@@ -1,0 +1,10 @@
+Debug/*
+Release/*
+bin
+bin/*
+src/*.*swp
+include/*.*swp
+data
+data/*
+python/__pycache__
+python/__pycache__/*
