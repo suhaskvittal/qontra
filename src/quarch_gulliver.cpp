@@ -37,13 +37,21 @@ GulliverDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         // Invoke BFUs. As this is hardware, we don't use system time
         // to track time taken.
         // Assume initial amount of time taken is 1 cycle per
-        // bit in syndrome.
+        // 1 in syndrome.
+        // We will push all the active high detector ids onto
+        // a "hardware" array.
+        std::vector<uint> detector_array;
+        for (uint di = 0; di < n_detectors; di++) {
+            if (syndrome[di]) {
+                detector_array.push_back(di);
+            }
+        }
         GulliverDecoder::BFUResult init = 
-            std::make_tuple(std::map<uint,uint>(), 0, n_detectors);
+            std::make_tuple(std::map<uint,uint>(), 0, hw);
         std::vector<GulliverDecoder::BFUResult> matchings = 
-            brute_force_matchings(syndrome, init);
+            brute_force_matchings(detector_array, init);
         // Choose the best one -- we assume this takes
-        // #matchings-1 cycles though this could be down in 1
+        // #matchings-1 cycles though this could be done in 1
         // cycle with enough comparator gates.
         GulliverDecoder::BFUResult best_result = matchings[0];
         for (uint i = 1; i < matchings.size(); i++) {
@@ -100,18 +108,23 @@ GulliverDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
 }
 
 std::vector<GulliverDecoder::BFUResult>
-GulliverDecoder::brute_force_matchings(const std::vector<uint8_t>& syndrome, 
+GulliverDecoder::brute_force_matchings(const std::vector<uint>& detector_array, 
         const GulliverDecoder::BFUResult& running_result)
 {
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
-    uint hw = std::accumulate(syndrome.begin(), syndrome.end()-n_observables, 0);
+    uint hw = detector_array.size();
     // Find first unmatched detector, and match to ever other unmatched detector.
     bool found_unmatched_detector = false;
     uint first_unmatched_detector = 0;
     std::vector<GulliverDecoder::BFUResult> results;
-    for (uint di = 0; di < n_detectors; di++) {
-        if (!syndrome[di] || std::get<0>(running_result).count(di)) {
+
+    uint32_t elapsed_cycles = 0;
+    for (uint8_t ai = 0; ai < detector_array.size(); ai++) {
+        uint di = detector_array[ai];
+        // Assume each read to the array costs a cycle.
+        elapsed_cycles++;
+        if (std::get<0>(running_result).count(di)) {
             continue;
         }
 
@@ -125,15 +138,26 @@ GulliverDecoder::brute_force_matchings(const std::vector<uint8_t>& syndrome,
             // Assume it took hw - 2*#matches to get to this point, plus
             // an addition operation. This code is unoptimized.
             uint32_t n_cycles = std::get<2>(running_result) 
-                            + (hw - matching.size())
-                            + n_bfu_cycles_per_add
-                            + (hw & 0x1 ? 1 : 0);  // Add 1 if hw is odd (boundary)
+                            + (hw - ai)*(n_bfu_cycles_per_add+1)
+                                        // We examine this new matching on the
+                                        // next round, so we will have a delay
+                                        // equal to an ADD and READ for each
+                                        // element after this element.
+                                        // Note that elapsed cycles contains 
+                                        // delays from the first ai entries in
+                                        // the array, so we subtract by ai.
+                            + n_bfu_cycles_per_add  // We have a delay caused by
+                                                    // the adder and SRAM access.
+                            + elapsed_cycles;   // And of course, the overall
+                                                // delay.
+            // Update elapsed cycles.
+            elapsed_cycles += n_bfu_cycles_per_add;
             // Update matching.
             matching[first_unmatched_detector] = di;
             matching[di] = first_unmatched_detector;
             const GulliverDecoder::BFUResult& new_result
                 = std::make_tuple(matching, cost, n_cycles); 
-            auto sub_results = brute_force_matchings(syndrome, new_result);
+            auto sub_results = brute_force_matchings(detector_array, new_result);
             for (auto r : sub_results) {
                 results.push_back(r); 
             }
@@ -151,14 +175,16 @@ GulliverDecoder::brute_force_matchings(const std::vector<uint8_t>& syndrome,
             fp_t cost = std::get<1>(running_result)
                             + path_table[di_dj].distance;
             uint32_t n_cycles = std::get<2>(running_result) 
-                            + (hw - matching.size())
-                            + n_bfu_cycles_per_add
-                            + (hw & 0x1 ? 1 : 0);
+                            + elapsed_cycles    // This should contain hw, so
+                                                // we do not need to add extra
+                                                // delay to account for starting
+                                                // in the next round.
+                            + n_bfu_cycles_per_add;
             matching[first_unmatched_detector] = BOUNDARY_INDEX;
             matching[BOUNDARY_INDEX] = first_unmatched_detector;
             const GulliverDecoder::BFUResult& new_result
                 = std::make_tuple(matching, cost, n_cycles); 
-            auto sub_results = brute_force_matchings(syndrome, new_result);
+            auto sub_results = brute_force_matchings(detector_array, new_result);
             for (auto r : sub_results) {
                 results.push_back(r); 
             }

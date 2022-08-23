@@ -10,11 +10,14 @@ std::filesystem::path data_folder(std::string(HOME_DIRECTORY) + "/data");
 const auto seed = std::chrono::system_clock::now().time_since_epoch().count();
 std::mt19937_64 GULLIVER_RNG(seed);
 
+static fp_t DEFAULT_ERROR = 1e-3;
+static uint32_t DEFAULT_SHOTS = 100000;
+
 void
 gulliver_decoder_analysis_experiment() {
-    std::cout << "Runnign decoder analysis...\n";
-    fp_t p = 1e-4;
-    uint32_t shots = 100000;
+    std::cout << "Running decoder analysis...\n";
+    fp_t p = DEFAULT_ERROR;
+    uint32_t shots = DEFAULT_SHOTS;
     // Setup circuit.
     for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
         stim::CircuitGenParameters surf_code_params(
@@ -33,17 +36,19 @@ gulliver_decoder_analysis_experiment() {
         // Gulliver
         GulliverParams gulliver_params = {
             1,      // n_bfu
-            2,      // n_bfu_cycles_per_add
-            5,      // bfu_hw_threshold
+            5,      // n_bfu_cycles_per_add
+            6,      // bfu_hw_threshold
             250e6   // clock_frequency
         };
         GulliverDecoder gulliver_decoder(surf_code_circ, gulliver_params);
 
         Decoder * decoder_array[] = {&mwpm_decoder, &gulliver_decoder};
+        std::cout << "Physical error rate: " << p 
+            << ", code distance: " << code_dist << "\n";
         for (Decoder * d_p : decoder_array) {
             b_decoder_ler(d_p, shots, GULLIVER_RNG); 
             fp_t ler = ((fp_t)d_p->n_logical_errors) / ((fp_t)shots);
-            std::cout << d_p->name() << " LER = " << ler << "\n";
+            std::cout << "\t" << d_p->name() << " LER = " << ler << "\n";
         }
     }
 }
@@ -54,12 +59,12 @@ gulliver_bfu_timing_experiment() {
 
     create_directory(data_folder);
 
+    fp_t p = DEFAULT_ERROR;
     for (uint code_dist = 3; code_dist <= 9; code_dist += 2) {
         std::filesystem::path filename(
                 "bfu_timing_d=" + std::to_string(code_dist) + ".txt");
         std::filesystem::path timing_analysis_file = data_folder/filename;
         // Setup Stim parameters.
-        fp_t p = 1e-4;
         stim::CircuitGenParameters surf_code_params(
                 code_dist, code_dist, "rotated_memory_z");
         // Setup error rates.
@@ -73,8 +78,8 @@ gulliver_bfu_timing_experiment() {
         // Setup decoder.
         GulliverParams decoder_params = {
             1,      // n_bfu
-            2,      // n_bfu_cycles_per_add
-            5,      // bfu_hw_threshold
+            5,      // n_bfu_cycles_per_add
+            6,      // bfu_hw_threshold
             250e6   // clock_frequency
         };
 
@@ -93,12 +98,12 @@ gulliver_mwpm_timing_experiment() {
 
     create_directory(data_folder);
 
+    fp_t p = DEFAULT_ERROR;
     for (uint code_dist = 3; code_dist <= 9; code_dist += 2) {
         std::filesystem::path filename(
                 "mwpm_timing_d=" + std::to_string(code_dist) + ".txt");
         std::filesystem::path timing_analysis_file = data_folder/filename;
         // Setup Stim parameters.
-        fp_t p = 1e-4;
         stim::CircuitGenParameters surf_code_params(
                 code_dist, code_dist, "rotated_memory_z");
         // Setup error rates.

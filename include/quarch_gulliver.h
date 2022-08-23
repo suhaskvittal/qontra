@@ -10,6 +10,7 @@
 #include "quarch_benchmark.h"
 
 #include <algorithm>
+#include <array>
 #include <map>
 #include <string>
 #include <set>
@@ -43,7 +44,7 @@ private:
 
     // Recursively examine all possible matchings given a syndrome.
     std::vector<BFUResult> brute_force_matchings(
-            const std::vector<uint8_t>&, const BFUResult& running_result);
+            const std::vector<uint>&, const BFUResult& running_result);
 
     uint n_bfu;
     uint32_t n_bfu_cycles_per_add;

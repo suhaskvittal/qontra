@@ -29,7 +29,7 @@ def plot_gulliver_timing_analysis_file(code_dist=3):
     file_path = '../data/bfu_timing_d=%d.txt' % code_dist
     output_path = '../data/figures/bfu_timing_d=%d.png' % code_dist
 
-    df = read_timing_analysis_file(file_path, max_time=3000)
+    df = read_timing_analysis_file(file_path, max_time=400)
     fig = mkhist(df, x_name='Time Taken', y_name='count',\
             category_key='Hamming Weight', palette='dark',\
             binwidth=10, multiple='dodge')
