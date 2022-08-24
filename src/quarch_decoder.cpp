@@ -85,6 +85,11 @@ Decoder::max_hamming_wgt_completed_within(fp_t max_time) {
     return max_weight;
 }
 
+uint64_t
+Decoder::sram_cost() {
+    return 0;
+}
+
 uint32_t
 syndrome_to_int(const std::vector<uint8_t>& syndrome, uint size) {
     if (size > 32) {

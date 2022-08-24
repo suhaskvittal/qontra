@@ -15,8 +15,40 @@ static fp_t DEFAULT_ERROR_STDDEV = 15e-4;
 static uint32_t DEFAULT_SHOTS = 100000;
 
 void
+decoder_sram_experiment() {
+    std::cout << "Running SRAM experiment...\n";
+    fp_t p = DEFAULT_ERROR_MEAN;
+    fp_t r = DEFAULT_ERROR_STDDEV;
+    // We examine this for MWPM (motivation).
+    for (uint code_dist = 3; code_dist <= 21; code_dist += 2) {
+        stim::CircuitGenParameters surf_code_params(
+                code_dist, code_dist, "rotated_memory_z");
+        // Setup error rates.
+        surf_code_params.after_clifford_depolarization = p;
+        surf_code_params.before_round_data_depolarization = p;
+        surf_code_params.before_measure_flip_probability = p;
+        surf_code_params.after_reset_flip_probability = p;
+
+        surf_code_params.after_clifford_depolarization_stddev = r;
+        surf_code_params.before_round_data_depolarization_stddev = r;
+        surf_code_params.before_measure_flip_probability_stddev = r;
+        surf_code_params.after_reset_flip_probability_stddev = r;
+
+        stim::Circuit surf_code_circ = 
+            generate_surface_code_circuit(surf_code_params).circuit;
+        MWPMDecoder mwpm_decoder(surf_code_circ);
+        uint64_t n_bytes_sram = mwpm_decoder.sram_cost();
+        std::cout << "For distance " << code_dist 
+            << ", a MWPM decoder requires " << n_bytes_sram
+            << " bytes of SRAM, or " 
+            << n_bytes_sram / 1024.0 << " KB, or " 
+            << n_bytes_sram / (1024.0*1024.0) << " MB.\n";
+    }
+}
+
+void
 decoder_analysis_experiment() {
-    std::cout << "Running decoder analysis...\n";
+    std::cout << "Running decoder analysis experiment...\n";
     fp_t p = DEFAULT_ERROR_MEAN;
     fp_t r = DEFAULT_ERROR_STDDEV;
     uint32_t shots = DEFAULT_SHOTS;
@@ -61,15 +93,15 @@ decoder_analysis_experiment() {
 }
 
 void
-bfu_timing_experiment() {
-    std::cout << "Running BFU timing analysis experiment...\n";
+gulliver_timing_experiment() {
+    std::cout << "Running Gulliver timing analysis experiment...\n";
 
     create_directory(data_folder);
 
     fp_t p = DEFAULT_ERROR_MEAN;
     for (uint code_dist = 3; code_dist <= 9; code_dist += 2) {
         std::filesystem::path filename(
-                "bfu_timing_d=" + std::to_string(code_dist) + ".txt");
+                "gulliver_timing_d=" + std::to_string(code_dist) + ".txt");
         std::filesystem::path timing_analysis_file = data_folder/filename;
         // Setup Stim parameters.
         stim::CircuitGenParameters surf_code_params(

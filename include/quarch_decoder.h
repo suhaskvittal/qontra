@@ -65,6 +65,11 @@ public:
      *  always complete within max_time.
      * */
     uint max_hamming_wgt_completed_within(fp_t max_time);
+    /*
+     *  Gets the potential SRAM cost if all data structures were
+     *  implemented in hardware. Returns amount in bytes.
+     * */
+    virtual uint64_t sram_cost(void);
     
     std::vector<std::vector<uint8_t>> syndromes;
     std::vector<fp_t> execution_times;  // in nanoseconds

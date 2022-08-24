@@ -61,6 +61,26 @@ MWPMDecoder::is_software() {
     return true;
 }
 
+uint64_t
+MWPMDecoder::sram_cost() {
+    // We examine the size of the path_table.
+    uint64_t n_bytes_sram = 0;   
+    for (auto kv_pair : path_table) {
+        std::pair<uint, uint> di_dj = kv_pair.first;
+        DijkstraResult res = kv_pair.second;
+        // We assume that the di_dj pair is stored
+        // in a hardware matrix. We don't count the 
+        // SRAM required to store keys.
+        // 
+        // Instead, we will only consider the SRAM
+        // required to store the entry.
+        uint64_t bytes_for_path = sizeof(res.path[0]) * res.path.size();
+        uint64_t bytes_for_distance = sizeof(res.distance);
+        n_bytes_sram += bytes_for_path + bytes_for_distance;
+    }
+    return n_bytes_sram;
+}
+
 DecoderShotResult
 MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     // Build Boost graph for MWPM.
@@ -100,12 +120,8 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
                 continue;  // There is no path.
             }
             fp_t raw_weight = path_table[di_dj].distance;
-#ifdef MWPM_QUANTIZE
             // Note that we have already typedef'd qfp_t as wgt_t.
             wgt_t edge_weight = (wgt_t) (MWPM_INTEGER_SCALE * raw_weight);
-#else
-            wgt_t edge_weight = raw_weight;
-#endif
             pm.AddEdge(vi, vj, edge_weight);
         }
     }

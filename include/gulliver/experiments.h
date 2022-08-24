@@ -37,12 +37,30 @@ struct GulliverSweepAnalysisParams {
     uint32_t shots;
 };
 
+/* Counts amount of SRAM storage
+ * required to support decoders. */
+void
+decoder_sram_experiment();
+
+/* Examines the logical error rate
+ * and syndrome completion of 
+ * decoders.
+ * */
 void 
 decoder_analysis_experiment();
+
+/* Computes the timing of various
+ * sampled syndromes using various
+ * decoers.
+ * */
 void
 gulliver_timing_experiment();
 void 
 mwpm_timing_experiment();
+
+/* Performs a sweep to get data
+ * to compute the error threshold.
+ * */
 void
 mwpm_sweep_experiment();
 

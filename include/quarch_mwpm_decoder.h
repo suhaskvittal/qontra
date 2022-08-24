@@ -43,12 +43,7 @@ struct DijkstraResult {
     fp_t distance;
 };
 
-// Types used by Blossom V.
-#ifdef MWPM_QUANTIZE
-typedef int wgt_t;
-#else
-typedef double wgt_t;
-#endif
+typedef qfp_t  wgt_t;
 
 class MWPMDecoder : public Decoder {
 public:
@@ -57,6 +52,8 @@ public:
     DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
     std::string name(void) override;
     bool is_software(void) override;
+
+    uint64_t sram_cost(void) override;
 protected:
     std::map<std::pair<uint, uint>, DijkstraResult> path_table;
 private:
