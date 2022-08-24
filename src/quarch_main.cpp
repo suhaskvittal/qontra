@@ -7,8 +7,8 @@
 #include "gulliver/experiments.h"
 
 int main() {
-    gulliver_mwpm_timing_experiment();
-    gulliver_bfu_timing_experiment();
-    gulliver_decoder_analysis_experiment();
+//  mwpm_timing_experiment();
+//  bfu_timing_experiment();
+    decoder_analysis_experiment();
     return 0;
 }

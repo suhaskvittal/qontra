@@ -12,6 +12,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <random>
 #include <string>
 
 extern std::filesystem::path data_folder;
@@ -37,13 +38,13 @@ struct GulliverSweepAnalysisParams {
 };
 
 void 
-gulliver_decoder_analysis_experiment();
+decoder_analysis_experiment();
 void
-gulliver_bfu_timing_experiment();
+gulliver_timing_experiment();
 void 
-gulliver_mwpm_timing_experiment();
+mwpm_timing_experiment();
 void
-gulliver_mwpm_sweep_experiment();
+mwpm_sweep_experiment();
 
 /* Private Helper Functions */
 void

@@ -10,13 +10,15 @@ std::filesystem::path data_folder(std::string(HOME_DIRECTORY) + "/data");
 const auto seed = std::chrono::system_clock::now().time_since_epoch().count();
 std::mt19937_64 GULLIVER_RNG(seed);
 
-static fp_t DEFAULT_ERROR = 1e-3;
+static fp_t DEFAULT_ERROR_MEAN = 1e-3;
+static fp_t DEFAULT_ERROR_STDDEV = 15e-4;
 static uint32_t DEFAULT_SHOTS = 100000;
 
 void
-gulliver_decoder_analysis_experiment() {
+decoder_analysis_experiment() {
     std::cout << "Running decoder analysis...\n";
-    fp_t p = DEFAULT_ERROR;
+    fp_t p = DEFAULT_ERROR_MEAN;
+    fp_t r = DEFAULT_ERROR_STDDEV;
     uint32_t shots = DEFAULT_SHOTS;
     // Setup circuit.
     for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
@@ -27,6 +29,11 @@ gulliver_decoder_analysis_experiment() {
         surf_code_params.before_round_data_depolarization = p;
         surf_code_params.before_measure_flip_probability = p;
         surf_code_params.after_reset_flip_probability = p;
+
+        surf_code_params.after_clifford_depolarization_stddev = r;
+        surf_code_params.before_round_data_depolarization_stddev = r;
+        surf_code_params.before_measure_flip_probability_stddev = r;
+        surf_code_params.after_reset_flip_probability_stddev = r;
 
         stim::Circuit surf_code_circ = 
             generate_surface_code_circuit(surf_code_params).circuit;
@@ -54,12 +61,12 @@ gulliver_decoder_analysis_experiment() {
 }
 
 void
-gulliver_bfu_timing_experiment() {
+bfu_timing_experiment() {
     std::cout << "Running BFU timing analysis experiment...\n";
 
     create_directory(data_folder);
 
-    fp_t p = DEFAULT_ERROR;
+    fp_t p = DEFAULT_ERROR_MEAN;
     for (uint code_dist = 3; code_dist <= 9; code_dist += 2) {
         std::filesystem::path filename(
                 "bfu_timing_d=" + std::to_string(code_dist) + ".txt");
@@ -93,12 +100,12 @@ gulliver_bfu_timing_experiment() {
 }
 
 void
-gulliver_mwpm_timing_experiment() {
+mwpm_timing_experiment() {
     std::cout << "Running MWPM timing analysis experiment...\n";
 
     create_directory(data_folder);
 
-    fp_t p = DEFAULT_ERROR;
+    fp_t p = DEFAULT_ERROR_MEAN;
     for (uint code_dist = 3; code_dist <= 9; code_dist += 2) {
         std::filesystem::path filename(
                 "mwpm_timing_d=" + std::to_string(code_dist) + ".txt");
@@ -125,7 +132,7 @@ gulliver_mwpm_timing_experiment() {
 }
 
 void
-gulliver_mwpm_sweep_experiment() {
+mwpm_sweep_experiment() {
     std::cout << "Running sweep analysis experiment...\n";
 
     std::filesystem::path folder("mwpm_sweep");
