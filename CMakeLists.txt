@@ -1,8 +1,8 @@
 # Declare CMAKE version
 cmake_minimum_required(VERSION 3.23.2)
 # Declare compiler
-set(CMAKE_CXX_COMPILER g++-11)
-set(CMAKE_C_COMPILER gcc-11)
+set(CMAKE_CXX_COMPILER g++)
+set(CMAKE_C_COMPILER gcc)
 # Declare Project and Version number
 project(Quarch VERSION 0.1)
 # Declare CPP Version
@@ -55,3 +55,4 @@ target_link_libraries(quarch libstim)
 # Add Blossom V to Quarch
 add_subdirectory(blossom5)
 target_link_libraries(quarch libblossom5)
+# Add DramSim2 to Quarch

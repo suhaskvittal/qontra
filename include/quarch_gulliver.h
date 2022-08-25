@@ -28,9 +28,9 @@ struct GulliverParams {
     fp_t clock_frequency;   // in Hz
 };
 
-class GulliverDecoder : public MWPMDecoder {
+class Gulliver : public MWPMDecoder {
 public:
-    GulliverDecoder(const stim::Circuit, const GulliverParams&);
+    Gulliver(const stim::Circuit, const GulliverParams&);
 
     DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
     std::string name(void) override;

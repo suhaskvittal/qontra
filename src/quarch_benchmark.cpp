@@ -32,7 +32,9 @@ stdev(const std::vector<fp_t>& data) {
 }
 
 void
-b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng) {
+b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
+        bool save_per_shot_data) 
+{
     // Clear stats.
     decoder_p->clear_stats();
     // Declare statistics
@@ -62,12 +64,16 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng) {
             if (sample_buffer[i].not_zero()) {
                 DecoderShotResult res = decoder_p->decode_error(syndrome);
                 // Update statistics.
-                execution_times[sn] = res.execution_time;
-                memory_overheads[sn] = res.memory_overhead;
+                if (save_per_shot_data) {
+                    execution_times[sn] = res.execution_time;
+                    memory_overheads[sn] = res.memory_overhead;
+                }
                 n_logical_errors += res.is_logical_error ? 1 : 0;
             } else {
-                execution_times[sn] = 0;
-                memory_overheads[sn] = 0;
+                if (save_per_shot_data) {
+                    execution_times[sn] = 0;
+                    memory_overheads[sn] = 0;
+                }
             }
             sn++;
         }

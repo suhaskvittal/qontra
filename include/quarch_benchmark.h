@@ -60,7 +60,8 @@ fp_t
 stdev(const std::vector<fp_t>&);
 
 void
-b_decoder_ler(Decoder*, uint32_t shots, std::mt19937_64&);
+b_decoder_ler(Decoder*, uint32_t shots, std::mt19937_64&,
+        bool save_per_shot_data=true);
 
 ErrorThresholdData
 sweep_error_threshold(const ErrorThresholdSweepParams&,

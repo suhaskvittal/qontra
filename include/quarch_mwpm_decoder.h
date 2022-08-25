@@ -8,7 +8,6 @@
 
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_traits.hpp>
-#include <boost/graph/maximum_weighted_matching.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
 #include <boost/property_map/property_map.hpp>
 
@@ -17,7 +16,6 @@
 #include <PerfectMatching.h>
 
 #include "quarch_decoder.h"
-#include "quarch_lilliput.h"
 
 #include <vector>
 #include <map>

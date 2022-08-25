@@ -84,7 +84,7 @@ protected:
     DecodingGraph graph;
     // Give all benchmarking functions
     // friendship.
-    friend void b_decoder_ler(Decoder*, uint32_t shots, std::mt19937_64&);
+    friend void b_decoder_ler(Decoder*, uint32_t shots, std::mt19937_64&, bool);
 };
 
 uint32_t

@@ -79,7 +79,7 @@ decoder_analysis_experiment() {
             6,      // bfu_hw_threshold
             250e6   // clock_frequency
         };
-        GulliverDecoder gulliver_decoder(surf_code_circ, gulliver_params);
+        Gulliver gulliver_decoder(surf_code_circ, gulliver_params);
 
         Decoder * decoder_array[] = {&mwpm_decoder, &gulliver_decoder};
         std::cout << "Physical error rate: " << p 
@@ -122,7 +122,7 @@ gulliver_timing_experiment() {
             250e6   // clock_frequency
         };
 
-        GulliverDecoder decoder(surf_code_circ, decoder_params);
+        Gulliver decoder(surf_code_circ, decoder_params);
         GulliverTimingAnalysisParams params = {
             &decoder,
             100000

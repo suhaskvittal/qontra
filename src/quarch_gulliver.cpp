@@ -5,7 +5,7 @@
 
 #include "quarch_gulliver.h"
 
-GulliverDecoder::GulliverDecoder(const stim::Circuit circuit,
+Gulliver::Gulliver(const stim::Circuit circuit,
         const GulliverParams& params)
     :MWPMDecoder(circuit), 
     n_bfu(params.n_bfu),
@@ -15,17 +15,17 @@ GulliverDecoder::GulliverDecoder(const stim::Circuit circuit,
 {}
 
 std::string
-GulliverDecoder::name() {
+Gulliver::name() {
     return "Gulliver";
 }
 
 bool
-GulliverDecoder::is_software() {
+Gulliver::is_software() {
     return false;
 }
 
 DecoderShotResult
-GulliverDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
+Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
     // Compute Hamming weight.
@@ -46,14 +46,14 @@ GulliverDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
                 detector_array.push_back(di);
             }
         }
-        GulliverDecoder::BFUResult init = 
+        Gulliver::BFUResult init = 
             std::make_tuple(std::map<uint,uint>(), 0, hw);
-        std::vector<GulliverDecoder::BFUResult> matchings = 
+        std::vector<Gulliver::BFUResult> matchings = 
             brute_force_matchings(detector_array, init);
         // Choose the best one -- we assume this takes
         // #matchings-1 cycles though this could be done in 1
         // cycle with enough comparator gates.
-        GulliverDecoder::BFUResult best_result = matchings[0];
+        Gulliver::BFUResult best_result = matchings[0];
         for (uint i = 1; i < matchings.size(); i++) {
             auto m = matchings[i];
             if (std::get<1>(m) < std::get<1>(best_result)) {
@@ -107,9 +107,9 @@ GulliverDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     }
 }
 
-std::vector<GulliverDecoder::BFUResult>
-GulliverDecoder::brute_force_matchings(const std::vector<uint>& detector_array, 
-        const GulliverDecoder::BFUResult& running_result)
+std::vector<Gulliver::BFUResult>
+Gulliver::brute_force_matchings(const std::vector<uint>& detector_array, 
+        const Gulliver::BFUResult& running_result)
 {
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
@@ -117,7 +117,7 @@ GulliverDecoder::brute_force_matchings(const std::vector<uint>& detector_array,
     // Find first unmatched detector, and match to ever other unmatched detector.
     bool found_unmatched_detector = false;
     uint first_unmatched_detector = 0;
-    std::vector<GulliverDecoder::BFUResult> results;
+    std::vector<Gulliver::BFUResult> results;
 
     uint32_t elapsed_cycles = 0;
     for (uint8_t ai = 0; ai < detector_array.size(); ai++) {
@@ -155,7 +155,7 @@ GulliverDecoder::brute_force_matchings(const std::vector<uint>& detector_array,
             // Update matching.
             matching[first_unmatched_detector] = di;
             matching[di] = first_unmatched_detector;
-            const GulliverDecoder::BFUResult& new_result
+            const Gulliver::BFUResult& new_result
                 = std::make_tuple(matching, cost, n_cycles); 
             auto sub_results = brute_force_matchings(detector_array, new_result);
             for (auto r : sub_results) {
@@ -182,7 +182,7 @@ GulliverDecoder::brute_force_matchings(const std::vector<uint>& detector_array,
                             + n_bfu_cycles_per_add;
             matching[first_unmatched_detector] = BOUNDARY_INDEX;
             matching[BOUNDARY_INDEX] = first_unmatched_detector;
-            const GulliverDecoder::BFUResult& new_result
+            const Gulliver::BFUResult& new_result
                 = std::make_tuple(matching, cost, n_cycles); 
             auto sub_results = brute_force_matchings(detector_array, new_result);
             for (auto r : sub_results) {
@@ -192,7 +192,7 @@ GulliverDecoder::brute_force_matchings(const std::vector<uint>& detector_array,
         return results;
     } else {
         // The running result is a complete matching.
-        return std::vector<GulliverDecoder::BFUResult>{running_result};
+        return std::vector<Gulliver::BFUResult>{running_result};
     }
 }
 
