@@ -36,7 +36,7 @@ public:
     std::string name(void) override;
     bool is_software(void) override;
     // Statistics on MWPM vs BFU usage.
-    uint32_t n_bfu_accesses;
+    uint32_t n_total_accesses;
     uint32_t n_mwpm_accesses;
 private:
     // BFUResult holds the matching, the cost, and the cycle time.

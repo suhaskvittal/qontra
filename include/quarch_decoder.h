@@ -41,6 +41,7 @@ public:
 
     virtual std::string name(void) =0;
     virtual bool is_software(void) =0;
+
     virtual void clear_stats();
 
     // General decoder statistics

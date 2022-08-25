@@ -11,7 +11,9 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     n_bfu(params.n_bfu),
     n_bfu_cycles_per_add(params.n_bfu_cycles_per_add),
     bfu_hw_threshold(params.bfu_hw_threshold),
-    clock_frequency(params.clock_frequency)
+    clock_frequency(params.clock_frequency),
+    n_total_accesses(0),
+    n_mwpm_accesses(0)
 {}
 
 std::string
@@ -31,7 +33,9 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     // Compute Hamming weight.
     // Don't count the observables.
     uint hw = std::accumulate(syndrome.begin(), syndrome.end()-n_observables, 0);
+    n_total_accesses++;
     if (hw > bfu_hw_threshold) {
+        n_mwpm_accesses++;
         return MWPMDecoder::decode_error(syndrome);
     } else {
         // Invoke BFUs. As this is hardware, we don't use system time

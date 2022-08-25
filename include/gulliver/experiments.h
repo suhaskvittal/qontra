@@ -8,6 +8,7 @@
 
 #include "quarch.h"
 #include "quarch_gulliver.h"
+#include "quarch_clique.h"
 #include "quarch_defs.h"
 
 #include <chrono>

@@ -38,9 +38,11 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
     // Clear stats.
     decoder_p->clear_stats();
     // Declare statistics
-    std::vector<std::vector<uint8_t>> syndromes(shots);
-    std::vector<fp_t> execution_times(shots);
-    std::vector<fp_t> memory_overheads(shots);
+    uint32_t array_size = save_per_shot_data ? shots : 1;
+
+    std::vector<std::vector<uint8_t>> syndromes(array_size);
+    std::vector<fp_t> execution_times(array_size);
+    std::vector<fp_t> memory_overheads(array_size);
     uint32_t n_logical_errors = 0;
 
     uint32_t sn = 0;
@@ -60,7 +62,9 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
             auto syndrome = 
                 _to_vector(sample_buffer[i], n_detectors, n_observables);
             // Update some stats before decoding.
-            syndromes[sn] = syndrome;
+            if (save_per_shot_data) {
+                syndromes[sn] = syndrome;
+            }
             if (sample_buffer[i].not_zero()) {
                 DecoderShotResult res = decoder_p->decode_error(syndrome);
                 // Update statistics.

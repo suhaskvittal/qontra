@@ -51,7 +51,7 @@ decoder_analysis_experiment() {
     std::cout << "Running decoder analysis experiment...\n";
     fp_t p = DEFAULT_ERROR_MEAN;
     fp_t r = DEFAULT_ERROR_STDDEV;
-    uint32_t shots = DEFAULT_SHOTS;
+    uint32_t shots = 1000000;
     // Setup circuit.
     for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
         stim::CircuitGenParameters surf_code_params(
@@ -76,19 +76,39 @@ decoder_analysis_experiment() {
         GulliverParams gulliver_params = {
             1,      // n_bfu
             5,      // n_bfu_cycles_per_add
-            6,      // bfu_hw_threshold
+            8,      // bfu_hw_threshold
             250e6   // clock_frequency
         };
         Gulliver gulliver_decoder(surf_code_circ, gulliver_params);
+        // CliqueDecoder
+        CliqueParams clique_params = {
+            1,
+            1,
+            1,
+            5.0e9,
+            code_dist*code_dist - 1
+        };
+        CliqueDecoder clique_decoder(surf_code_circ, clique_params); 
 
-        Decoder * decoder_array[] = {&mwpm_decoder, &gulliver_decoder};
+        Decoder * decoder_array[] = {
+            &mwpm_decoder, 
+            &gulliver_decoder,
+            &clique_decoder
+        };
         std::cout << "Physical error rate: " << p 
             << ", code distance: " << code_dist << "\n";
         for (Decoder * d_p : decoder_array) {
-            b_decoder_ler(d_p, shots, GULLIVER_RNG); 
+            b_decoder_ler(d_p, shots, GULLIVER_RNG, false); 
             fp_t ler = ((fp_t)d_p->n_logical_errors) / ((fp_t)shots);
             std::cout << "\t" << d_p->name() << " LER = " << ler << "\n";
         }
+        std::cout << "\n\tAdditional stats:\n";
+        std::cout << "\t\t" << gulliver_decoder.name() << " accessed MWPM " 
+            << gulliver_decoder.n_mwpm_accesses << " times out of "
+            << gulliver_decoder.n_total_accesses << ".\n";
+        std::cout << "\t\t" << clique_decoder.name() << " accessed MWPM "
+            << clique_decoder.n_mwpm_accesses << " times out of "
+            << clique_decoder.n_total_accesses << ".\n";
     }
 }
 
@@ -118,7 +138,7 @@ gulliver_timing_experiment() {
         GulliverParams decoder_params = {
             1,      // n_bfu
             5,      // n_bfu_cycles_per_add
-            6,      // bfu_hw_threshold
+            8,      // bfu_hw_threshold
             250e6   // clock_frequency
         };
 
