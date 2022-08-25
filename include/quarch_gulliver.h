@@ -12,8 +12,9 @@
 #include <algorithm>
 #include <array>
 #include <map>
-#include <string>
 #include <set>
+#include <stack>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -28,6 +29,12 @@ struct GulliverParams {
     fp_t clock_frequency;   // in Hz
 };
 
+struct BFUResult {
+    std::map<uint, uint> matching;
+    fp_t matching_weight;
+    bool valid;
+};
+
 class Gulliver : public MWPMDecoder {
 public:
     Gulliver(const stim::Circuit, const GulliverParams&);
@@ -39,12 +46,9 @@ public:
     uint32_t n_total_accesses;
     uint32_t n_mwpm_accesses;
 private:
-    // BFUResult holds the matching, the cost, and the cycle time.
-    typedef std::tuple<std::map<uint,uint>, fp_t, uint32_t> BFUResult;
-
     // Recursively examine all possible matchings given a syndrome.
-    std::vector<BFUResult> brute_force_matchings(
-            const std::vector<uint>&, const BFUResult& running_result);
+    std::vector<BFUResult> 
+        brute_force_matchings(const std::vector<uint>&, uint64_t&);
 
     uint n_bfu;
     uint32_t n_bfu_cycles_per_add;

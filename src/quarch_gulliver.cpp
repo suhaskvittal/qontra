@@ -50,28 +50,30 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
                 detector_array.push_back(di);
             }
         }
-        Gulliver::BFUResult init = 
-            std::make_tuple(std::map<uint,uint>(), 0, hw);
-        std::vector<Gulliver::BFUResult> matchings = 
-            brute_force_matchings(detector_array, init);
+        if (detector_array.size() & 0x1) {
+            // Add boundary.
+            detector_array.push_back(BOUNDARY_INDEX);
+        }
+        uint64_t n_cycles = 0;
+        std::vector<BFUResult> matchings = 
+            brute_force_matchings(detector_array, n_cycles);
         // Choose the best one -- we assume this takes
         // #matchings-1 cycles though this could be done in 1
         // cycle with enough comparator gates.
-        Gulliver::BFUResult best_result = matchings[0];
+        BFUResult best_result = matchings[0];
         for (uint i = 1; i < matchings.size(); i++) {
             auto m = matchings[i];
-            if (std::get<1>(m) < std::get<1>(best_result)) {
+            if (m.matching_weight < best_result.matching_weight) {
                 best_result = m;
             }
         }
         // Compute logical correction.
-        auto matching = std::get<0>(best_result);
+        auto matching = best_result.matching;
         // Expression:
         // ceil(sum(cycles)/#fu) + #matchings - 1
         // = (sum(cycles)-1)/#fu + 1 + #matchings - 1
         // = (sum(cycles)-1)/#fu + #matchings.
-        uint32_t n_cycles = 
-            ((std::get<2>(best_result)-1)/n_bfu_cycles_per_add) + matchings.size();
+        n_cycles = ((n_cycles-1)/n_bfu_cycles_per_add) + matchings.size();
 
         std::vector<uint8_t> correction(n_observables, 0);
         std::set<uint> visited;
@@ -111,92 +113,76 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     }
 }
 
-std::vector<Gulliver::BFUResult>
-Gulliver::brute_force_matchings(const std::vector<uint>& detector_array, 
-        const Gulliver::BFUResult& running_result)
+std::vector<BFUResult>
+Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
+        uint64_t& n_cycles) 
 {
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
     uint hw = detector_array.size();
-    // Find first unmatched detector, and match to ever other unmatched detector.
-    bool found_unmatched_detector = false;
-    uint first_unmatched_detector = 0;
-    std::vector<Gulliver::BFUResult> results;
+    // We try and model our hardware using the appropriate
+    // data structures.
+    //
+    // We implement a BFU in hardware using a hardware stack.
+    // and pipelined logic.
+    std::stack<BFUResult> bfu_stack;
+    BFUResult init = {std::map<uint,uint>(), 0.0, true};
+    bfu_stack.push(init);
+    // We store the results in a hardware array.
+    std::vector<BFUResult> results;  // Only has to be (hw-1)! in size.
 
-    uint32_t elapsed_cycles = 0;
-    for (uint8_t ai = 0; ai < detector_array.size(); ai++) {
-        uint di = detector_array[ai];
-        // Assume each read to the array costs a cycle.
-        elapsed_cycles++;
-        if (std::get<0>(running_result).count(di)) {
-            continue;
-        }
+    uint res_index = 0;
+    while (bfu_stack.size() > 0) {
+        // Assume that popping off the hardware
+        // stack is one cycle.
+        BFUResult entry = bfu_stack.top();
+        bfu_stack.pop();
 
-        if (found_unmatched_detector) {
-            std::pair di_dj = std::make_pair(first_unmatched_detector, di);
-            // Recurse with this new assignment.
-            // Copy data from running result.
-            std::map<uint, uint> matching(std::get<0>(running_result));
-            fp_t cost = std::get<1>(running_result)
-                            + path_table[di_dj].distance;
-            // Assume it took hw - 2*#matches to get to this point, plus
-            // an addition operation. This code is unoptimized.
-            uint32_t n_cycles = std::get<2>(running_result) 
-                            + (hw - ai)*(n_bfu_cycles_per_add+1)
-                                        // We examine this new matching on the
-                                        // next round, so we will have a delay
-                                        // equal to an ADD and READ for each
-                                        // element after this element.
-                                        // Note that elapsed cycles contains 
-                                        // delays from the first ai entries in
-                                        // the array, so we subtract by ai.
-                            + n_bfu_cycles_per_add  // We have a delay caused by
-                                                    // the adder and SRAM access.
-                            + elapsed_cycles;   // And of course, the overall
-                                                // delay.
-            // Update elapsed cycles.
-            elapsed_cycles += n_bfu_cycles_per_add;
-            // Update matching.
-            matching[first_unmatched_detector] = di;
-            matching[di] = first_unmatched_detector;
-            const Gulliver::BFUResult& new_result
-                = std::make_tuple(matching, cost, n_cycles); 
-            auto sub_results = brute_force_matchings(detector_array, new_result);
-            for (auto r : sub_results) {
-                results.push_back(r); 
+        n_cycles++;
+        // Find first unmatched detector, and match to ever other unmatched detector.
+        bool found_unmatched_detector = false;
+        uint first_unmatched_detector = 0;
+        for (uint8_t ai = 0; ai < detector_array.size(); ai++) {
+            uint di = detector_array[ai];
+            // Assume searching through the matching requires
+            // matching.size() cycles (one cycle per entry, assume
+            // we read every single entry).
+            n_cycles += entry.matching.size();
+            if (entry.matching.count(di)) {
+                continue;
             }
-        } else {
-            found_unmatched_detector = true;
-            first_unmatched_detector = di;
+
+            if (found_unmatched_detector) {
+                std::pair di_dj = std::make_pair(first_unmatched_detector, di);
+                // Recurse with this new assignment.
+                // Copy data from running result.
+                std::map<uint, uint> matching(entry.matching);
+                fp_t cost = entry.matching_weight
+                                + path_table[di_dj].distance;
+                matching[first_unmatched_detector] = di;
+                matching[di] = first_unmatched_detector;
+                // We perform an add operation
+                // and update the matching.
+                //
+                // Assume the write to the matching
+                // data structure is 2 cycles.
+                n_cycles += n_bfu_cycles_per_add + 2;
+                // Update matching.
+                BFUResult new_result = {matching, cost, true};
+                bfu_stack.push(new_result);
+            } else {
+                found_unmatched_detector = true;
+                first_unmatched_detector = di;
+            }
+            // Assume each iteration through the detector array is one cycle.
+            n_cycles++;
+        } 
+        // If we could not find an unmatched detector, this
+        // is a perfect matching.
+        if (!found_unmatched_detector) {
+            results.push_back(entry);
         }
     }
-    if (found_unmatched_detector) {
-        if (hw & 0x1) {
-            // Also try matching to the boundary. 
-            std::pair di_dj = 
-                std::make_pair(first_unmatched_detector, BOUNDARY_INDEX);
-            std::map<uint, uint> matching(std::get<0>(running_result));
-            fp_t cost = std::get<1>(running_result)
-                            + path_table[di_dj].distance;
-            uint32_t n_cycles = std::get<2>(running_result) 
-                            + elapsed_cycles    // This should contain hw, so
-                                                // we do not need to add extra
-                                                // delay to account for starting
-                                                // in the next round.
-                            + n_bfu_cycles_per_add;
-            matching[first_unmatched_detector] = BOUNDARY_INDEX;
-            matching[BOUNDARY_INDEX] = first_unmatched_detector;
-            const Gulliver::BFUResult& new_result
-                = std::make_tuple(matching, cost, n_cycles); 
-            auto sub_results = brute_force_matchings(detector_array, new_result);
-            for (auto r : sub_results) {
-                results.push_back(r); 
-            }
-        }
-        return results;
-    } else {
-        // The running result is a complete matching.
-        return std::vector<Gulliver::BFUResult>{running_result};
-    }
+    return results;
 }
 

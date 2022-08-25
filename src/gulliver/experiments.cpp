@@ -10,9 +10,16 @@ std::filesystem::path data_folder(std::string(HOME_DIRECTORY) + "/data");
 const auto seed = std::chrono::system_clock::now().time_since_epoch().count();
 std::mt19937_64 GULLIVER_RNG(seed);
 
-static fp_t DEFAULT_ERROR_MEAN = 1e-3;
-static fp_t DEFAULT_ERROR_STDDEV = 15e-4;
+static fp_t DEFAULT_ERROR_MEAN = 1e-4;
+static fp_t DEFAULT_ERROR_STDDEV = 15e-5;
 static uint32_t DEFAULT_SHOTS = 100000;
+
+static GulliverParams GULLIVER_DEFAULT = {
+    1,      // n_bfu
+    5,      // n_bfu_cycles_per_add
+    7,      // bfu_hw_threshold
+    250e6   // clock_frequency
+};
 
 void
 decoder_sram_experiment() {
@@ -73,12 +80,7 @@ decoder_analysis_experiment() {
         // MWPM
         MWPMDecoder mwpm_decoder(surf_code_circ);
         // Gulliver
-        GulliverParams gulliver_params = {
-            1,      // n_bfu
-            5,      // n_bfu_cycles_per_add
-            8,      // bfu_hw_threshold
-            250e6   // clock_frequency
-        };
+        GulliverParams gulliver_params = GULLIVER_DEFAULT;
         Gulliver gulliver_decoder(surf_code_circ, gulliver_params);
         // CliqueDecoder
         CliqueParams clique_params = {
@@ -135,12 +137,7 @@ gulliver_timing_experiment() {
         stim::Circuit surf_code_circ = 
             generate_surface_code_circuit(surf_code_params).circuit;
         // Setup decoder.
-        GulliverParams decoder_params = {
-            1,      // n_bfu
-            5,      // n_bfu_cycles_per_add
-            8,      // bfu_hw_threshold
-            250e6   // clock_frequency
-        };
+        GulliverParams decoder_params = GULLIVER_DEFAULT;
 
         Gulliver decoder(surf_code_circ, decoder_params);
         GulliverTimingAnalysisParams params = {
