@@ -23,6 +23,7 @@ set(QUARCH_PROGRAM_FILES
     src/quarch_defs.cpp
     src/quarch_lilliput.cpp
     src/quarch_gulliver.cpp
+    src/quarch_clique.cpp
     # Gulliver code.
     src/gulliver/experiments.cpp)
 add_executable(quarch ${QUARCH_PROGRAM_FILES})
@@ -56,3 +57,5 @@ target_link_libraries(quarch libstim)
 add_subdirectory(blossom5)
 target_link_libraries(quarch libblossom5)
 # Add DramSim2 to Quarch
+add_subdirectory(dramsim2)
+target_link_libraries(quarch libdramsim2)
