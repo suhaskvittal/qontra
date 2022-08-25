@@ -40,10 +40,13 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
     // Declare statistics
     uint32_t array_size = save_per_shot_data ? shots : 1;
 
+    uint32_t total_shots = shots;
     std::vector<std::vector<uint8_t>> syndromes(array_size);
     std::vector<fp_t> execution_times(array_size);
     std::vector<fp_t> memory_overheads(array_size);
     uint32_t n_logical_errors = 0;
+    fp_t mean_execution_time = 0.0,
+         max_execution_time = 0.0;
 
     uint32_t sn = 0;
     while (shots > 0) {
@@ -73,6 +76,10 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
                     memory_overheads[sn] = res.memory_overhead;
                 }
                 n_logical_errors += res.is_logical_error ? 1 : 0;
+                mean_execution_time += res.execution_time / ((fp_t)total_shots);
+                if (res.execution_time > max_execution_time) {
+                    max_execution_time = res.execution_time;
+                }
             } else {
                 if (save_per_shot_data) {
                     execution_times[sn] = 0;
@@ -88,6 +95,8 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
     decoder_p->execution_times = execution_times;
     decoder_p->memory_overheads = memory_overheads;
     decoder_p->n_logical_errors = n_logical_errors;
+    decoder_p->mean_execution_time = mean_execution_time;
+    decoder_p->max_execution_time = max_execution_time;
 }
 
 ErrorThresholdData

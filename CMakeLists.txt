@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 # Declare execution options.
 option(ENABLE_OPENMP "use openmp" OFF)
 option(MWPM_QUANTIZE_LEVEL "mwpm quantization level (0=None, 1=16b, 2=8b)" 0)
+option(USE_DRAMSIM3 "ON=use DRAMSim3 (default), OFF=use DRAMSim2" ON)
 # Declare executable.
 set(QUARCH_PROGRAM_FILES
     # Main code.
@@ -56,6 +57,11 @@ target_link_libraries(quarch libstim)
 # Add Blossom V to Quarch
 add_subdirectory(blossom5)
 target_link_libraries(quarch libblossom5)
-# Add DramSim2 to Quarch
-add_subdirectory(dramsim2)
-target_link_libraries(quarch libdramsim2)
+# Add DRAMSim to Quarch
+if (USE_DRAMSIM3)
+    add_subdirectory(dramsim3)
+    target_link_libraries(quarch dramsim3)
+else()
+    add_subdirectory(dramsim2)
+    target_link_libraries(quarch libdramsim2)
+endif()

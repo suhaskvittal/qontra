@@ -25,16 +25,7 @@ struct DecoderShotResult {
 
 class Decoder {
 public: 
-    Decoder(const stim::Circuit& circ)
-        :circuit(circ), 
-        graph(to_decoding_graph(circ)),
-        syndromes(),
-        execution_times(),
-        memory_overheads(),
-        n_logical_errors(0),
-        match_detectors_less_than((uint)-1)
-    {}
-
+    Decoder(const stim::Circuit& circ);
     virtual ~Decoder() {}
 
     virtual DecoderShotResult decode_error(const std::vector<uint8_t>&) =0;
@@ -76,6 +67,8 @@ public:
     std::vector<fp_t> execution_times;  // in nanoseconds
     std::vector<fp_t> memory_overheads; // in bytes
     uint32_t n_logical_errors;
+    fp_t mean_execution_time;
+    fp_t max_execution_time;
     // Useful for lookup tables.
     uint match_detectors_less_than;
     // Benchmarking circuit.

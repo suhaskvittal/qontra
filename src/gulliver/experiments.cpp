@@ -18,7 +18,9 @@ static GulliverParams GULLIVER_DEFAULT = {
     1,      // n_bfu
     5,      // n_bfu_cycles_per_add
     7,      // bfu_hw_threshold
-    250e6   // clock_frequency
+    250e6,  // clock_frequency
+    std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR3_1Gb_x8_1333.ini",
+    std::string(HOME_DIRECTORY) + "/src/gulliver/logs"
 };
 
 void
@@ -102,7 +104,9 @@ decoder_analysis_experiment() {
         for (Decoder * d_p : decoder_array) {
             b_decoder_ler(d_p, shots, GULLIVER_RNG, false); 
             fp_t ler = ((fp_t)d_p->n_logical_errors) / ((fp_t)shots);
-            std::cout << "\t" << d_p->name() << " LER = " << ler << "\n";
+            std::cout << "\t" << d_p->name() << " LER = " << ler 
+                << ", time taken: " << d_p->mean_execution_time 
+                << " (max time = " << d_p->max_execution_time << ")\n";
         }
         std::cout << "\n\tAdditional stats:\n";
         std::cout << "\t\t" << gulliver_decoder.name() << " accessed MWPM " 

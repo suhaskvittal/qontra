@@ -5,12 +5,26 @@
 
 #include "quarch_decoder.h"
 
+Decoder::Decoder(const stim::Circuit& circ)
+    :circuit(circ), 
+    graph(to_decoding_graph(circ)),
+    syndromes(),
+    execution_times(),
+    memory_overheads(),
+    n_logical_errors(0),
+    mean_execution_time(0),
+    max_execution_time(0),
+    match_detectors_less_than((uint)-1)
+{}
+
 void
 Decoder::clear_stats() {
     syndromes.clear();
     execution_times.clear();
     memory_overheads.clear();
     n_logical_errors = 0;
+    mean_execution_time = 0;
+    max_execution_time = 0;
 }
 
 std::vector<Decoder::SyndromeEvent>

@@ -12,6 +12,7 @@ CliqueDecoder::CliqueDecoder(const stim::Circuit& circ, const CliqueParams& para
     n_cycles_AND(params.n_cycles_AND),
     n_cycles_NOT(params.n_cycles_NOT),
     n_cycles_XOR(params.n_cycles_XOR),
+    clock_frequency(params.clock_frequency),
     detectors_per_round(params.detectors_per_round),
     first_round_degree_table()
 {

@@ -8,13 +8,47 @@
 Gulliver::Gulliver(const stim::Circuit circuit,
         const GulliverParams& params)
     :MWPMDecoder(circuit), 
+    // Statistics
+    n_total_accesses(0),
+    n_mwpm_accesses(0),
+    max_dram_required(0),
+    // DramSim3 and memory simulation variables
+    main_memory(nullptr),
+    memory_event_table(),
+    lk_mem_event(),
+    cv_table_updated(),
+    // Properties
     n_bfu(params.n_bfu),
     n_bfu_cycles_per_add(params.n_bfu_cycles_per_add),
     bfu_hw_threshold(params.bfu_hw_threshold),
-    clock_frequency(params.clock_frequency),
-    n_total_accesses(0),
-    n_mwpm_accesses(0)
-{}
+    clock_frequency(params.clock_frequency)
+{
+    // Create read and write callbacks for main memory.
+    auto access_cb = [this] (uint64_t x) {
+        std::pair<uint, uint> di_dj = this->from_addr(x);
+        MemoryEvent event = {
+            this->main_memory->GetTCK(),
+            true
+        };
+//      std::cout << "[DRAM] locking mem event lock.\n";
+//      std::lock_guard lk(this->lk_mem_event);
+//      std::cout << "[DRAM] access to " << di_dj.first << "," << di_dj.second
+//          << " serviced.\n";
+        this->memory_event_table[di_dj] = event;
+//      this->cv_table_updated.notify_all();
+//      std::cout << "[DRAM] unlocking mem event lock.\n";
+    };
+    main_memory = new dramsim3::MemorySystem(
+                    params.dram_config_file,
+                    params.log_output_directory,
+                    access_cb,
+                    access_cb
+                );
+}
+
+Gulliver::~Gulliver() {
+    delete main_memory;
+}
 
 std::string
 Gulliver::name() {
@@ -113,6 +147,33 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     }
 }
 
+uint64_t
+Gulliver::to_addr(uint di, uint dj) {
+    bound_detector(di);
+    bound_detector(dj);
+    return di * (circuit.count_detectors()+1) + dj; 
+}
+
+std::pair<uint,uint>
+Gulliver::from_addr(uint64_t addr) {
+    uint di = addr / (circuit.count_detectors()+1);
+    uint dj = addr - di * (circuit.count_detectors()+1);
+    unbound_detector(di);
+    unbound_detector(dj);
+
+    return std::make_pair(di, dj);
+}
+
+void
+Gulliver::bound_detector(uint& di) {
+    if (di == BOUNDARY_INDEX) di = circuit.count_detectors();
+}
+
+void
+Gulliver::unbound_detector(uint& di) {
+    if (di == circuit.count_detectors()) di = BOUNDARY_INDEX;
+}
+
 std::vector<BFUResult>
 Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
         uint64_t& n_cycles) 
@@ -157,6 +218,31 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
                 // Recurse with this new assignment.
                 // Copy data from running result.
                 std::map<uint, uint> matching(entry.matching);
+                // We need to go to DRAM to get the path_table entry.
+                uint64_t dram_addr = to_addr(first_unmatched_detector, di);
+                main_memory->AddTransaction(dram_addr, false);
+                main_memory->ClockTick();
+                n_cycles++;
+                // Acquire memory event table lock and wait
+                // until the condition variable is signaled.
+                //
+                // Note that this table stuff just simulation. 
+                // This wouldn't happen in hardware. We would
+                // just get the result from the memory controller.
+//              std::unique_lock lk(lk_mem_event);
+//              std::cout << "[Gulliver] locking mem event lock.\n";
+//              std::cout << "[Gulliver] Requested access to " << 
+//                  first_unmatched_detector << "," << di << ".\n";
+                while (memory_event_table.count(di_dj) == 0 ||
+                        !memory_event_table[di_dj].valid)
+                {
+                    main_memory->ClockTick();
+                    n_cycles++;
+                }
+//              cv_table_updated.wait(lk); 
+                memory_event_table[di_dj].valid = false;
+//              lk.unlock();
+//              std::cout << "[Gulliver] unlocking mem event lock.\n";
                 fp_t cost = entry.matching_weight
                                 + path_table[di_dj].distance;
                 matching[first_unmatched_detector] = di;
