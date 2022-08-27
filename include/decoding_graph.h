@@ -3,8 +3,8 @@
  *  date:   2 August 2022
  * */
 
-#ifndef QUARCH_DECODING_GRAPH_h
-#define QUARCH_DECODING_GRAPH_h
+#ifndef DECODING_GRAPH_h
+#define DECODING_GRAPH_h
 
 #include <boost/graph/adjacency_list.hpp>
 
@@ -20,7 +20,7 @@
 
 #include <stim.h>
 
-#include "quarch_defs.h"
+#include "defs.h"
 
 #define N_COORD 100
 

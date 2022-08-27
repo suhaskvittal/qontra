@@ -3,13 +3,13 @@
  *  date:   5 August 2022
  * */
 
-#ifndef QUARCH_DECODER_h
-#define QUARCH_DECODER_h
+#ifndef DECODER_h
+#define DECODER_h
 
 #include <stim.h>
 
-#include "quarch_defs.h"
-#include "quarch_decoding_graph.h"
+#include "defs.h"
+#include "decoding_graph.h"
 
 #include <string>
 #include <utility>

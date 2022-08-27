@@ -3,10 +3,10 @@
  *  date:   25 August 2022
  * */
 
-#ifndef QUARCH_CLIQUE_h
-#define QUARCH_CLIQUE_h
+#ifndef CLIQUE_h
+#define CLIQUE_h
 
-#include "quarch_mwpm_decoder.h"
+#include "mwpm_decoder.h"
 
 #include <boost/graph/adjacency_list.hpp>
 

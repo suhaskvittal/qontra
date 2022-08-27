@@ -3,11 +3,11 @@
  *  date:   8 August 2022
  * */
 
-#ifndef QUARCH_LILLIPUT_h
-#define QUARCH_LILLIPUT_h
+#ifndef LILLIPUT_h
+#define LILLIPUT_h
 
-#include "quarch_decoder.h"
-#include "quarch_mwpm_decoder.h"
+#include "decoder.h"
+#include "mwpm_decoder.h"
 
 #include <boost/math/special_functions/binomial.hpp>
 

@@ -3,13 +3,13 @@
  *  date:   21 August 2022
  * */
 
-#ifndef QUARCH_BENCHMARK_h
-#define QUARCH_BENCHMARK_h
+#ifndef BENCHMARK_h
+#define BENCHMARK_h
 
 #include <stim.h>
 
-#include "quarch_defs.h"
-#include "quarch_decoder.h"
+#include "defs.h"
+#include "decoder.h"
 
 #include <fstream>
 #include <functional>

@@ -3,8 +3,8 @@
  *  date:   2 August 2022
  * */
 
-#ifndef QUARCH_STIM_TEST_h
-#define QUARCH_STIM_TEST_h
+#ifndef STIM_TEST_h
+#define STIM_TEST_h
 
 #include <iostream>
 #include <chrono>
@@ -15,11 +15,11 @@
 
 #include <stim.h>
 
-#include "quarch_defs.h"
-#include "quarch_decoding_graph.h"
-#include "quarch_mwpm_decoder.h"
-#include "quarch_lilliput.h"
-#include "quarch_benchmark.h"
+#include "defs.h"
+#include "decoding_graph.h"
+#include "mwpm_decoder.h"
+#include "lilliput.h"
+#include "benchmark.h"
 
 extern std::mt19937_64 RNG;
 

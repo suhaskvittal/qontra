@@ -3,8 +3,8 @@
  *  date:   2 August 2022
  * */
 
-#ifndef QUARCH_DEFS_h
-#define QUARCH_DEFS_h
+#ifndef DEFS_h
+#define DEFS_h
 
 #include <limits>
 #include <filesystem>

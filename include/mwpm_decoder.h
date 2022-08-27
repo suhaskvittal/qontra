@@ -3,8 +3,8 @@
  *  date:   2 August 2022
  * */
 
-#ifndef QUARCH_MWPM_DECODER_h
-#define QUARCH_MWPM_DECODER_h
+#ifndef MWPM_DECODER_h
+#define MWPM_DECODER_h
 
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_traits.hpp>
@@ -15,7 +15,7 @@
 
 #include <PerfectMatching.h>
 
-#include "quarch_decoder.h"
+#include "decoder.h"
 
 #include <vector>
 #include <map>

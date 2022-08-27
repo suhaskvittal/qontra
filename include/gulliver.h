@@ -3,11 +3,11 @@
  *  date:   22 August 2022
  * */
 
-#ifndef QUARCH_GULLIVER_h
-#define QUARCH_GULLIVER_h
+#ifndef GULLIVER_h
+#define GULLIVER_h
 
-#include "quarch_mwpm_decoder.h"
-#include "quarch_benchmark.h"
+#include "mwpm_decoder.h"
+#include "benchmark.h"
 
 #include "memory_system.h"
 
