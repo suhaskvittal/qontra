@@ -15,10 +15,10 @@ def plot_mwpm_timing_analysis_file(code_dist=3):
     file_path = '../data/mwpm_timing_d=%d.txt' % code_dist
     output_path = '../data/figures/mwpm_timing_d=%d.png' % code_dist
 
-    df = read_timing_analysis_file(file_path, max_time=3000)
+    df = read_timing_analysis_file(file_path, max_time=10000)
     fig = mkhist(df, x_name='Time Taken', y_name='count',\
             category_key='Hamming Weight', palette='dark',\
-            binwidth=50, multiple='dodge')
+            binwidth=500, multiple='dodge')
     add_title(fig,\
             'Execution Time Distribution for '
             'Distance %d Surface Code, MWPM' % code_dist)
@@ -26,13 +26,13 @@ def plot_mwpm_timing_analysis_file(code_dist=3):
     plt.show()
 
 def plot_gulliver_timing_analysis_file(code_dist=3):
-    file_path = '../data/bfu_timing_d=%d.txt' % code_dist
-    output_path = '../data/figures/bfu_timing_d=%d.png' % code_dist
+    file_path = '../data/gulliver_timing_d=%d.txt' % code_dist
+    output_path = '../data/figures/gulliver_timing_d=%d.png' % code_dist
 
-    df = read_timing_analysis_file(file_path, max_time=400)
+    df = read_timing_analysis_file(file_path, max_time=10000)
     fig = mkhist(df, x_name='Time Taken', y_name='count',\
             category_key='Hamming Weight', palette='dark',\
-            binwidth=10, multiple='dodge')
+            binwidth=500, multiple='dodge')
     add_title(fig,\
             'Execution Time Distribution for '
             'Distance %d Surface Code, Gulliver' % code_dist)

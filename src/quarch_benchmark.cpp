@@ -46,7 +46,8 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
     std::vector<fp_t> memory_overheads(array_size);
     uint32_t n_logical_errors = 0;
     fp_t mean_execution_time = 0.0,
-         max_execution_time = 0.0;
+         max_execution_time = 0.0,
+         max_execution_time_for_correctable = 0.0;
 
     uint32_t sn = 0;
     while (shots > 0) {
@@ -79,6 +80,9 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
                 mean_execution_time += res.execution_time / ((fp_t)total_shots);
                 if (res.execution_time > max_execution_time) {
                     max_execution_time = res.execution_time;
+                    if (!res.is_logical_error) {
+                        max_execution_time_for_correctable = res.execution_time;    
+                    }
                 }
             } else {
                 if (save_per_shot_data) {
@@ -97,6 +101,8 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
     decoder_p->n_logical_errors = n_logical_errors;
     decoder_p->mean_execution_time = mean_execution_time;
     decoder_p->max_execution_time = max_execution_time;
+    decoder_p->max_execution_time_for_correctable = 
+        max_execution_time_for_correctable;
 }
 
 ErrorThresholdData

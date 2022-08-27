@@ -18,7 +18,6 @@
 #include <limits>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <stack>
 #include <string>
@@ -78,8 +77,6 @@ private:
 
     dramsim3::MemorySystem * main_memory;
     std::map<std::pair<uint, uint>, MemoryEvent> memory_event_table;
-    std::mutex lk_mem_event;
-    std::condition_variable cv_table_updated;
 
     uint n_bfu;
     uint32_t n_bfu_cycles_per_add;

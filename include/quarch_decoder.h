@@ -69,6 +69,7 @@ public:
     uint32_t n_logical_errors;
     fp_t mean_execution_time;
     fp_t max_execution_time;
+    fp_t max_execution_time_for_correctable;
     // Useful for lookup tables.
     uint match_detectors_less_than;
     // Benchmarking circuit.

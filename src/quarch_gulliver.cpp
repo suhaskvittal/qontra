@@ -15,8 +15,6 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     // DramSim3 and memory simulation variables
     main_memory(nullptr),
     memory_event_table(),
-    lk_mem_event(),
-    cv_table_updated(),
     // Properties
     n_bfu(params.n_bfu),
     n_bfu_cycles_per_add(params.n_bfu_cycles_per_add),
@@ -30,13 +28,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
             this->main_memory->GetTCK(),
             true
         };
-//      std::cout << "[DRAM] locking mem event lock.\n";
-//      std::lock_guard lk(this->lk_mem_event);
-//      std::cout << "[DRAM] access to " << di_dj.first << "," << di_dj.second
-//          << " serviced.\n";
         this->memory_event_table[di_dj] = event;
-//      this->cv_table_updated.notify_all();
-//      std::cout << "[DRAM] unlocking mem event lock.\n";
     };
     main_memory = new dramsim3::MemorySystem(
                     params.dram_config_file,
@@ -223,26 +215,14 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
                 main_memory->AddTransaction(dram_addr, false);
                 main_memory->ClockTick();
                 n_cycles++;
-                // Acquire memory event table lock and wait
-                // until the condition variable is signaled.
-                //
-                // Note that this table stuff just simulation. 
-                // This wouldn't happen in hardware. We would
-                // just get the result from the memory controller.
-//              std::unique_lock lk(lk_mem_event);
-//              std::cout << "[Gulliver] locking mem event lock.\n";
-//              std::cout << "[Gulliver] Requested access to " << 
-//                  first_unmatched_detector << "," << di << ".\n";
+                // Get the result from the memory controller.
                 while (memory_event_table.count(di_dj) == 0 ||
                         !memory_event_table[di_dj].valid)
                 {
                     main_memory->ClockTick();
                     n_cycles++;
                 }
-//              cv_table_updated.wait(lk); 
                 memory_event_table[di_dj].valid = false;
-//              lk.unlock();
-//              std::cout << "[Gulliver] unlocking mem event lock.\n";
                 fp_t cost = entry.matching_weight
                                 + path_table[di_dj].distance;
                 matching[first_unmatched_detector] = di;

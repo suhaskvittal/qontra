@@ -106,7 +106,9 @@ decoder_analysis_experiment() {
             fp_t ler = ((fp_t)d_p->n_logical_errors) / ((fp_t)shots);
             std::cout << "\t" << d_p->name() << " LER = " << ler 
                 << ", time taken: " << d_p->mean_execution_time 
-                << " (max time = " << d_p->max_execution_time << ")\n";
+                << " (max time = " << d_p->max_execution_time 
+                << "; " << d_p->max_execution_time_for_correctable
+                << ")\n";
         }
         std::cout << "\n\tAdditional stats:\n";
         std::cout << "\t\t" << gulliver_decoder.name() << " accessed MWPM " 
