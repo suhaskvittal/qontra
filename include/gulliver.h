@@ -8,6 +8,7 @@
 
 #include "mwpm_decoder.h"
 #include "benchmark.h"
+#include "gulliver/memory_hierarchy.h"
 
 #include "memory_system.h"
 
@@ -31,10 +32,14 @@ struct GulliverParams {
     uint32_t n_bfu_cycles_per_add;
     // Max Hamming weight to invoke BFUs 
     uint bfu_hw_threshold;
-
     fp_t clock_frequency;   // in Hz
-    
-    // Memory System Parameters (DramSim3)
+    // Cache Parameters
+    uint cacheC;
+    uint cacheS;
+    uint cacheB;
+    uint tlbC;
+    uint tlbB;
+    // DRAM parameters
     std::string dram_config_file;
     std::string log_output_directory;
 };
@@ -42,11 +47,6 @@ struct GulliverParams {
 struct BFUResult {
     std::map<uint, uint> matching;
     fp_t matching_weight;
-    bool valid;
-};
-
-struct MemoryEvent {
-    double tick;
     bool valid;
 };
 
@@ -63,20 +63,12 @@ public:
     uint32_t n_mwpm_accesses;
 
     uint64_t max_dram_required;
-protected:
-    /* Computes the address given a detector pair. */
-    uint64_t to_addr(uint, uint);
-    std::pair<uint, uint> from_addr(uint64_t);
-
-    void bound_detector(uint&);
-    void unbound_detector(uint&);
 private:
     /* Recursively examine all possible matchings given a syndrome. */
     std::vector<BFUResult> 
         brute_force_matchings(const std::vector<uint>&, uint64_t&);
 
-    dramsim3::MemorySystem * main_memory;
-    std::map<std::pair<uint, uint>, MemoryEvent> memory_event_table;
+    GulliverCache * cache;
 
     uint n_bfu;
     uint32_t n_bfu_cycles_per_add;

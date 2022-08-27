@@ -19,6 +19,13 @@ static GulliverParams GULLIVER_DEFAULT = {
     5,      // n_bfu_cycles_per_add
     7,      // bfu_hw_threshold
     250e6,  // clock_frequency
+    // Cache parameters,
+    13, // C, cache size is 2**C
+    2,  // S
+    8,  // B
+    9,  // tlb C
+    4,  // tlb B
+    // DRAM parameters
     std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR3_1Gb_x8_1333.ini",
     std::string(HOME_DIRECTORY) + "/src/gulliver/logs"
 };
