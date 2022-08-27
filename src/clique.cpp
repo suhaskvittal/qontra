@@ -3,7 +3,7 @@
  *  date:   25 August 2022
  * */
 
-#include "quarch_clique.h"
+#include "clique.h"
 
 CliqueDecoder::CliqueDecoder(const stim::Circuit& circ, const CliqueParams& params)
     :MWPMDecoder(circ),

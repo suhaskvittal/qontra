@@ -3,7 +3,7 @@
  *  date:   8 August 2022
  * */
 
-#include "quarch_lilliput.h"
+#include "lilliput.h"
 
 LILLIPUT::LILLIPUT(const stim::Circuit& circuit, Decoder * decoder_p,
         const LILLIPUTParams& params, std::mt19937_64& rng)

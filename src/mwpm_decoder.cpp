@@ -3,7 +3,7 @@
  *  date:   5 August 2022
  * */
 
-#include "quarch_mwpm_decoder.h"
+#include "mwpm_decoder.h"
 
 MWPMDecoder::MWPMDecoder(const stim::Circuit& circ) 
 :Decoder(circ), path_table()

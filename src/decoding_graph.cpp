@@ -3,7 +3,7 @@
  *  date:   2 August 2022
  * */
 
-#include "quarch_decoding_graph.h"
+#include "decoding_graph.h"
 
 DecodingGraph::DecodingGraph() {
     // Initialize data structures.

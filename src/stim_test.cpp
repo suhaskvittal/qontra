@@ -3,7 +3,7 @@
  *  date:   2 August 2022
  * */
 
-#include "quarch_stim_test.h"
+#include "stim_test.h"
 
 const auto seed = std::chrono::system_clock::now()
                             .time_since_epoch().count();

@@ -3,7 +3,7 @@
  *  date:   13 August 2022
  * */
 
-#include "quarch_decoder.h"
+#include "decoder.h"
 
 Decoder::Decoder(const stim::Circuit& circ)
     :circuit(circ), 
@@ -26,6 +26,7 @@ Decoder::clear_stats() {
     n_logical_errors = 0;
     mean_execution_time = 0;
     max_execution_time = 0;
+    max_execution_time_for_correctable = 0;
 }
 
 std::vector<Decoder::SyndromeEvent>

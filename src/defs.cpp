@@ -3,7 +3,7 @@
  *  date:   6 August 2022
  * */
 
-#include "quarch_defs.h"
+#include "defs.h"
 
 qfp_t 
 quantize(fp_t orig, fp_t fp_max, qfp_t qfp_max) {

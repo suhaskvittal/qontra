@@ -3,7 +3,7 @@
  *  date:   22 August 2022
  * */
 
-#include "quarch_gulliver.h"
+#include "gulliver.h"
 
 Gulliver::Gulliver(const stim::Circuit circuit,
         const GulliverParams& params)

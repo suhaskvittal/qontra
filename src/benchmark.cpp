@@ -3,7 +3,7 @@
  *  date:   9 August 2022
  * */
 
-#include "quarch_benchmark.h"
+#include "benchmark.h"
 
 fp_t
 min(const std::vector<fp_t>& data) {
