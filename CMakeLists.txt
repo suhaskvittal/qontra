@@ -15,16 +15,16 @@ option(USE_DRAMSIM3 "ON=use DRAMSim3 (default), OFF=use DRAMSim2" ON)
 # Declare executable.
 set(QUARCH_PROGRAM_FILES
     # Main code.
-    src/quarch_main.cpp
-    src/quarch_stim_test.cpp
-    src/quarch_benchmark.cpp
-    src/quarch_decoding_graph.cpp
-    src/quarch_decoder.cpp
-    src/quarch_mwpm_decoder.cpp
-    src/quarch_defs.cpp
-    src/quarch_lilliput.cpp
-    src/quarch_gulliver.cpp
-    src/quarch_clique.cpp
+    src/main.cpp
+    src/stim_test.cpp
+    src/benchmark.cpp
+    src/decoding_graph.cpp
+    src/decoder.cpp
+    src/mwpm_decoder.cpp
+    src/defs.cpp
+    src/lilliput.cpp
+    src/gulliver.cpp
+    src/clique.cpp
     # Gulliver code.
     src/gulliver/experiments.cpp)
 add_executable(quarch ${QUARCH_PROGRAM_FILES})
