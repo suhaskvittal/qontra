@@ -7,8 +7,9 @@
 #include "gulliver/experiments.h"
 
 int main() {
+//  decoder_sram_experiment();
 //  gulliver_timing_experiment();
     decoder_analysis_experiment();
-//  decoder_sram_experiment();
+//  gulliver_cache_experiment();
     return 0;
 }

@@ -11,7 +11,9 @@
 
 #include <memory_system.h>
 
+#include <chrono>
 #include <map>
+#include <random>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -19,6 +21,8 @@
 /* We will implement a cache system ourselves.
  * Nothing too fancy, but gets the job done.
  * */
+
+#define GC_POLICY_LFU
 
 typedef uint64_t addr_t;
 
@@ -37,6 +41,8 @@ struct GulliverCacheParams {
     uint B;
     uint n_detectors;
 
+    bool fake_cache;
+
     uint tlbC;
     uint tlbB;
 
@@ -51,7 +57,8 @@ struct GulliverCacheEntry {
     addr_t address;
     uint64_t tag;
 
-    uint32_t n_accesses;
+    uint32_t last_use;      // For LRU
+    uint32_t n_accesses;    // For LFU
     uint8_t is_new_entry;
     bool valid;
 };
@@ -114,6 +121,8 @@ private:
     uint C;
     uint S;
     uint B;
+
+    bool fake_cache;
 };
 
 uint

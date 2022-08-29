@@ -10,11 +10,8 @@
 #include "benchmark.h"
 #include "gulliver/memory_hierarchy.h"
 
-#include "memory_system.h"
-
 #include <algorithm>
 #include <array>
-#include <condition_variable>
 #include <deque>
 #include <limits>
 #include <map>
@@ -58,22 +55,25 @@ public:
     DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
     std::string name(void) override;
     bool is_software(void) override;
+
+    uint64_t sram_cost(void) override;
+    uint64_t dram_cost(void);
+
+    GulliverCache * cache;
     // Statistics on MWPM vs BFU usage.
     uint32_t n_total_accesses;
     uint32_t n_mwpm_accesses;
-
-    uint64_t max_dram_required;
 private:
     /* Recursively examine all possible matchings given a syndrome. */
     std::vector<BFUResult> 
         brute_force_matchings(const std::vector<uint>&, uint64_t&);
 
-    GulliverCache * cache;
-
     uint n_bfu;
     uint32_t n_bfu_cycles_per_add;
     uint bfu_hw_threshold;
     fp_t clock_frequency;
+
+    uint64_t _sram_cost;
 };
 
 

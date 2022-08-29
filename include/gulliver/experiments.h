@@ -19,22 +19,8 @@
 extern std::filesystem::path data_folder;
 extern std::mt19937_64 GULLIVER_RNG;
 
-struct GulliverTimingAnalysisParams {
+struct TimingAnalysisParams {
     Decoder * decoder_p;
-    uint32_t shots;
-};
-
-struct GulliverSweepAnalysisParams {
-    ErrorThresholdSweepParams::decoder_gen_f dgf;
-
-    fp_t error_lb;
-    fp_t error_ub;
-    fp_t error_step;
-
-    uint code_distance_lb;
-    uint code_distance_ub;
-    uint code_distance_step;
-
     uint32_t shots;
 };
 
@@ -65,12 +51,24 @@ mwpm_timing_experiment();
 void
 mwpm_sweep_experiment();
 
+/* Examines the performance of 
+ * Gulliver's cache with different
+ * parameters across different
+ * distances.
+ * */
+void
+gulliver_cache_experiment();
+
 /* Private Helper Functions */
 void
 _timing_analysis(const std::filesystem::path& output_file, 
-        const GulliverTimingAnalysisParams&);
+        Decoder*, uint32_t shots);
 void
-_sweep_analysis(const std::filesystem::path& output_folder,
-        const GulliverSweepAnalysisParams&);
+_threshold_sweep(const std::filesystem::path& output_folder,
+        const ErrorThresholdSweepParams&, uint32_t shots);
+
+void
+_cache_sweep(const std::filesystem::path& output_file,
+        const stim::Circuit&, uint32_t shots);
 
 #endif

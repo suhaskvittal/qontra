@@ -7,6 +7,10 @@
 
 // Entry is true if it has been accessed.
 static std::map<std::pair<uint, uint>, bool> memory_event_table;
+// RNG for random replacement
+static std::mt19937_64 CACHE_RNG(
+        std::chrono::high_resolution_clock::now()
+            .time_since_epoch().count());
 
 GulliverCache::GulliverCache(const GulliverCacheParams& params)
     :n_accesses(0),
@@ -18,7 +22,8 @@ GulliverCache::GulliverCache(const GulliverCacheParams& params)
     tag_store(),
     C(params.C),
     S(params.S),
-    B(params.B)
+    B(params.B),
+    fake_cache(params.fake_cache)
 {
     uint n_detectors = params.n_detectors;
     auto main_memory_callback = [n_detectors, memory_event_table] (uint64_t x) {
@@ -42,6 +47,7 @@ GulliverCache::GulliverCache(const GulliverCacheParams& params)
         0,
         0,
         0,
+        0,
         false
     };
     tag_store = std::vector<std::vector<GulliverCacheEntry>>(n_sets, 
@@ -61,7 +67,7 @@ GulliverCache::access(uint di, uint dj) {
     addr_t address = std::get<0>(tlb_result);
     // Update stats.
     n_tlb_accesses++;
-    n_tlb_misses += std::get<1>(tlb_result) ? 1 : 0;
+    n_tlb_misses += std::get<1>(tlb_result) ? 0 : 1;
     n_cycles += std::get<2>(tlb_result);
     // Perform tag, index, and offset extraction (1 cycle).
     uint32_t offset = address & ((1 << B) - 1);
@@ -74,14 +80,22 @@ GulliverCache::access(uint di, uint dj) {
     // we don't modify any data in the cache.
     std::vector<GulliverCacheEntry> blocks = tag_store[index]; 
     bool is_hit = false;
-    for (GulliverCacheEntry blk : blocks) {
-        is_hit |= (blk.tag == tag);
-        if (blk.is_new_entry) {
-            blk.is_new_entry--;
+    if (!fake_cache) {
+        for (GulliverCacheEntry& blk : blocks) {
+            if (blk.valid && blk.tag == tag) {
+                is_hit = true;
+                blk.last_use = 0;
+                if (blk.is_new_entry) {
+                    blk.is_new_entry--;
+                }
+                blk.n_accesses++;
+            } else {
+                blk.last_use++;
+            }
         }
+        // Update stats.
+        n_cycles++;
     }
-    // Update stats.
-    n_cycles++;
     n_accesses++;
     if (!is_hit) {
         n_misses++;
@@ -95,7 +109,9 @@ GulliverCache::access(uint di, uint dj) {
             n_cycles++;
         }
         memory_event_table[di_dj] = false;
-        n_cycles += replace(address, tag, index, offset);
+        if (!fake_cache) {
+            n_cycles += replace(address, tag, index, offset);
+        }
     }
     return n_cycles;
 }
@@ -109,6 +125,28 @@ GulliverCache::replace(addr_t address, uint64_t tag, uint64_t index,
     uint n_blocks = tag_store[index].size();
     bool no_victim = true;
     uint victim;
+#ifdef GC_POLICY_LRU
+    uint32_t victim_last_use = 0;
+    for (uint i = 0; i < n_blocks; i++) {
+        GulliverCacheEntry blk = tag_store[index][i];
+        if (!blk.valid || no_victim || blk.last_use > victim_last_use) {
+            victim = i;
+            no_victim = false;
+            victim_last_use = blk.last_use;
+        }   
+    }
+#elifdef GC_POLICY_RR
+    auto bi = CACHE_RNG() % n_blocks;
+    auto bj = CACHE_RNG() % n_blocks;
+    GulliverCacheEntry blk_i = tag_store[index][bi];
+    GulliverCacheEntry blk_j = tag_store[index][bj];
+    if (blk_i.last_use > blk_j.last_use) {
+        victim = bi;
+    } else {
+        victim = bj;
+    }
+    no_victim = false; 
+#else
     uint32_t victim_accesses = 0;
     for (uint i = 0; i < n_blocks; i++) {
         GulliverCacheEntry blk = tag_store[index][i];
@@ -121,6 +159,7 @@ GulliverCache::replace(addr_t address, uint64_t tag, uint64_t index,
             victim_accesses = blk.n_accesses;
         }
     }
+#endif
     n_cycles++;
     // Assume replacement is one cycle.
     if (no_victim) {
@@ -130,6 +169,7 @@ GulliverCache::replace(addr_t address, uint64_t tag, uint64_t index,
     tag_store[index][victim] = (GulliverCacheEntry) {
         address,
         tag,
+        0,
         0,
         NEW_ENTRY_TTE,
         true
@@ -155,9 +195,9 @@ TLB::address(uint di, uint dj) {
     // TLB access is 1 cycle.
     bool is_hit = false;
     addr_t address = 0x0;
-    for (TLBEntry blk : tag_store) {
-        if (blk.di == di && blk.dj == dj) {
-            is_hit |= true; 
+    for (TLBEntry& blk : tag_store) {
+        if (blk.valid && blk.di == di && blk.dj == dj) {
+            is_hit = true; 
             address = blk.address;
             blk.last_use = 0;
         } else {
@@ -189,6 +229,7 @@ uint64_t
 TLB::replace(addr_t address, uint di, uint dj) {
     // Identifying the victim is one cycle.
     uint64_t n_cycles = 0; 
+    uint n_blocks = tag_store.size();
     uint victim = 0;
     uint32_t victim_last_use = tag_store[0].last_use;
     for (uint i = 1; i < tag_store.size(); i++) {
