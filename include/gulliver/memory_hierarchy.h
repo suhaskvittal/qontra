@@ -22,7 +22,7 @@
  * Nothing too fancy, but gets the job done.
  * */
 
-#define GC_POLICY_LFU
+#define GC_POLICY_LRU
 
 typedef uint64_t addr_t;
 
@@ -41,10 +41,7 @@ struct GulliverCacheParams {
     uint B;
     uint n_detectors;
 
-    bool fake_cache;
-
-    uint tlbC;
-    uint tlbB;
+    bool fake_cache;    // For debugging.
 
     std::string dram_config_file;
     std::string log_output_dir;
@@ -76,25 +73,6 @@ struct TLBEntry {
     bool valid;
 };
 
-class TLB {
-public:
-    TLB(uint C, uint B, uint n_detectors);
-    /* First part is address, second part is
-     * a boolean which is true if there was a miss,
-     * and third part is the number of cycles taken.*/
-    typedef std::tuple<addr_t, bool, uint64_t> AddressResult;
-    AddressResult address(uint, uint);
-private:
-    uint64_t replace(addr_t, uint, uint);
-    /* No need for set-level access. */
-    std::vector<TLBEntry> tag_store;
-
-    uint C;
-    uint B;
-    uint n_detectors;
-};
-
-
 class GulliverCache {
 public:
     GulliverCache(const GulliverCacheParams&);
@@ -105,12 +83,9 @@ public:
     // Statistics
     uint32_t n_accesses;
     uint32_t n_misses;
-    uint32_t n_tlb_accesses;
-    uint32_t n_tlb_misses;
 private:
     uint64_t replace(addr_t, uint64_t tag, uint64_t index, uint64_t offset);
     dramsim3::MemorySystem * main_memory;
-    TLB * tlb;
 
     /* Tag store is accessed by:
      * (1) Set
@@ -121,6 +96,8 @@ private:
     uint C;
     uint S;
     uint B;
+
+    uint n_detectors;
 
     bool fake_cache;
 };

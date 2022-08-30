@@ -15,22 +15,19 @@ static std::mt19937_64 CACHE_RNG(
 GulliverCache::GulliverCache(const GulliverCacheParams& params)
     :n_accesses(0),
     n_misses(0),
-    n_tlb_accesses(0),
-    n_tlb_misses(0),
     main_memory(nullptr),
-    tlb(nullptr),
     tag_store(),
     C(params.C),
     S(params.S),
     B(params.B),
+    n_detectors(params.n_detectors),
     fake_cache(params.fake_cache)
 {
-    uint n_detectors = params.n_detectors;
-    auto main_memory_callback = [n_detectors, memory_event_table] (uint64_t x) {
-        uint di = x / n_detectors;
-        uint dj = x - di * n_detectors;
-        di = unbound_detector(di, n_detectors);
-        dj = unbound_detector(dj, n_detectors);
+    auto main_memory_callback = [this, memory_event_table] (uint64_t x) {
+        uint di = x / this->n_detectors;
+        uint dj = x - di * this->n_detectors;
+        di = unbound_detector(di, this->n_detectors);
+        dj = unbound_detector(dj, this->n_detectors);
         std::pair<uint, uint> di_dj = std::make_pair(di, dj);
         memory_event_table[di_dj] = true;
     };
@@ -38,7 +35,6 @@ GulliverCache::GulliverCache(const GulliverCacheParams& params)
     main_memory = new dramsim3::MemorySystem(
             params.dram_config_file, params.log_output_dir,
             main_memory_callback, main_memory_callback);
-    tlb = new TLB(params.tlbC, params.tlbB, n_detectors);
 
     uint32_t n_sets = 1 << (C - B - S);
     uint32_t n_blks = 1 << S;
@@ -56,19 +52,15 @@ GulliverCache::GulliverCache(const GulliverCacheParams& params)
 
 GulliverCache::~GulliverCache() {
     delete main_memory;
-    delete tlb;
 }
 
 uint64_t
 GulliverCache::access(uint di, uint dj) {
     uint64_t n_cycles = 0;
 
-    TLB::AddressResult tlb_result = tlb->address(di, dj);
-    addr_t address = std::get<0>(tlb_result);
-    // Update stats.
-    n_tlb_accesses++;
-    n_tlb_misses += std::get<1>(tlb_result) ? 0 : 1;
-    n_cycles += std::get<2>(tlb_result);
+    uint bdi = bound_detector(di, n_detectors);
+    uint bdj = bound_detector(dj, n_detectors);
+    addr_t address = bdi * n_detectors + bdj;
     // Perform tag, index, and offset extraction (1 cycle).
     uint32_t offset = address & ((1 << B) - 1);
     uint32_t index = (address >> B) & ((1 << (C-B-S)) - 1);
@@ -172,80 +164,6 @@ GulliverCache::replace(addr_t address, uint64_t tag, uint64_t index,
         0,
         0,
         NEW_ENTRY_TTE,
-        true
-    };
-    n_cycles++;
-    return n_cycles;
-}
-
-TLB::TLB(uint C, uint B, uint n_detectors)
-    :tag_store((1<<(C-B)), (TLBEntry){0,0,0,0,false}),
-    C(C),
-    B(B),
-    n_detectors(n_detectors)
-{}
-
-TLB::AddressResult
-TLB::address(uint di, uint dj) {
-    if (di > dj) {
-        // Enforce di <= dj.
-        return address(dj, di);
-    }
-    uint64_t n_cycles = 0;
-    // TLB access is 1 cycle.
-    bool is_hit = false;
-    addr_t address = 0x0;
-    for (TLBEntry& blk : tag_store) {
-        if (blk.valid && blk.di == di && blk.dj == dj) {
-            is_hit = true; 
-            address = blk.address;
-            blk.last_use = 0;
-        } else {
-            blk.last_use++;
-        }
-    }
-    n_cycles++;
-    if (!is_hit) {
-        // Then, we spend three cycles (conservatively)
-        // on "address translation".
-        
-        // Bound detectors to help with address translation.
-        uint bdi = bound_detector(di, n_detectors);
-        uint bdj = bound_detector(dj, n_detectors);
-        // Multiplication is obviously not one cycle,
-        // but we can optimize it in hardware because 
-        // n_detectors would be fixed. We could take the number
-        // of bits in the power of 2 larger than n_detectors.
-        // and do a bit shift.
-        address = bdi * n_detectors + bdj;
-        n_cycles += 3;
-        // And a few more on replacement.
-        n_cycles += replace(address, di, dj);
-    }
-    return std::make_tuple(address, is_hit, n_cycles);
-}
-
-uint64_t
-TLB::replace(addr_t address, uint di, uint dj) {
-    // Identifying the victim is one cycle.
-    uint64_t n_cycles = 0; 
-    uint n_blocks = tag_store.size();
-    uint victim = 0;
-    uint32_t victim_last_use = tag_store[0].last_use;
-    for (uint i = 1; i < tag_store.size(); i++) {
-        TLBEntry blk = tag_store[i];
-        if (!blk.valid || blk.last_use > victim_last_use) {
-            victim = i;
-            victim_last_use = blk.last_use;
-        }
-    }
-    n_cycles++;
-    // Eviction + installation is one cycle.
-    tag_store[victim] = (TLBEntry) {
-        di,
-        dj,
-        address,
-        0,
         true
     };
     n_cycles++;

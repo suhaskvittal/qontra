@@ -34,8 +34,6 @@ struct GulliverParams {
     uint cacheC;
     uint cacheS;
     uint cacheB;
-    uint tlbC;
-    uint tlbB;
     // DRAM parameters
     std::string dram_config_file;
     std::string log_output_directory;
@@ -60,9 +58,10 @@ public:
     uint64_t dram_cost(void);
 
     GulliverCache * cache;
-    // Statistics on MWPM vs BFU usage.
+
     uint32_t n_total_accesses;
     uint32_t n_mwpm_accesses;
+    fp_t max_bfu_latency;
 private:
     /* Recursively examine all possible matchings given a syndrome. */
     std::vector<BFUResult> 

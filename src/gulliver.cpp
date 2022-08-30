@@ -11,6 +11,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     // Statistics
     n_total_accesses(0),
     n_mwpm_accesses(0),
+    max_bfu_latency(0),
     // Memory system
     cache(nullptr),
     // Properties
@@ -18,7 +19,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     n_bfu_cycles_per_add(params.n_bfu_cycles_per_add),
     bfu_hw_threshold(params.bfu_hw_threshold),
     clock_frequency(params.clock_frequency),
-    _sram_cost((1 << params.cacheC) + (1 << params.tlbC))
+    _sram_cost((1 << params.cacheC))
 {
 
     GulliverCacheParams cache_params = {
@@ -26,9 +27,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
         params.cacheS,
         params.cacheB,
         circuit.count_detectors() + 1,
-        true,
-        params.tlbC,
-        params.tlbB,
+        false,
         params.dram_config_file,
         params.log_output_directory
     };
@@ -136,6 +135,9 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
         }
 
         fp_t time_taken = (n_cycles * 1e9) / clock_frequency;  // in ns.
+        if (time_taken > max_bfu_latency) {
+            max_bfu_latency = time_taken;
+        }
         DecoderShotResult res = {
             time_taken,
             0.0, // TODO

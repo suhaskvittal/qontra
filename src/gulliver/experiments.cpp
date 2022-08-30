@@ -20,11 +20,9 @@ static GulliverParams GULLIVER_DEFAULT = {
     7,      // bfu_hw_threshold
     500e6,  // clock_frequency
     // Cache parameters,
-    14, // C, cache size is 2**C
-    2,  // S
-    10,  // B
-    9,  // tlb C
-    4,  // tlb B
+    10, // C, cache size is 2**C
+    7,  // S
+    3,  // B
     // DRAM parameters
     std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR3_1Gb_x8_1333.ini",
     std::string(HOME_DIRECTORY) + "/src/gulliver/logs"
@@ -139,17 +137,12 @@ decoder_analysis_experiment() {
             << " from " << gulliver_decoder.cache->n_accesses
             << " accesses (miss rate = " << cache_miss_rate 
             << ").\n";
-        fp_t tlb_miss_rate = 
-            ((fp_t) gulliver_decoder.cache->n_tlb_misses) 
-            / gulliver_decoder.cache->n_tlb_accesses;
-        std::cout << "\t\tTLB misses: " << gulliver_decoder.cache->n_tlb_misses
-            << " from " << gulliver_decoder.cache->n_tlb_accesses
-            << " accesses (miss rate = " << tlb_miss_rate 
-            << ").\n";
-        std::cout << "\tAdditional stats:\n";
         std::cout << "\t\t" << gulliver_decoder.name() << " accessed MWPM " 
             << gulliver_decoder.n_mwpm_accesses << " times out of "
             << gulliver_decoder.n_total_accesses << ".\n";
+        std::cout << "\t\t" << "Max BFU latency: "
+            << gulliver_decoder.max_bfu_latency << "ns.\n";
+        std::cout << "\tAdditional stats:\n";
         std::cout << "\t\t" << clique_decoder.name() << " accessed MWPM "
             << clique_decoder.n_mwpm_accesses << " times out of "
             << clique_decoder.n_total_accesses << ".\n";
