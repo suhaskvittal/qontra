@@ -13,29 +13,26 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     n_mwpm_accesses(0),
     max_bfu_latency(0),
     // Memory system
-    cache(nullptr),
+    memsys(nullptr),
     // Properties
     n_bfu(params.n_bfu),
     n_bfu_cycles_per_add(params.n_bfu_cycles_per_add),
     bfu_hw_threshold(params.bfu_hw_threshold),
     clock_frequency(params.clock_frequency),
-    _sram_cost((1 << params.cacheC))
+    _sram_cost(0)
 {
 
-    GulliverCacheParams cache_params = {
-        params.cacheC,
-        params.cacheS,
-        params.cacheB,
+    GulliverMemoryParams mem_params = {
+        params.n_sram_table_entries,
         circuit.count_detectors() + 1,
-        false,
         params.dram_config_file,
         params.log_output_directory
     };
-    cache = new GulliverCache(cache_params);
+    memsys = new GulliverMemory(mem_params);
 }
 
 Gulliver::~Gulliver() {
-    delete cache;
+    delete memsys;
 }
 
 std::string
@@ -88,7 +85,7 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             detector_array.push_back(BOUNDARY_INDEX);
         }
         uint64_t n_cycles = 0;
-        n_cycles += cache->prefetch(detector_array);
+        n_cycles += memsys->prefetch(detector_array);
         uint64_t n_bfu_cycles = 0;
         std::vector<BFUResult> matchings = 
             brute_force_matchings(detector_array, n_bfu_cycles);
@@ -196,8 +193,8 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
                 // Recurse with this new assignment.
                 // Copy data from running result.
                 std::map<uint, uint> matching(entry.matching);
-                // Get data from the cache (simulated)
-                n_cycles += cache->access(first_unmatched_detector, di);
+                // Get data from the memory hierarchy
+                n_cycles += memsys->access(first_unmatched_detector, di, true);
                 fp_t cost = entry.matching_weight
                                 + path_table[di_dj].distance;
                 matching[first_unmatched_detector] = di;

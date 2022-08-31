@@ -30,10 +30,8 @@ struct GulliverParams {
     // Max Hamming weight to invoke BFUs 
     uint bfu_hw_threshold;
     fp_t clock_frequency;   // in Hz
-    // Cache Parameters
-    uint cacheC;
-    uint cacheS;
-    uint cacheB;
+    // Memory Parameters
+    uint n_sram_table_entries;
     // DRAM parameters
     std::string dram_config_file;
     std::string log_output_directory;
@@ -57,7 +55,7 @@ public:
     uint64_t sram_cost(void) override;
     uint64_t dram_cost(void);
 
-    GulliverCache * cache;
+    GulliverMemory * memsys;
 
     uint32_t n_total_accesses;
     uint32_t n_mwpm_accesses;

@@ -15,16 +15,14 @@ static fp_t DEFAULT_ERROR_STDDEV = 15e-5;
 static uint32_t DEFAULT_SHOTS = 100000;
 
 static GulliverParams GULLIVER_DEFAULT = {
-    16,     // n_bfu
+    4,      // n_bfu
     1,      // n_bfu_cycles_per_add
-    5,      // bfu_hw_threshold
+    7,      // bfu_hw_threshold
     500e6,  // clock_frequency
     // Cache parameters,
-    14,  // C, cache size is 2**C
-    2,   // S
-    8,   // B
+    128,
     // DRAM parameters
-    std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR3_1Gb_x8_1333.ini",
+    std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR4_4Gb_x16_1866.ini",
     std::string(HOME_DIRECTORY) + "/src/gulliver/logs"
 };
 
@@ -130,13 +128,6 @@ decoder_analysis_experiment() {
                 << ")\n";
         }
         std::cout << "\tGulliver stats:\n";
-        fp_t cache_miss_rate = 
-            ((fp_t) gulliver_decoder.cache->n_misses) 
-            / gulliver_decoder.cache->n_accesses;
-        std::cout << "\t\tCache misses: " << gulliver_decoder.cache->n_misses
-            << " from " << gulliver_decoder.cache->n_accesses
-            << " accesses (miss rate = " << cache_miss_rate 
-            << ").\n";
         std::cout << "\t\t" << gulliver_decoder.name() << " accessed MWPM " 
             << gulliver_decoder.n_mwpm_accesses << " times out of "
             << gulliver_decoder.n_total_accesses << ".\n";
@@ -146,7 +137,7 @@ decoder_analysis_experiment() {
         std::cout << "\t\t" << clique_decoder.name() << " accessed MWPM "
             << clique_decoder.n_mwpm_accesses << " times out of "
             << clique_decoder.n_total_accesses << ".\n";
-        gulliver_decoder.cache->main_memory->PrintStats();
+        gulliver_decoder.memsys->main_memory->PrintStats();
     }
 }
 
@@ -339,24 +330,4 @@ void
 _cache_sweep(const std::filesystem::path& output_file,
         const stim::Circuit& circuit, uint32_t shots)
 {
-    std::ofstream out(output_file);
-    for (uint C = 10; C <= 20; C++) {
-        for (uint B = 6; B <= 12; B++) {
-            for (uint S = 0; S <= C - B; S++) {
-                GulliverParams params = GULLIVER_DEFAULT;
-                params.cacheC = C;
-                params.cacheB = B;
-                params.cacheS = S;
-                Gulliver decoder(circuit, params);
-                b_decoder_ler(&decoder, shots, GULLIVER_RNG, false); 
-                fp_t cache_miss_rate = 
-                    ((fp_t) decoder.cache->n_misses) 
-                    / decoder.cache->n_accesses;
-                out << C << " " << S << " " << B 
-                    << " " << cache_miss_rate << "\n";
-                std::cout << "\t" << C << " " << S << " " << B 
-                    << " " << cache_miss_rate << "\n";
-            }
-        }
-    }
 }
