@@ -86,15 +86,8 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
         }
         uint64_t n_cycles = 0;
         n_cycles += memsys->prefetch(detector_array);
-        uint64_t n_bfu_cycles = 0;
         std::vector<BFUResult> matchings = 
-            brute_force_matchings(detector_array, n_bfu_cycles);
-        // Expression:
-        // ceil(sum(cycles)/#fu) + #matchings - 1
-        // = (sum(cycles)-1)/#fu + 1 + #matchings - 1
-        // = (sum(cycles)-1)/#fu + #matchings.
-        n_bfu_cycles = ((n_bfu_cycles-1)/n_bfu) + 1;
-        n_cycles += n_bfu_cycles;
+            brute_force_matchings(detector_array, n_cycles);
         // Choose the best one -- we assume this takes
         // #matchings-1 cycles though this could be done in 1
         // cycle with enough comparator gates.
@@ -153,6 +146,9 @@ std::vector<BFUResult>
 Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
         uint64_t& n_cycles) 
 {
+    uint64_t n_proc_cycles = 0;
+    uint64_t n_mem_cycles = 0;
+
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
     uint hw = detector_array.size();
@@ -173,17 +169,13 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
         // stack is one cycle.
         BFUResult entry = bfu_stack.top();
         bfu_stack.pop();
-
-        n_cycles++;
+        n_proc_cycles++;
         // Find first unmatched detector, and match to ever other unmatched detector.
         bool found_unmatched_detector = false;
         uint first_unmatched_detector = 0;
         for (uint8_t ai = 0; ai < detector_array.size(); ai++) {
             uint di = detector_array[ai];
-            // Assume searching through the matching requires
-            // matching.size() cycles (one cycle per entry, assume
-            // we read every single entry).
-            n_cycles += entry.matching.size();
+            n_proc_cycles++;
             if (entry.matching.count(di)) {
                 continue;
             }
@@ -194,7 +186,7 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
                 // Copy data from running result.
                 std::map<uint, uint> matching(entry.matching);
                 // Get data from the memory hierarchy
-                n_cycles += memsys->access(first_unmatched_detector, di, true);
+                n_mem_cycles += memsys->access(first_unmatched_detector, di, true);
                 fp_t cost = entry.matching_weight
                                 + path_table[di_dj].distance;
                 matching[first_unmatched_detector] = di;
@@ -204,7 +196,7 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
                 //
                 // Assume the write to the matching
                 // data structure is 2 cycles.
-                n_cycles += n_bfu_cycles_per_add + 2;
+                n_proc_cycles += n_bfu_cycles_per_add + 2;
                 // Update matching.
                 BFUResult new_result = {matching, cost, true};
                 bfu_stack.push(new_result);
@@ -212,8 +204,6 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
                 found_unmatched_detector = true;
                 first_unmatched_detector = di;
             }
-            // Assume each iteration through the detector array is one cycle.
-            n_cycles++;
         } 
         // If we could not find an unmatched detector, this
         // is a perfect matching.
@@ -221,6 +211,7 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
             results.push_back(entry);
         }
     }
+    n_cycles += ((n_proc_cycles-1)/n_bfu)+1 + n_mem_cycles;
     return results;
 }
 

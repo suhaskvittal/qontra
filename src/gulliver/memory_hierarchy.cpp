@@ -154,12 +154,10 @@ prefetch_init_exit:
 
 uint64_t
 GulliverMemory::invalidate() {
-    uint64_t n_cycles = 0;
     for (GulliverSramTableEntry& e : sram_table) {
         e.evictable = true;
     }
-    n_cycles++;
-    return n_cycles;
+    return 0;
 }
 
 uint64_t
