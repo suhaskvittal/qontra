@@ -15,14 +15,14 @@ static fp_t DEFAULT_ERROR_STDDEV = 15e-5;
 static uint32_t DEFAULT_SHOTS = 100000;
 
 static GulliverParams GULLIVER_DEFAULT = {
-    1,      // n_bfu
-    5,      // n_bfu_cycles_per_add
-    7,      // bfu_hw_threshold
+    16,     // n_bfu
+    1,      // n_bfu_cycles_per_add
+    5,      // bfu_hw_threshold
     500e6,  // clock_frequency
     // Cache parameters,
-    10, // C, cache size is 2**C
-    7,  // S
-    3,  // B
+    14,  // C, cache size is 2**C
+    2,   // S
+    8,   // B
     // DRAM parameters
     std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR3_1Gb_x8_1333.ini",
     std::string(HOME_DIRECTORY) + "/src/gulliver/logs"
@@ -146,6 +146,7 @@ decoder_analysis_experiment() {
         std::cout << "\t\t" << clique_decoder.name() << " accessed MWPM "
             << clique_decoder.n_mwpm_accesses << " times out of "
             << clique_decoder.n_total_accesses << ".\n";
+        gulliver_decoder.cache->main_memory->PrintStats();
     }
 }
 

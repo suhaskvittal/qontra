@@ -22,8 +22,6 @@
  * Nothing too fancy, but gets the job done.
  * */
 
-#define GC_POLICY_LRU
-
 typedef uint64_t addr_t;
 
 struct GulliverCacheParams {
@@ -79,6 +77,7 @@ public:
     ~GulliverCache();
 
     uint64_t access(uint, uint);
+    uint64_t prefetch(std::vector<uint>& detectors);
 
     // Statistics
     uint32_t n_accesses;
@@ -100,6 +99,8 @@ private:
     uint n_detectors;
 
     bool fake_cache;
+
+    friend void decoder_analysis_experiment(void);
 };
 
 uint

@@ -88,8 +88,16 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             detector_array.push_back(BOUNDARY_INDEX);
         }
         uint64_t n_cycles = 0;
+        n_cycles += cache->prefetch(detector_array);
+        uint64_t n_bfu_cycles = 0;
         std::vector<BFUResult> matchings = 
-            brute_force_matchings(detector_array, n_cycles);
+            brute_force_matchings(detector_array, n_bfu_cycles);
+        // Expression:
+        // ceil(sum(cycles)/#fu) + #matchings - 1
+        // = (sum(cycles)-1)/#fu + 1 + #matchings - 1
+        // = (sum(cycles)-1)/#fu + #matchings.
+        n_bfu_cycles = ((n_bfu_cycles-1)/n_bfu) + 1;
+        n_cycles += n_bfu_cycles;
         // Choose the best one -- we assume this takes
         // #matchings-1 cycles though this could be done in 1
         // cycle with enough comparator gates.
@@ -102,11 +110,6 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
         }
         // Compute logical correction.
         auto matching = best_result.matching;
-        // Expression:
-        // ceil(sum(cycles)/#fu) + #matchings - 1
-        // = (sum(cycles)-1)/#fu + 1 + #matchings - 1
-        // = (sum(cycles)-1)/#fu + #matchings.
-        n_cycles = ((n_cycles-1)/n_bfu_cycles_per_add) + matchings.size();
 
         std::vector<uint8_t> correction(n_observables, 0);
         std::set<uint> visited;
