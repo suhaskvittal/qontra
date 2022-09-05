@@ -9,6 +9,7 @@
 #include "mwpm_decoder.h"
 #include "benchmark.h"
 #include "gulliver/memory_hierarchy.h"
+#include "gulliver/defs.h"
 
 #include <algorithm>
 #include <array>
@@ -29,12 +30,13 @@ struct GulliverParams {
     uint32_t n_bfu_cycles_per_add;
     // Max Hamming weight to invoke BFUs 
     uint bfu_hw_threshold;
-    fp_t clock_frequency;   // in Hz
+    fp_t main_clock_frequency;   // in Hz
     // Memory Parameters
     uint n_sram_table_entries;
     // DRAM parameters
     std::string dram_config_file;
     std::string log_output_directory;
+    fp_t dram_clock_frequency;
 };
 
 struct BFUResult {
@@ -60,17 +62,21 @@ public:
     uint32_t n_total_accesses;
     uint32_t n_mwpm_accesses;
     fp_t max_bfu_latency;
+    GulliverCycles max_cycles;
 private:
     /* Recursively examine all possible matchings given a syndrome. */
+    std::map<uint, uint> 
+        predecode(const std::vector<uint>&, GulliverCycles&);
     std::vector<BFUResult> 
-        brute_force_matchings(const std::vector<uint>&, uint64_t&);
+        brute_force_matchings(const std::vector<uint>&, GulliverCycles&);
+
 
     uint n_bfu;
     uint32_t n_bfu_cycles_per_add;
     uint bfu_hw_threshold;
-    fp_t clock_frequency;
 
-    uint64_t _sram_cost;
+    fp_t main_clock_frequency;
+    fp_t dram_clock_frequency;
 };
 
 

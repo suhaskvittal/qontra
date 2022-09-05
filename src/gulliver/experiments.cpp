@@ -15,15 +15,16 @@ static fp_t DEFAULT_ERROR_STDDEV = 15e-5;
 static uint32_t DEFAULT_SHOTS = 100000;
 
 static GulliverParams GULLIVER_DEFAULT = {
-    4,      // n_bfu
+    8,      // n_bfu
     1,      // n_bfu_cycles_per_add
-    7,      // bfu_hw_threshold
-    500e6,  // clock_frequency
-    // Cache parameters,
-    128,
+    8,      // bfu_hw_threshold
+    250e6,  // onchip clock frequency
+    // Memory parameters
+    20,
     // DRAM parameters
     std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR4_4Gb_x16_1866.ini",
-    std::string(HOME_DIRECTORY) + "/src/gulliver/logs"
+    std::string(HOME_DIRECTORY) + "/src/gulliver/logs",
+    1.866e9   // DRAM clock frequency
 };
 
 void
@@ -33,21 +34,7 @@ decoder_sram_experiment() {
     fp_t r = DEFAULT_ERROR_STDDEV;
     // We examine this for MWPM (motivation).
     for (uint code_dist = 3; code_dist <= 21; code_dist += 2) {
-        stim::CircuitGenParameters surf_code_params(
-                code_dist, code_dist, "rotated_memory_z");
-        // Setup error rates.
-        surf_code_params.after_clifford_depolarization = p;
-        surf_code_params.before_round_data_depolarization = p;
-        surf_code_params.before_measure_flip_probability = p;
-        surf_code_params.after_reset_flip_probability = p;
-
-        surf_code_params.after_clifford_depolarization_stddev = r;
-        surf_code_params.before_round_data_depolarization_stddev = r;
-        surf_code_params.before_measure_flip_probability_stddev = r;
-        surf_code_params.after_reset_flip_probability_stddev = r;
-
-        stim::Circuit surf_code_circ = 
-            generate_surface_code_circuit(surf_code_params).circuit;
+        auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
         // MWPM
         MWPMDecoder mwpm_decoder(surf_code_circ);
         // Gulliver
@@ -78,21 +65,7 @@ decoder_analysis_experiment() {
     uint32_t shots = 1000000;
     // Setup circuit.
     for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
-        stim::CircuitGenParameters surf_code_params(
-                code_dist, code_dist, "rotated_memory_z");
-        // Setup error rates.
-        surf_code_params.after_clifford_depolarization = p;
-        surf_code_params.before_round_data_depolarization = p;
-        surf_code_params.before_measure_flip_probability = p;
-        surf_code_params.after_reset_flip_probability = p;
-
-        surf_code_params.after_clifford_depolarization_stddev = r;
-        surf_code_params.before_round_data_depolarization_stddev = r;
-        surf_code_params.before_measure_flip_probability_stddev = r;
-        surf_code_params.after_reset_flip_probability_stddev = r;
-
-        stim::Circuit surf_code_circ = 
-            generate_surface_code_circuit(surf_code_params).circuit;
+        auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
         // Build decoders.
         // MWPM
         MWPMDecoder mwpm_decoder(surf_code_circ);
@@ -128,11 +101,18 @@ decoder_analysis_experiment() {
                 << ")\n";
         }
         std::cout << "\tGulliver stats:\n";
+        std::cout << "\t\t" << gulliver_decoder.name() << " accessed DRAM "
+            << gulliver_decoder.memsys->n_dram_accesses << " times out of "
+            << gulliver_decoder.memsys->n_total_accesses << ".\n";
         std::cout << "\t\t" << gulliver_decoder.name() << " accessed MWPM " 
             << gulliver_decoder.n_mwpm_accesses << " times out of "
             << gulliver_decoder.n_total_accesses << ".\n";
         std::cout << "\t\t" << "Max BFU latency: "
             << gulliver_decoder.max_bfu_latency << "ns.\n";
+        std::cout << "\t\t" << "Max cycles onchip: "
+            << gulliver_decoder.max_cycles.onchip 
+            << ", max cycles in DRAM: "
+            << gulliver_decoder.max_cycles.dram << ".\n";
         std::cout << "\tAdditional stats:\n";
         std::cout << "\t\t" << clique_decoder.name() << " accessed MWPM "
             << clique_decoder.n_mwpm_accesses << " times out of "
@@ -148,21 +128,13 @@ gulliver_timing_experiment() {
     create_directory(data_folder);
 
     fp_t p = DEFAULT_ERROR_MEAN;
+    fp_t r = DEFAULT_ERROR_STDDEV;
     for (uint code_dist = 3; code_dist <= 13; code_dist += 2) {
         std::filesystem::path filename(
                 "gulliver_timing_d=" + std::to_string(code_dist) + ".txt");
         std::filesystem::path timing_analysis_file = data_folder/filename;
-        // Setup Stim parameters.
-        stim::CircuitGenParameters surf_code_params(
-                code_dist, code_dist, "rotated_memory_z");
-        // Setup error rates.
-        surf_code_params.after_clifford_depolarization = p;
-        surf_code_params.before_round_data_depolarization = p;
-        surf_code_params.before_measure_flip_probability = p;
-        surf_code_params.after_reset_flip_probability = p;
 
-        stim::Circuit surf_code_circ = 
-            generate_surface_code_circuit(surf_code_params).circuit;
+        auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
         // Setup decoder.
         GulliverParams decoder_params = GULLIVER_DEFAULT;
 
@@ -186,21 +158,13 @@ mwpm_timing_experiment() {
     create_directory(data_folder);
 
     fp_t p = DEFAULT_ERROR_MEAN;
+    fp_t r = DEFAULT_ERROR_STDDEV;
     for (uint code_dist = 3; code_dist <= 9; code_dist += 2) {
         std::filesystem::path filename(
                 "mwpm_timing_d=" + std::to_string(code_dist) + ".txt");
         std::filesystem::path timing_analysis_file = data_folder/filename;
-        // Setup Stim parameters.
-        stim::CircuitGenParameters surf_code_params(
-                code_dist, code_dist, "rotated_memory_z");
-        // Setup error rates.
-        surf_code_params.after_clifford_depolarization = p;
-        surf_code_params.before_round_data_depolarization = p;
-        surf_code_params.before_measure_flip_probability = p;
-        surf_code_params.after_reset_flip_probability = p;
 
-        stim::Circuit surf_code_circ = 
-            generate_surface_code_circuit(surf_code_params).circuit;
+        auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
         // Setup decoder.
         MWPMDecoder decoder(surf_code_circ);
         _timing_analysis(timing_analysis_file, &decoder, DEFAULT_SHOTS);
@@ -208,77 +172,68 @@ mwpm_timing_experiment() {
 }
 
 void
-mwpm_sweep_experiment() {
-    std::cout << "Running sweep analysis experiment...\n";
-
-    std::filesystem::path folder("mwpm_sweep");
-    std::filesystem::path sweep_analysis_folder = data_folder/folder;
-    // Create folder if it does not exist.
-    create_directory(data_folder);
-    create_directory(sweep_analysis_folder);
-
-    ErrorThresholdSweepParams::decoder_gen_f dgf = 
-        [] (uint code_dist, fp_t error) {
-            stim::CircuitGenParameters circ_params(
-                    code_dist, code_dist, "rotated_memory_z");
-            // Setup error rates.
-            circ_params.after_clifford_depolarization = error;
-            circ_params.before_round_data_depolarization = error;
-            circ_params.before_measure_flip_probability = error;
-            circ_params.after_reset_flip_probability = error;
-            stim::Circuit circ = 
-                generate_surface_code_circuit(circ_params).circuit;
-            Decoder * decoder = new MWPMDecoder(circ);
-            return decoder;
-        };
-
-    ErrorThresholdSweepParams params = {
-        dgf,
-        1e-3,
-        1e-2,
-        1e-3,
-        3,
-        11,
-        2
-    };
-    _threshold_sweep(sweep_analysis_folder, params, DEFAULT_SHOTS);
-}
-
-void
-gulliver_cache_experiment() {
-    std::filesystem::path folder("gulliver_cache");
-    std::filesystem::path cache_analysis_folder(data_folder/folder);
-    // Create directories if they do not exist.
-    create_directory(data_folder);
-    create_directory(cache_analysis_folder);
-
+surface_code_hamming_weight_experiment() {
+//  uint32_t shots = 1000000000; // one billion.
+    uint32_t shots = 1000000;
+    uint32_t shots_per_round = 100000;
     fp_t p = DEFAULT_ERROR_MEAN;
     fp_t r = DEFAULT_ERROR_STDDEV;
-    uint32_t shots = 100000;
-    for (uint code_dist = 3; code_dist <= 7; code_dist += 2) {
-        std::filesystem::path out_file(
-                "dist" + std::to_string(code_dist)  + ".txt");
-        std::filesystem::path output_path = cache_analysis_folder/out_file;
-        // Build circuit
-        stim::CircuitGenParameters surf_code_params(
-                code_dist, code_dist, "rotated_memory_z");
-        // Setup error rates.
-        surf_code_params.after_clifford_depolarization = p;
-        surf_code_params.before_round_data_depolarization = p;
-        surf_code_params.before_measure_flip_probability = p;
-        surf_code_params.after_reset_flip_probability = p;
 
-        surf_code_params.after_clifford_depolarization_stddev = r;
-        surf_code_params.before_round_data_depolarization_stddev = r;
-        surf_code_params.before_measure_flip_probability_stddev = r;
-        surf_code_params.after_reset_flip_probability_stddev = r;
+    for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
+        std::map<uint, uint32_t> frequency_table;
 
-        stim::Circuit surf_code_circ = 
-            generate_surface_code_circuit(surf_code_params).circuit;
-        // Now, sweep over C, B, S.
-        std::cout << "Distance " << code_dist << ":\n";
-        _cache_sweep(output_path, surf_code_circ, shots);
+        auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
+        uint n_detectors = surf_code_circ.count_detectors();
+#ifdef USE_OMP
+#pragma omp parallel
+#endif
+        for (uint32_t batch = 0; batch < shots/shots_per_round; batch++) {
+            stim::simd_bit_table sample_buffer
+                = stim::detector_samples(surf_code_circ, shots_per_round, 
+                        false, true, GULLIVER_RNG);
+            for (uint32_t sn = 0; sn < shots_per_round; sn++) {
+                uint hw = 0;
+                for (uint i = 0; i < n_detectors; i++) {
+                    if (sample_buffer[i][sn]) {
+                        hw++;
+                    } 
+                } 
+
+                if (frequency_table.count(hw) == 0) {
+                    frequency_table[hw] = 0;
+                }
+                frequency_table[hw]++;
+            }
+        }
+
+        for (auto kv_entry : frequency_table) {
+            uint hw = kv_entry.first;
+            uint32_t freq = kv_entry.second;
+            std::cout << "(Distance " << code_dist 
+                << ") Hamming weight " << hw << " has frequency "
+                << freq << ".\n";
+        }
     }
+}
+
+stim::Circuit
+_make_surface_code_circuit(uint code_dist, fp_t mean, fp_t stddev) {
+    stim::CircuitGenParameters surf_code_params(
+            code_dist, code_dist, "rotated_memory_z");
+    // Setup error rates.
+    surf_code_params.after_clifford_depolarization = mean;
+    surf_code_params.before_round_data_depolarization = mean;
+    surf_code_params.before_measure_flip_probability = mean;
+    surf_code_params.after_reset_flip_probability = mean;
+
+    surf_code_params.after_clifford_depolarization_stddev = stddev;
+    surf_code_params.before_round_data_depolarization_stddev = stddev;
+    surf_code_params.before_measure_flip_probability_stddev = stddev;
+    surf_code_params.after_reset_flip_probability_stddev = stddev;
+
+    stim::Circuit circ = generate_surface_code_circuit(surf_code_params).circuit;
+
+    return circ;
 }
 
 void 
@@ -306,28 +261,3 @@ _timing_analysis(const std::filesystem::path& output_file,
     }
 }
 
-void 
-_threshold_sweep(const std::filesystem::path& output_folder,
-        const ErrorThresholdSweepParams& params, uint32_t shots) 
-{
-    auto data = sweep_error_threshold(params, shots, GULLIVER_RNG);
-    // Write data to output folder.
-    std::filesystem::path circ_output_folder = output_folder/"circuits";
-    std::filesystem::path sweep_output_file = output_folder/"sweep.txt";
-    // Create any folders that do not exist.
-    safe_create_directory(output_folder);
-    safe_create_directory(circ_output_folder);
-    // Finally, run the sweep.
-    ErrorThresholdOutputParams output_params = {
-        true,
-        circ_output_folder
-    };
-    std::ofstream out(sweep_output_file);
-    write_sweep_data(data, out, output_params);
-}
-
-void
-_cache_sweep(const std::filesystem::path& output_file,
-        const stim::Circuit& circuit, uint32_t shots)
-{
-}

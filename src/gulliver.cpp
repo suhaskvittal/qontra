@@ -12,14 +12,15 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     n_total_accesses(0),
     n_mwpm_accesses(0),
     max_bfu_latency(0),
+    max_cycles(),
     // Memory system
     memsys(nullptr),
     // Properties
     n_bfu(params.n_bfu),
     n_bfu_cycles_per_add(params.n_bfu_cycles_per_add),
     bfu_hw_threshold(params.bfu_hw_threshold),
-    clock_frequency(params.clock_frequency),
-    _sram_cost(0)
+    main_clock_frequency(params.main_clock_frequency),
+    dram_clock_frequency(params.dram_clock_frequency)
 {
 
     GulliverMemoryParams mem_params = {
@@ -47,13 +48,13 @@ Gulliver::is_software() {
 
 uint64_t
 Gulliver::sram_cost() {
-    return _sram_cost;
+    return 0;   // TODO
 }
 
 uint64_t
 Gulliver::dram_cost() {
     uint n_d = circuit.count_detectors();
-    return n_d*n_d*sizeof(uint);
+    return n_d*(n_d-1)*sizeof(uint)/2;  // In bytes.
 }
 
 DecoderShotResult
@@ -84,8 +85,19 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             // Add boundary.
             detector_array.push_back(BOUNDARY_INDEX);
         }
-        uint64_t n_cycles = 0;
+        GulliverCycles n_cycles;
         n_cycles += memsys->prefetch(detector_array);
+        // First do some predecoding.
+        auto matching = predecode(detector_array, n_cycles);
+        // Remove entries from the detector array that have been
+        // matched.
+        for (auto it = detector_array.begin(); it != detector_array.end(); ) {
+            if (matching.count(*it)) {
+                it = detector_array.erase(it);
+            } else {
+                it++;
+            }
+        }
         std::vector<BFUResult> matchings = 
             brute_force_matchings(detector_array, n_cycles);
         // Choose the best one -- we assume this takes
@@ -99,7 +111,9 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             }
         }
         // Compute logical correction.
-        auto matching = best_result.matching;
+        for (auto kv_entry : best_result.matching) {
+            matching[kv_entry.first] = kv_entry.second; 
+        }
 
         std::vector<uint8_t> correction(n_observables, 0);
         std::set<uint> visited;
@@ -127,9 +141,12 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             visited.insert(dj);
         }
 
-        fp_t time_taken = (n_cycles * 1e9) / clock_frequency;  // in ns.
+        fp_t time_taken = 
+            ((n_cycles.onchip / main_clock_frequency)
+             + (n_cycles.dram / dram_clock_frequency)) * 1e9;  // in ns.
         if (time_taken > max_bfu_latency) {
             max_bfu_latency = time_taken;
+            max_cycles = n_cycles;
         }
         DecoderShotResult res = {
             time_taken,
@@ -142,15 +159,87 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     }
 }
 
-std::vector<BFUResult>
-Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
-        uint64_t& n_cycles) 
+std::map<uint, uint>
+Gulliver::predecode(const std::vector<uint>& detector_array, 
+        GulliverCycles& n_cycles) 
 {
     uint64_t n_proc_cycles = 0;
-    uint64_t n_mem_cycles = 0;
+    GulliverCycles n_mem_cycles;  // sram and dram accesses.
+    
+    typedef std::pair<uint, fp_t> PairingEntry;
+    std::map<uint, PairingEntry> best_pairing; 
+    for (uint i = 0; i < detector_array.size(); i++) {
+        uint di = detector_array[i];
+        auto vi = graph.get(di);
+        // Compute the min neighbor that is in the detector array.
+        for (uint j = i+1; j < detector_array.size(); j++) {
+            uint dj = detector_array[j];
+            auto vj = graph.get(dj);
+            // Check if di and dj are connected.
+            // Assume this is an access to some SRAM data structure.
+            //
+            // This can be a global data structure across all logical qubits.
+            // Or even just a logic circuit.
+            auto edge = boost::edge(vi, vj, graph.base);
+            n_proc_cycles++;
+            if (!edge.second) {
+                continue;
+            }
+            // If they are adjacent, then access the weight from memory.
+            fp_t w = graph.base[edge.first].edge_weight;
+            n_mem_cycles += memsys->access(di, dj, false);
 
-    uint n_detectors = circuit.count_detectors();
-    uint n_observables = circuit.count_observables();
+            bool di_consents = best_pairing.count(di) == 0;
+            bool dj_consents = best_pairing.count(dj) == 0;
+
+            if (best_pairing.count(di)) {
+                PairingEntry prev = best_pairing[di];
+                if (prev.second > w) {
+                    di_consents = true;
+                }
+            }
+
+            if (best_pairing.count(dj)) {
+                PairingEntry prev = best_pairing[dj];
+                if (prev.second > w) {
+                    dj_consents = true;
+                }
+            }
+
+            if (di_consents && dj_consents) {
+                best_pairing[di] = std::make_pair(dj, w);
+                best_pairing[dj] = std::make_pair(di, w);
+            }
+            // Assume one cycle for comparisons.
+            n_proc_cycles++;
+        }
+    }
+    // Consolidate the matching.
+    std::map<uint, uint> matching;
+    for (auto kv_entry : best_pairing) {
+        uint di = kv_entry.first;
+        if (matching.count(di)) {
+            continue;
+        }
+        uint dj = kv_entry.second.first;
+        if (di == best_pairing[dj].first) {
+            matching[di] = dj;
+            matching[dj] = di;
+        }
+        n_proc_cycles++;
+    }
+    n_cycles.onchip += n_proc_cycles;
+    n_cycles += n_mem_cycles;
+    return matching;
+}
+
+std::vector<BFUResult>
+Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
+        GulliverCycles& n_cycles) 
+{
+    uint64_t n_proc_cycles = 0;
+    GulliverCycles n_mem_cycles;  // sram and dram.
+
     uint hw = detector_array.size();
     // We try and model our hardware using the appropriate
     // data structures.
@@ -211,7 +300,8 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
             results.push_back(entry);
         }
     }
-    n_cycles += ((n_proc_cycles-1)/n_bfu)+1 + n_mem_cycles;
+    n_cycles.onchip += (n_proc_cycles-1)/n_bfu + 1;
+    n_cycles += n_mem_cycles;
     return results;
 }
 

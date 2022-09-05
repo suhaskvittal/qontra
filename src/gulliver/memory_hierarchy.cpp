@@ -13,8 +13,10 @@
 static std::map<std::pair<uint, uint>, bool> memory_event_table;
 
 GulliverMemory::GulliverMemory(const GulliverMemoryParams& params)
-    :main_memory(nullptr),
+    :n_dram_accesses(0),
+    n_total_accesses(0),
     sram_table(),
+    main_memory(nullptr),
     n_detectors(params.n_detectors)
 {
     auto main_memory_callback = [this, memory_event_table] (uint64_t x) {
@@ -32,7 +34,7 @@ GulliverMemory::GulliverMemory(const GulliverMemoryParams& params)
 
     GulliverSramTableEntry default_entry = {
         0x0,
-        false
+        true
     };
     sram_table = std::vector<GulliverSramTableEntry>(params.n_sram_table_entries, 
                                                         default_entry);
@@ -42,12 +44,12 @@ GulliverMemory::~GulliverMemory() {
     delete main_memory;
 }
 
-uint64_t
+GulliverCycles
 GulliverMemory::access(uint di, uint dj, bool mark_as_evictable) {
     if (di > dj) {
         return access(dj, di, mark_as_evictable);
     }
-    uint64_t n_cycles = 0;
+    GulliverCycles n_cycles;
 
     uint bdi = bound_detector(di, n_detectors);
     uint bdj = bound_detector(dj, n_detectors);
@@ -64,8 +66,10 @@ GulliverMemory::access(uint di, uint dj, bool mark_as_evictable) {
             break;
         }
     }
-    n_cycles++;
+    n_cycles.onchip++;
+    n_total_accesses++;
     if (!is_hit) {
+        n_dram_accesses++;
         // Then, we must go to DRAM.
         std::pair<uint, uint> di_dj = std::make_pair(di, dj);
         main_memory->AddTransaction(address, false); 
@@ -73,20 +77,20 @@ GulliverMemory::access(uint di, uint dj, bool mark_as_evictable) {
             !memory_event_table[di_dj])
         {
             main_memory->ClockTick(); 
-            n_cycles++;
+            n_cycles.dram++;
         }
         memory_event_table[di_dj] = false;
-        n_cycles += replace(address);
+        n_cycles.onchip += replace(address);
     }
     return n_cycles;
 }
 
-uint64_t
+GulliverCycles
 GulliverMemory::prefetch(std::vector<uint>& detectors) {
     invalidate();
 
-    uint64_t n_cycles = 0;
-
+    GulliverCycles n_cycles;
+    
     std::map<std::pair<uint, uint>, addr_t> detector_pairs;
     for (uint ai = 0; ai < detectors.size(); ai++) {
         uint di = detectors[ai];
@@ -101,11 +105,12 @@ GulliverMemory::prefetch(std::vector<uint>& detectors) {
             bool is_hit = false;
             for (GulliverSramTableEntry& e : sram_table) {
                 if (e.address == address) {
+                    e.evictable = false;
                     is_hit = true;
                     break;
                 }
             }
-            n_cycles++;
+            n_cycles.onchip++;
             if (!is_hit) {
                 std::pair<uint, uint> di_dj = std::make_pair(di,dj);
                 detector_pairs[di_dj] = address;
@@ -125,11 +130,13 @@ prefetch_init_exit:
 
         while (!main_memory->WillAcceptTransaction(address, false)) {
             main_memory->ClockTick();
-            n_cycles++;
+            n_cycles.dram++;
         }
         main_memory->AddTransaction(address, false);
         main_memory->ClockTick();
-        n_cycles++;
+        n_cycles.dram++;
+        n_dram_accesses++;
+        n_total_accesses++;
     }
 
     std::set<std::pair<uint, uint>> completed;
@@ -147,17 +154,16 @@ prefetch_init_exit:
             }
         }  
         main_memory->ClockTick();
-        n_cycles++;
+        n_cycles.dram++;
     } while (completed.size() < detector_pairs.size());
     return n_cycles;
 }
 
-uint64_t
+void
 GulliverMemory::invalidate() {
     for (GulliverSramTableEntry& e : sram_table) {
         e.evictable = true;
     }
-    return 0;
 }
 
 uint64_t

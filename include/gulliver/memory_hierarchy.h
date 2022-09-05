@@ -8,6 +8,7 @@
 
 #include "defs.h"
 #include "decoding_graph.h"
+#include "gulliver/defs.h"
 
 #include <memory_system.h>
 
@@ -42,11 +43,15 @@ public:
     GulliverMemory(const GulliverMemoryParams&);
     ~GulliverMemory();
 
-    uint64_t access(uint, uint, bool mark_as_evictable);
-    uint64_t prefetch(std::vector<uint>& detectors);
-    uint64_t invalidate(void);
+    GulliverCycles access(uint, uint, bool mark_as_evictable);
+    GulliverCycles prefetch(std::vector<uint>& detectors);
+
+    void invalidate(void);
+
+    uint64_t n_dram_accesses;
+    uint64_t n_total_accesses;
 private:
-    uint64_t replace(addr_t);
+    uint64_t replace(addr_t);   // Strictly on chip.
 
     std::vector<GulliverSramTableEntry> sram_table;
     dramsim3::MemorySystem * main_memory;

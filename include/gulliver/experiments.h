@@ -19,11 +19,6 @@
 extern std::filesystem::path data_folder;
 extern std::mt19937_64 GULLIVER_RNG;
 
-struct TimingAnalysisParams {
-    Decoder * decoder_p;
-    uint32_t shots;
-};
-
 /* Counts amount of SRAM storage
  * required to support decoders. */
 void
@@ -45,30 +40,19 @@ gulliver_timing_experiment();
 void 
 mwpm_timing_experiment();
 
-/* Performs a sweep to get data
- * to compute the error threshold.
+/*
+ * Determine frequency of various Hamming
+ * weights for different distances
+ * (surface code).
  * */
 void
-mwpm_sweep_experiment();
-
-/* Examines the performance of 
- * Gulliver's cache with different
- * parameters across different
- * distances.
- * */
-void
-gulliver_cache_experiment();
+surface_code_hamming_weight_experiment();
 
 /* Private Helper Functions */
+stim::Circuit
+_make_surface_code_circuit(uint code_dist, fp_t, fp_t);
 void
 _timing_analysis(const std::filesystem::path& output_file, 
         Decoder*, uint32_t shots);
-void
-_threshold_sweep(const std::filesystem::path& output_folder,
-        const ErrorThresholdSweepParams&, uint32_t shots);
-
-void
-_cache_sweep(const std::filesystem::path& output_file,
-        const stim::Circuit&, uint32_t shots);
 
 #endif
