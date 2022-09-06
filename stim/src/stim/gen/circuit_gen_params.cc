@@ -107,32 +107,34 @@ const {
             get_after_reset_flip_probability(), basis);
 }
 
+#define ADJUST(p, mean) ((p) < (mean) ? 2*(mean)-(p) : (p))
+
 double
 CircuitGenParameters::get_after_clifford_depolarization() const {
     std::normal_distribution<double> dist{
         after_clifford_depolarization, after_clifford_depolarization_stddev};
-    return abs(dist(CIRCGEN_RNG));
+    return ADJUST(dist(CIRCGEN_RNG), after_clifford_depolarization);
 }
 
 double
 CircuitGenParameters::get_before_round_data_depolarization() const {
     std::normal_distribution<double> dist{
         before_round_data_depolarization, before_round_data_depolarization_stddev};
-    return abs(dist(CIRCGEN_RNG));
+    return ADJUST(dist(CIRCGEN_RNG), before_round_data_depolarization);
 }
 
 double
 CircuitGenParameters::get_before_measure_flip_probability() const {
     std::normal_distribution<double> dist{
         before_measure_flip_probability, before_measure_flip_probability_stddev};
-    return abs(dist(CIRCGEN_RNG));
+    return ADJUST(dist(CIRCGEN_RNG), before_measure_flip_probability);
 }
 
 double
 CircuitGenParameters::get_after_reset_flip_probability() const {
     std::normal_distribution<double> dist{
         after_reset_flip_probability, after_reset_flip_probability_stddev};
-    return abs(dist(CIRCGEN_RNG));
+    return ADJUST(dist(CIRCGEN_RNG), after_reset_flip_probability);
 }
 
 std::string GeneratedCircuit::layout_str() const {

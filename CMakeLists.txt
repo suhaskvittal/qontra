@@ -31,11 +31,14 @@ set(QUARCH_PROGRAM_FILES
 add_executable(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
 if (ENABLE_OPENMP) 
-    target_compile_options(quarch PRIVATE -O3 -Wall -fopenmp)
+    target_compile_options(quarch PRIVATE -fopenmp)
     target_compile_definitions(quarch PRIVATE USE_OMP)
-elseif(CMAKE_BUILD_TYPE EQUAL Release)
+endif()
+
+if(CMAKE_BUILD_TYPE EQUAL Release)
     target_compile_options(quarch PRIVATE -O3 -Wall)
 endif()
+
 target_compile_definitions(quarch PRIVATE 
                             QFP_SIZE=${MWPM_QUANTIZE_LEVEL}
                             HOME_DIRECTORY="${CMAKE_SOURCE_DIR}")

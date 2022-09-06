@@ -26,6 +26,10 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     GulliverMemoryParams mem_params = {
         params.n_sram_table_entries,
         circuit.count_detectors() + 1,
+        params.dram,
+        params.bankgroup,
+        params.bank,
+        params.row_offset,
         params.dram_config_file,
         params.log_output_directory
     };

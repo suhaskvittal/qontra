@@ -11,17 +11,21 @@ const auto seed = std::chrono::system_clock::now().time_since_epoch().count();
 std::mt19937_64 GULLIVER_RNG(seed);
 
 static fp_t DEFAULT_ERROR_MEAN = 1e-4;
-static fp_t DEFAULT_ERROR_STDDEV = 15e-5;
+static fp_t DEFAULT_ERROR_STDDEV = 30e-5;
 static uint32_t DEFAULT_SHOTS = 100000;
 
 static GulliverParams GULLIVER_DEFAULT = {
     8,      // n_bfu
     1,      // n_bfu_cycles_per_add
     8,      // bfu_hw_threshold
-    250e6,  // onchip clock frequency
+    250e6,  // FPGA clock frequency
     // Memory parameters
-    20,
+    32,     // Number of registers
     // DRAM parameters
+    nullptr,    // DRAM pointer (nullptr for single Gulliver decoder)
+    0,          // Bank group for logical qubit
+    0,          // Bank for logical qubit
+    0,          // Row offset for logical qubit.
     std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR4_4Gb_x16_1866.ini",
     std::string(HOME_DIRECTORY) + "/src/gulliver/logs",
     1.866e9   // DRAM clock frequency
@@ -172,10 +176,43 @@ mwpm_timing_experiment() {
 }
 
 void
+mwpm_nonuniform_error_experiment() {
+    uint32_t shots = 100000000; 
+    uint32_t shots_per_round = DEFAULT_SHOTS;
+    fp_t p = DEFAULT_ERROR_MEAN;
+    fp_t r = DEFAULT_ERROR_STDDEV;
+    for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
+        auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
+        auto proxy_circ = _make_surface_code_circuit(code_dist, p, 0);
+
+        uint32_t nle_proxy = 0;
+        uint32_t nle_actual = 0;
+#ifdef USE_OMP
+#pragma omp parallel for reduction (+:nle_proxy, nle_actual)
+#endif
+        for (uint32_t batch = 0; batch < shots/shots_per_round; batch++) {
+            MWPMDecoder decoder_proxy(proxy_circ);
+            MWPMDecoder decoder_actual(proxy_circ);
+            // Decoder should've initialized everything for the proxy_circ.
+            // We replace the circuit with the actual circuit.
+            decoder_actual.circuit = surf_code_circ;
+            b_decoder_ler(&decoder_proxy, shots_per_round, GULLIVER_RNG, false);
+            b_decoder_ler(&decoder_actual, shots_per_round, GULLIVER_RNG, false);
+            nle_proxy += decoder_proxy.n_logical_errors;
+            nle_actual += decoder_actual.n_logical_errors;
+        }
+        fp_t ler_proxy = ((fp_t) nle_proxy) / ((fp_t) shots);
+        fp_t ler_actual = ((fp_t) nle_actual) / ((fp_t) shots);
+        std::cout << "[d = " << code_dist << "] MWPM LER = " << ler_actual
+            << " (" << ler_proxy << ").\n";
+    }
+}
+
+void
 surface_code_hamming_weight_experiment() {
 //  uint32_t shots = 1000000000; // one billion.
     uint32_t shots = 1000000;
-    uint32_t shots_per_round = 100000;
+    uint32_t shots_per_round = DEFAULT_SHOTS;
     fp_t p = DEFAULT_ERROR_MEAN;
     fp_t r = DEFAULT_ERROR_STDDEV;
 
@@ -198,11 +235,15 @@ surface_code_hamming_weight_experiment() {
                         hw++;
                     } 
                 } 
-
-                if (frequency_table.count(hw) == 0) {
-                    frequency_table[hw] = 0;
+#ifdef USE_OMP
+#pragma omp critical
+#endif
+                {
+                    if (frequency_table.count(hw) == 0) {
+                        frequency_table[hw] = 0;
+                    }
+                    frequency_table[hw]++;
                 }
-                frequency_table[hw]++;
             }
         }
 

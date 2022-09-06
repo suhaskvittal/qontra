@@ -29,6 +29,15 @@ struct GulliverMemoryParams {
     uint n_sram_table_entries;
     uint n_detectors;
 
+    dramsim3::MemorySystem * dram;  // Can be nullptr if the user wants to setup
+                                    // DRAM using the config file.
+                                    //
+                                    // Needed for DRAM used across multiple
+                                    // logical qubits.
+    uint8_t bankgroup;
+    uint8_t bank;
+    uint32_t row_offset;
+
     std::string dram_config_file;
     std::string log_output_dir;
 };
@@ -52,11 +61,18 @@ public:
     uint64_t n_total_accesses;
 private:
     uint64_t replace(addr_t);   // Strictly on chip.
+    addr_t to_address(uint, uint);
+    std::pair<uint, uint> from_address(addr_t);
 
     std::vector<GulliverSramTableEntry> sram_table;
     dramsim3::MemorySystem * main_memory;
 
     uint n_detectors;
+    uint8_t bankgroup;
+    uint8_t bank;
+    uint32_t row_offset;
+
+    addr_t base_address;
 
     friend class Gulliver;
     friend void decoder_analysis_experiment(void);

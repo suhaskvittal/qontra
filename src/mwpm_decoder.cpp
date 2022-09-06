@@ -12,9 +12,6 @@ MWPMDecoder::MWPMDecoder(const stim::Circuit& circ)
     uint n_detectors = boost::num_vertices(graph.base);
     // Parallelize the Dijkstra's computation if the Openmp Flag
     // is on.
-#ifdef USE_OMP
-#pragma omp parallel for
-#endif
     for (uint i = 0; i < n_detectors; i++) {
         uint vi = graph.get(i);
         // Build data structures for call.
@@ -46,9 +43,6 @@ MWPMDecoder::MWPMDecoder(const stim::Circuit& circ)
         // Do the same for the boundary.
         update_path_table(i, BOUNDARY_INDEX, distances, predecessors);
     }
-#ifdef USE_OMP
-#pragma omp barrier
-#endif
 }
 
 std::string
@@ -190,29 +184,21 @@ MWPMDecoder::update_path_table(uint src, uint dst,
     fp_t distance = distances[vj];
     std::vector<uint> path;
     if (distance < MAX_PRACTICAL_DISTANCE) {
-        bool failed_to_find_path = false;
         while (curr != vi) {
-            if (curr >= boost::num_vertices(graph.base)) {
+            if (curr >= boost::num_vertices(graph.base) || path.size() > 100) {
                 distance = std::numeric_limits<fp_t>::max();
                 path.clear();
-                failed_to_find_path = true;
-                break;
+                goto failed_to_find_path;
             }
             uint det = graph.base[curr].detector;
             path.push_back(det);
             curr = predecessors[curr];
         }
-        if (!failed_to_find_path) {
-            path.push_back(graph.base[curr].detector);
-        }
+        path.push_back(graph.base[curr].detector);
     }
+failed_to_find_path:
     // Build result.
     DijkstraResult res = {path, distance};
-#ifdef USE_OMP
-#pragma omp critical
-#endif
-    {
-        path_table[std::make_pair(src, dst)] = res;
-        path_table[std::make_pair(dst, src)] = res;
-    }
+    path_table[std::make_pair(src, dst)] = res;
+    path_table[std::make_pair(dst, src)] = res;
 }

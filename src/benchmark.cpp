@@ -72,10 +72,6 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
             if (sample_buffer[i].not_zero()) {
                 DecoderShotResult res = decoder_p->decode_error(syndrome);
                 // Update statistics.
-                if (save_per_shot_data) {
-                    execution_times[sn] = res.execution_time;
-                    memory_overheads[sn] = res.memory_overhead;
-                }
                 n_logical_errors += res.is_logical_error ? 1 : 0;
                 mean_execution_time += res.execution_time / ((fp_t)total_shots);
                 if (res.execution_time > max_execution_time) {
@@ -83,6 +79,10 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
                     if (!res.is_logical_error) {
                         max_execution_time_for_correctable = res.execution_time;    
                     }
+                }
+                if (save_per_shot_data) {
+                    execution_times[sn] = res.execution_time;
+                    memory_overheads[sn] = res.memory_overhead;
                 }
             } else {
                 if (save_per_shot_data) {

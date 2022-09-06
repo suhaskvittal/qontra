@@ -40,6 +40,14 @@ gulliver_timing_experiment();
 void 
 mwpm_timing_experiment();
 
+/* Computes the logical error rate
+ * of a MWPM decoder that assumes
+ * constant physical error rates
+ * but operates on non-uniform physical
+ * error rates.*/
+void
+mwpm_nonuniform_error_experiment();
+
 /*
  * Determine frequency of various Hamming
  * weights for different distances

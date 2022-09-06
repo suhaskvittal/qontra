@@ -22,8 +22,7 @@ public:
     uint32_t distance;
     std::string task;
 
-    bool use_normally_distributed_errors;
-    // If use_normally_distributed_errors, then
+    // If the stddev are nonzero, then
     // these values are the mean.
     // Note: these haven't been renamed to avoid
     // breaking code.

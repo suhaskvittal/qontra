@@ -34,8 +34,18 @@ struct GulliverParams {
     // Memory Parameters
     uint n_sram_table_entries;
     // DRAM parameters
+    // Either provide the pointer to DRAM
+    // and the necessary bankgroup, bank, and
+    // row_offset information, or just provide
+    // the config and log files.
+    dramsim3::MemorySystem * dram;
+    uint8_t bankgroup;
+    uint8_t bank;
+    uint32_t row_offset;
+
     std::string dram_config_file;
     std::string log_output_directory;
+
     fp_t dram_clock_frequency;
 };
 

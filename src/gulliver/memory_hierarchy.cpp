@@ -5,10 +5,6 @@
 
 #include "gulliver/memory_hierarchy.h"
 
-#define ADDRESS(di,dj,dn) (((di)*(dn)+(dj-di-1))*sizeof(fp_t))
-#define GET_DI(x,dn) ((x) / (sizeof(fp_t)*dn))
-#define GET_DJ(x,di,dn) ((x/sizeof(fp_t)) - ((di)*(dn)) + (di) + 1)
-
 // Entry is true if it has been accessed.
 static std::map<std::pair<uint, uint>, bool> memory_event_table;
 
@@ -16,21 +12,27 @@ GulliverMemory::GulliverMemory(const GulliverMemoryParams& params)
     :n_dram_accesses(0),
     n_total_accesses(0),
     sram_table(),
-    main_memory(nullptr),
-    n_detectors(params.n_detectors)
+    main_memory(params.dram),
+    n_detectors(params.n_detectors),
+    bankgroup(params.bankgroup),
+    bank(params.bank),
+    row_offset(params.row_offset),
+    base_address(0)
 {
-    auto main_memory_callback = [this, memory_event_table] (uint64_t x) {
-        uint di = GET_DI(x, this->n_detectors);
-        uint dj = GET_DJ(x, di, this->n_detectors);
-        di = unbound_detector(di, this->n_detectors);
-        dj = unbound_detector(dj, this->n_detectors);
-        std::pair<uint, uint> di_dj = std::make_pair(di, dj);
+    auto main_memory_callback = [this] (uint64_t x) {
+        std::pair<uint, uint> di_dj = this->from_address(x);
         memory_event_table[di_dj] = true;
     };
     // Finish initialization.
-    main_memory = new dramsim3::MemorySystem(
-            params.dram_config_file, params.log_output_dir,
-            main_memory_callback, main_memory_callback);
+    if (main_memory == nullptr) {
+        main_memory = new dramsim3::MemorySystem(
+                params.dram_config_file, params.log_output_dir,
+                main_memory_callback, main_memory_callback);
+    }
+    base_address = bankgroup << main_memory->config_->bg_pos
+                || bank << main_memory->config_->ba_pos
+                || row_offset << main_memory->config_->ro_pos;
+    base_address <<= main_memory->config_->shift_bits;
 
     GulliverSramTableEntry default_entry = {
         0x0,
@@ -51,9 +53,7 @@ GulliverMemory::access(uint di, uint dj, bool mark_as_evictable) {
     }
     GulliverCycles n_cycles;
 
-    uint bdi = bound_detector(di, n_detectors);
-    uint bdj = bound_detector(dj, n_detectors);
-    addr_t address = ADDRESS(bdi, bdj, n_detectors);
+    addr_t address = to_address(di, dj);
     // Examine sram table to check if entry exists.
     // If so, return it -- only one cycle lost!
     bool is_hit = false;
@@ -94,12 +94,10 @@ GulliverMemory::prefetch(std::vector<uint>& detectors) {
     std::map<std::pair<uint, uint>, addr_t> detector_pairs;
     for (uint ai = 0; ai < detectors.size(); ai++) {
         uint di = detectors[ai];
-        uint bdi = bound_detector(di, n_detectors);
         for (uint bi = ai+1; bi < detectors.size(); bi++) {
             uint dj = detectors[bi];
-            uint bdj = bound_detector(dj, n_detectors);
             // Compute address and tag
-            addr_t address = ADDRESS(bdi, bdj, n_detectors);
+            addr_t address = to_address(di, dj);
             // First, check for table hit before prefetching
             // from memory.
             bool is_hit = false;
@@ -192,12 +190,31 @@ GulliverMemory::replace(addr_t address) {
     return n_cycles;
 }
 
-uint
+addr_t
+GulliverMemory::to_address(uint di, uint dj) {
+    uint bdi = bound_detector(di, n_detectors);
+    uint bdj = bound_detector(dj, n_detectors);
+    addr_t addr = base_address + (bdi*n_detectors + (bdj-bdi-1)) * sizeof(fp_t);
+    return addr;
+}
+
+std::pair<uint, uint>
+GulliverMemory::from_address(addr_t x) {
+    x -= base_address;
+    uint bdi = x / (sizeof(fp_t) * n_detectors);
+    uint bdj = x / sizeof(fp_t) - bdi*n_detectors + bdi + 1;
+    std::pair<uint, uint> di_dj = 
+        std::make_pair(unbound_detector(bdi, n_detectors), 
+                unbound_detector(bdj, n_detectors));
+    return di_dj;
+}
+
+inline uint
 bound_detector(uint d, uint n_detectors) {
     return d == BOUNDARY_INDEX ? n_detectors-1 : d;
 }
 
-uint
+inline uint
 unbound_detector(uint d, uint n_detectors) {
     return d == n_detectors-1 ? BOUNDARY_INDEX : d;
 }

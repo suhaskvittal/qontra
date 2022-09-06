@@ -73,7 +73,7 @@ public:
     // Useful for lookup tables.
     uint match_detectors_less_than;
     // Benchmarking circuit.
-    const stim::Circuit circuit;
+    stim::Circuit circuit;
 protected:
     // Member variables.
     DecodingGraph graph;
