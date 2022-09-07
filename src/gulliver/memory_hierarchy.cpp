@@ -80,7 +80,7 @@ GulliverMemory::access(uint di, uint dj, bool mark_as_evictable) {
             n_cycles.dram++;
         }
         memory_event_table[di_dj] = false;
-        n_cycles.onchip += replace(address);
+        replace(address);
     }
     return n_cycles;
 }

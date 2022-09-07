@@ -75,10 +75,6 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     } else {
         // Invoke BFUs. As this is hardware, we don't use system time
         // to track time taken.
-        // Assume initial amount of time taken is 1 cycle per
-        // 1 in syndrome.
-        // We will push all the active high detector ids onto
-        // a "hardware" array.
         std::vector<uint> detector_array;
         for (uint di = 0; di < n_detectors; di++) {
             if (syndrome[di]) {
@@ -172,12 +168,19 @@ Gulliver::predecode(const std::vector<uint>& detector_array,
     
     typedef std::pair<uint, fp_t> PairingEntry;
     std::map<uint, PairingEntry> best_pairing; 
+    std::map<uint, uint> n_pairings;
     for (uint i = 0; i < detector_array.size(); i++) {
         uint di = detector_array[i];
+        if (n_pairings.count(di) == 0) {
+            n_pairings[di] = 0;
+        }
         auto vi = graph.get(di);
         // Compute the min neighbor that is in the detector array.
         for (uint j = i+1; j < detector_array.size(); j++) {
             uint dj = detector_array[j];
+            if (n_pairings.count(dj) == 0) {
+                n_pairings[dj] = 0;
+            }
             auto vj = graph.get(dj);
             // Check if di and dj are connected.
             // Assume this is an access to some SRAM data structure.
@@ -193,26 +196,28 @@ Gulliver::predecode(const std::vector<uint>& detector_array,
             fp_t w = graph.base[edge.first].edge_weight;
             n_mem_cycles += memsys->access(di, dj, false);
 
-            bool di_consents = best_pairing.count(di) == 0;
-            bool dj_consents = best_pairing.count(dj) == 0;
-
             if (best_pairing.count(di)) {
                 PairingEntry prev = best_pairing[di];
                 if (prev.second > w) {
-                    di_consents = true;
+                    best_pairing[di] = std::make_pair(dj, w);
+                    n_pairings[dj]++;
+                    n_pairings[prev.first]--;
                 }
+            } else {
+                best_pairing[di] = std::make_pair(dj, w);
+                n_pairings[dj]++;
             }
 
             if (best_pairing.count(dj)) {
                 PairingEntry prev = best_pairing[dj];
                 if (prev.second > w) {
-                    dj_consents = true;
+                    best_pairing[dj] = std::make_pair(di, w);
+                    n_pairings[di]++;
+                    n_pairings[prev.first]--;
                 }
-            }
-
-            if (di_consents && dj_consents) {
-                best_pairing[di] = std::make_pair(dj, w);
+            } else {
                 best_pairing[dj] = std::make_pair(di, w);
+                n_pairings[di]++;
             }
             // Assume one cycle for comparisons.
             n_proc_cycles++;
@@ -222,10 +227,13 @@ Gulliver::predecode(const std::vector<uint>& detector_array,
     std::map<uint, uint> matching;
     for (auto kv_entry : best_pairing) {
         uint di = kv_entry.first;
+        uint dj = kv_entry.second.first;
         if (matching.count(di)) {
             continue;
         }
-        uint dj = kv_entry.second.first;
+        if (n_pairings[di] > 1 || n_pairings[dj] > 1) {
+            continue;
+        }
         if (di == best_pairing[dj].first) {
             matching[di] = dj;
             matching[dj] = di;
@@ -250,6 +258,7 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
     //
     // We implement a BFU in hardware using a hardware stack.
     // and pipelined logic.
+    uint max_stack_size = 0;  // We track this to see number of BFUs being used.
     std::stack<BFUResult> bfu_stack;
     BFUResult init = {std::map<uint,uint>(), 0.0, true};
     bfu_stack.push(init);
@@ -258,6 +267,9 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
 
     uint res_index = 0;
     while (bfu_stack.size() > 0) {
+        if (bfu_stack.size() > max_stack_size) {
+            max_stack_size = bfu_stack.size();
+        }
         // Assume that popping off the hardware
         // stack is one cycle.
         BFUResult entry = bfu_stack.top();
@@ -304,8 +316,13 @@ Gulliver::brute_force_matchings(const std::vector<uint>& detector_array,
             results.push_back(entry);
         }
     }
-    n_cycles.onchip += (n_proc_cycles-1)/n_bfu + 1;
+    n_cycles.onchip += n_proc_cycles;
     n_cycles += n_mem_cycles;
+    // Observe that accesses to the registers can be concurrent,
+    // so we can assume that any step, all BFUs are using the
+    // register file.
+    uint n_bfu_used = n_bfu < max_stack_size ? n_bfu : max_stack_size;
+    n_cycles.onchip = (n_cycles.onchip-1)/n_bfu_used + 1;
     return results;
 }
 

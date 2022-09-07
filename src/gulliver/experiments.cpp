@@ -18,7 +18,7 @@ static GulliverParams GULLIVER_DEFAULT = {
     8,      // n_bfu
     1,      // n_bfu_cycles_per_add
     8,      // bfu_hw_threshold
-    250e6,  // FPGA clock frequency
+    1e9,    // FPGA clock frequency
     // Memory parameters
     32,     // Number of registers
     // DRAM parameters
@@ -28,7 +28,7 @@ static GulliverParams GULLIVER_DEFAULT = {
     0,          // Row offset for logical qubit.
     std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR4_4Gb_x16_1866.ini",
     std::string(HOME_DIRECTORY) + "/src/gulliver/logs",
-    1.866e9   // DRAM clock frequency
+    1e9,      // DRAM clock frequency
 };
 
 void
@@ -177,7 +177,7 @@ mwpm_timing_experiment() {
 
 void
 mwpm_nonuniform_error_experiment() {
-    uint32_t shots = 100000000; 
+    uint32_t shots = 1000000000;  // 1 billion 
     uint32_t shots_per_round = DEFAULT_SHOTS;
     fp_t p = DEFAULT_ERROR_MEAN;
     fp_t r = DEFAULT_ERROR_STDDEV;

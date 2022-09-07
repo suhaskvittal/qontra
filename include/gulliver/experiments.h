@@ -40,6 +40,12 @@ gulliver_timing_experiment();
 void 
 mwpm_timing_experiment();
 
+/* Examines Gulliver's latency
+ * when servicing multiple logical
+ * qubits on one DIMM.*/
+void
+gulliver_multiple_qubits_experiment();
+
 /* Computes the logical error rate
  * of a MWPM decoder that assumes
  * constant physical error rates
