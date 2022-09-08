@@ -8,8 +8,7 @@
 
 #include "mwpm_decoder.h"
 #include "benchmark.h"
-#include "gulliver/memory_hierarchy.h"
-#include "gulliver/defs.h"
+#include "gulliver/simulator.h"
 
 #include <algorithm>
 #include <array>
@@ -24,35 +23,17 @@
 #include <vector>
 
 struct GulliverParams {
-    // Number of functional units for brute force unit
-    uint n_bfu;             
-    // Number of cycles per addition operation in BFU.
-    uint32_t n_bfu_cycles_per_add;
-    // Max Hamming weight to invoke BFUs 
+    // Fetch width for brute force unit
+    uint bfu_fetch_width;             
+    // Max Hamming weight to invoke onchip hardware. 
     uint bfu_hw_threshold;
-    fp_t main_clock_frequency;   // in Hz
     // Memory Parameters
-    uint n_sram_table_entries;
+    uint n_registers;
     // DRAM parameters
-    // Either provide the pointer to DRAM
-    // and the necessary bankgroup, bank, and
-    // row_offset information, or just provide
-    // the config and log files.
-    dramsim3::MemorySystem * dram;
-    uint8_t bankgroup;
-    uint8_t bank;
-    uint32_t row_offset;
-
     std::string dram_config_file;
     std::string log_output_directory;
 
-    fp_t dram_clock_frequency;
-};
-
-struct BFUResult {
-    std::map<uint, uint> matching;
-    fp_t matching_weight;
-    bool valid;
+    fp_t main_clock_frequency;   // in Hz
 };
 
 class Gulliver : public MWPMDecoder {
@@ -67,26 +48,18 @@ public:
     uint64_t sram_cost(void) override;
     uint64_t dram_cost(void);
 
-    GulliverMemory * memsys;
-
     uint32_t n_total_accesses;
     uint32_t n_mwpm_accesses;
     fp_t max_bfu_latency;
-    GulliverCycles max_cycles;
+    uint64_t max_cycles;
 private:
-    /* Recursively examine all possible matchings given a syndrome. */
-    std::map<uint, uint> 
-        predecode(const std::vector<uint>&, GulliverCycles&);
-    std::vector<BFUResult> 
-        brute_force_matchings(const std::vector<uint>&, GulliverCycles&);
+    GulliverSimulator * simulator;
 
-
-    uint n_bfu;
-    uint32_t n_bfu_cycles_per_add;
     uint bfu_hw_threshold;
-
     fp_t main_clock_frequency;
-    fp_t dram_clock_frequency;
+    // Delete later.
+    dramsim3::MemorySystem * dram;
+    std::map<std::pair<uint, uint>, bool> * memory_event_table;
 };
 
 

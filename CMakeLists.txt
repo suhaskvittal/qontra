@@ -27,7 +27,7 @@ set(QUARCH_PROGRAM_FILES
     src/clique.cpp
     # Gulliver code.
     src/gulliver/experiments.cpp
-    src/gulliver/memory_hierarchy.cpp)
+    src/gulliver/simulator.cpp)
 add_executable(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
 if (ENABLE_OPENMP) 
@@ -37,6 +37,8 @@ endif()
 
 if(CMAKE_BUILD_TYPE EQUAL Release)
     target_compile_options(quarch PRIVATE -O3 -Wall)
+else()
+    target_compile_options(quarch PRIVATE -ggdb3)
 endif()
 
 target_compile_definitions(quarch PRIVATE 

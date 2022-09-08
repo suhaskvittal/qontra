@@ -15,20 +15,14 @@ static fp_t DEFAULT_ERROR_STDDEV = 30e-5;
 static uint32_t DEFAULT_SHOTS = 100000;
 
 static GulliverParams GULLIVER_DEFAULT = {
-    8,      // n_bfu
-    1,      // n_bfu_cycles_per_add
-    8,      // bfu_hw_threshold
-    1e9,    // FPGA clock frequency
+    4,      // bfu_fetch_width
+    10,     // bfu_hw_threshold
     // Memory parameters
     32,     // Number of registers
     // DRAM parameters
-    nullptr,    // DRAM pointer (nullptr for single Gulliver decoder)
-    0,          // Bank group for logical qubit
-    0,          // Bank for logical qubit
-    0,          // Row offset for logical qubit.
     std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR4_4Gb_x16_1866.ini",
     std::string(HOME_DIRECTORY) + "/src/gulliver/logs",
-    1e9,      // DRAM clock frequency
+    1e9,      // clock frequency
 };
 
 void
@@ -105,23 +99,15 @@ decoder_analysis_experiment() {
                 << ")\n";
         }
         std::cout << "\tGulliver stats:\n";
-        std::cout << "\t\t" << gulliver_decoder.name() << " accessed DRAM "
-            << gulliver_decoder.memsys->n_dram_accesses << " times out of "
-            << gulliver_decoder.memsys->n_total_accesses << ".\n";
         std::cout << "\t\t" << gulliver_decoder.name() << " accessed MWPM " 
             << gulliver_decoder.n_mwpm_accesses << " times out of "
             << gulliver_decoder.n_total_accesses << ".\n";
         std::cout << "\t\t" << "Max BFU latency: "
             << gulliver_decoder.max_bfu_latency << "ns.\n";
-        std::cout << "\t\t" << "Max cycles onchip: "
-            << gulliver_decoder.max_cycles.onchip 
-            << ", max cycles in DRAM: "
-            << gulliver_decoder.max_cycles.dram << ".\n";
         std::cout << "\tAdditional stats:\n";
         std::cout << "\t\t" << clique_decoder.name() << " accessed MWPM "
             << clique_decoder.n_mwpm_accesses << " times out of "
             << clique_decoder.n_total_accesses << ".\n";
-        gulliver_decoder.memsys->main_memory->PrintStats();
     }
 }
 
