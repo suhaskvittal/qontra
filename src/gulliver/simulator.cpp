@@ -57,6 +57,7 @@ GulliverSimulator::tick() {
                 r.evictable = false;
                 r.valid = true;
                 is_installed = true;
+                break;
             }
         }
         
@@ -269,12 +270,12 @@ GulliverSimulator::tick_bfu_fetch() {
             // to DRAM. We will stall the pipeline until DRAM gives us
             // the value.
             auto di_dj = std::make_pair(di, dj);
-//          if (is_hit) {
+            if (is_hit) {
                 // Get weight and add data to proposed_matches.
                 fp_t w = weight_table[di_dj];
                 proposed_matches.push(std::make_pair(dj, w));
                 next.stalled = false;
-/*          } else {
+            } else {
                 std::cout << 
                     "[GulliverSimulator] error: data not in register file for: " 
                     << di << "," << dj << ".\n";
@@ -291,9 +292,9 @@ GulliverSimulator::tick_bfu_fetch() {
                     dram->AddTransaction(address, false);
                     dram_await_array.push_back(di_dj);
                 }
-                latch.stalled = true;
+                next.stalled = true;
             } 
-*/      }
+        }
         // Update the latch data.
         next.valid = true;
         next.proposed_matches = proposed_matches;

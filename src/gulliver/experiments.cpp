@@ -18,7 +18,7 @@ static GulliverParams GULLIVER_DEFAULT = {
     4,      // bfu_fetch_width
     10,     // bfu_hw_threshold
     // Memory parameters
-    32,     // Number of registers
+    128,    // Number of registers
     // DRAM parameters
     std::string(HOME_DIRECTORY) + "/dramsim3/configs/DDR4_4Gb_x16_1866.ini",
     std::string(HOME_DIRECTORY) + "/src/gulliver/logs",
