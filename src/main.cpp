@@ -7,10 +7,10 @@
 #include "gulliver/experiments.h"
 
 int main() {
-//  surface_code_hamming_weight_experiment();
+    surface_code_hamming_weight_experiment();
 //  decoder_sram_experiment();
 //  gulliver_timing_experiment();
 //  mwpm_nonuniform_error_experiment();
-    decoder_analysis_experiment();
+//  decoder_analysis_experiment();
     return 0;
 }

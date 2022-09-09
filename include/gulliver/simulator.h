@@ -43,6 +43,13 @@ public:
     
     bool is_idle(void);
     std::map<uint, uint> get_matching(void);
+    
+    // Statistics
+    uint64_t rowhammer_flips(void);
+    uint64_t row_activations(void);
+
+    uint64_t prefetch_cycles;
+    uint64_t bfu_cycles;
 protected:
     void tick_prefetch(void);
     void tick_predecode(void);

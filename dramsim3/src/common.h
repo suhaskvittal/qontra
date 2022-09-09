@@ -30,6 +30,32 @@ struct Address {
     int bank;
     int row;
     int column;
+    
+    // Override comparison operators.
+    bool operator<(const Address& other) const {
+        if (channel < other.channel) {
+            return true;
+        } else if (rank < other.rank) {
+            return true;
+        } else if (bankgroup < other.bankgroup) {
+            return true;
+        } else if (bank < other.bank) {
+            return true;
+        } else if (row < other.row) {
+            return true;
+        } else {
+            return column < other.column;
+        }
+    }
+
+    bool operator==(const Address& other) const {
+        return channel == other.channel
+            && rank == other.rank
+            && bankgroup == other.bankgroup
+            && bank == other.bank
+            && row == other.row
+            && column == other.column;
+    }
 };
 
 inline uint32_t ModuloWidth(uint64_t addr, uint32_t bit_width, uint32_t pos) {

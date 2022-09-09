@@ -12,6 +12,7 @@ Controller::Controller(int channel, const Config &config, const Timing &timing,
 Controller::Controller(int channel, const Config &config, const Timing &timing)
 #endif  // THERMAL
     : channel_id_(channel),
+      rhtracker(),
       clk_(0),
       config_(config),
       simple_stats_(config_, channel_id_),
@@ -263,6 +264,23 @@ void Controller::IssueCommand(const Command &cmd) {
     // must update stats before states (for row hits)
     UpdateCommandStats(cmd);
     channel_state_.UpdateTimingAndStates(cmd, clk_);
+
+#ifdef ROWHAMMER
+    // Update Rowhammer tracker.
+    switch (cmd.cmd_type) {
+    case CommandType::ACTIVATE:
+        rhtracker.register_activation(cmd.addr);
+        break;
+    case CommandType::REFRESH:
+        rhtracker.refresh_rank(cmd.Rank());
+        break;
+    case CommandType::REFRESH_BANK:
+        rhtracker.refresh_bank(cmd.Bank(), cmd.Rank());
+        break;
+    default:
+        break;  // Do nothing.
+    }
+#endif
 }
 
 Command Controller::TransToCommand(const Transaction &trans) {

@@ -28,13 +28,7 @@
 #define MWPM_DECODER_NAME "MWPMDecoder"
 #define MAX_PRACTICAL_DISTANCE  1000.0
 
-#if QFP_SIZE==0
 #define MWPM_INTEGER_SCALE 10000.0
-#elif QFP_SIZE==1
-#define MWPM_INTEGER_SCALE 1000.0
-#elif QFP_SIZE==2
-#define MWPM_INTEGER_SCALE 10.0
-#endif
 
 struct DijkstraResult {
     std::vector<uint> path;

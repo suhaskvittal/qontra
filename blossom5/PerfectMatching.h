@@ -57,16 +57,8 @@ public:
 	typedef double REAL; 
 	#define PM_INFTY ((REAL)1e100)
 #else
-#if QFP_SIZE==0
 	typedef int32_t REAL;
     #define PM_INFTY (INT32_MAX>>1)
-#elif QFP_SIZE==1
-    typedef int16_t REAL;
-    #define PM_INFTY (INT16_MAX>>1)
-#elif QFP_SIZE==2
-    typedef int8_t REAL;
-    #define PM_INFTY (INT8_MAX>>1)
-#endif
 #endif
 
 	typedef int NodeId;

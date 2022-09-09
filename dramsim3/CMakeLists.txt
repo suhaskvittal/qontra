@@ -39,6 +39,7 @@ add_library(dramsim3 SHARED
     src/simple_stats.cc
     src/timing.cc
     src/memory_system.cc
+    src/rhtracker.cc
 )
 
 if (THERMAL)
@@ -71,6 +72,10 @@ if (THERMAL)
     target_link_libraries(thermalreplay dramsim3 inih)
     target_compile_options(thermalreplay PRIVATE -DTHERMAL -D_LONGINT -DAdd_ ${OpenMP_C_FLAGS})
 endif (THERMAL)
+
+if (ROWHAMMER)
+    target_compile_definitions(dramsim3 PRIVATE ROWHAMMER)
+endif()
 
 if (CMD_TRACE)
     target_compile_options(dramsim3 PRIVATE -DCMD_TRACE)

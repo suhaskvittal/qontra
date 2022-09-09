@@ -104,6 +104,8 @@ decoder_analysis_experiment() {
             << gulliver_decoder.n_total_accesses << ".\n";
         std::cout << "\t\t" << "Max BFU latency: "
             << gulliver_decoder.max_bfu_latency << "ns.\n";
+        std::cout << "\t\t" << "Number of Rowhammer flips: "
+            << gulliver_decoder.simulator->rowhammer_flips() << ".\n";
         std::cout << "\tAdditional stats:\n";
         std::cout << "\t\t" << clique_decoder.name() << " accessed MWPM "
             << clique_decoder.n_mwpm_accesses << " times out of "
@@ -200,13 +202,20 @@ surface_code_hamming_weight_experiment() {
     uint32_t shots = 1000000;
     uint32_t shots_per_round = DEFAULT_SHOTS;
     fp_t p = DEFAULT_ERROR_MEAN;
-    fp_t r = DEFAULT_ERROR_STDDEV;
+    fp_t r = 0;DEFAULT_ERROR_STDDEV;
+
+    // First part is Hamming weight frequency,
+    // the second part is the number of correctable
+    // syndromes of that weight.
+    typedef std::pair<uint32_t, uint32_t> ft_entry;
 
     for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
-        std::map<uint, uint32_t> frequency_table;
+        std::map<uint, ft_entry> frequency_table;
 
         auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
         uint n_detectors = surf_code_circ.count_detectors();
+        uint n_observables = surf_code_circ.count_observables();
+        MWPMDecoder decoder(surf_code_circ);
 #ifdef USE_OMP
 #pragma omp parallel
 #endif
@@ -214,31 +223,36 @@ surface_code_hamming_weight_experiment() {
             stim::simd_bit_table sample_buffer
                 = stim::detector_samples(surf_code_circ, shots_per_round, 
                         false, true, GULLIVER_RNG);
+            sample_buffer = sample_buffer.transposed();
             for (uint32_t sn = 0; sn < shots_per_round; sn++) {
-                uint hw = 0;
-                for (uint i = 0; i < n_detectors; i++) {
-                    if (sample_buffer[i][sn]) {
-                        hw++;
-                    } 
-                } 
+                std::vector<uint8_t> syndrome = 
+                    _to_vector(sample_buffer[sn], n_detectors, n_observables);
+                uint hw = std::accumulate(
+                        syndrome.begin(),
+                        syndrome.begin() + n_detectors,
+                        0);
+                DecoderShotResult res = decoder.decode_error(syndrome);
 #ifdef USE_OMP
 #pragma omp critical
 #endif
                 {
                     if (frequency_table.count(hw) == 0) {
-                        frequency_table[hw] = 0;
+                        frequency_table[hw] = std::make_pair(0, 0);
                     }
-                    frequency_table[hw]++;
+                    frequency_table[hw].first++;
+                    if (res.is_logical_error) {
+                        frequency_table[hw].second++;
+                    } 
                 }
             }
         }
 
+        std::cout << "Distance " << code_dist << ":\n";
         for (auto kv_entry : frequency_table) {
             uint hw = kv_entry.first;
-            uint32_t freq = kv_entry.second;
-            std::cout << "(Distance " << code_dist 
-                << ") Hamming weight " << hw << " has frequency "
-                << freq << ".\n";
+            ft_entry e = kv_entry.second;
+            std::cout << "\tHamming weight " << hw << " has frequency "
+                << e.first << " (uncorrectable = " <<  e.second << ").\n";
         }
     }
 }

@@ -33,6 +33,24 @@ int BaseDRAMSystem::GetChannel(uint64_t hex_addr) const {
     return (hex_addr >> config_.ch_pos) & config_.ch_mask;
 }
 
+uint64_t 
+BaseDRAMSystem::rowhammer_flips() {
+    uint64_t n_rh_flips = 0;
+    for (Controller * ctrl : ctrls_) {
+        n_rh_flips += ctrl->rhtracker.n_rh_flips; 
+    }
+    return n_rh_flips;
+}
+
+uint64_t 
+BaseDRAMSystem::row_activations() {
+    uint64_t n_acts = 0;
+    for (Controller * ctrl : ctrls_) {
+        n_acts += ctrl->rhtracker.n_activations;
+    }
+    return n_acts;
+}
+
 void BaseDRAMSystem::PrintEpochStats() {
     // first epoch, print bracket
     if (clk_ - config_.epoch_period == 0) {

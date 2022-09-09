@@ -9,7 +9,12 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
         std::map<std::pair<uint, uint>, bool> * memory_event_table,
         const std::map<std::pair<uint, uint>, fp_t>& weight_table,
         const GulliverSimulatorParams& params)
-    :dram(dram),
+    :
+    /* Statistics */
+    prefetch_cycles(0),
+    bfu_cycles(0),
+    /* Microarchitecture */
+    dram(dram),
     register_file(params.n_registers),
     next_dram_request_register(std::make_pair(0,0)),
     dram_await_array(),
@@ -21,6 +26,7 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     replacement_queue(),
     state(GulliverSimulator::State::prefetch),
     bfu_idle(false),
+    /* Config parameters */
     memory_event_table(memory_event_table),
     weight_table(weight_table),
     n_detectors(params.n_detectors),
@@ -88,12 +94,14 @@ GulliverSimulator::tick() {
 
     switch (state) {
     case GulliverSimulator::State::prefetch:
+        prefetch_cycles++;
         tick_prefetch();
         break;
     case GulliverSimulator::State::predecode:
         tick_predecode();
         break;
     case GulliverSimulator::State::bfu:
+        bfu_cycles++;
         tick_bfu();
         break;
     }
@@ -107,6 +115,16 @@ GulliverSimulator::is_idle() {
 std::map<uint, uint>
 GulliverSimulator::get_matching() {
     return best_matching_register.running_matching;
+}
+
+uint64_t
+GulliverSimulator::rowhammer_flips() {
+    return dram->dram_system_->rowhammer_flips();
+}
+
+uint64_t
+GulliverSimulator::row_activations() {
+    return dram->dram_system_->row_activations();
 }
 
 void

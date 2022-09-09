@@ -48,13 +48,14 @@ public:
     uint64_t sram_cost(void) override;
     uint64_t dram_cost(void);
 
+    // Statistics
     uint32_t n_total_accesses;
     uint32_t n_mwpm_accesses;
     fp_t max_bfu_latency;
     uint64_t max_cycles;
-private:
+    // More statistics are in the simulator.
     GulliverSimulator * simulator;
-
+private:
     uint bfu_hw_threshold;
     fp_t main_clock_frequency;
     // Delete later.

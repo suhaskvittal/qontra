@@ -11,6 +11,8 @@
 #include "refresh.h"
 #include "simple_stats.h"
 
+#include "rhtracker.h"
+
 #ifdef THERMAL
 #include "thermal.h"
 #endif  // THERMAL
@@ -38,6 +40,8 @@ class Controller {
     std::pair<uint64_t, int> ReturnDoneTrans(uint64_t clock);
 
     int channel_id_;
+
+    dramsim3_ext::RHTracker rhtracker;
 
    private:
     uint64_t clk_;

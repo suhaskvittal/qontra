@@ -11,16 +11,8 @@
 
 #include <stdint.h>
 
-typedef double      fp_t;   // floating point type
-// We define quantized floating point types.
-// Used in MWPM.
-#if QFP_SIZE==0
-typedef int32_t     qfp_t; // quantized floating point type
-#elif QFP_SIZE==1
-typedef int16_t     qfp_t;
-#elif QFP_SIZE==2
-typedef int8_t      qfp_t;
-#endif
+typedef double fp_t;   // floating point type
+typedef int32_t qfp_t; // quantized floating point type
 
 typedef uint16_t uint;
 typedef int16_t sint;

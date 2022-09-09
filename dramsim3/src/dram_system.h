@@ -34,6 +34,10 @@ class BaseDRAMSystem {
     virtual void ClockTick() = 0;
     int GetChannel(uint64_t hex_addr) const;
 
+    /* Rowhammer functions. */
+    uint64_t rowhammer_flips(void);
+    uint64_t row_activations(void);
+
     std::function<void(uint64_t req_id)> read_callback_, write_callback_;
     static int total_channels_;
 

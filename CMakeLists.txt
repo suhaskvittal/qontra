@@ -10,8 +10,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 # Declare execution options.
 option(ENABLE_OPENMP "use openmp" OFF)
-option(MWPM_QUANTIZE_LEVEL "mwpm quantization level (0=None, 1=16b, 2=8b)" 0)
 option(USE_DRAMSIM3 "ON=use DRAMSim3 (default), OFF=use DRAMSim2" ON)
+option(ROWHAMMER "ON=perform Rowhammer tracking" OFF)
 # Declare executable.
 set(QUARCH_PROGRAM_FILES
     # Main code.
@@ -42,7 +42,6 @@ else()
 endif()
 
 target_compile_definitions(quarch PRIVATE 
-                            QFP_SIZE=${MWPM_QUANTIZE_LEVEL}
                             HOME_DIRECTORY="${CMAKE_SOURCE_DIR}")
 # Add include directory to include path.
 target_include_directories(quarch PRIVATE "include")

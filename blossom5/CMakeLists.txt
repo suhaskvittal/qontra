@@ -4,8 +4,6 @@ project(BlossomV VERSION 2.05)
 # Define C++ version.
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-# Define option (to be set externally)
-option(MWPM_QUANTIZE_LEVEL "mwpm quantization level (0=32b, 1=16b, 2=8b)" 0)
 # Define program files
 set(BLOSSOMV_PROGRAM_FILES
     PMduals.cpp
@@ -24,7 +22,6 @@ add_library(libblossom5 ${BLOSSOMV_PROGRAM_FILES})
 set_target_properties(libblossom5 PROPERTIES PREFIX "")
 target_include_directories(libblossom5 PUBLIC .)
 target_compile_options(libblossom5 PRIVATE -O3 -D_NDEBUG)
-target_compile_definitions(libblossom5 PRIVATE QFP_SIZE=${MWPM_QUANTIZE_LEVEL})
 if(NOT APPLE)
     target_link_options(libblossom5 -lrt)
 endif()
