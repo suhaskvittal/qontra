@@ -8,41 +8,7 @@
 MWPMDecoder::MWPMDecoder(const stim::Circuit& circ) 
 :Decoder(circ), path_table()
 {
-    // Perform Dijkstra's algorithm on the graph.
-    uint n_detectors = boost::num_vertices(graph.base);
-    // Parallelize the Dijkstra's computation if the Openmp Flag
-    // is on.
-    for (uint i = 0; i < n_detectors; i++) {
-        uint vi = graph.get(i);
-        // Build data structures for call.
-        auto index_map =
-            boost::get(boost::vertex_index, graph.base);
-        auto weight_map = 
-            boost::get(&DecodingEdge::edge_weight, graph.base);
-        std::vector<uint> predecessors(n_detectors);
-        std::vector<fp_t> distances(n_detectors);
-
-        boost::dijkstra_shortest_paths(
-            graph.base,  // Input graph
-            vi,     // Source vertex
-            // Named parameters:
-            predecessor_map(
-                boost::make_iterator_property_map(
-                    predecessors.begin(), index_map
-                )
-            ).distance_map(
-                boost::make_iterator_property_map(
-                    distances.begin(), index_map
-                )
-            ).weight_map(weight_map)
-        );
-        // Results should be in predecessors and distances.
-        for (uint vj = i + 1; vj < n_detectors; vj++) {
-            update_path_table(i, vj, distances, predecessors);
-        }
-        // Do the same for the boundary.
-        update_path_table(i, BOUNDARY_INDEX, distances, predecessors);
-    }
+    path_table = compute_path_table(graph);
 }
 
 std::string
@@ -109,7 +75,7 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         for (uint vj = vi + 1; vj < n_vertices; vj++) {
             uint dj = detector_list[vj];
             std::pair<uint, uint> di_dj = std::make_pair(di,dj);
-            if (path_table[di_dj].distance >= MAX_PRACTICAL_DISTANCE) 
+            if (path_table[di_dj].distance >= 1000.0) 
             {
                 continue;  // There is no path.
             }
@@ -170,35 +136,4 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         matching
     };
     return res;
-}
-
-void
-MWPMDecoder::update_path_table(uint src, uint dst,
-        const std::vector<fp_t>& distances,
-        const std::vector<uint>& predecessors)
-{
-    // Compute path.
-    uint vi = graph.get(src);
-    uint vj = graph.get(dst);
-    uint curr = vj;
-    fp_t distance = distances[vj];
-    std::vector<uint> path;
-    if (distance < MAX_PRACTICAL_DISTANCE) {
-        while (curr != vi) {
-            if (curr >= boost::num_vertices(graph.base) || path.size() > 100) {
-                distance = std::numeric_limits<fp_t>::max();
-                path.clear();
-                goto failed_to_find_path;
-            }
-            uint det = graph.base[curr].detector;
-            path.push_back(det);
-            curr = predecessors[curr];
-        }
-        path.push_back(graph.base[curr].detector);
-    }
-failed_to_find_path:
-    // Build result.
-    DijkstraResult res = {path, distance};
-    path_table[std::make_pair(src, dst)] = res;
-    path_table[std::make_pair(dst, src)] = res;
 }

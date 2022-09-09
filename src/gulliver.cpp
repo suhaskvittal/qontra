@@ -24,15 +24,12 @@ Gulliver::Gulliver(const stim::Circuit circuit,
 {
     // Initialize Memory System.
     // Define memory event table and associated callbacks.
-    memory_event_table = new std::map<std::pair<uint, uint>, bool>();
+    memory_event_table = new std::map<addr_t, bool>();
 
     dramsim3::Config config(params.dram_config_file, params.log_output_directory);
-    const addr_t base_address = get_base_address(0, 0, 0, &config);
-    const uint n_detectors = circuit.count_detectors()+1;
-    auto cb = [this, base_address, n_detectors](addr_t x) 
+    auto cb = [this](addr_t x) 
     {
-        auto di_dj = from_address(x, base_address, n_detectors);
-        this->memory_event_table->insert_or_assign(di_dj, true);
+        this->memory_event_table->insert_or_assign(x, true);
     };
     dram = new dramsim3::MemorySystem(params.dram_config_file, 
                                         params.log_output_directory,
@@ -45,7 +42,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     }
 
     GulliverSimulatorParams sim_params = {
-        n_detectors,
+        circuit.count_detectors()+1,
         params.n_registers,
         params.bfu_fetch_width,
         params.bfu_hw_threshold,
@@ -55,7 +52,6 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     };
     simulator = new GulliverSimulator(dram, this->memory_event_table,
                                     weight_table, sim_params);
-                    
 }
 
 Gulliver::~Gulliver() {

@@ -6,7 +6,7 @@
 #include "gulliver/simulator.h"
 
 GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram, 
-        std::map<std::pair<uint, uint>, bool> * memory_event_table,
+        std::map<addr_t, bool> * memory_event_table,
         const std::map<std::pair<uint, uint>, fp_t>& weight_table,
         const GulliverSimulatorParams& params)
     :
@@ -76,16 +76,16 @@ GulliverSimulator::tick() {
     // Check if any transactions to DRAM have completed.
     for (auto it = dram_await_array.begin(); it != dram_await_array.end(); ) {
         auto di_dj = *it;
-        if (memory_event_table->count(di_dj) 
-                && memory_event_table->at(di_dj)) 
+        uint di = di_dj.first;
+        uint dj = di_dj.second;
+        addr_t address = 
+            to_address(di, dj, base_address, n_detectors);
+        if (memory_event_table->count(address) 
+                && memory_event_table->at(address)) 
         {
             it = dram_await_array.erase(it);
-            memory_event_table->at(di_dj) = false;
+            memory_event_table->at(address) = false;
             // Add to replacement queue.
-            uint di = di_dj.first;
-            uint dj = di_dj.second;
-            addr_t address = 
-                to_address(di, dj, base_address, n_detectors);
             replacement_queue.push_back(address);
         } else {
             it++;

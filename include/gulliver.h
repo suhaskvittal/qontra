@@ -60,7 +60,7 @@ private:
     fp_t main_clock_frequency;
     // Delete later.
     dramsim3::MemorySystem * dram;
-    std::map<std::pair<uint, uint>, bool> * memory_event_table;
+    std::map<addr_t, bool> * memory_event_table;
 };
 
 

@@ -17,6 +17,8 @@ typedef int32_t qfp_t; // quantized floating point type
 typedef uint16_t uint;
 typedef int16_t sint;
 
+typedef uint64_t addr_t;
+
 #define KB 1024.0
 #define MB (KB*1024.0)
 #define GB (MB*1024.0)

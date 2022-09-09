@@ -17,8 +17,6 @@
 #include <vector>
 #include <utility>
 
-typedef uint64_t addr_t;
-
 struct GulliverSimulatorParams {
     uint n_detectors;
 
@@ -31,10 +29,16 @@ struct GulliverSimulatorParams {
     uint32_t row_offset;
 };
 
+struct MemoryEventEntry {
+    uint di;
+    uint dj;
+    uint logical_qubit;
+};
+
 class GulliverSimulator {
 public:
     GulliverSimulator(dramsim3::MemorySystem*, 
-            std::map<std::pair<uint, uint>, bool> * memory_event_table,
+            std::map<addr_t, bool> * memory_event_table,
             const std::map<std::pair<uint, uint>, fp_t>& weight_table,
             const GulliverSimulatorParams&);
 
@@ -100,7 +104,7 @@ protected:
     bool bfu_idle;
 
     /* Data */
-    std::map<std::pair<uint, uint>, bool> * memory_event_table;
+    std::map<addr_t, bool> * memory_event_table;
 
     std::map<std::pair<uint, uint>, fp_t> weight_table;
     /* Configuration parameters. */

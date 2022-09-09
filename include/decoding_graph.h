@@ -7,6 +7,9 @@
 #define DECODING_GRAPH_h
 
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/graph_traits.hpp>
+#include <boost/graph/dijkstra_shortest_paths.hpp>
+#include <boost/property_map/property_map.hpp>
 
 #include <iostream>
 #include <vector>
@@ -34,6 +37,11 @@ struct DecodingEdge {
     fp_t edge_weight;
     fp_t error_probability;
     std::set<uint> frames;
+};
+
+struct DijkstraResult {
+    std::vector<uint> path;
+    fp_t distance;
 };
 
 typedef boost::adjacency_list<
@@ -65,6 +73,9 @@ private:
 DecodingGraph
 to_decoding_graph(const stim::Circuit&);
 
+std::map<std::pair<uint, uint>, DijkstraResult>
+compute_path_table(DecodingGraph&);
+
 typedef std::function<void(fp_t, std::vector<uint>, std::set<uint>)>
     error_callback_f;
 typedef std::function<void(uint, std::array<fp_t, N_COORD>)>
@@ -75,5 +86,11 @@ _read_detector_error_model(const stim::DetectorErrorModel&,
         uint n_iter, uint& det_offset, 
         std::array<fp_t, N_COORD>& coord_offset,
         error_callback_f, detector_callback_f);
+
+void
+_update_path_table(std::map<std::pair<uint, uint>, DijkstraResult>&,
+        DecodingGraph&, uint, uint, 
+        const std::vector<fp_t>& distances,
+        const std::vector<uint>& predecessors);
 
 #endif

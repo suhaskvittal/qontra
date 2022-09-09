@@ -134,6 +134,46 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
     return graph;
 }
 
+std::map<std::pair<uint, uint>, DijkstraResult>
+compute_path_table(DecodingGraph& graph) {
+    std::map<std::pair<uint, uint>, DijkstraResult> path_table;
+    // Perform Dijkstra's algorithm on the graph.
+    uint n_detectors = boost::num_vertices(graph.base);
+    for (uint i = 0; i < n_detectors; i++) {
+        uint vi = graph.get(i);
+        // Build data structures for call.
+        auto index_map =
+            boost::get(boost::vertex_index, graph.base);
+        auto weight_map = 
+            boost::get(&DecodingEdge::edge_weight, graph.base);
+        std::vector<uint> predecessors(n_detectors);
+        std::vector<fp_t> distances(n_detectors);
+
+        boost::dijkstra_shortest_paths(
+            graph.base,  // Input graph
+            vi,     // Source vertex
+            // Named parameters:
+            predecessor_map(
+                boost::make_iterator_property_map(
+                    predecessors.begin(), index_map
+                )
+            ).distance_map(
+                boost::make_iterator_property_map(
+                    distances.begin(), index_map
+                )
+            ).weight_map(weight_map)
+        );
+        // Results should be in predecessors and distances.
+        for (uint vj = i + 1; vj < n_detectors; vj++) {
+            _update_path_table(path_table, graph, i, vj, distances, predecessors);
+        }
+        // Do the same for the boundary.
+        _update_path_table(path_table, graph, i, BOUNDARY_INDEX, 
+                distances, predecessors);
+    }
+    return path_table;
+}
+
 void 
 _read_detector_error_model(
         const stim::DetectorErrorModel& dem, uint n_iter,
@@ -197,4 +237,36 @@ _read_detector_error_model(
             }
         }
     }
+}
+
+void
+_update_path_table(std::map<std::pair<uint, uint>, DijkstraResult>& path_table,
+        DecodingGraph& graph, uint src, uint dst,
+        const std::vector<fp_t>& distances,
+        const std::vector<uint>& predecessors)
+{
+    // Compute path.
+    uint vi = graph.get(src);
+    uint vj = graph.get(dst);
+    uint curr = vj;
+    fp_t distance = distances[vj];
+    std::vector<uint> path;
+    if (distance < 1000.0) {
+        while (curr != vi) {
+            if (curr >= boost::num_vertices(graph.base) || path.size() > 100) {
+                distance = std::numeric_limits<fp_t>::max();
+                path.clear();
+                goto failed_to_find_path;
+            }
+            uint det = graph.base[curr].detector;
+            path.push_back(det);
+            curr = predecessors[curr];
+        }
+        path.push_back(graph.base[curr].detector);
+    }
+failed_to_find_path:
+    // Build result.
+    DijkstraResult res = {path, distance};
+    path_table[std::make_pair(src, dst)] = res;
+    path_table[std::make_pair(dst, src)] = res;
 }
