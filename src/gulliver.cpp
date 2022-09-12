@@ -34,12 +34,6 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     dram = new dramsim3::MemorySystem(params.dram_config_file, 
                                         params.log_output_directory,
                                         cb, cb);
-    std::map<std::pair<uint, uint>, fp_t> weight_table;
-    for (auto res : path_table) {
-        auto di_dj = res.first;
-        DijkstraResult r = res.second;
-        weight_table[di_dj] = r.distance;
-    }
 
     GulliverSimulatorParams sim_params = {
         circuit.count_detectors()+1,
@@ -51,7 +45,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
         0
     };
     simulator = new GulliverSimulator(dram, this->memory_event_table,
-                                    weight_table, sim_params);
+                                    path_table, sim_params);
 }
 
 Gulliver::~Gulliver() {
@@ -108,7 +102,7 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             detector_array.push_back(BOUNDARY_INDEX);
         }
         // Run simulator.
-        simulator->load(detector_array);
+        simulator->load_detectors(detector_array);
         uint64_t n_cycles = 0;
         while (!simulator->is_idle()) {
             simulator->tick();

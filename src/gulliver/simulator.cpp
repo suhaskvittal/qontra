@@ -7,7 +7,7 @@
 
 GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram, 
         std::map<addr_t, bool> * memory_event_table,
-        const std::map<std::pair<uint, uint>, fp_t>& weight_table,
+        const PathTable& path_table,
         const GulliverSimulatorParams& params)
     :
     /* Statistics */
@@ -28,24 +28,32 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     bfu_idle(false),
     /* Config parameters */
     memory_event_table(memory_event_table),
-    weight_table(weight_table),
+    path_table(path_table),
     n_detectors(params.n_detectors),
     bfu_fetch_width(params.bfu_fetch_width),
     bfu_hw_threshold(params.bfu_hw_threshold),
-    bankgroup(params.bankgroup),
-    bank(params.bank),
-    row_offset(params.row_offset),
     base_address(0)
 {
+    load_base_address(params.bankgroup, params.bank, params.row_offset);
+}
+
+bool
+GulliverSimulator::load_detectors(const std::vector<uint>& detector_array) {
     clear();
-    // Setup base address. 
-    base_address = get_base_address(bankgroup, bank, row_offset, dram->config_);
+    detector_vector_register = detector_array;
+    return detector_array.size() <= bfu_hw_threshold;
 }
 
 void
-GulliverSimulator::load(const std::vector<uint>& detector_array) {
+GulliverSimulator::load_path_table(const PathTable& pt) {
     clear();
-    detector_vector_register = detector_array;
+    path_table = pt;  
+}
+
+void
+GulliverSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset) {
+    clear();
+    base_address = get_base_address(bg, ba, ro_offset, dram->config_);
 }
 
 void
@@ -290,7 +298,7 @@ GulliverSimulator::tick_bfu_fetch() {
             auto di_dj = std::make_pair(di, dj);
             if (is_hit) {
                 // Get weight and add data to proposed_matches.
-                fp_t w = weight_table[di_dj];
+                fp_t w = path_table[di_dj].distance;
                 proposed_matches.push(std::make_pair(dj, w));
                 next.stalled = false;
             } else {
@@ -355,8 +363,8 @@ addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,
         dramsim3::Config * config) 
 {
     addr_t base_address = bankgroup << config->bg_pos
-                        || bank << config->ba_pos
-                        || row_offset << config->ro_pos;
+                        | bank << config->ba_pos
+                        | row_offset << config->ro_pos;
     base_address <<= config->shift_bits;
     return base_address;
 }

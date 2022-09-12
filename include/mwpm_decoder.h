@@ -33,7 +33,9 @@ public:
 
     uint64_t sram_cost(void) override;
 protected:
-    std::map<std::pair<uint, uint>, DijkstraResult> path_table;
+    PathTable path_table;
+
+    friend void surface_code_hamming_weight_experiment(void);
 };
 
 #endif

@@ -50,6 +50,7 @@ typedef boost::adjacency_list<
             boost::undirectedS,
             DecodingVertex,
             DecodingEdge> decoding_graph_base;
+typedef std::map<std::pair<uint, uint>, DijkstraResult> PathTable;
 
 #define BOUNDARY_INDEX ((uint)-1)
 
@@ -73,7 +74,7 @@ private:
 DecodingGraph
 to_decoding_graph(const stim::Circuit&);
 
-std::map<std::pair<uint, uint>, DijkstraResult>
+PathTable
 compute_path_table(DecodingGraph&);
 
 typedef std::function<void(fp_t, std::vector<uint>, std::set<uint>)>
@@ -88,7 +89,7 @@ _read_detector_error_model(const stim::DetectorErrorModel&,
         error_callback_f, detector_callback_f);
 
 void
-_update_path_table(std::map<std::pair<uint, uint>, DijkstraResult>&,
+_update_path_table(PathTable&,
         DecodingGraph&, uint, uint, 
         const std::vector<fp_t>& distances,
         const std::vector<uint>& predecessors);

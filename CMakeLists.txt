@@ -27,7 +27,8 @@ set(QUARCH_PROGRAM_FILES
     src/clique.cpp
     # Gulliver code.
     src/gulliver/experiments.cpp
-    src/gulliver/simulator.cpp)
+    src/gulliver/simulator.cpp
+    src/gulliver/multi_qubit.cpp)
 add_executable(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
 if (ENABLE_OPENMP) 

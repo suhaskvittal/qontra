@@ -8,6 +8,8 @@
 
 #include "quarch.h"
 #include "gulliver.h"
+#include "gulliver/simulator.h"
+#include "gulliver/multi_qubit.h"
 #include "clique.h"
 #include "defs.h"
 
@@ -15,6 +17,8 @@
 #include <filesystem>
 #include <random>
 #include <string>
+
+#include <math.h>
 
 extern std::filesystem::path data_folder;
 extern std::mt19937_64 GULLIVER_RNG;

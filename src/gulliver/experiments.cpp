@@ -10,9 +10,13 @@ std::filesystem::path data_folder(std::string(HOME_DIRECTORY) + "/data");
 const auto seed = std::chrono::system_clock::now().time_since_epoch().count();
 std::mt19937_64 GULLIVER_RNG(seed);
 
-static fp_t DEFAULT_ERROR_MEAN = 1e-4;
-static fp_t DEFAULT_ERROR_STDDEV = 30e-5;
-static uint32_t DEFAULT_SHOTS = 100000;
+static const fp_t DEFAULT_ERROR_MEAN = 1e-4;
+static const fp_t DEFAULT_ERROR_STDDEV = 30e-5;
+static const uint32_t DEFAULT_SHOTS = 100000;
+
+static const uint MQSIM_NQUBITS = 10;
+static const uint MQSIM_NDECODER = 5;
+static const uint MQSIM_DISTANCE = 5;
 
 static GulliverParams GULLIVER_DEFAULT = {
     4,      // bfu_fetch_width
@@ -60,7 +64,7 @@ decoder_analysis_experiment() {
     std::cout << "Running decoder analysis experiment...\n";
     fp_t p = DEFAULT_ERROR_MEAN;
     fp_t r = DEFAULT_ERROR_STDDEV;
-    uint32_t shots = 1000000;
+    uint32_t shots = 100000000;
     // Setup circuit.
     for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
         auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
@@ -164,6 +168,32 @@ mwpm_timing_experiment() {
 }
 
 void
+gulliver_multiple_qubits_experiment() {
+    fp_t p = DEFAULT_ERROR_MEAN;
+    fp_t r = DEFAULT_ERROR_STDDEV;
+
+    std::vector<stim::Circuit> circuits;
+    for (uint i = 0; i < MQSIM_NQUBITS; i++) {
+        circuits.push_back(_make_surface_code_circuit(MQSIM_DISTANCE, p, r));
+    }
+
+    GulliverParams params = GULLIVER_DEFAULT;
+    GulliverMultiQubitSimulator * mqsim = 
+        new GulliverMultiQubitSimulator(circuits, MQSIM_NDECODER, GULLIVER_DEFAULT);
+    mqsim->benchmark(100000, GULLIVER_RNG);
+
+    std::cout << "Gulliver on " << MQSIM_NQUBITS << " logical qubits across "
+        << MQSIM_NDECODER << " decoders for d=" << MQSIM_DISTANCE << " had " 
+        << mqsim->n_timeouts << " timeouts, " 
+        << mqsim->n_overflows << " overflows, "
+        << mqsim->n_uncomputable 
+        << " syndromes that could not be computed on the bfu,"
+        << " and a max latency of "
+        << mqsim->max_latency << "ns.\n";
+    delete mqsim;
+}
+
+void
 mwpm_nonuniform_error_experiment() {
     uint32_t shots = 1000000000;  // 1 billion 
     uint32_t shots_per_round = DEFAULT_SHOTS;
@@ -199,25 +229,27 @@ mwpm_nonuniform_error_experiment() {
 void
 surface_code_hamming_weight_experiment() {
 //  uint32_t shots = 1000000000; // one billion.
-    uint32_t shots = 1000000;
+    uint32_t shots = 100000000;
     uint32_t shots_per_round = DEFAULT_SHOTS;
     fp_t p = DEFAULT_ERROR_MEAN;
     fp_t r = 0;DEFAULT_ERROR_STDDEV;
 
-    // First part is Hamming weight frequency,
-    // the second part is the number of correctable
-    // syndromes of that weight.
-    typedef std::pair<uint32_t, uint32_t> ft_entry;
-
     for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
-        std::map<uint, ft_entry> frequency_table;
+        std::cout << "Distance " << code_dist << ":\n";
 
-        auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
+        std::map<uint, uint32_t> hwfreq_table;
+        std::map<uint, fp_t> maxprob_table;
+
+        auto surf_code_circ = _make_surface_code_circuit(code_dist, p, 0);
         uint n_detectors = surf_code_circ.count_detectors();
         uint n_observables = surf_code_circ.count_observables();
         MWPMDecoder decoder(surf_code_circ);
+    
+        b_decoder_ler(&decoder, shots, GULLIVER_RNG, false);
+        fp_t ler = ((fp_t)decoder.n_logical_errors) / ((fp_t)shots);
+        std::cout << "\tMWPM LER = " << ler << "\n";
 #ifdef USE_OMP
-#pragma omp parallel
+#pragma omp parallel for
 #endif
         for (uint32_t batch = 0; batch < shots/shots_per_round; batch++) {
             stim::simd_bit_table sample_buffer
@@ -236,23 +268,28 @@ surface_code_hamming_weight_experiment() {
 #pragma omp critical
 #endif
                 {
-                    if (frequency_table.count(hw) == 0) {
-                        frequency_table[hw] = std::make_pair(0, 0);
+                    if (hwfreq_table.count(hw) == 0) {
+                        hwfreq_table[hw] = 0;
+                        maxprob_table[hw] = std::numeric_limits<fp_t>::max();
                     }
-                    frequency_table[hw].first++;
-                    if (res.is_logical_error) {
-                        frequency_table[hw].second++;
-                    } 
+                    hwfreq_table[hw]++;
+
+                    fp_t matching_weight = 0.0;
+                    for (auto assign : res.matching) {
+                        matching_weight += decoder.path_table[assign].distance;
+                    }
+                    if (matching_weight < maxprob_table[hw]) {
+                        maxprob_table[hw] = matching_weight*0.5;
+                    }
                 }
             }
         }
-
-        std::cout << "Distance " << code_dist << ":\n";
-        for (auto kv_entry : frequency_table) {
+        for (auto kv_entry : hwfreq_table) {
             uint hw = kv_entry.first;
-            ft_entry e = kv_entry.second;
+            uint32_t f = kv_entry.second;
             std::cout << "\tHamming weight " << hw << " has frequency "
-                << e.first << " (uncorrectable = " <<  e.second << ").\n";
+                << f << " (max probability = " 
+                << 1.0/(pow(M_E, maxprob_table[hw])+1) << ")\n";
         }
     }
 }

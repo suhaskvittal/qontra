@@ -39,10 +39,15 @@ class GulliverSimulator {
 public:
     GulliverSimulator(dramsim3::MemorySystem*, 
             std::map<addr_t, bool> * memory_event_table,
-            const std::map<std::pair<uint, uint>, fp_t>& weight_table,
+            const PathTable& path_table,
             const GulliverSimulatorParams&);
 
-    void load(const std::vector<uint>&);
+    bool load_detectors(const std::vector<uint>&);  // Returns false if the
+                                                    // syndrome is not 
+                                                    // servicable.
+    void load_path_table(const PathTable&);
+    void load_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset);
+
     void tick(void);
     
     bool is_idle(void);
@@ -105,18 +110,13 @@ protected:
 
     /* Data */
     std::map<addr_t, bool> * memory_event_table;
-
-    std::map<std::pair<uint, uint>, fp_t> weight_table;
+    PathTable path_table;
     /* Configuration parameters. */
 private:
     uint n_detectors;
 
     uint bfu_fetch_width;
     uint bfu_hw_threshold; 
-
-    uint8_t bankgroup;
-    uint8_t bank;
-    uint32_t row_offset;
 
     addr_t base_address;
 };

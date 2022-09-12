@@ -134,9 +134,9 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
     return graph;
 }
 
-std::map<std::pair<uint, uint>, DijkstraResult>
+PathTable
 compute_path_table(DecodingGraph& graph) {
-    std::map<std::pair<uint, uint>, DijkstraResult> path_table;
+    PathTable path_table;
     // Perform Dijkstra's algorithm on the graph.
     uint n_detectors = boost::num_vertices(graph.base);
     for (uint i = 0; i < n_detectors; i++) {
@@ -240,7 +240,7 @@ _read_detector_error_model(
 }
 
 void
-_update_path_table(std::map<std::pair<uint, uint>, DijkstraResult>& path_table,
+_update_path_table(PathTable& path_table,
         DecodingGraph& graph, uint src, uint dst,
         const std::vector<fp_t>& distances,
         const std::vector<uint>& predecessors)
