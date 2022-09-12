@@ -19,8 +19,8 @@ static const uint MQSIM_NDECODER = 5;
 static const uint MQSIM_DISTANCE = 5;
 
 static GulliverParams GULLIVER_DEFAULT = {
-    4,      // bfu_fetch_width
-    10,     // bfu_hw_threshold
+    8,      // bfu_fetch_width
+    16,     // bfu_hw_threshold
     // Memory parameters
     128,    // Number of registers
     // DRAM parameters
@@ -116,6 +116,8 @@ decoder_analysis_experiment() {
             << gulliver_decoder.max_latency << "ns.\n";
         std::cout << "\t\t" << "Number of Rowhammer flips: "
             << gulliver_decoder.simulator->rowhammer_flips() << ".\n";
+        std::cout << "\t\t" << "Max Hamming weight: "
+            << gulliver_decoder.max_hamming_weight << ".\n";
         std::cout << "\tAdditional stats:\n";
         std::cout << "\t\t" << clique_decoder.name() << " accessed MWPM "
             << clique_decoder.n_mwpm_accesses << " times out of "

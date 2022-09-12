@@ -55,6 +55,7 @@ public:
     fp_t max_latency;
     uint64_t max_bfu_cycles;
     uint64_t max_prefetch_cycles;
+    uint max_hamming_weight;
     // More statistics are in the simulator.
     GulliverSimulator * simulator;
 private:

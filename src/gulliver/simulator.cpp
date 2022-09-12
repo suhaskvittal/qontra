@@ -343,6 +343,9 @@ GulliverSimulator::tick_bfu_fetch() {
         std::stack<std::pair<uint, fp_t>> proposed_matches;
         StackEntry ei = hardware_stack.top();
         uint di = detector_vector_register[ei.next_unmatched_index];
+
+        std::vector<std::pair<uint, fp_t>> match_list;
+        fp_t min_weight = std::numeric_limits<fp_t>::max();
         for (uint aj = ei.next_unmatched_index+1; 
                 aj < detector_vector_register.size(); aj++) 
         {
@@ -359,10 +362,23 @@ GulliverSimulator::tick_bfu_fetch() {
             if (is_hit) {
                 // Get weight and add data to proposed_matches.
                 fp_t w = path_table[di_dj].distance;
-                proposed_matches.push(std::make_pair(dj, w));
+                match_list.push_back(std::make_pair(dj, w));
+                if (w < min_weight) {
+                    min_weight = w;
+                }
             } else {
                 stall_next = true;
             } 
+        }
+
+        if (!stall_next) {
+            for (auto p : match_list) {
+                if (detector_vector_register.size() <= FILTER_CUTOFF 
+                        || p.second < 1.5 * min_weight) 
+                {
+                    proposed_matches.push(p);
+                }
+            }
         }
         // Update the latch data.
         next.valid = true;

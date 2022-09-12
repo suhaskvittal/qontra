@@ -15,6 +15,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     max_latency(0),
     max_bfu_cycles(0),
     max_prefetch_cycles(0),
+    max_hamming_weight(0),
     // Memory system
     simulator(nullptr),
     // Properties
@@ -91,6 +92,9 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     // Don't count the observables.
     uint hw = std::accumulate(syndrome.begin(), syndrome.end()-n_observables, 0);
     n_total_accesses++;
+    if (hw > max_hamming_weight) {
+        max_hamming_weight = hw;
+    }
     if (hw > bfu_hw_threshold) {
         n_mwpm_accesses++;
         return MWPMDecoder::decode_error(syndrome);

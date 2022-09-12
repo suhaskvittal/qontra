@@ -20,6 +20,7 @@
 #include <utility>
 
 #define N_ROWS_ADJACENCY_LISTS 8
+#define FILTER_CUTOFF 8
 
 struct GulliverSimulatorParams {
     uint n_detectors;
