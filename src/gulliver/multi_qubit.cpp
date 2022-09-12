@@ -18,6 +18,7 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
     /* Memory */
     dram(nullptr),
     memory_event_table(nullptr),
+    adjacency_lists(nullptr),
     /* Decoders */
     simulators(n_decoders),
     occupied(n_decoders, false),
@@ -28,6 +29,10 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
 {
     // Initialize memory first.
     memory_event_table = new std::map<addr_t, bool>(); 
+    // Note that every circuit, provided that they are all
+    // the same code and code distance, have the same
+    // adjacency matrix.
+    adjacency_lists = new std::map<uint, std::vector<uint>>();
     auto cb = [this](addr_t x) 
     {
         this->memory_event_table->insert_or_assign(x, true);
@@ -38,6 +43,21 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
     for (uint i = 0; i < circuits.size(); i++) {
         DecodingGraph graph = to_decoding_graph(circuits[i]);
         path_tables[i] = compute_path_table(graph);
+    }
+
+    DecodingGraph sample_graph = to_decoding_graph(circuits[0]);
+    boost::graph_traits<decoding_graph_base>::vertex_iterator vi_p, vf_p;
+    boost::tie(vi_p, vf_p) = boost::vertices(sample_graph.base);
+    for (; vi_p != vf_p; vi_p++) {
+        boost::graph_traits<decoding_graph_base>::adjacency_iterator ai_p, af_p;
+        boost::tie(ai_p, af_p) = boost::adjacent_vertices(*vi_p, sample_graph.base);
+
+        uint di = sample_graph.base[*vi_p].detector;
+        adjacency_lists->insert_or_assign(di, std::vector<uint>());
+        for (; ai_p != af_p; ai_p++) {
+            uint dj = sample_graph.base[*ai_p].detector;
+            adjacency_lists->at(di).push_back(dj);
+        }
     }
 
     for (uint i = 0; i < n_decoders; i++) {
@@ -55,8 +75,11 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
             bank,
             row_offset
         };
-        simulators[i] = new GulliverSimulator(dram, memory_event_table,
-                                            path_tables[0], sim_params);
+        simulators[i] = new GulliverSimulator(dram,
+                                            memory_event_table,
+                                            adjacency_lists,
+                                            path_tables[0], 
+                                            sim_params);
     }
 }
 
@@ -68,6 +91,7 @@ GulliverMultiQubitSimulator::~GulliverMultiQubitSimulator() {
     }
     delete dram;
     delete memory_event_table;
+    delete adjacency_lists;
 }
 
 void

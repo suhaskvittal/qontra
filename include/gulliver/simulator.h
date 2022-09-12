@@ -11,11 +11,15 @@
 
 #include <memory_system.h>
 
+#include <boost/graph/graph_traits.hpp>
+
 #include <deque>
 #include <map>
 #include <stack>
 #include <vector>
 #include <utility>
+
+#define N_ROWS_ADJACENCY_LISTS 8
 
 struct GulliverSimulatorParams {
     uint n_detectors;
@@ -39,6 +43,7 @@ class GulliverSimulator {
 public:
     GulliverSimulator(dramsim3::MemorySystem*, 
             std::map<addr_t, bool> * memory_event_table,
+            std::map<uint, std::vector<uint>> * adjacency_lists,
             const PathTable& path_table,
             const GulliverSimulatorParams&);
 
@@ -60,16 +65,19 @@ public:
     uint64_t prefetch_cycles;
     uint64_t bfu_cycles;
 protected:
-    void tick_prefetch(void);
     void tick_predecode(void);
+    void tick_consolidate(void);
+    void tick_prefetch(void);
     void tick_bfu(void);
 
     void tick_bfu_compute(uint stage);
     void tick_bfu_fetch();
 
+    bool access(addr_t, bool set_evictable_on_hit);
+
     void clear(void);
 
-    enum State { prefetch, predecode, bfu, idle };
+    enum State { prefetch, predecode, consolidate, bfu, idle };
 
     struct Register {
         addr_t address;
@@ -83,7 +91,13 @@ protected:
         uint next_unmatched_index;
     };
 
-    struct PipelineLatch {
+    struct PDScoreboardEntry {
+        uint best_mate_index;
+        uint n_suitors;
+        fp_t mate_weight;
+    };
+
+    struct BFUPipelineLatch {
         std::stack<std::pair<uint, fp_t>> proposed_matches;
         StackEntry base_entry;
         bool stalled;
@@ -91,25 +105,31 @@ protected:
     };
 
     /* Microarchitectural components.*/
+    // Global memory
     dramsim3::MemorySystem * dram;
     std::vector<Register> register_file;    
     std::pair<uint, uint> next_dram_request_register;
-    std::vector<std::pair<uint, uint>> dram_await_array;
-
+    std::vector<addr_t> dram_await_array;
     std::vector<uint> detector_vector_register; // Holds the detectors from the
                                                 // current syndrome.
+    // Predecode
+    std::vector<PDScoreboardEntry> predecode_scoreboard;
+    uint index_register;
+    uint neighbor_register;
+    // BFU
     std::stack<StackEntry> hardware_stack;
-    std::vector<std::vector<PipelineLatch>> pipeline_latches;   // Size is 
-                                                                // fetch_width by
-                                                                // (hw_threshold-1)
+    // Size of latches is fetch_width by (hw_threshold-1)
+    std::vector<std::vector<BFUPipelineLatch>> bfu_pipeline_latches;   
+    // Replacement policy
     StackEntry best_matching_register;
     std::deque<addr_t> replacement_queue;
-        
+    // Global state machine
     State state; 
     bool bfu_idle;
 
     /* Data */
     std::map<addr_t, bool> * memory_event_table;
+    std::map<uint, std::vector<uint>> * adjacency_lists;
     PathTable path_table;
     /* Configuration parameters. */
 private:

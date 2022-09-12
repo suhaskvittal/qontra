@@ -61,6 +61,7 @@ private:
     // Delete later.
     dramsim3::MemorySystem * dram;
     std::map<addr_t, bool> * memory_event_table;
+    std::map<uint, std::vector<uint>> * adjacency_lists;
 };
 
 
