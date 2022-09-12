@@ -43,7 +43,6 @@ class GulliverSimulator {
 public:
     GulliverSimulator(dramsim3::MemorySystem*, 
             std::map<addr_t, bool> * memory_event_table,
-            std::map<uint, std::vector<uint>> * adjacency_lists,
             const PathTable& path_table,
             const GulliverSimulatorParams&);
 
@@ -65,8 +64,6 @@ public:
     uint64_t prefetch_cycles;
     uint64_t bfu_cycles;
 protected:
-    void tick_predecode(void);
-    void tick_consolidate(void);
     void tick_prefetch(void);
     void tick_bfu(void);
 
@@ -77,7 +74,7 @@ protected:
 
     void clear(void);
 
-    enum State { prefetch, predecode, consolidate, bfu, idle };
+    enum State { prefetch, bfu, idle };
 
     struct Register {
         addr_t address;
@@ -129,7 +126,6 @@ protected:
 
     /* Data */
     std::map<addr_t, bool> * memory_event_table;
-    std::map<uint, std::vector<uint>> * adjacency_lists;
     PathTable path_table;
     /* Configuration parameters. */
 private:

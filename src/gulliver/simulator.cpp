@@ -10,7 +10,6 @@
 
 GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram, 
         std::map<addr_t, bool> * memory_event_table,
-        std::map<uint, std::vector<uint>> * adjacency_lists,
         const PathTable& path_table,
         const GulliverSimulatorParams& params)
     :
@@ -36,7 +35,6 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     /* Config parameters */
     memory_event_table(memory_event_table),
     path_table(path_table),
-    adjacency_lists(adjacency_lists),
     n_detectors(params.n_detectors),
     bfu_fetch_width(params.bfu_fetch_width),
     bfu_hw_threshold(params.bfu_hw_threshold),
@@ -118,12 +116,6 @@ GulliverSimulator::tick() {
         prefetch_cycles++;
         tick_prefetch();
         break;
-    case GulliverSimulator::State::predecode:
-        tick_predecode();
-        break;
-    case GulliverSimulator::State::consolidate:
-        tick_consolidate();
-        break;
     case GulliverSimulator::State::bfu:
         bfu_cycles++;
         tick_bfu();
@@ -154,123 +146,6 @@ GulliverSimulator::row_activations() {
 }
 
 void
-GulliverSimulator::tick_predecode() {
-    if (index_register < detector_vector_register.size()) {
-        uint di = detector_vector_register[index_register];
-        std::vector<uint> neighbors = adjacency_lists->at(di);
-        // Check if neighbor is in in the 
-        // DVR (detector vector register).
-        bool in_dvr = false;
-        uint dj = neighbors[neighbor_register];
-        for (uint d : detector_vector_register) {
-            if (dj == d) {
-                in_dvr = true;
-                break;
-            }
-        }
-        // If in the DVR, then update entry in the scoreboard.
-        // Also, if di >= dj, then we have already seen this combination,
-        // so we can just skip if that's the case.
-        if (index_register < neighbor_register && in_dvr) {
-            addr_t weight_addr = to_address(di, dj, base_address, n_detectors);
-            fp_t w = path_table[std::make_pair(di, dj)].distance;
-            bool is_hit = access(weight_addr, false);
-            if (!is_hit) {
-                return;
-            }
-
-            PDScoreboardEntry& ei = predecode_scoreboard[index_register];
-            PDScoreboardEntry& ej = predecode_scoreboard[neighbor_register];
-            if (ei.mate_weight > w) {
-                ei.best_mate_index = neighbor_register;
-                ej.n_suitors++;
-                ei.mate_weight = w;
-            }
-            if (ej.mate_weight > w) {
-                ej.best_mate_index = index_register;
-                ei.n_suitors++;
-                ej.mate_weight = w;
-            }
-        }
-        // Update index and neighbor registers.
-        neighbor_register++;
-        if (neighbor_register >= neighbors.size()) {
-            index_register++;
-            neighbor_register = 0;
-        }
-    } else {
-        state = GulliverSimulator::State::consolidate;
-        index_register = 0;
-#ifdef GSIM_DEBUG
-        std::cout << "CONSOLIDATE\n";
-#endif
-    }
-}
-
-void
-GulliverSimulator::tick_consolidate() {
-    // We use the best matching register to consolidate results
-    // from predecode.
-    //
-    // As we exit the consolidate state and enter prefetch,
-    // we will reset the best matching register and push the contents
-    // onto the hardware stack used in the BFU pipeline.
-    std::map<uint, uint>& init_matching = best_matching_register.running_matching;
-    fp_t& init_weight = best_matching_register.matching_weight;
-    if (index_register < detector_vector_register.size()) {
-        // Retrieve data
-        uint di = detector_vector_register[index_register];
-        if (init_matching.count(di)) {
-            index_register++;   // Auto-increment if we have already assigned di.
-        }
-        PDScoreboardEntry& ei = predecode_scoreboard[index_register];
-        // Retrieve neighbor data. 
-        uint j = ei.best_mate_index;
-        uint dj = detector_vector_register[j]; 
-        PDScoreboardEntry& ej = predecode_scoreboard[j];
-        // Make sure dj "likes" di.
-        if (index_register == ej.best_mate_index
-                && ei.n_suitors == 1 && ej.n_suitors == 1)
-        {
-            init_matching[di] = dj;
-            init_matching[dj] = di;
-            init_weight += ei.mate_weight;
-        }
-        index_register++;
-    } else {
-        StackEntry init = {
-            init_matching,
-            init_weight,
-            0
-        };
-        // Remove all entries in init_matching from
-        // the DVR.
-        for (auto it = detector_vector_register.begin();
-                it != detector_vector_register.end(); )
-        {
-            if (init_matching.count(*it)) {
-                it = detector_vector_register.erase(it);
-            } else {
-                it++;
-            }
-        }
-        if (detector_vector_register.empty()) {
-            state = GulliverSimulator::State::idle;
-        } else {
-            // Reset best_matching_register
-            best_matching_register.running_matching = std::map<uint, uint>();
-            best_matching_register.matching_weight = 0.0;
-            hardware_stack.push(init);
-
-            state = GulliverSimulator::State::prefetch;
-#ifdef GSIM_DEBUG
-            std::cout << "PREFETCH\n";
-#endif
-        }
-    }
-}
-
-void
 GulliverSimulator::tick_prefetch()  {
     uint& ai = next_dram_request_register.first;
     uint& aj = next_dram_request_register.second;
@@ -280,6 +155,12 @@ GulliverSimulator::tick_prefetch()  {
         // have been processed.
         if (dram_await_array.size() == 0) {
             state = GulliverSimulator::State::bfu;
+            StackEntry init = {
+                std::map<uint,uint>(),
+                0.0,
+                0
+            };
+            hardware_stack.push(init);
 #ifdef GSIM_DEBUG
             std::cout << "BFU\n";
 #endif
@@ -508,7 +389,7 @@ GulliverSimulator::clear() {
         0 
     };
     replacement_queue.clear();
-    state = GulliverSimulator::State::predecode;
+    state = GulliverSimulator::State::prefetch;
 }
 
 addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,

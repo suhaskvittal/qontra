@@ -20,33 +20,17 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     main_clock_frequency(params.main_clock_frequency),
     // Heap initialized data (to be deleted)
     dram(nullptr),
-    memory_event_table(nullptr),
-    adjacency_lists(nullptr)
+    memory_event_table(nullptr)
 {
     // Initialize Memory System.
     // Define memory event table and associated callbacks.
     memory_event_table = new std::map<addr_t, bool>();
-    adjacency_lists = new std::map<uint, std::vector<uint>>();
 
     dramsim3::Config config(params.dram_config_file, params.log_output_directory);
     auto cb = [this](addr_t x) 
     {
         this->memory_event_table->insert_or_assign(x, true);
     };
-
-    boost::graph_traits<decoding_graph_base>::vertex_iterator vi_p, vf_p;
-    boost::tie(vi_p, vf_p) = boost::vertices(graph.base);
-    for (; vi_p != vf_p; vi_p++) {
-        boost::graph_traits<decoding_graph_base>::adjacency_iterator ai_p, af_p;
-        boost::tie(ai_p, af_p) = boost::adjacent_vertices(*vi_p, graph.base);
-
-        uint di = graph.base[*vi_p].detector;
-        adjacency_lists->insert_or_assign(di, std::vector<uint>());
-        for (; ai_p != af_p; ai_p++) {
-            uint dj = graph.base[*ai_p].detector;
-            adjacency_lists->at(di).push_back(dj);
-        }
-    }
 
     dram = new dramsim3::MemorySystem(params.dram_config_file, 
                                         params.log_output_directory,
@@ -63,7 +47,6 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     };
     simulator = new GulliverSimulator(dram, 
                                     memory_event_table,
-                                    adjacency_lists,    
                                     path_table, 
                                     sim_params);
 }
@@ -74,7 +57,6 @@ Gulliver::~Gulliver() {
     delete simulator;
     delete dram;
     delete memory_event_table;
-    delete adjacency_lists;
 }
 
 std::string
