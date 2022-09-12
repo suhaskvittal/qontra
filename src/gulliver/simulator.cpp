@@ -36,6 +36,8 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     memory_event_table(memory_event_table),
     path_table(path_table),
     n_detectors(params.n_detectors),
+    n_detectors_per_round(params.n_detectors_per_round),
+    critical_index(0),
     bfu_fetch_width(params.bfu_fetch_width),
     bfu_hw_threshold(params.bfu_hw_threshold),
     base_address(0)
@@ -47,9 +49,15 @@ bool
 GulliverSimulator::load_detectors(const std::vector<uint>& detector_array) {
     clear();
     detector_vector_register = detector_array;
-#ifdef GSIM_DEBUG
-    std::cout << "PREDECODE\n";
-#endif
+    // Compute the critical index.
+    critical_index = detector_vector_register.size();
+    for (uint i = 0; i < detector_vector_register.size(); i++) {
+        if (detector_vector_register[i] >= n_detectors - n_detectors_per_round) {
+            critical_index = i;
+            break;        
+        }
+    }
+    setup();
     return detector_array.size() <= bfu_hw_threshold;
 }
 
@@ -135,6 +143,12 @@ GulliverSimulator::get_matching() {
     return best_matching_register.running_matching;
 }
 
+void
+GulliverSimulator::reset_stats() {
+    prefetch_cycles = 0;
+    bfu_cycles = 0;
+}
+
 uint64_t
 GulliverSimulator::rowhammer_flips() {
     return dram->dram_system_->rowhammer_flips();
@@ -143,6 +157,55 @@ GulliverSimulator::rowhammer_flips() {
 uint64_t
 GulliverSimulator::row_activations() {
     return dram->dram_system_->row_activations();
+}
+
+void
+GulliverSimulator::setup() {
+    // The idea is that we should have retrieved this data
+    // from DRAM as we received the pieces for the syndrome
+    // after each round.
+    //
+    // The 1us constraint only applies for the period after
+    // the last round.
+    //
+    // However, we still want to track DRAM accesses, so
+    // we will call the requisite functions.
+
+    for (uint ai = 0; ai < critical_index; ai++) {
+        uint di = detector_vector_register[ai];
+        for (uint aj = ai+1; aj < critical_index; aj++) {
+            uint dj = detector_vector_register[aj];
+            addr_t address = to_address(di, dj, base_address, n_detectors);
+            while (!dram->WillAcceptTransaction(address, false)) {
+                dram->ClockTick();
+            }
+            dram->AddTransaction(address, false);
+            while (memory_event_table->count(address) == 0
+                    || !memory_event_table->at(address))
+            {
+                dram->ClockTick();
+            }
+            memory_event_table->at(address) = false;
+
+            // Add data to the register file
+            for (Register& r : register_file) {
+                if (!r.valid || r.evictable) {
+                    r.address = address;
+                    r.valid = true;
+                    r.evictable = false;
+                    break;
+                }
+            }
+        }
+    }
+    
+    if (critical_index == n_detectors) {
+        next_dram_request_register.first = n_detectors;
+        next_dram_request_register.second = n_detectors;
+    } else {
+        next_dram_request_register.first = 0;
+        next_dram_request_register.second = critical_index;
+    }
 }
 
 void
@@ -161,9 +224,6 @@ GulliverSimulator::tick_prefetch()  {
                 0
             };
             hardware_stack.push(init);
-#ifdef GSIM_DEBUG
-            std::cout << "BFU\n";
-#endif
         }
         return;
     }
@@ -171,14 +231,13 @@ GulliverSimulator::tick_prefetch()  {
     uint di = detector_vector_register[ai];
     uint dj = detector_vector_register[aj];
     addr_t address = to_address(di, dj, base_address, n_detectors);
-    std::pair<uint, uint> di_dj = std::make_pair(di, dj);
     
     access(address, false);  // We don't care if there is a hit or miss.
     // Update di, dj.
     aj++;
     if (aj >= detector_vector_register.size()) {
         ai++;
-        aj = ai+1;
+        aj = ai < critical_index ? critical_index : ai+1;
     }
 }
 

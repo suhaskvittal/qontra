@@ -8,6 +8,7 @@
 GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
         const std::vector<stim::Circuit>& circuits,
         uint n_decoders,
+        uint n_detectors_per_round,
         const GulliverParams& params)
     :
     /* Statistics */
@@ -51,6 +52,7 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
 
         GulliverSimulatorParams sim_params = {
             circuits[0].count_detectors()+1,
+            n_detectors_per_round,
             params.n_registers,
             params.bfu_fetch_width,
             params.bfu_hw_threshold,

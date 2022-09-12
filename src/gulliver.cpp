@@ -6,13 +6,15 @@
 #include "gulliver.h"
 
 Gulliver::Gulliver(const stim::Circuit circuit,
+        uint n_detectors_per_round,
         const GulliverParams& params)
     :MWPMDecoder(circuit), 
     // Statistics
     n_total_accesses(0),
     n_mwpm_accesses(0),
-    max_bfu_latency(0),
-    max_cycles(0),
+    max_latency(0),
+    max_bfu_cycles(0),
+    max_prefetch_cycles(0),
     // Memory system
     simulator(nullptr),
     // Properties
@@ -38,6 +40,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
 
     GulliverSimulatorParams sim_params = {
         circuit.count_detectors()+1,
+        n_detectors_per_round,
         params.n_registers,
         params.bfu_fetch_width,
         params.bfu_hw_threshold,
@@ -105,6 +108,7 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             detector_array.push_back(BOUNDARY_INDEX);
         }
         // Run simulator.
+        simulator->reset_stats();
         simulator->load_detectors(detector_array);
         uint64_t n_cycles = 0;
         while (!simulator->is_idle()) {
@@ -141,9 +145,10 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
         }
 
         fp_t time_taken = n_cycles / main_clock_frequency * 1e9;
-        if (time_taken > max_bfu_latency) {
-            max_bfu_latency = time_taken;
-            max_cycles = n_cycles;
+        if (time_taken > max_latency) {
+            max_latency = time_taken;
+            max_bfu_cycles = simulator->bfu_cycles;
+            max_prefetch_cycles = simulator->prefetch_cycles;
         }
         DecoderShotResult res = {
             time_taken,
@@ -155,94 +160,3 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
         return res;
     }
 }
-
-/* FOR FUTURE REFERENCE, DO NOT DELETE
- *
- *
- *
-std::map<uint, uint>
-Gulliver::predecode(const std::vector<uint>& detector_array, 
-        GulliverCycles& n_cycles) 
-{
-    uint64_t n_proc_cycles = 0;
-    GulliverCycles n_mem_cycles;  // sram and dram accesses.
-    
-    typedef std::pair<uint, fp_t> PairingEntry;
-    std::map<uint, PairingEntry> best_pairing; 
-    std::map<uint, uint> n_pairings;
-    for (uint i = 0; i < detector_array.size(); i++) {
-        uint di = detector_array[i];
-        if (n_pairings.count(di) == 0) {
-            n_pairings[di] = 0;
-        }
-        auto vi = graph.get(di);
-        // Compute the min neighbor that is in the detector array.
-        for (uint j = i+1; j < detector_array.size(); j++) {
-            uint dj = detector_array[j];
-            if (n_pairings.count(dj) == 0) {
-                n_pairings[dj] = 0;
-            }
-            auto vj = graph.get(dj);
-            // Check if di and dj are connected.
-            // Assume this is an access to some SRAM data structure.
-            //
-            // This can be a global data structure across all logical qubits.
-            // Or even just a logic circuit.
-            auto edge = boost::edge(vi, vj, graph.base);
-            n_proc_cycles++;
-            if (!edge.second) {
-                continue;
-            }
-            // If they are adjacent, then access the weight from memory.
-            fp_t w = graph.base[edge.first].edge_weight;
-            n_mem_cycles += memsys->access(di, dj, false);
-
-            if (best_pairing.count(di)) {
-                PairingEntry prev = best_pairing[di];
-                if (prev.second > w) {
-                    best_pairing[di] = std::make_pair(dj, w);
-                    n_pairings[dj]++;
-                    n_pairings[prev.first]--;
-                }
-            } else {
-                best_pairing[di] = std::make_pair(dj, w);
-                n_pairings[dj]++;
-            }
-
-            if (best_pairing.count(dj)) {
-                PairingEntry prev = best_pairing[dj];
-                if (prev.second > w) {
-                    best_pairing[dj] = std::make_pair(di, w);
-                    n_pairings[di]++;
-                    n_pairings[prev.first]--;
-                }
-            } else {
-                best_pairing[dj] = std::make_pair(di, w);
-                n_pairings[di]++;
-            }
-            // Assume one cycle for comparisons.
-            n_proc_cycles++;
-        }
-    }
-    // Consolidate the matching.
-    std::map<uint, uint> matching;
-    for (auto kv_entry : best_pairing) {
-        uint di = kv_entry.first;
-        uint dj = kv_entry.second.first;
-        if (matching.count(di)) {
-            continue;
-        }
-        if (n_pairings[di] > 1 || n_pairings[dj] > 1) {
-            continue;
-        }
-        if (di == best_pairing[dj].first) {
-            matching[di] = dj;
-            matching[dj] = di;
-        }
-        n_proc_cycles++;
-    }
-    n_cycles.onchip += n_proc_cycles;
-    n_cycles += n_mem_cycles;
-    return matching;
-}
-*/

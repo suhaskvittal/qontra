@@ -23,7 +23,8 @@
 class GulliverMultiQubitSimulator {
 public:
     GulliverMultiQubitSimulator(const std::vector<stim::Circuit>&, 
-            uint n_decoders, const GulliverParams&);
+            uint n_decoders, uint n_detectors_per_round,
+            const GulliverParams&);
     ~GulliverMultiQubitSimulator();
 
     void benchmark(uint32_t shots, std::mt19937_64&);

@@ -41,7 +41,8 @@ decoder_sram_experiment() {
         MWPMDecoder mwpm_decoder(surf_code_circ);
         // Gulliver
         GulliverParams gulliver_params = GULLIVER_DEFAULT;
-        Gulliver gulliver_decoder(surf_code_circ, gulliver_params);
+        Gulliver gulliver_decoder(surf_code_circ, code_dist*code_dist-1,
+                gulliver_params);
 
         Decoder * decoder_array[] = {
             &mwpm_decoder, 
@@ -64,7 +65,7 @@ decoder_analysis_experiment() {
     std::cout << "Running decoder analysis experiment...\n";
     fp_t p = DEFAULT_ERROR_MEAN;
     fp_t r = DEFAULT_ERROR_STDDEV;
-    uint32_t shots = 100000;
+    uint32_t shots = 1000000;
     // Setup circuit.
     for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
         auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
@@ -73,7 +74,8 @@ decoder_analysis_experiment() {
         MWPMDecoder mwpm_decoder(surf_code_circ);
         // Gulliver
         GulliverParams gulliver_params = GULLIVER_DEFAULT;
-        Gulliver gulliver_decoder(surf_code_circ, gulliver_params);
+        Gulliver gulliver_decoder(surf_code_circ, code_dist*code_dist-1,
+                gulliver_params);
         // CliqueDecoder
         CliqueParams clique_params = {
             1,
@@ -106,8 +108,12 @@ decoder_analysis_experiment() {
         std::cout << "\t\t" << gulliver_decoder.name() << " accessed MWPM " 
             << gulliver_decoder.n_mwpm_accesses << " times out of "
             << gulliver_decoder.n_total_accesses << ".\n";
-        std::cout << "\t\t" << "Max BFU latency: "
-            << gulliver_decoder.max_bfu_latency << "ns.\n";
+        std::cout << "\t\t" << "Max cycles in prefetch: " 
+            << gulliver_decoder.max_prefetch_cycles << ".\n";
+        std::cout << "\t\t" << "Max cycles in BFU: "
+            << gulliver_decoder.max_bfu_cycles << ".\n";
+        std::cout << "\t\t" << "Max latency: "
+            << gulliver_decoder.max_latency << "ns.\n";
         std::cout << "\t\t" << "Number of Rowhammer flips: "
             << gulliver_decoder.simulator->rowhammer_flips() << ".\n";
         std::cout << "\tAdditional stats:\n";
@@ -134,7 +140,7 @@ gulliver_timing_experiment() {
         // Setup decoder.
         GulliverParams decoder_params = GULLIVER_DEFAULT;
 
-        Gulliver decoder(surf_code_circ, decoder_params);
+        Gulliver decoder(surf_code_circ, code_dist*code_dist-1, decoder_params);
         _timing_analysis(timing_analysis_file, &decoder, DEFAULT_SHOTS);
 
         uint32_t n_nonzero_syndromes = 0;
@@ -179,7 +185,8 @@ gulliver_multiple_qubits_experiment() {
 
     GulliverParams params = GULLIVER_DEFAULT;
     GulliverMultiQubitSimulator * mqsim = 
-        new GulliverMultiQubitSimulator(circuits, MQSIM_NDECODER, GULLIVER_DEFAULT);
+        new GulliverMultiQubitSimulator(circuits, MQSIM_NDECODER,
+                MQSIM_DISTANCE*MQSIM_DISTANCE-1, GULLIVER_DEFAULT);
     mqsim->benchmark(100000, GULLIVER_RNG);
 
     std::cout << "Gulliver on " << MQSIM_NQUBITS << " logical qubits across "

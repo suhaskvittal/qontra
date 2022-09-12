@@ -38,7 +38,8 @@ struct GulliverParams {
 
 class Gulliver : public MWPMDecoder {
 public:
-    Gulliver(const stim::Circuit, const GulliverParams&);
+    Gulliver(const stim::Circuit, uint n_detectors_per_round, 
+            const GulliverParams&);
     ~Gulliver();
 
     DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
@@ -51,8 +52,9 @@ public:
     // Statistics
     uint32_t n_total_accesses;
     uint32_t n_mwpm_accesses;
-    fp_t max_bfu_latency;
-    uint64_t max_cycles;
+    fp_t max_latency;
+    uint64_t max_bfu_cycles;
+    uint64_t max_prefetch_cycles;
     // More statistics are in the simulator.
     GulliverSimulator * simulator;
 private:

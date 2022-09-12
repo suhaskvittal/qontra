@@ -23,6 +23,7 @@
 
 struct GulliverSimulatorParams {
     uint n_detectors;
+    uint n_detectors_per_round;
 
     uint n_registers;
     uint bfu_fetch_width;
@@ -56,6 +57,8 @@ public:
     
     bool is_idle(void);
     std::map<uint, uint> get_matching(void);
+
+    void reset_stats(void);
     
     // Statistics
     uint64_t rowhammer_flips(void);
@@ -64,6 +67,8 @@ public:
     uint64_t prefetch_cycles;
     uint64_t bfu_cycles;
 protected:
+    void setup(void);
+
     void tick_prefetch(void);
     void tick_bfu(void);
 
@@ -130,6 +135,9 @@ protected:
     /* Configuration parameters. */
 private:
     uint n_detectors;
+    uint n_detectors_per_round;
+
+    uint critical_index;
 
     uint bfu_fetch_width;
     uint bfu_hw_threshold; 
