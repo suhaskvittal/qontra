@@ -5,6 +5,8 @@
 
 #include "decoder.h"
 
+namespace qrc {
+
 Decoder::Decoder(const stim::Circuit& circ)
     :circuit(circ), 
     graph(to_decoding_graph(circ)),
@@ -134,3 +136,4 @@ is_logical_error(const std::vector<uint8_t>& correction,
     return !corr_matches_obs;
 }
 
+};  // qrc

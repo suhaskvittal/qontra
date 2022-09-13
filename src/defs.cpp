@@ -5,6 +5,8 @@
 
 #include "defs.h"
 
+namespace qrc {
+
 qfp_t 
 quantize(fp_t orig, fp_t fp_max, qfp_t qfp_max) {
     fp_t mid = (orig/fp_max) * qfp_max;
@@ -17,3 +19,5 @@ safe_create_directory(const std::filesystem::path& path) {
         std::filesystem::create_directory(path);
     }
 }
+
+};  // qrc

@@ -23,9 +23,13 @@ typedef uint64_t addr_t;
 #define MB (KB*1024.0)
 #define GB (MB*1024.0)
 
+namespace qrc {
+
 qfp_t
 quantize(fp_t, fp_t fp_max, qfp_t qfp_max);
 void 
 safe_create_directory(const std::filesystem::path&);
+
+};  // qrc
 
 #endif

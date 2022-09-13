@@ -5,6 +5,9 @@
 
 #include "gulliver/multi_qubit.h"
 
+namespace qrc {
+namespace gulliver {
+
 GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
         const std::vector<stim::Circuit>& circuits,
         uint n_decoders,
@@ -162,3 +165,6 @@ GulliverMultiQubitSimulator::reset_stats() {
     n_uncomputable = 0;
     max_latency = 0.0;
 }
+
+};  // gulliver
+};  // qrc

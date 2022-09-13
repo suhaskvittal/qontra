@@ -21,6 +21,9 @@
 
 #define FILTER_CUTOFF 10
 
+namespace qrc {
+namespace gulliver {
+
 struct GulliverSimulatorParams {
     uint n_detectors;
     uint n_detectors_per_round;
@@ -149,5 +152,8 @@ std::pair<uint, uint> from_address(addr_t, addr_t base, uint n_detectors);
 
 uint bound_detector(uint, uint n_detectors);
 uint unbound_detector(uint, uint n_detectors);
+
+}; // gulliver
+}; // qrc
 
 #endif

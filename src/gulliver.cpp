@@ -5,6 +5,8 @@
 
 #include "gulliver.h"
 
+namespace qrc {
+
 Gulliver::Gulliver(const stim::Circuit circuit,
         uint n_detectors_per_round,
         const GulliverParams& params)
@@ -39,7 +41,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
                                         params.log_output_directory,
                                         cb, cb);
 
-    GulliverSimulatorParams sim_params = {
+    gulliver::GulliverSimulatorParams sim_params = {
         circuit.count_detectors()+1,
         n_detectors_per_round,
         params.n_registers,
@@ -49,7 +51,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
         0,
         0
     };
-    simulator = new GulliverSimulator(dram, 
+    simulator = new gulliver::GulliverSimulator(dram, 
                                     memory_event_table,
                                     path_table, 
                                     sim_params);
@@ -177,3 +179,5 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
         return res;
     }
 }
+
+};  // namespace qrc

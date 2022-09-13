@@ -14,6 +14,8 @@
 #include <string>
 #include <utility>
 
+namespace qrc {
+
 /* Benchmark functions and structures*/
 struct DecoderShotResult {
     fp_t execution_time;
@@ -92,5 +94,7 @@ is_logical_error(const std::vector<uint8_t>& correction,
 std::vector<uint8_t> 
 _to_vector(const stim::simd_bits_range_ref&,
         uint n_detectors, uint n_observables);
+
+}; // qrc
 
 #endif

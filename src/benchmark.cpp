@@ -5,6 +5,8 @@
 
 #include "benchmark.h"
 
+namespace qrc {
+
 fp_t
 min(const std::vector<fp_t>& data) {
     return *std::min_element(data.begin(), data.end());
@@ -184,3 +186,5 @@ std::vector<uint8_t> _to_vector(const stim::simd_bits_range_ref& array,
     }
     return syndrome;
 }
+
+};  // qrc

@@ -22,6 +22,8 @@
 #include <tuple>
 #include <vector>
 
+namespace qrc {
+
 struct GulliverParams {
     // Fetch width for brute force unit
     uint bfu_fetch_width;             
@@ -57,7 +59,7 @@ public:
     uint64_t max_prefetch_cycles;
     uint max_hamming_weight;
     // More statistics are in the simulator.
-    GulliverSimulator * simulator;
+    gulliver::GulliverSimulator * simulator;
 private:
     uint bfu_hw_threshold;
     fp_t main_clock_frequency;
@@ -66,5 +68,6 @@ private:
     std::map<addr_t, bool> * memory_event_table;
 };
 
+};  // qrc
 
 #endif

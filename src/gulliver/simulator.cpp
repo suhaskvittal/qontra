@@ -8,6 +8,9 @@
 
 //#define GSIM_DEBUG
 
+namespace qrc {
+namespace gulliver {
+
 GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram, 
         std::map<addr_t, bool> * memory_event_table,
         const PathTable& path_table,
@@ -518,3 +521,6 @@ uint
 unbound_detector(uint d, uint n_detectors) {
     return d == n_detectors-1 ? BOUNDARY_INDEX : d;
 }
+
+};  // gulliver
+};  // qrc

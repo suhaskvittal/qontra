@@ -5,6 +5,8 @@
 
 #include "decoding_graph.h"
 
+namespace qrc {
+
 DecodingGraph::DecodingGraph() {
     // Initialize data structures.
     base = decoding_graph_base();
@@ -270,3 +272,5 @@ failed_to_find_path:
     path_table[std::make_pair(src, dst)] = res;
     path_table[std::make_pair(dst, src)] = res;
 }
+
+};  // qrc

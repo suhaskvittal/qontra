@@ -15,21 +15,16 @@ option(ROWHAMMER "ON=perform Rowhammer tracking" OFF)
 # Declare executable.
 set(QUARCH_PROGRAM_FILES
     # Main code.
-    src/main.cpp
-    src/stim_test.cpp
     src/benchmark.cpp
     src/decoding_graph.cpp
     src/decoder.cpp
     src/mwpm_decoder.cpp
     src/defs.cpp
-    src/lilliput.cpp
     src/gulliver.cpp
-    src/clique.cpp
     # Gulliver code.
-    src/gulliver/experiments.cpp
     src/gulliver/simulator.cpp
     src/gulliver/multi_qubit.cpp)
-add_executable(quarch ${QUARCH_PROGRAM_FILES})
+add_library(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
 if (ENABLE_OPENMP) 
     target_compile_options(quarch PRIVATE -fopenmp)

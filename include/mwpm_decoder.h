@@ -21,7 +21,9 @@
 #define MWPM_DECODER_NAME "MWPMDecoder"
 #define MWPM_INTEGER_SCALE 10000.0
 
-typedef qfp_t  wgt_t;
+typedef qfp_t wgt_t;
+
+namespace qrc {
 
 class MWPMDecoder : public Decoder {
 public:
@@ -34,8 +36,8 @@ public:
     uint64_t sram_cost(void) override;
 protected:
     PathTable path_table;
-
-    friend void surface_code_hamming_weight_experiment(void);
 };
+
+};  // qrc
 
 #endif

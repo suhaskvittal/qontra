@@ -20,6 +20,8 @@
 
 #define MAX_SHOTS 100000
 
+namespace qrc {
+
 struct ErrorThresholdData {
     // Key: (code distance, error rate)
     // Value: (circuit, logical error rate)
@@ -69,5 +71,7 @@ sweep_error_threshold(const ErrorThresholdSweepParams&,
 void
 write_sweep_data(const ErrorThresholdData&, std::ostream&,
         const ErrorThresholdOutputParams&);
+
+};  // qrc
 
 #endif

@@ -5,6 +5,8 @@
 
 #include "mwpm_decoder.h"
 
+namespace qrc {
+
 MWPMDecoder::MWPMDecoder(const stim::Circuit& circ) 
 :Decoder(circ), path_table()
 {
@@ -137,3 +139,5 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     };
     return res;
 }
+
+};  // qrc

@@ -6,10 +6,14 @@
 #ifndef DECODING_GRAPH_h
 #define DECODING_GRAPH_h
 
+#include "defs.h"
+
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
 #include <boost/property_map/property_map.hpp>
+
+#include <stim.h>
 
 #include <iostream>
 #include <vector>
@@ -21,11 +25,9 @@
 
 #include <math.h>
 
-#include <stim.h>
-
-#include "defs.h"
-
 #define N_COORD 100
+
+namespace qrc {
 
 struct DecodingVertex {
     std::array<fp_t, N_COORD> coord;
@@ -93,5 +95,7 @@ _update_path_table(PathTable&,
         DecodingGraph&, uint, uint, 
         const std::vector<fp_t>& distances,
         const std::vector<uint>& predecessors);
+
+};  // qrc
 
 #endif

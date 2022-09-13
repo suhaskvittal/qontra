@@ -20,6 +20,9 @@
 
 #define ROWS_PER_QUBIT  4
 
+namespace qrc {
+namespace gulliver {
+
 class GulliverMultiQubitSimulator {
 public:
     GulliverMultiQubitSimulator(const std::vector<stim::Circuit>&, 
@@ -45,5 +48,8 @@ private:
     std::vector<PathTable> path_tables;
     fp_t main_clock_frequency;
 };
+
+};  // gulliver
+};  // qrc
 
 #endif
