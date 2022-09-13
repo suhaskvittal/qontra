@@ -19,8 +19,7 @@
 #include <vector>
 #include <utility>
 
-#define N_ROWS_ADJACENCY_LISTS 8
-#define FILTER_CUTOFF 8
+#define FILTER_CUTOFF 10
 
 struct GulliverSimulatorParams {
     uint n_detectors;
@@ -77,6 +76,7 @@ protected:
     void tick_bfu_fetch();
 
     bool access(addr_t, bool set_evictable_on_hit);
+    void update_state(void);
 
     void clear(void);
 
@@ -84,7 +84,7 @@ protected:
 
     struct Register {
         addr_t address;
-        bool evictable;
+        uint64_t last_use;
         bool valid;
     };
 
@@ -115,10 +115,6 @@ protected:
     std::vector<addr_t> dram_await_array;
     std::vector<uint> detector_vector_register; // Holds the detectors from the
                                                 // current syndrome.
-    // Predecode
-    std::vector<PDScoreboardEntry> predecode_scoreboard;
-    uint index_register;
-    uint neighbor_register;
     // BFU
     std::stack<StackEntry> hardware_stack;
     // Size of latches is fetch_width by (hw_threshold-1)

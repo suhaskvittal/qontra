@@ -11,7 +11,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     :MWPMDecoder(circuit), 
     // Statistics
     n_total_accesses(0),
-    n_mwpm_accesses(0),
+    n_logical_failures(0),
     max_latency(0),
     max_bfu_cycles(0),
     max_prefetch_cycles(0),
@@ -92,12 +92,16 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     // Don't count the observables.
     uint hw = std::accumulate(syndrome.begin(), syndrome.end()-n_observables, 0);
     n_total_accesses++;
-    if (hw > max_hamming_weight) {
-        max_hamming_weight = hw;
-    }
     if (hw > bfu_hw_threshold) {
-        n_mwpm_accesses++;
-        return MWPMDecoder::decode_error(syndrome);
+        n_logical_failures++;
+        DecoderShotResult res = {
+            0.0,
+            0.0,
+            1,
+            std::vector<uint8_t>(),
+            std::map<uint, uint>()
+        };
+        return res;
     } else {
         // Invoke BFUs.
         // We use a simulator to count the number of cycles.
@@ -153,11 +157,20 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             max_latency = time_taken;
             max_bfu_cycles = simulator->bfu_cycles;
             max_prefetch_cycles = simulator->prefetch_cycles;
+            max_hamming_weight = hw;
         }
+
+        bool is_error = 
+            is_logical_error(correction, syndrome, n_detectors, n_observables);
+        if (time_taken > 1000) {
+            n_logical_failures++;
+            is_error = true;
+        }
+
         DecoderShotResult res = {
             time_taken,
             0.0, // TODO
-            is_logical_error(correction, syndrome, n_detectors, n_observables),
+            is_error,
             correction,
             matching
         };

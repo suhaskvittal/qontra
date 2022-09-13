@@ -65,11 +65,13 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
         for (uint32_t i = 0; i < shots_this_round; i++) {
             auto syndrome = 
                 _to_vector(sample_buffer[i], n_detectors, n_observables);
+            uint hw = 
+                std::accumulate(syndrome.begin(), syndrome.end() - n_observables, 0);
             // Update some stats before decoding.
             if (save_per_shot_data) {
                 syndromes[sn] = syndrome;
             }
-            if (sample_buffer[i].not_zero()) {
+            if (hw > 0) {
                 DecoderShotResult res = decoder_p->decode_error(syndrome);
                 // Update statistics.
                 n_logical_errors += res.is_logical_error ? 1 : 0;

@@ -65,7 +65,7 @@ decoder_analysis_experiment() {
     std::cout << "Running decoder analysis experiment...\n";
     fp_t p = DEFAULT_ERROR_MEAN;
     fp_t r = DEFAULT_ERROR_STDDEV;
-    uint32_t shots = 1000000;
+    uint32_t shots = 100000000;
     // Setup circuit.
     for (uint code_dist = 3; code_dist <= 11; code_dist += 2) {
         auto surf_code_circ = _make_surface_code_circuit(code_dist, p, r);
@@ -105,8 +105,9 @@ decoder_analysis_experiment() {
                 << ")\n";
         }
         std::cout << "\tGulliver stats:\n";
-        std::cout << "\t\t" << gulliver_decoder.name() << " accessed MWPM " 
-            << gulliver_decoder.n_mwpm_accesses << " times out of "
+        std::cout << "\t\t" << gulliver_decoder.name() 
+            << " had a logical failure " 
+            << gulliver_decoder.n_logical_failures << " times out of "
             << gulliver_decoder.n_total_accesses << ".\n";
         std::cout << "\t\t" << "Max cycles in prefetch: " 
             << gulliver_decoder.max_prefetch_cycles << ".\n";

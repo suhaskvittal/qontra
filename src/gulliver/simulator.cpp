@@ -18,13 +18,10 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     bfu_cycles(0),
     /* Microarchitecture */
     dram(dram),
-    register_file(params.n_registers),
+    register_file(params.n_registers, (Register){0x0, 0, false}),
     next_dram_request_register(std::make_pair(0,0)),
     dram_await_array(),
     detector_vector_register(),
-    predecode_scoreboard(params.bfu_hw_threshold),
-    index_register(0),
-    neighbor_register(0),
     hardware_stack(),
     bfu_pipeline_latches(params.bfu_fetch_width, 
             std::vector<BFUPipelineLatch>(params.bfu_hw_threshold-1)),
@@ -77,28 +74,32 @@ void
 GulliverSimulator::tick() {
     dram->ClockTick();
     
+    // Update last use for every register.
+    for (Register& r : register_file) {
+        r.last_use++;
+    }
     // Go perform any replacements if necessary.
     if (replacement_queue.size()) {
         addr_t address = replacement_queue.front();
         // Check if there are any evictable registers.
-        bool is_installed = false;
-        for (Register& r : register_file) {
-            if (!r.valid || r.evictable) {
-                r.address = address; 
-                r.evictable = false;
-                r.valid = true;
-                is_installed = true;
-                break;
+        Register * victim = &register_file[0];
+        for (uint i = 1; i < register_file.size(); i++) {
+            Register& r = register_file[i];
+            if (victim->valid &&
+                    (!r.valid || r.last_use > victim->last_use)) 
+            {
+                victim = &register_file[i];
             }
         }
-        
-        if (is_installed) {
-            replacement_queue.pop_front();
+        victim->address = address;
+        victim->valid = true;
+        victim->last_use = 0;
+
+        replacement_queue.pop_front();
 #ifdef GSIM_DEBUG
-            std::cout << "\t[Gulliver] Installed " << std::hex 
-                << address << std::dec << "\n";
+        std::cout << "\t[Gulliver] Installed " << std::hex 
+            << address << std::dec << "\n";
 #endif
-        }
     }
     // Check if any transactions to DRAM have completed.
     for (auto it = dram_await_array.begin(); it != dram_await_array.end(); ) {
@@ -188,14 +189,18 @@ GulliverSimulator::setup() {
             memory_event_table->at(address) = false;
 
             // Add data to the register file
-            for (Register& r : register_file) {
-                if (!r.valid || r.evictable) {
-                    r.address = address;
-                    r.valid = true;
-                    r.evictable = false;
-                    break;
+            Register * victim = &register_file[0];
+            for (uint i = 1; i < register_file.size(); i++) {
+                Register& r = register_file[i];
+                if (victim->valid &&
+                        (!r.valid || (victim->last_use < r.last_use))) 
+                {
+                    victim = &register_file[i];
                 }
             }
+            victim->address = address;
+            victim->valid = true;
+            victim->last_use = 0;
         }
     }
     
@@ -217,13 +222,7 @@ GulliverSimulator::tick_prefetch()  {
         // We only transition state if all DRAM requests
         // have been processed.
         if (dram_await_array.size() == 0) {
-            state = GulliverSimulator::State::bfu;
-            StackEntry init = {
-                std::map<uint,uint>(),
-                0.0,
-                0
-            };
-            hardware_stack.push(init);
+            update_state();
         }
         return;
     }
@@ -255,7 +254,7 @@ GulliverSimulator::tick_bfu() {
     }
     tick_bfu_fetch();
     if (bfu_idle) {
-        state = GulliverSimulator::State::idle;
+        update_state();
     }
 }
 
@@ -374,7 +373,7 @@ GulliverSimulator::tick_bfu_fetch() {
         if (!stall_next) {
             for (auto p : match_list) {
                 if (detector_vector_register.size() <= FILTER_CUTOFF 
-                        || p.second < 1.5 * min_weight) 
+                        || p.second < 1.2 * min_weight) 
                 {
                     proposed_matches.push(p);
                 }
@@ -399,7 +398,7 @@ GulliverSimulator::access(addr_t address, bool set_evictable_on_hit) {
     for (Register& r : register_file) {
         if (r.valid && r.address == address) {
             is_hit = true;
-            r.evictable = set_evictable_on_hit;
+            r.last_use = 0;
             break;
         }
     }
@@ -435,20 +434,31 @@ GulliverSimulator::access(addr_t address, bool set_evictable_on_hit) {
 }
 
 void
+GulliverSimulator::update_state() {
+    switch (state) {
+    case GulliverSimulator::State::prefetch:
+#ifdef GSIM_DEBUG
+        std::cout << "BFU\n";
+#endif
+        state = GulliverSimulator::State::bfu;
+        hardware_stack.push((StackEntry) {std::map<uint, uint>(), 0.0, 0});
+        break;
+    case GulliverSimulator::State::bfu:
+#ifdef GSIM_DEBUG
+        std::cout << "IDLE\n";
+#endif
+        state = GulliverSimulator::State::idle;
+        break;
+    default:
+        break;
+    }
+}
+
+void
 GulliverSimulator::clear() {
-    for (Register& r : register_file) {
-        r.evictable = true;
-    }    
     next_dram_request_register = std::make_pair(0,1);
     dram_await_array.clear();
     detector_vector_register.clear();
-    for (PDScoreboardEntry& ei : predecode_scoreboard) {
-        ei.best_mate_index = 0;
-        ei.n_suitors = 0;
-        ei.mate_weight = std::numeric_limits<fp_t>::max();
-    }
-    index_register = 0;
-    neighbor_register = 0;
     while (!hardware_stack.empty()) {
         hardware_stack.pop();
     }
@@ -465,6 +475,9 @@ GulliverSimulator::clear() {
     };
     replacement_queue.clear();
     state = GulliverSimulator::State::prefetch;
+#ifdef GSIM_DEBUG
+    std::cout << "PREFETCH\n";
+#endif
 }
 
 addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,

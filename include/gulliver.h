@@ -51,7 +51,7 @@ public:
 
     // Statistics
     uint32_t n_total_accesses;
-    uint32_t n_mwpm_accesses;
+    uint32_t n_logical_failures;
     fp_t max_latency;
     uint64_t max_bfu_cycles;
     uint64_t max_prefetch_cycles;
