@@ -50,7 +50,13 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     uint n_observables = circuit.count_observables();
     // Note to self: fault ids in pymatching are the frames in DecodingGraph.
     // Log start time.
+#ifdef __APPLE__
     auto start_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+#else
+    struct timespec start_time_data;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start_time_data);
+    auto start_time = start_time_data.tv_nsec;
+#endif
     // Count number of detectors.
     uint8_t syndrome_is_even = 0x1;
     std::vector<uint> detector_list;
@@ -127,7 +133,13 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         visited.insert(vj);
     }
     // Stop time here.
+#ifdef __APPLE__
     auto end_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+#else
+    struct timespec end_time_data;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end_time_data);
+    auto end_time = end_time_data.tv_nsec;
+#endif
     auto time_taken = end_time - start_time;
     // Build result.
     DecoderShotResult res = {

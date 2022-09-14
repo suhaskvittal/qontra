@@ -14,8 +14,10 @@
 typedef double fp_t;   // floating point type
 typedef int32_t qfp_t; // quantized floating point type
 
-typedef uint16_t uint;
-typedef int16_t sint;
+#ifdef __APPLE__
+typedef uint32_t uint;
+#endif
+typedef int32_t sint;
 
 typedef uint64_t addr_t;
 
