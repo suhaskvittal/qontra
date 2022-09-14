@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.23.2)
+cmake_minimum_required(VERSION 3.20.3)
 # Define project
 project(BlossomV VERSION 2.05)
 # Define C++ version.

@@ -1,15 +1,12 @@
 # Declare CMAKE version
-cmake_minimum_required(VERSION 3.23.2)
-# Declare compiler
-set(CMAKE_CXX_COMPILER g++)
-set(CMAKE_C_COMPILER gcc)
-# Declare Project and Version number
+cmake_minimum_required(VERSION 3.20.3)
+#2a4e7ca86be5b659c7227ed05c2faaf0c287e807 Declare Project and Version number
 project(Quarch VERSION 0.1)
 # Declare CPP Version
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 # Declare execution options.
-option(ENABLE_OPENMP "use openmp" OFF)
+option(BOOST_PATH "Path to Boost Headers" "boost_1_79_0")
 option(USE_DRAMSIM3 "ON=use DRAMSim3 (default), OFF=use DRAMSim2" ON)
 option(ROWHAMMER "ON=perform Rowhammer tracking" OFF)
 # Declare executable.
@@ -26,25 +23,19 @@ set(QUARCH_PROGRAM_FILES
     src/gulliver/multi_qubit.cpp)
 add_library(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
-if (ENABLE_OPENMP) 
-    target_compile_options(quarch PRIVATE -fopenmp)
-    target_compile_definitions(quarch PRIVATE USE_OMP)
-endif()
-
-if(CMAKE_BUILD_TYPE EQUAL Release)
-    target_compile_options(quarch PRIVATE -O3 -Wall)
+if(CMAKE_BUILD_TYPE MATCHES Release)
+    target_compile_options(quarch PUBLIC -O3)
 else()
-    target_compile_options(quarch PRIVATE -ggdb3)
+    target_compile_options(quarch PUBLIC -ggdb3)
 endif()
 
-target_compile_definitions(quarch PRIVATE 
-                            HOME_DIRECTORY="${CMAKE_SOURCE_DIR}")
 # Add include directory to include path.
-target_include_directories(quarch PRIVATE "include")
+target_include_directories(quarch PUBLIC "include")
+target_include_directories(quarch PUBLIC "${BOOST_PATH}")
 # Link boost libraries to Quarch.
-find_package(boost 1.79.0 COMPONENTS graph REQUIRED)
-target_include_directories(quarch PUBLIC ${Boost_INCLUDE_DIR})
-target_link_libraries(quarch ${Boost_LIBRARIES})
+#find_package(boost 1.70.0 COMPONENTS graph REQUIRED)
+#target_include_directories(quarch PUBLIC ${Boost_INCLUDE_DIR})
+#target_link_libraries(quarch ${Boost_LIBRARIES})
 # Link OpenMP to Quarch
 if (ENABLE_OPENMP)
     find_package(OpenMP)

@@ -84,16 +84,19 @@ void
 GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
     const uint32_t shots_per_round = 100000;
 
-    for (uint32_t batch = 0; batch < shots/shots_per_round; batch++) {
+    while (shots > 0) {
+        uint32_t shots_this_round = 
+            shots > shots_per_round ? shots_per_round : shots;
+
         std::vector<stim::simd_bit_table> sample_buffers;
         for (uint i = 0; i < circuits.size(); i++) {
-            auto buf = stim::detector_samples(circuits[i], shots_per_round,
+            auto buf = stim::detector_samples(circuits[i], shots_this_round,
                                                 false, true, rng);
             buf = buf.transposed();
             sample_buffers.push_back(buf);
         }
 
-        for (uint32_t j = 0; j < shots_per_round; j++) {
+        for (uint32_t j = 0; j < shots_this_round; j++) {
             uint next_available_decoder = 0;
             for (uint i = 0; i < circuits.size(); i++) {
                 if (!sample_buffers[i][j].not_zero()) {
@@ -155,6 +158,7 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                 max_latency = time_taken;
             }
         }
+        shots -= shots_this_round;
     }
 }
 
