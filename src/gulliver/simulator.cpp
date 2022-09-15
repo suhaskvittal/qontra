@@ -522,5 +522,5 @@ unbound_detector(uint d, uint n_detectors) {
     return d == n_detectors-1 ? BOUNDARY_INDEX : d;
 }
 
-};  // gulliver
-};  // qrc
+}  // gulliver
+}  // qrc

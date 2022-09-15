@@ -20,4 +20,4 @@ safe_create_directory(const std::filesystem::path& path) {
     }
 }
 
-};  // qrc
+}  // qrc

@@ -7,41 +7,52 @@
 
 namespace qrc {
 
-DecodingGraph::DecodingGraph() {
-    // Initialize data structures.
-    base = decoding_graph_base();
-    detector_to_index = std::map<uint, uint>();
-    // Setup boundary node.
-    boundary_coord = std::array<fp_t, N_COORD>();
+static int32_t V_INDEX = 0;
+static int32_t E_INDEX = 0;
+
+static DecodingGraph::Vertex NULL_VERTEX = {
+    -1,
+    std::array<fp_t, N_COORD>(),
+    0
+};
+
+static DecodingGraph::Edge NULL_EDGE = {
+    -1,
+    std::make_pair(0, 0),
+    0.0,
+    0.0,
+    std::set<uint>()
+};
+
+DecodingGraph::DecodingGraph() 
+    :detector_to_vertex(),
+    boundary_coord(),
+    vertex_list(),
+    adjacency_matrix()
+{
     boundary_coord.fill((uint)-1);
     add_detector(BOUNDARY_INDEX, boundary_coord);
 }
 
-DecodingGraph::DecodingGraph(const DecodingGraph& other) {
-    base = decoding_graph_base(other.base);
-    detector_to_index = 
-        std::map<uint, uint>(other.detector_to_index);
-}
-
-DecodingGraph::DecodingGraph(DecodingGraph&& other) {
-    base = decoding_graph_base(other.base);
-    detector_to_index = 
-        std::map<uint, uint>(other.detector_to_index);
+uint
+DecodingGraph::count_detectors() {
+    return vertex_list.size();
 }
 
 void
 DecodingGraph::add_detector(uint det, std::array<fp_t, N_COORD>& coord) {
-    if (detector_to_index.count(det)) {
+    if (detector_to_vertex.count(det) && detector_to_vertex[det] != NULL_VERTEX) {
         // Simple update the coord data.
-        auto index = detector_to_index[det];
-        base[index].coord = coord;
+        detector_to_vertex[det].coord = coord;
     } else {
-        DecodingVertex vertex_data = {
+        Vertex v = {
+            V_INDEX++,
             coord,
             det
         };
-        auto index = boost::add_vertex(vertex_data, base);
-        detector_to_index[det] = index;
+        detector_to_vertex[det] = v;
+        vertex_list.push_back(v);
+        adjacency_matrix[v] = std::vector<Vertex>();
     }
 }
 
@@ -49,25 +60,106 @@ void
 DecodingGraph::add_edge(uint det1, uint det2,
         fp_t weight, fp_t e_prob, std::set<uint>& frames) 
 {
-    auto v1 = detector_to_index[det1];
-    auto v2 = detector_to_index[det2];
+    Vertex& v1 = detector_to_vertex[det1];
+    Vertex& v2 = detector_to_vertex[det2];
     
-    DecodingEdge edge_data = {
+    Edge e = {
+        E_INDEX++,
         std::make_pair(det1, det2),
         weight,
         e_prob,
         frames
     };
-    boost::add_edge(v1, v2, edge_data, base);
+    vertices_to_edge[std::make_pair(v1,v2)] = e;
+    vertices_to_edge[std::make_pair(v2,v1)] = e;
+    adjacency_matrix[v1].push_back(v2);
+    adjacency_matrix[v2].push_back(v1);
 }
 
-uint
-DecodingGraph::get(uint det_id) {
-    if (!detector_to_index.count(det_id)) {
+void
+DecodingGraph::remove_vertex(const Vertex& v) {
+    // Delete v from the vertex list
+    for (auto it = vertex_list.begin(); it != vertex_list.end(); ) {
+        if (*it == v) {
+            it = vertex_list.erase(it); 
+        } else {
+            it++; 
+        }
+    }
+    // And adjacency lists of its neighbors. Delete any
+    // edges containing v.
+    for (Vertex w : adjacency_matrix[v]) {
+        auto adj_list = adjacency_matrix[w];
+        for (auto it = adj_list.begin(); it != adj_list.end(); ) {
+            if (*it == v) {
+                it = adj_list.erase(it); 
+                vertices_to_edge[std::make_pair(v,w)] = NULL_EDGE;
+                vertices_to_edge[std::make_pair(w,v)] = NULL_EDGE;
+            } else {
+                it++; 
+            }
+        } 
+    }
+    adjacency_matrix[v].clear();
+    detector_to_vertex[v.detector] = NULL_VERTEX;
+}
+
+void
+DecodingGraph::remove_edge(const Edge& e) {
+    Vertex v = get_vertex(e.detectors.first);
+    Vertex w = get_vertex(e.detectors.second);
+    vertices_to_edge[std::make_pair(v,w)] = NULL_EDGE;
+    vertices_to_edge[std::make_pair(w,v)] = NULL_EDGE;
+    // Remove v from adjacency list of w and vice versa.
+    auto adj_list_v = adjacency_matrix[v];
+    auto adj_list_w = adjacency_matrix[w];
+
+    for (auto it = adj_list_v.begin(); it != adj_list_v.end(); ) {
+        if (*it == w) {
+            adj_list_v.erase(it); 
+        } else {
+            it++; 
+        }
+    }
+
+    for (auto it = adj_list_w.begin(); it != adj_list_w.end(); ) {
+        if (*it == v) {
+            adj_list_w.erase(it); 
+        } else {
+            it++; 
+        }
+    }
+}
+
+DecodingGraph::Vertex
+DecodingGraph::get_vertex(uint det_id) {
+    if (!detector_to_vertex.count(det_id) || detector_to_vertex[det_id] == NULL_VERTEX) {
         // Add it to the graph.
         add_detector(det_id, boundary_coord);
     }
-    return detector_to_index[det_id];
+    return detector_to_vertex[det_id];
+}
+
+DecodingGraph::Edge
+DecodingGraph::get_edge(uint det1, uint det2) {
+    Vertex v1 = get_vertex(det1);
+    Vertex v2 = get_vertex(det2);
+    auto v1_v2 = std::make_pair(v1, v2);
+    if (vertices_to_edge.count(v1_v2)) {
+        return vertices_to_edge[v1_v2]; 
+    } else {
+        return NULL_EDGE; 
+    }
+}
+
+std::vector<DecodingGraph::Vertex>
+DecodingGraph::vertices() {
+    return vertex_list;
+}
+
+std::vector<DecodingGraph::Vertex>
+DecodingGraph::adjacency_list(const Vertex& v) {
+    return adjacency_matrix[v];
 }
 
 DecodingGraph
@@ -100,22 +192,17 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
             // Now, we should only have two entries in det.
             uint det1 = dets[0];
             uint det2 = dets[1];
-            // Get vertex indices in boost graph.
-            uint vi1 = graph.get(det1);
-            uint vi2 = graph.get(det2);
-            // Returns a tuple (edge_index, does_exist)
-            auto graph_edge = boost::edge(vi1, vi2, graph.base);
-            if (graph_edge.second) {
+            auto graph_edge = graph.get_edge(det1, det2);
+            if (graph_edge != NULL_EDGE) {
                 // Get old edge data.
-                DecodingEdge old_edge_data = graph.base[graph_edge.first];
-                fp_t old_e_prob = old_edge_data.error_probability;
-                std::set<uint> old_frames = old_edge_data.frames;
+                fp_t old_e_prob = graph_edge.error_probability;
+                std::set<uint> old_frames = graph_edge.frames;
                 if (frames == old_frames) {
                     e_prob = 
                         e_prob * (1-old_e_prob) + old_e_prob * (1-e_prob);
                     // We will introduce a new edge index, so just
                     // delete this.
-                    boost::remove_edge(graph_edge.first, graph.base);
+                    graph.remove_edge(graph_edge);
                 }
             }
             fp_t edge_weight = (fp_t)log((1-e_prob)/e_prob);
@@ -140,38 +227,20 @@ PathTable
 compute_path_table(DecodingGraph& graph) {
     PathTable path_table;
     // Perform Dijkstra's algorithm on the graph.
-    uint n_detectors = boost::num_vertices(graph.base);
+    auto vertices = graph.vertices();
+    uint n_detectors = graph.count_detectors();
     for (uint i = 0; i < n_detectors; i++) {
-        uint vi = graph.get(i);
+        DecodingGraph::Vertex s = vertices[i];
         // Build data structures for call.
-        auto index_map =
-            boost::get(boost::vertex_index, graph.base);
-        auto weight_map = 
-            boost::get(&DecodingEdge::edge_weight, graph.base);
-        std::vector<uint> predecessors(n_detectors);
-        std::vector<fp_t> distances(n_detectors);
+        std::map<DecodingGraph::Vertex, DecodingGraph::Vertex> predecessors;
+        std::map<DecodingGraph::Vertex, fp_t> distances;
 
-        boost::dijkstra_shortest_paths(
-            graph.base,  // Input graph
-            vi,     // Source vertex
-            // Named parameters:
-            predecessor_map(
-                boost::make_iterator_property_map(
-                    predecessors.begin(), index_map
-                )
-            ).distance_map(
-                boost::make_iterator_property_map(
-                    distances.begin(), index_map
-                )
-            ).weight_map(weight_map)
-        );
-        // Results should be in predecessors and distances.
-        for (uint vj = i + 1; vj < n_detectors; vj++) {
-            _update_path_table(path_table, graph, i, vj, distances, predecessors);
+        _dijkstra(graph, s, distances, predecessors);
+
+        for (uint j = i + 1; j < n_detectors; j++) {
+            DecodingGraph::Vertex t = vertices[j];
+            _update_path_table(path_table, graph, s, t, distances, predecessors);
         }
-        // Do the same for the boundary.
-        _update_path_table(path_table, graph, i, BOUNDARY_INDEX, 
-                distances, predecessors);
     }
     return path_table;
 }
@@ -242,35 +311,90 @@ _read_detector_error_model(
 }
 
 void
+_dijkstra(DecodingGraph& graph, 
+        const DecodingGraph::Vertex& src,
+        std::map<DecodingGraph::Vertex, fp_t>& distances,
+        std::map<DecodingGraph::Vertex, DecodingGraph::Vertex>& predecessors)
+{
+    typedef std::pair<DecodingGraph::Vertex, fp_t> PQVertex;
+
+    struct DijkstraCmp {
+        bool operator()(const PQVertex& v1, const PQVertex& v2) {
+            return v1.second > v2.second; 
+        };
+    };
+    std::map<DecodingGraph::Vertex, PQVertex> v2pv;
+    std::priority_queue<PQVertex, std::vector<PQVertex>, DijkstraCmp> queue;
+    for (DecodingGraph::Vertex v : graph.vertices()) {
+        if (v == src) {
+            distances[v] = 0; 
+        } else {
+            distances[v] = std::numeric_limits<fp_t>::max();
+        } 
+        predecessors[v] = v;
+
+        PQVertex pv = std::make_pair(v, distances[v]);
+        queue.push(pv);
+        v2pv[v] = pv;
+    }
+
+    std::set<DecodingGraph::Vertex> visited;
+    while (!queue.empty()) {
+        PQVertex pvi = queue.top(); 
+        auto vi = pvi.first;
+        queue.pop();
+        if (pvi.second != distances[vi]) {
+            continue; 
+        }
+
+        auto adj_list = graph.adjacency_list(vi);
+        for (DecodingGraph::Vertex vj : adj_list) {
+            if (visited.count(vj)) {
+                continue; 
+            }
+            DecodingGraph::Edge e = graph.get_edge(vi.detector, vj.detector);
+            fp_t new_dist = distances[vi] + e.edge_weight;
+            if (new_dist < distances[vj]) {
+                distances[vj] = new_dist; 
+                predecessors[vj] = vi;
+                // Insert new entry into the priority queue.
+                PQVertex pvj = std::make_pair(vj, new_dist);
+                queue.push(pvj);
+            }
+        }
+        visited.insert(vi);
+    } 
+}
+
+void
 _update_path_table(PathTable& path_table,
-        DecodingGraph& graph, uint src, uint dst,
-        const std::vector<fp_t>& distances,
-        const std::vector<uint>& predecessors)
+        DecodingGraph& graph, 
+        const DecodingGraph::Vertex& src, 
+        const DecodingGraph::Vertex& dst,
+        std::map<DecodingGraph::Vertex, fp_t>& distances,
+        std::map<DecodingGraph::Vertex, DecodingGraph::Vertex>& predecessors)
 {
     // Compute path.
-    uint vi = graph.get(src);
-    uint vj = graph.get(dst);
-    uint curr = vj;
-    fp_t distance = distances[vj];
+    DecodingGraph::Vertex curr = dst;
+    fp_t distance = distances[dst];
     std::vector<uint> path;
-    if (distance < 1000.0) {
-        while (curr != vi) {
-            if (curr >= boost::num_vertices(graph.base) || path.size() > 100) {
-                distance = std::numeric_limits<fp_t>::max();
-                path.clear();
-                goto failed_to_find_path;
-            }
-            uint det = graph.base[curr].detector;
-            path.push_back(det);
-            curr = predecessors[curr];
+
+    while (curr != src) {
+        if (curr == predecessors[curr]) {
+            distance = std::numeric_limits<fp_t>::max();
+            path.clear();
+            goto failed_to_find_path;
         }
-        path.push_back(graph.base[curr].detector);
+        uint det = curr.detector;
+        path.push_back(det);
+        curr = predecessors[curr];
     }
+    path.push_back(curr.detector);
 failed_to_find_path:
     // Build result.
     DijkstraResult res = {path, distance};
-    path_table[std::make_pair(src, dst)] = res;
-    path_table[std::make_pair(dst, src)] = res;
+    path_table[std::make_pair(src.detector, dst.detector)] = res;
+    path_table[std::make_pair(dst.detector, src.detector)] = res;
 }
 
-};  // qrc
+}  // qrc

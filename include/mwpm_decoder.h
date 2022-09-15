@@ -38,6 +38,6 @@ protected:
     PathTable path_table;
 };
 
-};  // qrc
+}  // qrc
 
 #endif

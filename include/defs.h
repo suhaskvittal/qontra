@@ -32,6 +32,6 @@ quantize(fp_t, fp_t fp_max, qfp_t qfp_max);
 void 
 safe_create_directory(const std::filesystem::path&);
 
-};  // qrc
+}  // qrc
 
 #endif

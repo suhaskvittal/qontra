@@ -95,6 +95,6 @@ std::vector<uint8_t>
 _to_vector(const stim::simd_bits_range_ref&,
         uint n_detectors, uint n_observables);
 
-}; // qrc
+} // qrc
 
 #endif

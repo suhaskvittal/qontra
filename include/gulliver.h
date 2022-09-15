@@ -68,6 +68,6 @@ private:
     std::map<addr_t, bool> * memory_event_table;
 };
 
-};  // qrc
+}  // qrc
 
 #endif

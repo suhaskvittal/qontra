@@ -35,6 +35,6 @@ void
 b_decoder_ler(Decoder*, uint32_t shots, std::mt19937_64&,
         bool save_per_shot_data=true);
 
-};  // qrc
+}  // qrc
 
 #endif

@@ -49,7 +49,7 @@ private:
     fp_t main_clock_frequency;
 };
 
-};  // gulliver
-};  // qrc
+}  // gulliver
+}  // qrc
 
 #endif

@@ -8,20 +8,15 @@
 
 #include "defs.h"
 
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/graph_traits.hpp>
-#include <boost/graph/dijkstra_shortest_paths.hpp>
-#include <boost/property_map/property_map.hpp>
-
 #include <stim.h>
 
-#include <iostream>
-#include <vector>
 #include <array>
+#include <functional>
+#include <iostream>
+#include <map>
 #include <set>
 #include <tuple>
-#include <map>
-#include <functional>
+#include <vector>
 
 #include <math.h>
 
@@ -29,29 +24,11 @@
 
 namespace qrc {
 
-struct DecodingVertex {
-    std::array<fp_t, N_COORD> coord;
-    uint detector;
-};
-
-struct DecodingEdge {
-    std::pair<uint, uint> detectors;
-    fp_t edge_weight;
-    fp_t error_probability;
-    std::set<uint> frames;
-};
-
 struct DijkstraResult {
     std::vector<uint> path;
     fp_t distance;
 };
 
-typedef boost::adjacency_list<
-            boost::vecS,
-            boost::vecS,
-            boost::undirectedS,
-            DecodingVertex,
-            DecodingEdge> decoding_graph_base;
 typedef std::map<std::pair<uint, uint>, DijkstraResult> PathTable;
 
 #define BOUNDARY_INDEX ((uint)-1)
@@ -59,18 +36,66 @@ typedef std::map<std::pair<uint, uint>, DijkstraResult> PathTable;
 class DecodingGraph {
 public:
     DecodingGraph();
-    DecodingGraph(const DecodingGraph&);
-    DecodingGraph(DecodingGraph&&);
+
+    struct Vertex {
+        int32_t id;
+        std::array<fp_t, N_COORD> coord;
+        uint detector;
+
+        bool operator==(const Vertex& other) const {
+            return id == other.id; 
+        }
+
+        bool operator <(const Vertex& other) const {
+            return id < other.id; 
+        }
+
+        bool operator!=(const Vertex& other) const {
+            return !(*this == other); 
+        }
+    };
+
+    struct Edge {
+        int32_t id;
+        std::pair<uint, uint> detectors;
+        fp_t edge_weight;
+        fp_t error_probability;
+        std::set<uint> frames;
+
+        bool operator==(const Edge& other) const {
+            return id == other.id; 
+        }
+
+        bool operator <(const Edge& other) const {
+            return id < other.id; 
+        }
+
+        bool operator!=(const Edge& other) const {
+            return !(*this == other); 
+        }
+    };
+
+    uint count_detectors(void);
 
     void add_detector(uint, std::array<fp_t, N_COORD>& coord);
     void add_edge(uint det1, uint det2, fp_t weight,
             fp_t e_prob, std::set<uint>& frames);
-    uint get(uint det_id);
 
-    decoding_graph_base base;
+    void remove_vertex(const Vertex&);
+    void remove_edge(const Edge&);
+
+    Vertex get_vertex(uint det_id);
+    Edge get_edge(uint, uint);
+   
+    std::vector<Vertex> vertices(void);
+    std::vector<Vertex> adjacency_list(const Vertex&);
 private:
-    std::map<uint, uint> detector_to_index;
+    std::map<uint, Vertex> detector_to_vertex;
+    std::map<std::pair<Vertex, Vertex>, Edge> vertices_to_edge;
     std::array<fp_t, N_COORD> boundary_coord;
+
+    std::vector<Vertex> vertex_list;
+    std::map<Vertex, std::vector<Vertex>> adjacency_matrix;
 };
 
 DecodingGraph
@@ -91,11 +116,17 @@ _read_detector_error_model(const stim::DetectorErrorModel&,
         error_callback_f, detector_callback_f);
 
 void
+_dijkstra(DecodingGraph&, const DecodingGraph::Vertex&, 
+        std::map<DecodingGraph::Vertex, fp_t>& distances,
+        std::map<DecodingGraph::Vertex, DecodingGraph::Vertex>& predecessors);
+void
 _update_path_table(PathTable&,
-        DecodingGraph&, uint, uint, 
-        const std::vector<fp_t>& distances,
-        const std::vector<uint>& predecessors);
+        DecodingGraph&, 
+        const DecodingGraph::Vertex&,
+        const DecodingGraph::Vertex&, 
+        std::map<DecodingGraph::Vertex, fp_t>& distances,
+        std::map<DecodingGraph::Vertex, DecodingGraph::Vertex>& predecessors);
 
-};  // qrc
+}  // qrc
 
 #endif

@@ -170,5 +170,5 @@ GulliverMultiQubitSimulator::reset_stats() {
     max_latency = 0.0;
 }
 
-};  // gulliver
-};  // qrc
+}  // gulliver
+}  // qrc

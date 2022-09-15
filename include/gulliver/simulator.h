@@ -11,8 +11,6 @@
 
 #include <memory_system.h>
 
-#include <boost/graph/graph_traits.hpp>
-
 #include <deque>
 #include <map>
 #include <stack>
@@ -153,7 +151,7 @@ std::pair<uint, uint> from_address(addr_t, addr_t base, uint n_detectors);
 uint bound_detector(uint, uint n_detectors);
 uint unbound_detector(uint, uint n_detectors);
 
-}; // gulliver
-}; // qrc
+} // gulliver
+} // qrc
 
 #endif
