@@ -136,4 +136,4 @@ is_logical_error(const std::vector<uint8_t>& correction,
     return !corr_matches_obs;
 }
 
-};  // qrc
+}  // qrc

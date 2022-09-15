@@ -23,6 +23,6 @@ set_target_properties(libblossom5 PROPERTIES PREFIX "")
 target_include_directories(libblossom5 PUBLIC .)
 target_compile_options(libblossom5 PRIVATE -O3 -D_NDEBUG)
 if(NOT APPLE)
-    target_link_options(libblossom5 -lrt)
+    target_link_libraries(libblossom5 PUBLIC rt)
 endif()
 

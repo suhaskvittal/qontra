@@ -50,7 +50,13 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     uint n_observables = circuit.count_observables();
     // Note to self: fault ids in pymatching are the frames in DecodingGraph.
     // Log start time.
+#ifdef __APPLE__
     auto start_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+#else
+    struct timespec start_time_data;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start_time_data);
+    auto start_time = start_time_data.tv_nsec;
+#endif
     // Count number of detectors.
     uint8_t syndrome_is_even = 0x1;
     std::vector<uint> detector_list;
@@ -112,11 +118,11 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         std::vector<uint> detector_path(path_table[di_dj].path);
         for (uint i = 1; i < detector_path.size(); i++) {
             // Get edge from decoding graph.
-            auto wi = graph.get(detector_path[i-1]);
-            auto wj = graph.get(detector_path[i]);
-            auto edge = boost::edge(wi, wj, graph.base);
+            auto wi = detector_path[i-1];
+            auto wj = detector_path[i];
+            auto edge = graph.get_edge(wi, wj);
             // The edge should exist.
-            for (uint obs : graph.base[edge.first].frames) {
+            for (uint obs : edge.frames) {
                 // Flip the bit.
                 if (obs >= 0) {
                     correction[obs] = !correction[obs];
@@ -127,7 +133,13 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         visited.insert(vj);
     }
     // Stop time here.
+#ifdef __APPLE__
     auto end_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+#else
+    struct timespec end_time_data;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end_time_data);
+    auto end_time = end_time_data.tv_nsec;
+#endif
     auto time_taken = end_time - start_time;
     // Build result.
     DecoderShotResult res = {
@@ -140,4 +152,4 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     return res;
 }
 
-};  // qrc
+}  // qrc

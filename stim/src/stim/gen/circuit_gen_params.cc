@@ -111,28 +111,44 @@ double
 CircuitGenParameters::get_after_clifford_depolarization() const {
     std::normal_distribution<double> dist{
         after_clifford_depolarization, after_clifford_depolarization_stddev};
-    return abs(dist(CIRCGEN_RNG));
+    double e = dist(CIRCGEN_RNG);
+    if (e < after_clifford_depolarization) {
+        e = 2*after_clifford_depolarization - e;
+    }
+    return e;
 }
 
 double
 CircuitGenParameters::get_before_round_data_depolarization() const {
     std::normal_distribution<double> dist{
         before_round_data_depolarization, before_round_data_depolarization_stddev};
-    return abs(dist(CIRCGEN_RNG));
+    double e = dist(CIRCGEN_RNG);
+    if (e < before_round_data_depolarization) {
+        e = 2*before_round_data_depolarization - e;
+    }
+    return e;
 }
 
 double
 CircuitGenParameters::get_before_measure_flip_probability() const {
     std::normal_distribution<double> dist{
         before_measure_flip_probability, before_measure_flip_probability_stddev};
-    return abs(dist(CIRCGEN_RNG));
+    double e = dist(CIRCGEN_RNG);
+    if (e < before_measure_flip_probability) {
+        e = 2*before_measure_flip_probability - e;
+    }
+    return e;
 }
 
 double
 CircuitGenParameters::get_after_reset_flip_probability() const {
     std::normal_distribution<double> dist{
         after_reset_flip_probability, after_reset_flip_probability_stddev};
-    return abs(dist(CIRCGEN_RNG));
+    double e = dist(CIRCGEN_RNG);
+    if (e < after_reset_flip_probability) {
+        e = 2*after_reset_flip_probability - e;
+    }
+    return e;
 }
 
 std::string GeneratedCircuit::layout_str() const {

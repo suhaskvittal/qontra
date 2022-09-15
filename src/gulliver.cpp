@@ -141,10 +141,10 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             std::vector<uint> detector_path(path_table[di_dj].path);
             for (uint i = 1; i < detector_path.size(); i++) {
                 // Get edge from decoding graph.
-                auto wi = graph.get(detector_path[i-1]);
-                auto wj = graph.get(detector_path[i]);
-                auto edge = boost::edge(wi, wj, graph.base);
-                for (uint obs : graph.base[edge.first].frames) {
+                auto wi = detector_path[i-1];
+                auto wj = detector_path[i];
+                auto edge = graph.get_edge(wi, wj);
+                for (uint obs : edge.frames) {
                     if (obs >= 0) {
                         correction[obs] = !correction[obs];
                     }
@@ -180,4 +180,4 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     }
 }
 
-};  // namespace qrc
+}  // namespace qrc
