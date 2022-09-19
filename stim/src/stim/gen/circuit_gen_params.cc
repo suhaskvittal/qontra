@@ -11,6 +11,9 @@ using namespace stim;
 const auto seed = std::chrono::system_clock::now().time_since_epoch().count();
 static std::mt19937_64 CIRCGEN_RNG(seed);
 
+#define K(m,s)  ( ((m)*(m)) / ((s)*(s)) )
+#define T(m,s)  ( ((s)*(s)) / (m) )
+
 void append_anti_basis_error(Circuit &circuit, 
         const std::vector<uint32_t> &targets, double p, char basis) 
 {
@@ -109,45 +112,37 @@ const {
 
 double
 CircuitGenParameters::get_after_clifford_depolarization() const {
-    std::normal_distribution<double> dist{
-        after_clifford_depolarization, after_clifford_depolarization_stddev};
+    double k = K(after_clifford_depolarization, after_clifford_depolarization_stddev);
+    double t = T(after_clifford_depolarization, after_clifford_depolarization_stddev);
+    std::gamma_distribution<double> dist{k, t};
     double e = dist(CIRCGEN_RNG);
-    if (e < after_clifford_depolarization) {
-        e = 2*after_clifford_depolarization - e;
-    }
     return e;
 }
 
 double
 CircuitGenParameters::get_before_round_data_depolarization() const {
-    std::normal_distribution<double> dist{
-        before_round_data_depolarization, before_round_data_depolarization_stddev};
+    double k = K(before_round_data_depolarization, before_round_data_depolarization_stddev);
+    double t = T(before_round_data_depolarization, before_round_data_depolarization_stddev);
+    std::gamma_distribution<double> dist{k, t};
     double e = dist(CIRCGEN_RNG);
-    if (e < before_round_data_depolarization) {
-        e = 2*before_round_data_depolarization - e;
-    }
     return e;
 }
 
 double
 CircuitGenParameters::get_before_measure_flip_probability() const {
-    std::normal_distribution<double> dist{
-        before_measure_flip_probability, before_measure_flip_probability_stddev};
+    double k = K(before_measure_flip_probability, before_measure_flip_probability_stddev);
+    double t = T(before_measure_flip_probability, before_measure_flip_probability_stddev);
+    std::gamma_distribution<double> dist{k, t};
     double e = dist(CIRCGEN_RNG);
-    if (e < before_measure_flip_probability) {
-        e = 2*before_measure_flip_probability - e;
-    }
     return e;
 }
 
 double
 CircuitGenParameters::get_after_reset_flip_probability() const {
-    std::normal_distribution<double> dist{
-        after_reset_flip_probability, after_reset_flip_probability_stddev};
+    double k = K(after_reset_flip_probability, after_reset_flip_probability_stddev);
+    double t = T(after_reset_flip_probability, after_reset_flip_probability_stddev);
+    std::gamma_distribution<double> dist{k, t};
     double e = dist(CIRCGEN_RNG);
-    if (e < after_reset_flip_probability) {
-        e = 2*after_reset_flip_probability - e;
-    }
     return e;
 }
 
