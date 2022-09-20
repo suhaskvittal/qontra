@@ -3,6 +3,7 @@
  * */
 
 #include "stim/gen/circuit_gen_params.h"
+#include <random>
 
 #include "stim/arg_parse.h"
 
@@ -112,37 +113,47 @@ const {
 
 double
 CircuitGenParameters::get_after_clifford_depolarization() const {
-    double k = K(after_clifford_depolarization, after_clifford_depolarization_stddev);
-    double t = T(after_clifford_depolarization, after_clifford_depolarization_stddev);
-    std::gamma_distribution<double> dist{k, t};
-    double e = dist(CIRCGEN_RNG);
-    return e;
+    return get_error(after_clifford_depolarization, after_clifford_depolarization_stddev);
 }
 
 double
 CircuitGenParameters::get_before_round_data_depolarization() const {
-    double k = K(before_round_data_depolarization, before_round_data_depolarization_stddev);
-    double t = T(before_round_data_depolarization, before_round_data_depolarization_stddev);
-    std::gamma_distribution<double> dist{k, t};
-    double e = dist(CIRCGEN_RNG);
-    return e;
+    return get_error(before_round_data_depolarization, before_round_data_depolarization_stddev);
 }
 
 double
 CircuitGenParameters::get_before_measure_flip_probability() const {
-    double k = K(before_measure_flip_probability, before_measure_flip_probability_stddev);
-    double t = T(before_measure_flip_probability, before_measure_flip_probability_stddev);
-    std::gamma_distribution<double> dist{k, t};
-    double e = dist(CIRCGEN_RNG);
-    return e;
+    return get_error(before_measure_flip_probability, before_measure_flip_probability_stddev);
 }
 
 double
 CircuitGenParameters::get_after_reset_flip_probability() const {
-    double k = K(after_reset_flip_probability, after_reset_flip_probability_stddev);
-    double t = T(after_reset_flip_probability, after_reset_flip_probability_stddev);
-    std::gamma_distribution<double> dist{k, t};
-    double e = dist(CIRCGEN_RNG);
+    return get_error(after_reset_flip_probability, after_reset_flip_probability_stddev);
+}
+
+double
+CircuitGenParameters::get_error(double mean, double stddev) const {
+    if (stddev == 0.0) {
+        return mean;
+    }
+    double e;
+    if (dist == Distribution::normal) {
+        std::normal_distribution<double> dist{mean, stddev};
+        e = dist(CIRCGEN_RNG);
+        if (e < after_reset_flip_probability) {
+            e = 2*after_reset_flip_probability - e;
+        }
+    } else if (dist == Distribution::gamma) {
+        double k = K(mean, stddev);
+        double t = T(mean, stddev);
+        std::gamma_distribution<double> dist{k, t};
+        e = dist(CIRCGEN_RNG) + mean;
+    } else {
+        double m = log(mean);
+        // Assume stddev is for the logarithm.
+        std::lognormal_distribution<double> dist{m, stddev};
+        e = dist(CIRCGEN_RNG) + mean;
+    }
     return e;
 }
 

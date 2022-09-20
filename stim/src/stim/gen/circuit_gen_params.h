@@ -22,6 +22,8 @@ public:
     uint32_t distance;
     std::string task;
 
+    enum Distribution {normal, gamma, lognormal};
+
     // If the stddev are nonzero, then
     // these values are the mean.
     // Note: these haven't been renamed to avoid
@@ -35,6 +37,8 @@ public:
     double before_round_data_depolarization_stddev = 0;
     double before_measure_flip_probability_stddev = 0;
     double after_reset_flip_probability_stddev = 0;
+
+    Distribution dist = Distribution::lognormal;
 
     void validate_params() const;
 
@@ -62,6 +66,8 @@ public:
     double get_before_measure_flip_probability(void) const;
     double get_after_reset_flip_probability(void) const;
 private:
+    double get_error(double mean, double stddev) const;
+
     std::mt19937_64 rng; 
 };
 

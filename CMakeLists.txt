@@ -31,11 +31,14 @@ endif()
 
 # Add include directory to include path.
 target_include_directories(quarch PUBLIC "include")
-target_include_directories(quarch PUBLIC "${BOOST_PATH}")
-# Link boost libraries to Quarch.
-#find_package(boost 1.70.0 COMPONENTS graph REQUIRED)
-#target_include_directories(quarch PUBLIC ${Boost_INCLUDE_DIR})
-#target_link_libraries(quarch ${Boost_LIBRARIES})
+if (BOOST_PATH)
+    target_include_directories(quarch PUBLIC "${BOOST_PATH}")
+else()
+    # Link boost libraries to Quarch.
+    find_package(boost 1.70.0 COMPONENTS graph REQUIRED)
+    target_include_directories(quarch PUBLIC ${Boost_INCLUDE_DIR})
+    target_link_libraries(quarch ${Boost_LIBRARIES})
+endif()
 # Link OpenMP to Quarch
 if (ENABLE_OPENMP)
     find_package(OpenMP)
