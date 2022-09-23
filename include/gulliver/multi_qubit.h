@@ -34,6 +34,10 @@ public:
     void benchmark(uint32_t shots, std::mt19937_64&);
     void reset_stats(void);
 
+    dramsim3::MemorySystem * dram;
+    std::vector<QubitCache*> caches;
+    std::vector<GulliverSimulator*> simulators;
+
     uint32_t n_timeouts;
     uint32_t n_overflows;
     uint32_t n_uncomputable;
@@ -42,13 +46,8 @@ private:
     bool load_simulator(
             GulliverSimulator*, const stim::simd_bits_range_ref&, uint qubit_id);
 
-    dramsim3::MemorySystem * dram;
-    std::vector<QubitCache*> caches;
     std::map<addr_t, bool> * memory_event_table;
-
-    std::vector<GulliverSimulator*> simulators;
     std::vector<bool> occupied;
-
     std::vector<stim::Circuit> circuits;
     std::vector<PathTable> path_tables;
     uint n_rounds;

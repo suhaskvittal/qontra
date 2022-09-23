@@ -102,7 +102,16 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
         DecoderShotResult res = {
             0.0,
             0.0,
-            1,
+            true,
+            std::vector<uint8_t>(),
+            std::map<uint, uint>()
+        };
+        return res;
+    } else if (hw == 0) {
+        DecoderShotResult res = {
+            0.0,
+            0.0,
+            false,
             std::vector<uint8_t>(),
             std::map<uint, uint>()
         };
@@ -130,7 +139,7 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             fp_t t = n_cycles / main_clock_frequency * 1e9;
             if (t > 1000 && round < n_rounds) {
                 simulator->sig_end_round();
-                n_cycles++;
+                n_cycles = 0;
                 round++;
             }
             dram->ClockTick();

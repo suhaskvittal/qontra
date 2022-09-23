@@ -73,7 +73,7 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
             row_offset
         };
         simulators[i] = new GulliverSimulator(dram,
-                                            cache,
+                                            nullptr,
                                             memory_event_table,
                                             path_tables[0], 
                                             sim_params);
@@ -111,6 +111,7 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
 
         for (uint32_t j = 0; j < shots_this_round; j++) {
             std::deque<uint> service_queue;
+
             for (uint i = 0; i < circuits.size(); i++) {
                 if (!sample_buffers[i][j].not_zero()) {
                     continue;
@@ -120,24 +121,36 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                 }
                 service_queue.push_back(i);
             }
+#ifdef GSIM_DEBUG
+            std::cout << "Shot " << j << ": " 
+                << service_queue.size() << " qubits have faults.\n";
+#endif
             
             // Preload data.
-            for (uint i = 0; i < simulators.size(); ) {
-                if (service_queue.empty()) {
-                    break;
-                }
-                // Compute data
-                uint qubit_id = service_queue.front();
-                service_queue.pop_front();
+            for (uint i = 0; i < simulators.size(); i++) {
                 GulliverSimulator * sim = simulators[i];
-                load_simulator(sim, sample_buffers[qubit_id][j], qubit_id);
+                if (service_queue.empty()) {
+                    sim->force_idle();
+                } else {
+                    // Compute data
+                    uint qubit_id = service_queue.front();
+                    service_queue.pop_front();
+                    load_simulator(sim, sample_buffers[qubit_id][j], qubit_id);
+                }
             }
 
             fp_t time_taken = 0.0; 
             uint64_t n_cycles = 0;
             uint round = 0;
-            bool done = true;
+            bool done;
             do {
+#ifdef GSIM_DEBUG
+                if (n_cycles == 1001) {
+                    std::cout << "\tTimeout: " 
+                        << service_queue.size() << " qubits unserviced.\n";
+                }
+#endif
+                done = true;
                 dram->ClockTick();
                 for (uint i = 0; i < simulators.size(); i++) {
                     GulliverSimulator * sim = simulators[i]; 
@@ -147,9 +160,21 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                         uint qubit_id = service_queue.front();
                         service_queue.pop_front();
                         load_simulator(sim, sample_buffers[qubit_id][j], qubit_id);
+                        sim->sig_end_round(round);
+#ifdef GSIM_DEBUG
+                        std::cout << "Simulator " << i << 
+                            " finished early, loading new syndrome.\n";
+#endif
                     } else if (!sim->is_idle()) {
                         done = false;
+                    } else {
+                        continue;
                     }
+#ifdef GSIM_DEBUG
+                    if (n_cycles == 1001) {
+                        std::cout << "Simulator " << i << " is not finished\n";
+                    }
+#endif
                     sim->tick();
                 }
                 
@@ -163,7 +188,7 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                     n_cycles = 0;
                     time_taken = 0.0;
                 }
-            } while (!done && time_taken <= 1000.0);
+            } while (!done);
             if (time_taken > 1000.0) {
                 n_timeouts++;
             }

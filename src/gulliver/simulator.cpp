@@ -6,8 +6,6 @@
 #include "gulliver/simulator.h"
 #include <limits>
 
-//#define GSIM_DEBUG
-
 namespace qrc {
 namespace gulliver {
 
@@ -54,6 +52,10 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
 
 bool
 GulliverSimulator::load_detectors(const std::vector<uint>& detector_array) {
+    if (detector_array.size() == 0) {
+        state = State::idle;
+        return false;
+    }
     clear();
     detector_vector_register = detector_array;
     // Compute the critical index.
@@ -61,7 +63,11 @@ GulliverSimulator::load_detectors(const std::vector<uint>& detector_array) {
 
     bool computable = detector_array.size() <= bfu_hw_threshold;
     if (!computable) {
-        state = State::idle;  // Don't even bother trying.
+        if (cache == nullptr) {
+            state = State::idle;  // Don't even bother trying.
+        } else {
+            state = State::ccomp;  // Use the down time to complete pages.
+        }
     }
     return computable;
 }
@@ -156,11 +162,13 @@ GulliverSimulator::tick() {
 }
 
 void
-GulliverSimulator::sig_end_round() {
+GulliverSimulator::sig_end_round(uint rounds_ended) {
     // We subtract by 1 because we don't count the boundary.
-    if (curr_max_detector < n_detectors-1) {
-        curr_max_detector += n_detectors_per_round;
+    curr_max_detector += n_detectors_per_round * rounds_ended;
+    if (curr_max_detector > n_detectors-1) {
+        curr_max_detector = n_detectors - 1;
     }
+    major_detector_register = 0;
 #ifdef GSIM_DEBUG
     std::cout << "SIGNAL -- ROUND END\n";
 #endif
@@ -168,7 +176,12 @@ GulliverSimulator::sig_end_round() {
 
 bool
 GulliverSimulator::is_idle() {
-    return state == GulliverSimulator::State::idle;
+    return state == State::idle;
+}
+
+void
+GulliverSimulator::force_idle() {
+    state = State::idle;
 }
 
 std::map<uint, uint>
@@ -194,7 +207,9 @@ GulliverSimulator::row_activations() {
 
 void 
 GulliverSimulator::tick_ccomp() {
-    if (cache->completion_queue.empty()) {
+    if (curr_max_detector >= 2 * n_detectors_per_round 
+            || cache->completion_queue.empty()) 
+    {
         update_state();
         return;
     }
@@ -237,11 +252,11 @@ GulliverSimulator::tick_prefetch()  {
         }
         return;
     }
-    
     uint di = detector_vector_register[ai];
     uint dj = detector_vector_register[aj];
-
-    if (di > curr_max_detector || dj > curr_max_detector) {
+    if ((di != BOUNDARY_INDEX && di > curr_max_detector)
+            || (dj != BOUNDARY_INDEX && dj > curr_max_detector)) 
+    {
         return;
     }
 
@@ -471,10 +486,17 @@ void
 GulliverSimulator::update_state() {
     switch (state) {
     case State::ccomp:
+        if (detector_vector_register.empty()) {
 #ifdef GSIM_DEBUG
-        std::cout << "PREFETCH\n";
+            std::cout << "IDLE\n";
 #endif
-        state = State::prefetch;
+            state = State::idle;
+        } else {
+#ifdef GSIM_DEBUG
+            std::cout << "PREFETCH\n";
+#endif
+            state = State::prefetch;
+        }
         break;
     case State::prefetch:
 #ifdef GSIM_DEBUG
@@ -523,12 +545,12 @@ GulliverSimulator::clear() {
     if (cache == nullptr) {
         state = State::prefetch;
 #ifdef GSIM_DEBUG
-        std::cout << "PREFETCH\n";
+        std::cout << "(clear)PREFETCH\n";
 #endif
     } else {
         state = State::ccomp;
 #ifdef GSIM_DEBUG
-        std::cout << "CCOMP\n";
+        std::cout << "(clear)CCOMP\n";
 #endif
     }
 }

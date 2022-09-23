@@ -97,7 +97,7 @@ QubitCache::access(uint qubit, uint di, uint dj) {
 
 void
 QubitCache::complete(uint qubit, uint detector) {
-    uint si = qubit & sets.size();
+    uint si = qubit % sets.size();
     for (Tag& t : sets[si]) {
         if (t.qubit == qubit && t.detector == detector && t.valid) {
             t.incomplete = false;
@@ -111,7 +111,7 @@ QubitCache::replace(uint qubit, uint detector, bool super_replace) {
     // If this is a super replace, find a victim from the supertag store.
     // We want to choose a victim whose logical qubit maps to the same
     // set as our new logical qubit (otherwise, what's the point?)
-    uint si = qubit & sets.size();
+    uint si = qubit % sets.size();
     if (super_replace) {
         uint victim = 0;
         uint32_t min_frequency = (uint32_t) -1;
@@ -121,7 +121,7 @@ QubitCache::replace(uint qubit, uint detector, bool super_replace) {
             if (!st.valid) {
                 victim = i;
                 break;
-            } else if (si == (st.qubit & sets.size())
+            } else if (si == (st.qubit % sets.size())
                     && st.frequency < min_frequency) 
             {
                 victim = i;
@@ -131,7 +131,7 @@ QubitCache::replace(uint qubit, uint detector, bool super_replace) {
         
         // First, invalid all tags corresponding to the victim supertag.
         SuperTag& victim_tag = supertag_store[victim];
-        uint i = victim_tag.qubit & sets.size();
+        uint i = victim_tag.qubit % sets.size();
         for (Tag& t : sets[i]) {
             if (t.qubit == victim_tag.qubit) {
                 t.valid = false;
@@ -189,7 +189,7 @@ QubitCache::is_hit(const Request& r) {
 
     is_miss = true;
     // Check if we can match the tag.
-    uint si = r.qubit & sets.size();
+    uint si = r.qubit % sets.size();
     for (Tag& t : sets[si]) {
         if (t.qubit == r.qubit 
                 && (t.detector == r.di || t.detector == r.dj)

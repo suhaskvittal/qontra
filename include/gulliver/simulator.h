@@ -18,6 +18,7 @@
 #include <vector>
 #include <utility>
 
+//#define GSIM_DEBUG
 #define FILTER_CUTOFF 10
 
 namespace qrc {
@@ -58,13 +59,16 @@ public:
     void load_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset);
 
     void tick(void);
-    void sig_end_round(void);
+    void sig_end_round(uint=1);  // Number of rounds to jump. 
     
     bool is_idle(void);
+    void force_idle(void);
     std::map<uint, uint> get_matching(void);
 
     void reset_stats(void);
     
+    dramsim3::MemorySystem * dram;
+    QubitCache * cache;
     // Statistics
     uint64_t rowhammer_flips(void);
     uint64_t row_activations(void);
@@ -114,8 +118,6 @@ protected:
 
 /* Microarchitectural components.*/
     // Global memory
-    dramsim3::MemorySystem * dram;
-    QubitCache * cache;
     std::vector<Register> register_file;    
     std::vector<addr_t> dram_await_array;
     std::vector<uint> detector_vector_register; // Holds the detectors from the
