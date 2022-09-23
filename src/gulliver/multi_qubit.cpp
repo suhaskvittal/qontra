@@ -189,6 +189,12 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                     time_taken = 0.0;
                 }
             } while (!done);
+            if (round < n_rounds) {
+                n_cycles = 0;  // We have not reached the final round,
+                               // so all our computation finishes
+                               // before the final round.
+            }
+
             if (time_taken > 1000.0) {
                 n_timeouts++;
             }

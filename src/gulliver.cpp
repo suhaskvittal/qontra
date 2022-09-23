@@ -146,6 +146,10 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             simulator->tick();
             n_cycles++;
         }
+        if (round < n_rounds) {
+            n_cycles = 0;  // We will already be finished
+                           // when the final round arrives.
+        }
         // Get matching from simulator.
         auto matching = simulator->get_matching();
 
