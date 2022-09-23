@@ -123,14 +123,17 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
         // Run simulator.
         simulator->reset_stats();
         simulator->load_detectors(detector_array);
+
         uint64_t n_cycles = 0;
-        fp_t last_signal_time = 0.0;
+        uint round = 0;
         while (!simulator->is_idle()) {
             fp_t t = n_cycles / main_clock_frequency * 1e9;
-            if (t - last_signal_time > 1000) {
+            if (t > 1000 && round < n_rounds) {
                 simulator->sig_end_round();
-                last_signal_time = t;
+                n_cycles++;
+                round++;
             }
+            dram->ClockTick();
             simulator->tick();
             n_cycles++;
         }

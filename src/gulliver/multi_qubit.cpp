@@ -29,6 +29,7 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
     /* Metadata */
     circuits(circuits),
     path_tables(circuits.size()),
+    n_rounds(circuits[0].count_detectors() / n_detectors_per_round),
     main_clock_frequency(params.main_clock_frequency)
 {
     uint n_detectors = circuits[0].count_detectors()+1;
@@ -109,59 +110,60 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
         }
 
         for (uint32_t j = 0; j < shots_this_round; j++) {
-            uint next_available_decoder = 0;
+            std::deque<uint> service_queue;
             for (uint i = 0; i < circuits.size(); i++) {
                 if (!sample_buffers[i][j].not_zero()) {
                     continue;
                 }
-                if (next_available_decoder >= simulators.size()) {
-                    next_available_decoder = 0;
+                if (service_queue.size() >= simulators.size()) {
                     n_overflows++;
+                }
+                service_queue.push_back(i);
+            }
+            
+            // Preload data.
+            for (uint i = 0; i < simulators.size(); ) {
+                if (service_queue.empty()) {
                     break;
                 }
-
-                stim::Circuit circ = circuits[i];
-                uint n_detectors = circ.count_detectors();
-                uint n_observables = circ.count_observables();
-                auto syndrome = 
-                    _to_vector(sample_buffers[i][j], n_detectors, n_observables);
-                // Load data into simulator.
-                auto path_table = path_tables[i];
-                uint8_t bankgroup = i % dram->config_->bankgroups;
-                uint8_t bank = (i / dram->config_->bankgroups) 
-                                % dram->config_->banks_per_group;
-                uint32_t row_offset = ROWS_PER_QUBIT * i;
-                GulliverSimulator * sim = simulators[next_available_decoder];
-                sim->load_path_table(path_table);
-                sim->load_base_address(bankgroup, bank, row_offset);
-                // Finally, load the problem into the simulator.
-                std::vector<uint> detector_array;
-                for (uint di = 0; di < n_detectors; di++) {
-                    if (syndrome[di]) {
-                        detector_array.push_back(di);
-                    }
-                }
-
-                if (!sim->load_detectors(detector_array)) {
-                    n_uncomputable++;
-                }
-                next_available_decoder++;
+                // Compute data
+                uint qubit_id = service_queue.front();
+                service_queue.pop_front();
+                GulliverSimulator * sim = simulators[i];
+                load_simulator(sim, sample_buffers[qubit_id][j], qubit_id);
             }
 
+            fp_t time_taken = 0.0; 
             uint64_t n_cycles = 0;
-            bool done;
+            uint round = 0;
+            bool done = true;
             do {
-                done = true;
-                for (uint i = 0; i < next_available_decoder; i++) {
-                    GulliverSimulator * sim = simulators[i];
-                    if (!sim->is_idle()) {
+                dram->ClockTick();
+                for (uint i = 0; i < simulators.size(); i++) {
+                    GulliverSimulator * sim = simulators[i]; 
+                    if (sim->is_idle() && !service_queue.empty()) {
                         done = false;
-                        sim->tick();
+
+                        uint qubit_id = service_queue.front();
+                        service_queue.pop_front();
+                        load_simulator(sim, sample_buffers[qubit_id][j], qubit_id);
+                    } else if (!sim->is_idle()) {
+                        done = false;
                     }
+                    sim->tick();
                 }
+                
                 n_cycles++;
-            } while (!done);
-            fp_t time_taken = n_cycles / main_clock_frequency * 1e9;
+                time_taken = n_cycles / main_clock_frequency * 1e9;
+                if (time_taken > 1000.0 && round < n_rounds) {
+                    for (GulliverSimulator * sim : simulators) {
+                        sim->sig_end_round();
+                    }
+                    round++;
+                    n_cycles = 0;
+                    time_taken = 0.0;
+                }
+            } while (!done && time_taken <= 1000.0);
             if (time_taken > 1000.0) {
                 n_timeouts++;
             }
@@ -180,6 +182,41 @@ GulliverMultiQubitSimulator::reset_stats() {
     n_overflows = 0;
     n_uncomputable = 0;
     max_latency = 0.0;
+}
+
+bool
+GulliverMultiQubitSimulator::load_simulator(
+        GulliverSimulator * sim,
+        const stim::simd_bits_range_ref& event,
+        uint qubit_id) 
+{
+    stim::Circuit circ = circuits[qubit_id];
+    uint n_detectors = circ.count_detectors();
+    uint n_observables = circ.count_observables();
+    auto syndrome = _to_vector(event, n_detectors, n_observables);
+    // Load data into simulator.
+    auto path_table = path_tables[qubit_id];
+    uint8_t bankgroup = qubit_id % dram->config_->bankgroups;
+    uint8_t bank = (qubit_id / dram->config_->bankgroups)
+                    % dram->config_->banks_per_group;
+    uint32_t row_offset = ROWS_PER_QUBIT * qubit_id;
+
+    sim->load_qubit_number(qubit_id);
+    sim->load_path_table(path_table);
+    sim->load_base_address(bankgroup, bank, row_offset);
+    // Load the problem into the simulator.
+    std::vector<uint> detector_array;
+    for (uint di = 0; di < syndrome.size(); di++) {
+        if (syndrome[di]) {
+            detector_array.push_back(di);
+        }
+    }
+
+    bool computable = sim->load_detectors(detector_array);
+    if (!computable) {
+        n_uncomputable++;
+    }
+    return computable;
 }
 
 }  // gulliver

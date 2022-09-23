@@ -13,6 +13,7 @@
 #include <memory_system.h>
 #include <stim.h>
 
+#include <deque>
 #include <map>
 #include <random>
 #include <vector>
@@ -38,6 +39,9 @@ public:
     uint32_t n_uncomputable;
     fp_t max_latency;
 private:
+    bool load_simulator(
+            GulliverSimulator*, const stim::simd_bits_range_ref&, uint qubit_id);
+
     dramsim3::MemorySystem * dram;
     std::vector<QubitCache*> caches;
     std::map<addr_t, bool> * memory_event_table;
@@ -47,6 +51,7 @@ private:
 
     std::vector<stim::Circuit> circuits;
     std::vector<PathTable> path_tables;
+    uint n_rounds;
     fp_t main_clock_frequency;
 };
 

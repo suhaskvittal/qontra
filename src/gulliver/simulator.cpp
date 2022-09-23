@@ -59,7 +59,11 @@ GulliverSimulator::load_detectors(const std::vector<uint>& detector_array) {
     // Compute the critical index.
     curr_max_detector = n_detectors_per_round;
 
-    return detector_array.size() <= bfu_hw_threshold;
+    bool computable = detector_array.size() <= bfu_hw_threshold;
+    if (!computable) {
+        state = State::idle;  // Don't even bother trying.
+    }
+    return computable;
 }
 
 void
@@ -82,8 +86,6 @@ GulliverSimulator::tick() {
     if (cache != nullptr) {
         cache->tick();
     }
-    dram->ClockTick();
-    
     // Update last use for every register.
     for (Register& r : register_file) {
         r.last_use++;
@@ -159,6 +161,9 @@ GulliverSimulator::sig_end_round() {
     if (curr_max_detector < n_detectors-1) {
         curr_max_detector += n_detectors_per_round;
     }
+#ifdef GSIM_DEBUG
+    std::cout << "SIGNAL -- ROUND END\n";
+#endif
 }
 
 bool
