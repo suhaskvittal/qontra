@@ -22,6 +22,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     simulator(nullptr),
     // Properties
     bfu_hw_threshold(params.bfu_hw_threshold),
+    n_rounds(circuit.count_detectors()/n_detectors_per_round),
     main_clock_frequency(params.main_clock_frequency),
     // Heap initialized data (to be deleted)
     dram(nullptr),
@@ -52,6 +53,8 @@ Gulliver::Gulliver(const stim::Circuit circuit,
         0
     };
     simulator = new gulliver::GulliverSimulator(dram, 
+                                    nullptr,  // Single qubit experiment doesn't
+                                              // use a cache.
                                     memory_event_table,
                                     path_table, 
                                     sim_params);
@@ -121,7 +124,13 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
         simulator->reset_stats();
         simulator->load_detectors(detector_array);
         uint64_t n_cycles = 0;
+        fp_t last_signal_time = 0.0;
         while (!simulator->is_idle()) {
+            fp_t t = n_cycles / main_clock_frequency * 1e9;
+            if (t - last_signal_time > 1000) {
+                simulator->sig_end_round();
+                last_signal_time = t;
+            }
             simulator->tick();
             n_cycles++;
         }

@@ -39,6 +39,7 @@ public:
     fp_t max_latency;
 private:
     dramsim3::MemorySystem * dram;
+    std::vector<QubitCache*> caches;
     std::map<addr_t, bool> * memory_event_table;
 
     std::vector<GulliverSimulator*> simulators;

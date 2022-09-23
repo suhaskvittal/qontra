@@ -31,6 +31,10 @@ struct GulliverParams {
     uint bfu_hw_threshold;
     // Memory Parameters
     uint n_registers;
+    // Cache parameters
+    uint n_cache_supertags;
+    uint n_cache_sets;
+    uint n_cache_lines;
     // DRAM parameters
     std::string dram_config_file;
     std::string log_output_directory;
@@ -62,6 +66,7 @@ public:
     gulliver::GulliverSimulator * simulator;
 private:
     uint bfu_hw_threshold;
+    uint n_rounds;
     fp_t main_clock_frequency;
     // Delete later.
     dramsim3::MemorySystem * dram;

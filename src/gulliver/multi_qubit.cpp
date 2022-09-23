@@ -21,6 +21,7 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
     max_latency(0),
     /* Memory */
     dram(nullptr),
+    caches(),
     memory_event_table(nullptr),
     /* Decoders */
     simulators(n_decoders),
@@ -30,6 +31,7 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
     path_tables(circuits.size()),
     main_clock_frequency(params.main_clock_frequency)
 {
+    uint n_detectors = circuits[0].count_detectors()+1;
     // Initialize memory first.
     memory_event_table = new std::map<addr_t, bool>(); 
     // Note that every circuit, provided that they are all
@@ -53,8 +55,14 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
                         % dram->config_->banks_per_group;
         uint32_t row_offset = ROWS_PER_QUBIT * i;
 
+        QubitCache * cache = new QubitCache(params.n_cache_supertags,
+                                params.n_cache_sets,
+                                params.n_cache_lines,
+                                n_detectors - n_detectors_per_round);
+        caches.push_back(cache);
+
         GulliverSimulatorParams sim_params = {
-            circuits[0].count_detectors()+1,
+            n_detectors,
             n_detectors_per_round,
             params.n_registers,
             params.bfu_fetch_width,
@@ -64,6 +72,7 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
             row_offset
         };
         simulators[i] = new GulliverSimulator(dram,
+                                            cache,
                                             memory_event_table,
                                             path_tables[0], 
                                             sim_params);
@@ -75,6 +84,9 @@ GulliverMultiQubitSimulator::~GulliverMultiQubitSimulator() {
 
     for (GulliverSimulator * s : simulators) {
         delete s;
+    }
+    for (QubitCache * c : caches) {
+        delete c;
     }
     delete dram;
     delete memory_event_table;

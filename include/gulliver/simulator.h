@@ -8,6 +8,7 @@
 
 #include "defs.h"
 #include "decoding_graph.h"
+#include "gulliver/cache.h"
 
 #include <memory_system.h>
 
@@ -43,7 +44,8 @@ struct MemoryEventEntry {
 
 class GulliverSimulator {
 public:
-    GulliverSimulator(dramsim3::MemorySystem*, 
+    GulliverSimulator(dramsim3::MemorySystem*,
+            QubitCache*,
             std::map<addr_t, bool> * memory_event_table,
             const PathTable& path_table,
             const GulliverSimulatorParams&);
@@ -52,9 +54,11 @@ public:
                                                     // syndrome is not 
                                                     // servicable.
     void load_path_table(const PathTable&);
+    void load_qubit_number(uint);
     void load_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset);
 
     void tick(void);
+    void sig_end_round(void);
     
     bool is_idle(void);
     std::map<uint, uint> get_matching(void);
@@ -65,11 +69,11 @@ public:
     uint64_t rowhammer_flips(void);
     uint64_t row_activations(void);
 
+    uint64_t ccomp_cycles;
     uint64_t prefetch_cycles;
     uint64_t bfu_cycles;
 protected:
-    void setup(void);
-
+    void tick_ccomp(void);
     void tick_prefetch(void);
     void tick_bfu(void);
 
@@ -81,7 +85,7 @@ protected:
 
     void clear(void);
 
-    enum State { prefetch, bfu, idle };
+    enum class State { ccomp, prefetch, bfu, idle };
 
     struct Register {
         addr_t address;
@@ -108,15 +112,20 @@ protected:
         bool valid;
     };
 
-    /* Microarchitectural components.*/
+/* Microarchitectural components.*/
     // Global memory
     dramsim3::MemorySystem * dram;
+    QubitCache * cache;
     std::vector<Register> register_file;    
-    std::pair<uint, uint> next_dram_request_register;
     std::vector<addr_t> dram_await_array;
     std::vector<uint> detector_vector_register; // Holds the detectors from the
                                                 // current syndrome.
-    // BFU
+// CComp
+    uint ccomp_detector_register;
+// Prefetch
+    uint major_detector_register;
+    std::map<uint, uint> minor_detector_table;
+// BFU
     std::stack<StackEntry> hardware_stack;
     // Size of latches is fetch_width by (hw_threshold-1)
     std::vector<std::vector<BFUPipelineLatch>> bfu_pipeline_latches;   
@@ -132,14 +141,15 @@ protected:
     PathTable path_table;
     /* Configuration parameters. */
 private:
+    uint curr_max_detector;
+
     uint n_detectors;
     uint n_detectors_per_round;
-
-    uint critical_index;
 
     uint bfu_fetch_width;
     uint bfu_hw_threshold; 
 
+    uint curr_qubit;
     addr_t base_address;
 };
 

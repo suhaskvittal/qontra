@@ -12,6 +12,7 @@ namespace qrc {
 namespace gulliver {
 
 GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram, 
+        QubitCache * cache,
         std::map<addr_t, bool> * memory_event_table,
         const PathTable& path_table,
         const GulliverSimulatorParams& params)
@@ -21,10 +22,13 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     bfu_cycles(0),
     /* Microarchitecture */
     dram(dram),
+    cache(cache),
     register_file(params.n_registers, (Register){0x0, 0, false}),
-    next_dram_request_register(std::make_pair(0,0)),
     dram_await_array(),
     detector_vector_register(),
+    ccomp_detector_register(0),
+    major_detector_register(0),
+    minor_detector_table(),
     hardware_stack(),
     bfu_pipeline_latches(params.bfu_fetch_width, 
             std::vector<BFUPipelineLatch>(params.bfu_hw_threshold-1)),
@@ -32,16 +36,19 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     replacement_queue(),
     state(GulliverSimulator::State::prefetch),
     bfu_idle(false),
-    /* Config parameters */
+    /* Data */
     memory_event_table(memory_event_table),
     path_table(path_table),
+    /* Config parameters */
+    curr_max_detector(0),
     n_detectors(params.n_detectors),
     n_detectors_per_round(params.n_detectors_per_round),
-    critical_index(0),
     bfu_fetch_width(params.bfu_fetch_width),
     bfu_hw_threshold(params.bfu_hw_threshold),
+    curr_qubit(0),
     base_address(0)
 {
+    clear();
     load_base_address(params.bankgroup, params.bank, params.row_offset);
 }
 
@@ -50,31 +57,31 @@ GulliverSimulator::load_detectors(const std::vector<uint>& detector_array) {
     clear();
     detector_vector_register = detector_array;
     // Compute the critical index.
-    critical_index = detector_vector_register.size();
-    for (uint i = 0; i < detector_vector_register.size(); i++) {
-        if (detector_vector_register[i] >= n_detectors - n_detectors_per_round) {
-            critical_index = i;
-            break;        
-        }
-    }
-    setup();
+    curr_max_detector = n_detectors_per_round;
+
     return detector_array.size() <= bfu_hw_threshold;
 }
 
 void
 GulliverSimulator::load_path_table(const PathTable& pt) {
-    clear();
     path_table = pt;  
 }
 
 void
+GulliverSimulator::load_qubit_number(uint qubit) {
+    curr_qubit = qubit;
+}
+
+void
 GulliverSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset) {
-    clear();
     base_address = get_base_address(bg, ba, ro_offset, dram->config_);
 }
 
 void
 GulliverSimulator::tick() {
+    if (cache != nullptr) {
+        cache->tick();
+    }
     dram->ClockTick();
     
     // Update last use for every register.
@@ -113,27 +120,44 @@ GulliverSimulator::tick() {
             it = dram_await_array.erase(it);
             memory_event_table->at(address) = false;
             // Add to replacement queue.
+            auto di_dj = from_address(address, base_address, n_detectors);
 #ifdef GSIM_DEBUG
             std::cout << "\t[DRAM] Retrieved " << std::hex
-                << address << std::dec << "\n";
+                << address << std::dec << "(" << di_dj.first
+                << "," << di_dj.second << ")\n";
 #endif
-            replacement_queue.push_back(address);
+            uint di = di_dj.first;
+            if (state != State::ccomp) {
+                replacement_queue.push_back(address);
+            }
         } else {
             it++;
         }
     }
 
     switch (state) {
-    case GulliverSimulator::State::prefetch:
+    case State::ccomp:
+        ccomp_cycles++;
+        tick_ccomp();
+        break;
+    case State::prefetch:
         prefetch_cycles++;
         tick_prefetch();
         break;
-    case GulliverSimulator::State::bfu:
+    case State::bfu:
         bfu_cycles++;
         tick_bfu();
         break;
     default:
         break;
+    }
+}
+
+void
+GulliverSimulator::sig_end_round() {
+    // We subtract by 1 because we don't count the boundary.
+    if (curr_max_detector < n_detectors-1) {
+        curr_max_detector += n_detectors_per_round;
     }
 }
 
@@ -163,63 +187,42 @@ GulliverSimulator::row_activations() {
     return dram->dram_system_->row_activations();
 }
 
-void
-GulliverSimulator::setup() {
-    // The idea is that we should have retrieved this data
-    // from DRAM as we received the pieces for the syndrome
-    // after each round.
-    //
-    // The 1us constraint only applies for the period after
-    // the last round.
-    //
-    // However, we still want to track DRAM accesses, so
-    // we will call the requisite functions.
-
-    for (uint ai = 0; ai < critical_index; ai++) {
-        uint di = detector_vector_register[ai];
-        for (uint aj = ai+1; aj < critical_index; aj++) {
-            uint dj = detector_vector_register[aj];
-            addr_t address = to_address(di, dj, base_address, n_detectors);
-            while (!dram->WillAcceptTransaction(address, false)) {
-                dram->ClockTick();
-            }
-            dram->AddTransaction(address, false);
-            while (memory_event_table->count(address) == 0
-                    || !memory_event_table->at(address))
-            {
-                dram->ClockTick();
-            }
-            memory_event_table->at(address) = false;
-
-            // Add data to the register file
-            Register * victim = &register_file[0];
-            for (uint i = 1; i < register_file.size(); i++) {
-                Register& r = register_file[i];
-                if (victim->valid &&
-                        (!r.valid || (victim->last_use < r.last_use))) 
-                {
-                    victim = &register_file[i];
-                }
-            }
-            victim->address = address;
-            victim->valid = true;
-            victim->last_use = 0;
+void 
+GulliverSimulator::tick_ccomp() {
+    if (cache->completion_queue.empty()) {
+        update_state();
+        return;
+    }
+    // Retrieve data from memory.
+    uint di = cache->completion_queue.front();
+    uint dj = unbound_detector(ccomp_detector_register, n_detectors);
+    if (di == dj) {
+        // Update ccomp detector register
+        ccomp_detector_register++;
+        if (ccomp_detector_register >= n_detectors) {
+            ccomp_detector_register = 0;
+            cache->complete(curr_qubit, di);
+            cache->completion_queue.pop_front();
         }
     }
-    
-    if (critical_index == n_detectors) {
-        next_dram_request_register.first = n_detectors;
-        next_dram_request_register.second = n_detectors;
-    } else {
-        next_dram_request_register.first = 0;
-        next_dram_request_register.second = critical_index;
+    addr_t address = to_address(di, dj, base_address, n_detectors);
+    if (dram->WillAcceptTransaction(address, false)) {
+        dram->AddTransaction(address, false);
+        dram_await_array.push_back(address);
+        // Update ccomp detector register
+        ccomp_detector_register++;
+        if (ccomp_detector_register >= n_detectors) {
+            ccomp_detector_register = 0;
+            cache->complete(curr_qubit, di);
+            cache->completion_queue.pop_front();
+        }
     }
 }
 
 void
 GulliverSimulator::tick_prefetch()  {
-    uint& ai = next_dram_request_register.first;
-    uint& aj = next_dram_request_register.second;
+    uint& ai = major_detector_register;
+    uint& aj = minor_detector_table[ai];
 
     if (ai >= detector_vector_register.size()-1) {
         // We only transition state if all DRAM requests
@@ -232,14 +235,21 @@ GulliverSimulator::tick_prefetch()  {
     
     uint di = detector_vector_register[ai];
     uint dj = detector_vector_register[aj];
+
+    if (di > curr_max_detector || dj > curr_max_detector) {
+        return;
+    }
+
     addr_t address = to_address(di, dj, base_address, n_detectors);
     
     access(address, false);  // We don't care if there is a hit or miss.
-    // Update di, dj.
+    // Update ai, aj.
     aj++;
     if (aj >= detector_vector_register.size()) {
         ai++;
-        aj = ai < critical_index ? critical_index : ai+1;
+        if (minor_detector_table.count(ai) == 0) {
+            minor_detector_table[ai] = ai + 1;
+        }
     }
 }
 
@@ -411,6 +421,22 @@ GulliverSimulator::access(addr_t address, bool set_evictable_on_hit) {
             break;
         }
     }
+    // Check the cache.
+    if (cache != nullptr) {
+        auto di_dj = from_address(address, base_address, n_detectors);
+        uint di = di_dj.first;
+        uint dj = di_dj.second;
+        QubitCache::LoadStatus s = cache->access(curr_qubit, di, dj);
+        if (s == QubitCache::LoadStatus::hit) {
+            replacement_queue.push_back(address);  // Add to register file.
+            return true;
+        } else if (s == QubitCache::LoadStatus::unknown) {
+            // We exit this function immediately because we don't
+            // want to go to DRAM yet. We are still waiting on the
+            // result.
+            return false;
+        } // Otherwise, go perform the DRAM access.
+    }
 
     if (!is_hit) {
         // If there is no hit, also check that the request has not
@@ -439,18 +465,24 @@ GulliverSimulator::access(addr_t address, bool set_evictable_on_hit) {
 void
 GulliverSimulator::update_state() {
     switch (state) {
-    case GulliverSimulator::State::prefetch:
+    case State::ccomp:
+#ifdef GSIM_DEBUG
+        std::cout << "PREFETCH\n";
+#endif
+        state = State::prefetch;
+        break;
+    case State::prefetch:
 #ifdef GSIM_DEBUG
         std::cout << "BFU\n";
 #endif
-        state = GulliverSimulator::State::bfu;
+        state = State::bfu;
         hardware_stack.push((StackEntry) {std::map<uint, uint>(), 0.0, 0});
         break;
-    case GulliverSimulator::State::bfu:
+    case State::bfu:
 #ifdef GSIM_DEBUG
         std::cout << "IDLE\n";
 #endif
-        state = GulliverSimulator::State::idle;
+        state = State::idle;
         break;
     default:
         break;
@@ -459,9 +491,15 @@ GulliverSimulator::update_state() {
 
 void
 GulliverSimulator::clear() {
-    next_dram_request_register = std::make_pair(0,1);
     dram_await_array.clear();
     detector_vector_register.clear();
+    
+    ccomp_detector_register = 0;
+
+    major_detector_register = 0;
+    minor_detector_table.clear();
+    minor_detector_table[0] = 1;
+
     while (!hardware_stack.empty()) {
         hardware_stack.pop();
     }
@@ -477,10 +515,17 @@ GulliverSimulator::clear() {
         0 
     };
     replacement_queue.clear();
-    state = GulliverSimulator::State::prefetch;
+    if (cache == nullptr) {
+        state = State::prefetch;
 #ifdef GSIM_DEBUG
-    std::cout << "PREFETCH\n";
+        std::cout << "PREFETCH\n";
 #endif
+    } else {
+        state = State::ccomp;
+#ifdef GSIM_DEBUG
+        std::cout << "CCOMP\n";
+#endif
+    }
 }
 
 addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,
@@ -497,7 +542,7 @@ addr_t
 to_address(uint di, uint dj, addr_t base, uint n_detectors) {
     uint bdi = bound_detector(di, n_detectors);
     uint bdj = bound_detector(dj, n_detectors);
-    addr_t x = base + (bdi*n_detectors + bdj-bdi-1) * sizeof(fp_t);
+    addr_t x = base + (bdi*n_detectors + bdj) * sizeof(fp_t);
     return x;
 }
 
@@ -505,7 +550,7 @@ std::pair<uint, uint>
 from_address(addr_t x, addr_t base, uint n_detectors) {
     x -= base;
     uint bdi = x / (sizeof(fp_t) * n_detectors);
-    uint bdj = x / sizeof(fp_t) - bdi*n_detectors + bdi + 1;
+    uint bdj = x / sizeof(fp_t) - bdi*n_detectors;
     uint di = unbound_detector(bdi, n_detectors);
     uint dj = unbound_detector(bdj, n_detectors);
     std::pair<uint, uint> di_dj = std::make_pair(di, dj);

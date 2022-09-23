@@ -20,7 +20,8 @@ set(QUARCH_PROGRAM_FILES
     src/gulliver.cpp
     # Gulliver code.
     src/gulliver/simulator.cpp
-    src/gulliver/multi_qubit.cpp)
+    src/gulliver/multi_qubit.cpp
+    src/gulliver/cache.cpp)
 add_library(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
 if(CMAKE_BUILD_TYPE MATCHES Release)
