@@ -24,6 +24,8 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     register_file(params.n_registers, (Register){0x0, 0, false}),
     dram_await_array(),
     detector_vector_register(),
+    mean_weight_register(0),
+    access_counter(0),
     ccomp_detector_register(0),
     major_detector_register(0),
     minor_detector_table(),
@@ -44,7 +46,8 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     bfu_fetch_width(params.bfu_fetch_width),
     bfu_hw_threshold(params.bfu_hw_threshold),
     curr_qubit(0),
-    base_address(0)
+    base_address(0),
+    has_boundary(false)
 {
     clear();
     load_base_address(params.bankgroup, params.bank, params.row_offset);
@@ -58,6 +61,14 @@ GulliverSimulator::load_detectors(const std::vector<uint>& detector_array) {
     }
     clear();
     detector_vector_register = detector_array;
+#ifdef GSIM_DEBUG
+    std::cout << "LOAD:";
+    for (uint d : detector_array) {
+        std::cout << " " << d; 
+    }
+    std::cout << "\n";
+#endif
+    has_boundary = detector_vector_register.back() == BOUNDARY_INDEX;
     // Compute the critical index.
     curr_max_detector = n_detectors_per_round;
 
@@ -170,7 +181,8 @@ GulliverSimulator::sig_end_round(uint rounds_ended) {
     }
     major_detector_register = 0;
 #ifdef GSIM_DEBUG
-    std::cout << "SIGNAL -- ROUND END\n";
+    std::cout << "SIGNAL -- ROUND END | Max detector = " 
+        << curr_max_detector << "\n";
 #endif
 }
 
@@ -242,7 +254,22 @@ GulliverSimulator::tick_ccomp() {
 void
 GulliverSimulator::tick_prefetch()  {
     uint& ai = major_detector_register;
+    if (minor_detector_table.count(ai) == 0) {
+        // Start with boundary first if it exists.
+        if (has_boundary) {
+            minor_detector_table[ai] = detector_vector_register.size() - 1;
+        } else {
+            minor_detector_table[ai] = ai + 1;
+        }
+    }
     uint& aj = minor_detector_table[ai];
+    
+    while (aj >= detector_vector_register.size()
+        && ai < detector_vector_register.size()-1)
+    {
+        ai++;
+        aj = minor_detector_table[ai];
+    }
 
     if (ai >= detector_vector_register.size()-1) {
         // We only transition state if all DRAM requests
@@ -254,22 +281,45 @@ GulliverSimulator::tick_prefetch()  {
     }
     uint di = detector_vector_register[ai];
     uint dj = detector_vector_register[aj];
-    if ((di != BOUNDARY_INDEX && di > curr_max_detector)
-            || (dj != BOUNDARY_INDEX && dj > curr_max_detector)) 
-    {
+
+//    if (curr_max_detector > WINDOW_SIZE*n_detectors_per_round
+//            && detector_vector_register.size() > FILTER_CUTOFF
+//            && di < (curr_max_detector - WINDOW_SIZE*n_detectors_per_round)) 
+//    {
+//        ai++;
+//        return;
+//    }
+
+    if (di != BOUNDARY_INDEX && di > curr_max_detector) {
+        return;
+    }
+
+    if (dj != BOUNDARY_INDEX && dj > curr_max_detector) {
+        uint next_di = detector_vector_register[ai+1];
+        if (next_di == BOUNDARY_INDEX || next_di < curr_max_detector) {
+            ai++;
+        }
         return;
     }
 
     addr_t address = to_address(di, dj, base_address, n_detectors);
     
     access(address, false);  // We don't care if there is a hit or miss.
+    mean_weight_register += path_table[std::make_pair(di, dj)].distance;
+    access_counter++;
     // Update ai, aj.
-    aj++;
-    if (aj >= detector_vector_register.size()) {
+    // Update varies on whether or not boundary is in the DVR.
+    if (has_boundary && dj == BOUNDARY_INDEX) {
+        aj = ai + 1;  // Reset, we have finished the boundary.
+    } else {
+        aj++;
+    }
+
+    if ((has_boundary && aj >= detector_vector_register.size()-1) 
+            || (!has_boundary && aj >= detector_vector_register.size())) 
+    {
+        aj = detector_vector_register.size();
         ai++;
-        if (minor_detector_table.count(ai) == 0) {
-            minor_detector_table[ai] = ai + 1;
-        }
     }
 }
 
@@ -385,6 +435,12 @@ GulliverSimulator::tick_bfu_fetch() {
             if (ei.running_matching.count(dj)) {
                 continue;
             }
+//            if (dj != BOUNDARY_INDEX && di != BOUNDARY_INDEX
+//                    && detector_vector_register.size() > FILTER_CUTOFF
+//                    && (dj-di) > WINDOW_SIZE*n_detectors_per_round)
+//            {
+//                continue;
+//            }
             addr_t address = to_address(di, dj, base_address, n_detectors);
             bool is_hit = access(address, true);
             // If there is no hit on the register file, then we have to go
@@ -402,11 +458,14 @@ GulliverSimulator::tick_bfu_fetch() {
                 stall_next = true;
             } 
         }
-
+        
         if (!stall_next) {
             for (auto p : match_list) {
-                if (detector_vector_register.size() <= FILTER_CUTOFF 
-                        || p.second < 1.2 * min_weight) 
+                uint dj = p.first;
+                fp_t w = p.second;
+                if (detector_vector_register.size() <= FILTER_CUTOFF
+                    || w <= mean_weight_register
+                    || w == min_weight)
                 {
                     proposed_matches.push(p);
                 }
@@ -499,7 +558,9 @@ GulliverSimulator::update_state() {
         }
         break;
     case State::prefetch:
+        mean_weight_register /= access_counter;
 #ifdef GSIM_DEBUG
+        std::cout << "[Mean Weight] " << mean_weight_register << "\n";
         std::cout << "BFU\n";
 #endif
         state = State::bfu;
@@ -508,6 +569,9 @@ GulliverSimulator::update_state() {
     case State::bfu:
 #ifdef GSIM_DEBUG
         std::cout << "IDLE\n";
+        std::cout << "\tcycles in prefetch: " << prefetch_cycles << "\n";
+        std::cout << "\tcycles in bfu: " << bfu_cycles << "\n";
+        std::cout << "\thamming weight: " << detector_vector_register.size() << "\n";
 #endif
         state = State::idle;
         break;
@@ -520,12 +584,13 @@ void
 GulliverSimulator::clear() {
     dram_await_array.clear();
     detector_vector_register.clear();
+    mean_weight_register = 0;
+    access_counter = 0;
     
     ccomp_detector_register = 0;
 
     major_detector_register = 0;
     minor_detector_table.clear();
-    minor_detector_table[0] = 1;
 
     while (!hardware_stack.empty()) {
         hardware_stack.pop();
@@ -569,7 +634,7 @@ addr_t
 to_address(uint di, uint dj, addr_t base, uint n_detectors) {
     uint bdi = bound_detector(di, n_detectors);
     uint bdj = bound_detector(dj, n_detectors);
-    addr_t x = base + (bdi*n_detectors + bdj) * sizeof(fp_t);
+    addr_t x = base + (bdi*n_detectors + (bdj-bdi-1)) * sizeof(fp_t);
     return x;
 }
 
@@ -577,7 +642,7 @@ std::pair<uint, uint>
 from_address(addr_t x, addr_t base, uint n_detectors) {
     x -= base;
     uint bdi = x / (sizeof(fp_t) * n_detectors);
-    uint bdj = x / sizeof(fp_t) - bdi*n_detectors;
+    uint bdj = x / sizeof(fp_t) - bdi*n_detectors + bdi + 1;
     uint di = unbound_detector(bdi, n_detectors);
     uint dj = unbound_detector(bdj, n_detectors);
     std::pair<uint, uint> di_dj = std::make_pair(di, dj);

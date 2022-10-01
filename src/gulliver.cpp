@@ -98,6 +98,7 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
     uint hw = std::accumulate(syndrome.begin(), syndrome.end()-n_observables, 0);
     n_total_accesses++;
     if (hw > bfu_hw_threshold) {
+        max_hamming_weight = hw;
         n_logical_failures++;
         DecoderShotResult res = {
             0.0,
@@ -130,17 +131,24 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             detector_array.push_back(BOUNDARY_INDEX);
         }
         // Run simulator.
+#ifdef GSIM_DEBUG
+        std::cout << "==============================================\n";
+#endif
         simulator->reset_stats();
         simulator->load_detectors(detector_array);
 
         uint64_t n_cycles = 0;
-        uint round = 0;
+        uint round = 1;
         while (!simulator->is_idle()) {
             fp_t t = n_cycles / main_clock_frequency * 1e9;
-            if (t > 1000 && round < n_rounds) {
-                simulator->sig_end_round();
-                n_cycles = 0;
-                round++;
+            if (t >= 1000) {
+                if (round < n_rounds) {
+                    simulator->sig_end_round();
+                    n_cycles = 0;
+                    round++;
+                } else {
+                    break;
+                }
             }
             dram->ClockTick();
             simulator->tick();
@@ -161,8 +169,13 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             if (visited.count(di) || visited.count(dj)) {
                 continue;
             }
-            // For explanation, see MWPMDecoder function.
+
             std::pair<uint, uint> di_dj = std::make_pair(di, dj);
+#ifdef GSIM_DEBUG
+            std::cout << "[Matching] " << di << " --> " << dj << "\n";
+            std::cout << "\tWeight = " << path_table[di_dj].distance << "\n";
+#endif
+            // For explanation, see MWPMDecoder function.
             std::vector<uint> detector_path(path_table[di_dj].path);
             for (uint i = 1; i < detector_path.size(); i++) {
                 // Get edge from decoding graph.
@@ -184,15 +197,20 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             max_latency = time_taken;
             max_bfu_cycles = simulator->bfu_cycles;
             max_prefetch_cycles = simulator->prefetch_cycles;
-            max_hamming_weight = hw;
         }
 
         bool is_error = 
             is_logical_error(correction, syndrome, n_detectors, n_observables);
-        if (time_taken > 1000) {
-            n_logical_failures++;
-            is_error = true;
-        }
+//      if (time_taken > 1000) {
+//          n_logical_failures++;
+//          is_error = true;
+//      }
+#ifdef GSIM_DEBUG
+        std::cout << "Is error: " << is_error << "\n";
+        std::cout << "Time taken: " << time_taken << "ns.\n";
+        std::cout << "Prefetch cycles: " << simulator->prefetch_cycles << "\n";
+        std::cout << "BFU Cycles: " << simulator->bfu_cycles << "\n";
+#endif
 
         DecoderShotResult res = {
             time_taken,

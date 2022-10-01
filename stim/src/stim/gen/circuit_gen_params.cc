@@ -152,7 +152,7 @@ CircuitGenParameters::get_error(double mean, double stddev) const {
         double m = log(mean);
         // Assume stddev is for the logarithm.
         std::lognormal_distribution<double> dist{m, stddev};
-        e = dist(CIRCGEN_RNG) + mean;
+        e = dist(CIRCGEN_RNG);
     }
     return e;
 }

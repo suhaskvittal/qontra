@@ -12,6 +12,7 @@
 
 #include <memory_system.h>
 
+#include <algorithm>
 #include <deque>
 #include <map>
 #include <stack>
@@ -20,6 +21,7 @@
 
 //#define GSIM_DEBUG
 #define FILTER_CUTOFF 10
+#define WINDOW_SIZE 100
 
 namespace qrc {
 namespace gulliver {
@@ -122,9 +124,12 @@ protected:
     std::vector<addr_t> dram_await_array;
     std::vector<uint> detector_vector_register; // Holds the detectors from the
                                                 // current syndrome.
+    fp_t mean_weight_register;
+    uint access_counter;
 // CComp
     uint ccomp_detector_register;
 // Prefetch
+    uint min_detector_register;
     uint major_detector_register;
     std::map<uint, uint> minor_detector_table;
 // BFU
@@ -153,6 +158,8 @@ private:
 
     uint curr_qubit;
     addr_t base_address;
+
+    bool has_boundary;
 };
 
 addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,

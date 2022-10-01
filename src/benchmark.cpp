@@ -52,6 +52,7 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
          max_execution_time_for_correctable = 0.0;
 
     uint32_t sn = 0;
+    uint32_t bn = 0;
     while (shots > 0) {
         uint32_t shots_this_round = shots > MAX_SHOTS ? MAX_SHOTS : shots;
         // Get samples from Stim.
@@ -65,6 +66,10 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
         uint n_observables = decoder_p->circuit.count_observables();
 
         for (uint32_t i = 0; i < shots_this_round; i++) {
+            if (i % 1000 == 0) {
+                std::cout << "Batch " << bn << ", shot " << i 
+                    << "(" << sn << ")\n";
+            }
             auto syndrome = 
                 _to_vector(sample_buffer[i], n_detectors, n_observables);
             uint hw = 
@@ -97,6 +102,7 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
             sn++;
         }
         shots -= shots_this_round;
+        bn++;
     }
     // Update stats in decoder.
     decoder_p->syndromes = syndromes;

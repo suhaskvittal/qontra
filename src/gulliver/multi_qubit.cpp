@@ -141,7 +141,7 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
 
             fp_t time_taken = 0.0; 
             uint64_t n_cycles = 0;
-            uint round = 0;
+            uint round = 1;
             bool done;
             do {
 #ifdef GSIM_DEBUG
