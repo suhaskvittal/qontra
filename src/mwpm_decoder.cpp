@@ -95,43 +95,20 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     }
     // Solve instance.
     pm.Solve();
-    // Compute logical correction.
-    std::vector<uint8_t> correction(n_observables, 0);
-    std::set<uint> visited;
     std::map<uint, uint> matching;
     for (uint vi = 0; vi < n_vertices; vi++) {
-        if (visited.count(vi)) {
-            continue;
-        }
         uint vj = pm.GetMatch(vi);
         uint di = detector_list[vi];
-        if (di >= match_detectors_less_than) {
+        if (di != BOUNDARY_INDEX && di >= match_detectors_less_than) {
             continue;
         }
         uint dj = detector_list[vj];
         // Update matching data structure.
         matching[di] = dj;
         matching[dj] = di;
-        std::pair<uint, uint> di_dj = std::make_pair(di, dj);
-        // Check path between the two detectors.
-        // This is examining the error chain.
-        std::vector<uint> detector_path(path_table[di_dj].path);
-        for (uint i = 1; i < detector_path.size(); i++) {
-            // Get edge from decoding graph.
-            auto wi = detector_path[i-1];
-            auto wj = detector_path[i];
-            auto edge = graph.get_edge(wi, wj);
-            // The edge should exist.
-            for (uint obs : edge.frames) {
-                // Flip the bit.
-                if (obs >= 0) {
-                    correction[obs] = !correction[obs];
-                }
-            }
-        }
-        visited.insert(vi);
-        visited.insert(vj);
     }
+    // Compute logical correction.
+    std::vector<uint8_t> correction = get_correction_from_matching(matching);
     // Stop time here.
 #ifdef __APPLE__
     auto end_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
@@ -150,6 +127,38 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         matching
     };
     return res;
+}
+
+std::vector<uint8_t>
+MWPMDecoder::get_correction_from_matching(const std::map<uint, uint>& matching) {
+    std::set<uint> visited;
+    std::vector<uint8_t> correction(circuit.count_observables(), 0);
+    for (auto di_dj : matching) {
+        uint di = di_dj.first;
+        uint dj = di_dj.second;
+        if (visited.count(di) || visited.count(dj)) {
+            continue;
+        }
+        // Check path between the two detectors.
+        // This is examining the error chain.
+        std::vector<uint> detector_path(path_table[di_dj].path);
+        for (uint i = 1; i < detector_path.size(); i++) {
+            // Get edge from decoding graph.
+            auto wi = detector_path[i-1];
+            auto wj = detector_path[i];
+            auto edge = graph.get_edge(wi, wj);
+            // The edge should exist.
+            for (uint obs : edge.frames) {
+                // Flip the bit.
+                if (obs >= 0) {
+                    correction[obs] = !correction[obs];
+                }
+            }
+        }
+        visited.insert(di);
+        visited.insert(dj);
+    }
+    return correction;
 }
 
 }  // qrc

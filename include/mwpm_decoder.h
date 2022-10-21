@@ -35,6 +35,8 @@ public:
 
     uint64_t sram_cost(void) override;
 protected:
+    std::vector<uint8_t> get_correction_from_matching(const std::map<uint, uint>&);
+
     PathTable path_table;
 };
 
