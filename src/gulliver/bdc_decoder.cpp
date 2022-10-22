@@ -105,94 +105,43 @@ BDCDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
 
 std::map<uint, uint>
 BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
-    wgt_t min_weight = std::numeric_limits<wgt_t>::max();
-    // First compute the maximum weight.
-    for (uint i = 0; i < detector_array.size(); i++) {
-        uint di = detector_array[i];
-        for (uint j = i+1; j < detector_array.size(); j++) {
-            uint dj = detector_array[j];
-            fp_t raw_weight = path_table[std::make_pair(di, dj)].distance;
-            wgt_t w = (wgt_t) (raw_weight * MWPM_INTEGER_SCALE);
-
-            if (w < min_weight) {
-                min_weight = w;
-            }
-        }
-    }
-
-    typedef std::pair<uint, bool>           vertex_t;
-    typedef std::pair<vertex_t, vertex_t>   edge_t;
+    // We implement the Hungarian algorithm: https://en.wikipedia.org/wiki/Hungarian_algorithm
+    typedef std::pair<uint, bool> vertex_t;
+    typedef std::pair<vertex_t, vertex_t> edge_t;
 
     std::map<vertex_t, vertex_t> bp_matching;
-    std::map<vertex_t, wgt_t> u_table;
+    std::map<vertex_t, wgt_t> potential;
     for (uint d : detector_array) {
         vertex_t v1 = std::make_pair(d, true);
         vertex_t v2 = std::make_pair(d, false);
-        u_table[v1] = min_weight;
-        u_table[v2] = 0;
-    } 
-    
-    bool new_stage = true;
-    std::map<vertex_t, uint8_t> label_table;  
-    std::map<vertex_t, vertex_t> prev;
-    while (bp_matching.size() < 2*detector_array.size()) {
-        // A new stage only begins if a matching had occurred successfully.
-        // At the start of every stage, we reset all data structures.
-        std::set<vertex_t> visited;
-        std::deque<vertex_t> vertices;
-        if (new_stage) {
-#ifdef BDC_DEBUG
-            std::cout << "STAGE START: matching has size "
-                << bp_matching.size() << "\n";
-#endif
-            label_table.clear();
-            visited.clear();
-            // Make initial label for vertex and find initial vertices.
-            for (uint d : detector_array) {
-                vertex_t v1 = std::make_pair(d, true);
-                vertex_t v2 = std::make_pair(d, false);
+        potential[v1] = 0;
+        potential[v2] = 0;
+    }
 
-                if (bp_matching.count(v1)) {
-                    label_table[v1] = FREE;
-                } else {
-#ifdef BDC_DEBUG
-                    std::cout << "\t" << v1.first << " is an S-Boy.\n";
-#endif
-                    label_table[v1] = SBOY;
-                    vertices.push_back(v1);
-                    visited.insert(v1);
-                    prev[v1] = v1;
-                }
-                label_table[v2] = FREE;
-            }
-        } else {
-            for (uint d : detector_array) {
-                vertex_t v = std::make_pair(d, true);
-                if (label_table[v] == SBOY) {
-                    vertices.push_back(v);
-                }
+    while (bp_matching.size() < 2*detector_array.size()) {
+        std::deque<vertex_t> vertices;
+        std::map<vertex_t, vertex_t> prev;
+        std::set<vertex_t> visited;
+        for (uint d : detector_array) {
+            vertex_t v = std::make_pair(d, true);
+            if (!bp_matching.count(v)) {
+                vertices.push_back(v);
+                visited.insert(v);
+                prev[v] = v;
             }
         }
-        new_stage = false;
-
-        // Now, perform DFS and search for a free SINGLE girl.
+        // Perform a BFS to find an augmenting path.
         bool found = false;
         vertex_t end;
-#ifdef BDC_DEBUG
-        std::cout << "BFS:\n";
-#endif
         while (!vertices.empty()) {
-            vertex_t v1 = vertices.front();
-#ifdef BDC_DEBUG
-            std::cout << "\tPopped " << v1.first << "(" << v1.second << ")\n";
-#endif
-            vertices.pop_front();
-            if (label_table[v1] == TGIRL && !bp_matching.count(v1)) {
+            vertex_t v1 = vertices.back();
+            vertices.pop_back();
+            // Found endpoint of augmenting path.
+            if (!found && !bp_matching.count(v1) && !v1.second) {
                 found = true;
                 end = v1;
-                break;
+                continue;
             }
-            // Otherwise, traverse to neighbors.
             for (uint d : detector_array) {
                 if (d == v1.first) {
                     continue;
@@ -201,71 +150,30 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
                 if (visited.count(v2)) {
                     continue;
                 }
-                // Compute slack.
-                std::pair<uint, uint> di_dj = std::make_pair(v1.first, v2.first);
-                fp_t raw_weight = path_table[di_dj].distance;
-                wgt_t w = (wgt_t) (raw_weight * MWPM_INTEGER_SCALE);
-                wgt_t slack = w - u_table[v1] - u_table[v2];
-                // We only go across edges with 0 slack.
-                if (slack != 0) {
+                if (v1.second && (bp_matching.count(v1) && bp_matching[v1] == v2)) {
                     continue;
                 }
-#ifdef BDC_DEBUG
-                std::cout << "\t\tWalking to " << v2.first 
-                    << "(" << v2.second << ")\n";
-#endif
-                // Otherwise, try to label v2.
-                // Rules:
-                // (1) If v1 is SBOY and v2 is FREE and (v1, v2) is not
-                //      in the matching, label v2 as TGIRL.
-                // (2) If v2 is TGIRL and v1 is FREE and (v1, v2) is in
-                //      the matching, label v1 as SBOY.
-                if (label_table[v1] == SBOY 
-                        && label_table[v2] == FREE
-                        && (!bp_matching.count(v1) || bp_matching[v1] != v2))
-                {
-                    label_table[v2] = TGIRL;
-#ifdef BDC_DEBUG
-                    std::cout << "\t\tLabeled v2 as TGIRL.\n";
-#endif 
+                if (!v1.second && (!bp_matching.count(v1) || bp_matching[v1] != v2)) {
+                    continue;
                 }
-                if (label_table[v1] == TGIRL
-                        && label_table[v2] == FREE
-                        && bp_matching.count(v1)
-                        && bp_matching[v1] == v2)
-                {
-                    label_table[v2] = SBOY;
-#ifdef BDC_DEBUG
-                    std::cout << "\t\tLabeled v2 as SBOY.\n";
-#endif 
-                }
-                if (label_table[v2] == FREE) {
+                // Check if edge is tight.
+                auto di_dj = std::make_pair(v1.first, d);
+                fp_t raw_weight = path_table[di_dj].distance;
+                wgt_t w = (wgt_t)(raw_weight * MWPM_INTEGER_SCALE);
+                if (potential[v1] + potential[v2] != w) {
                     continue;
                 }
                 prev[v2] = v1;
-                vertices.push_back(v2);
                 visited.insert(v2);
+                vertices.push_back(v2);
             }
         }
-        // If we succeed in finding a TGIRL, then use prev to 
-        // augment the matching.
+        // If we found an augmenting path, then update
+        // the matching. Otherwise, update the potentials.
         if (found) {
 #ifdef BDC_DEBUG
-            std::cout << "Found augmenting path.\n";
-
-            std::cout << "\t(before)Matching is size " 
-                << bp_matching.size() << ".\n";
-            for (auto mate : bp_matching) {
-                vertex_t v1 = mate.first;
-                vertex_t v2 = mate.second;
-                std::cout << "\t\t" << v1.first << "("
-                            << v1.second << ") --> " 
-                            << v2.first <<  "(" 
-                            << v2.second << ")\n";
-            }
-#endif
-#ifdef BDC_DEBUG
-            std::cout << "\tpath: " << end.first << "(" << end.second << ")";
+            std::cout << "augmenting path found: "
+                << end.first << "(" << end.second << ")";
 #endif
             vertex_t curr = end;
             bool add = true;
@@ -275,90 +183,121 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
                 std::cout << " " << p.first << "(" << p.second << ")";
 #endif
                 if (add) {
-                    bp_matching[curr] = p;
                     bp_matching[p] = curr;
+                    bp_matching[curr] = p;
                 }
                 add = !add;
                 curr = p;
             }
-            new_stage = true;
 #ifdef BDC_DEBUG
             std::cout << "\n";
-            std::cout << "\t(after)Matching is size " 
-                << bp_matching.size() << ".\n";
-            for (auto mate : bp_matching) {
-                vertex_t v1 = mate.first;
-                vertex_t v2 = mate.second;
-                std::cout << "\t\t" << v1.first << "("
-                            << v1.second << ") --> " 
-                            << v2.first <<  "(" 
-                            << v2.second << ")\n";
-            }
 #endif
         } else {
-            // Otherwise, update the slack variables.
-            wgt_t slack_update = std::numeric_limits<wgt_t>::max();
 #ifdef BDC_DEBUG
-            std::cout << "Slack list:\n";
+            std::cout << "Visited:";
+            for (vertex_t v : visited) {
+                std::cout << " " << v.first << "(" << v.second << ")";
+            }
+            std::cout << "\n";
 #endif
+            // Compute potential update.
+            wgt_t update = std::numeric_limits<wgt_t>::max();
             for (uint di : detector_array) {
+                // We only consider edges where the source
+                // was visited and the destination was not.
                 vertex_t vi = std::make_pair(di, true);
-                if (label_table[vi] != SBOY) {
+                if (!visited.count(vi)) {
                     continue;
-                }
-                if (u_table[vi] < slack_update) {
-                    slack_update = u_table[vi];  
                 }
                 for (uint dj : detector_array) {
                     if (di == dj) {
                         continue;
                     }
                     vertex_t vj = std::make_pair(dj, false);
-                    if (label_table[vj] != FREE) {
+                    if (visited.count(vj)) {
                         continue;
                     }
-
-                    fp_t raw_weight = path_table[std::make_pair(di, dj)].distance;
-                    wgt_t w = (wgt_t) (raw_weight * MWPM_INTEGER_SCALE);
-                    wgt_t slack = w - u_table[vi] - u_table[vj];
-#ifdef BDC_DEBUG
-                    std::cout << "\tSlack of " << di << "," << dj << " = " 
-                        << slack << "\n";
-                    std::cout << "\t\tu1[" << di << "] = " << u_table[vi] << "\n";
-                    std::cout << "\t\tu2[" << dj << "] = " << u_table[vj] << "\n";
-#endif
-                    if (slack < slack_update) {
-                        slack_update = slack;
+                    auto di_dj = std::make_pair(di, dj);
+                    fp_t raw_weight = path_table[di_dj].distance;
+                    wgt_t w = (wgt_t)(raw_weight * MWPM_INTEGER_SCALE);
+                    wgt_t slack = w - potential[vi] - potential[vj];
+                    if (slack < update) {
+                        update = slack;
                     }
                 }
             }
-
-#ifdef BDC_DEBUG
-            std::cout << "Made slack update: " << slack_update << "\n";
-#endif
             for (uint d : detector_array) {
                 vertex_t v1 = std::make_pair(d, true);
-                if (label_table[v1] == SBOY) {
-                    u_table[v1] += slack_update;
-                }
                 vertex_t v2 = std::make_pair(d, false);
-                if (label_table[v2] == TGIRL) {
-                    u_table[v2] -= slack_update;
+                if (visited.count(v1)) {
+                    potential[v1] += update;
+                }
+                if (visited.count(v2)) {
+                    potential[v2] -= update;
                 }
             }
-            new_stage = true;
+#ifdef BDC_DEBUG
+            // Check that invariants are not violated.       
+            for (auto match : bp_matching) {
+                vertex_t v1 = match.first;
+                vertex_t v2 = match.second;
+                auto di_dj = std::make_pair(v1.first, v2.first);
+                fp_t raw_weight = path_table[di_dj].distance;
+                wgt_t w = (wgt_t)(raw_weight * MWPM_INTEGER_SCALE);
+                wgt_t slack = w - potential[v1] - potential[v2];
+                if (slack != 0) {
+                    std::cout << "NOTE: TIGHT MATCHING INVARIANT VIOLATED.\n";
+                    break;
+                }
+                if (slack < 0) {
+                    std::cout << "NOTE: POTENTIAL INVARIANT VIOLATED.\n";
+                    break;
+                }
+            }
+            // Check which edges are available.
+            std::cout << "Available edges:\n";
+            for (uint di : detector_array) {
+                vertex_t vi = std::make_pair(di, true);
+                for (uint dj : detector_array) {
+                    if (di == dj) {
+                        continue;
+                    }
+                    vertex_t vj = std::make_pair(dj, false);
+
+                    auto di_dj = std::make_pair(di, dj);
+                    fp_t raw_weight = path_table[di_dj].distance;
+                    wgt_t w = (wgt_t)(raw_weight * MWPM_INTEGER_SCALE);
+                    wgt_t slack = w - potential[vi] - potential[vj];
+
+                    if (slack == 0) {
+                        std::cout << "\t" << vi.first << "(" << vi.second << ") , "
+                            << vj.first << "(" << vj.second << ")\n";
+                    }
+                }
+            }
+#endif
         }
     }
-    // Finally, extract a matching from the bipartite matching.
+#ifdef BDC_DEBUG
+    std::cout << "matching:\n";
+    fp_t weight = 0.0;
+#endif
+    // Translate result into a matching of the original graph.
     std::map<uint, uint> matching;
-    for (auto mate : bp_matching) {
-        vertex_t vi = mate.first;
-        vertex_t vj = mate.second;
-        if (vi.second) {
-            matching[vi.first] = vj.first;
-            matching[vj.first] = vi.first;
-        }
+    for (auto match : bp_matching) {
+        vertex_t v1 = match.first;
+        vertex_t v2 = match.second;
+#ifdef BDC_DEBUG
+        std::cout << "\t" << v1.first << "(" << v1.second << ") --> "
+            << v2.first << "(" << v2.second << ")\n";
+        auto di_dj = std::make_pair(v1.first, v2.first);
+        weight += path_table[di_dj].distance;
+#endif
+        matching[v1.first] = v2.first;
     }
+#ifdef BDC_DEBUG
+    std::cout << "\tweight = " << weight << "\n";
+#endif
     return matching;
 }
 
