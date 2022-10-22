@@ -38,7 +38,8 @@ GeneratedCircuit _finish_surface_code_circuit(
     const std::vector<surface_coord> &z_order,
     const std::vector<surface_coord> x_observable,
     const std::vector<surface_coord> z_observable,
-    bool is_memory_x) {
+    bool is_memory_x) 
+{
     if (params.rounds < 1) {
         throw std::invalid_argument("Need rounds >= 1.");
     }

@@ -54,9 +54,12 @@ CircuitGenParameters::append_begin_round_tick(
         Circuit &circuit, const std::vector<uint32_t> &data_qubits) 
 const {
     circuit.append_op("TICK", {});
-    double p = get_before_round_data_depolarization();
-    if (p > 0) {
-        circuit.append_op("DEPOLARIZE1", data_qubits, p);
+    for (uint32_t d : data_qubits) {
+        std::vector<uint32_t> singleton{d};
+        double p = get_before_round_data_depolarization();
+        if (p > 0) {
+            circuit.append_op("DEPOLARIZE1", singleton, p);
+        }
     }
 }
 
@@ -65,9 +68,12 @@ CircuitGenParameters::append_unitary_1(
     Circuit &circuit, const std::string &name, const std::vector<uint32_t> targets)
 const {
     circuit.append_op(name, targets);
-    double p = get_after_clifford_depolarization();
-    if (p > 0) {
-        circuit.append_op("DEPOLARIZE1", targets, p);
+    for (uint32_t t : targets) {
+        std::vector<uint32_t> singleton{t};
+        double p = get_after_clifford_depolarization();
+        if (p > 0) {
+            circuit.append_op("DEPOLARIZE1", singleton, p);
+        }
     }
 }
 
@@ -76,9 +82,12 @@ CircuitGenParameters::append_unitary_2(
     Circuit &circuit, const std::string &name, const std::vector<uint32_t> targets)
 const {
     circuit.append_op(name, targets);
-    double p = get_after_clifford_depolarization();
-    if (p > 0) {
-        circuit.append_op("DEPOLARIZE2", targets, p);
+    for (uint32_t i = 0; i < targets.size(); i += 2) {
+        std::vector<uint32_t> cx{targets[i], targets[i+1]};
+        double p = get_after_clifford_depolarization();
+        if (p > 0) {
+            circuit.append_op("DEPOLARIZE2", cx, p);
+        }
     }
 }
 
@@ -87,16 +96,22 @@ CircuitGenParameters::append_reset(
         Circuit &circuit, const std::vector<uint32_t> targets, char basis)
 const {
     circuit.append_op(std::string("R") + basis, targets);
-    append_anti_basis_error(circuit, targets, 
-            get_after_reset_flip_probability(), basis);
+    for (uint32_t t : targets) {
+        std::vector<uint32_t> singleton{t};
+        append_anti_basis_error(circuit, singleton, 
+                get_after_reset_flip_probability(), basis);
+    }
 }
 
 void 
 CircuitGenParameters::append_measure(
         Circuit &circuit, const std::vector<uint32_t> targets, char basis)
 const {
-    append_anti_basis_error(circuit, targets,
-            get_before_measure_flip_probability(), basis);
+    for (uint32_t t : targets) {
+        std::vector<uint32_t> singleton{t};
+        append_anti_basis_error(circuit, singleton, 
+                get_before_measure_flip_probability(), basis);
+    }
     circuit.append_op(std::string("M") + basis, targets);
 }
 
@@ -104,11 +119,17 @@ void
 CircuitGenParameters::append_measure_reset(
     Circuit &circuit, const std::vector<uint32_t> targets, char basis)
 const {
-    append_anti_basis_error(circuit, targets,
-            get_before_measure_flip_probability(), basis);
+    for (uint32_t t : targets) {
+        std::vector<uint32_t> singleton{t};
+        append_anti_basis_error(circuit, singleton, 
+                get_before_measure_flip_probability(), basis);
+    }
     circuit.append_op(std::string("MR") + basis, targets);
-    append_anti_basis_error(circuit, targets, 
-            get_after_reset_flip_probability(), basis);
+    for (uint32_t t : targets) {
+        std::vector<uint32_t> singleton{t};
+        append_anti_basis_error(circuit, singleton, 
+                get_after_reset_flip_probability(), basis);
+    }
 }
 
 double
