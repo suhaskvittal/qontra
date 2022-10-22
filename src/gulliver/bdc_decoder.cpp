@@ -135,10 +135,10 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
     bool new_stage = true;
     std::map<vertex_t, uint8_t> label_table;  
     std::map<vertex_t, vertex_t> prev;
-    std::set<vertex_t> visited;
     while (bp_matching.size() < 2*detector_array.size()) {
         // A new stage only begins if a matching had occurred successfully.
         // At the start of every stage, we reset all data structures.
+        std::set<vertex_t> visited;
         std::deque<vertex_t> vertices;
         if (new_stage) {
 #ifdef BDC_DEBUG
@@ -146,7 +146,6 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
                 << bp_matching.size() << "\n";
 #endif
             label_table.clear();
-            prev.clear();
             visited.clear();
             // Make initial label for vertex and find initial vertices.
             for (uint d : detector_array) {
@@ -180,14 +179,14 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
         bool found = false;
         vertex_t end;
 #ifdef BDC_DEBUG
-        std::cout << "DFS:\n";
+        std::cout << "BFS:\n";
 #endif
         while (!vertices.empty()) {
-            vertex_t v1 = vertices.back();
+            vertex_t v1 = vertices.front();
 #ifdef BDC_DEBUG
             std::cout << "\tPopped " << v1.first << "(" << v1.second << ")\n";
 #endif
-            vertices.pop_back();
+            vertices.pop_front();
             if (label_table[v1] == TGIRL && !bp_matching.count(v1)) {
                 found = true;
                 end = v1;
@@ -325,6 +324,8 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
 #ifdef BDC_DEBUG
                     std::cout << "\tSlack of " << di << "," << dj << " = " 
                         << slack << "\n";
+                    std::cout << "\t\tu1[" << di << "] = " << u_table[vi] << "\n";
+                    std::cout << "\t\tu2[" << dj << "] = " << u_table[vj] << "\n";
 #endif
                     if (slack < slack_update) {
                         slack_update = slack;
