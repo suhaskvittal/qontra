@@ -3,18 +3,18 @@
  *  date:   2 October 2022
  * */
 
-#include "gulliver/bdc_decoder.h"
+#include "gulliver/trial_decoder.h"
 #include <limits>
 
 namespace qrc {
 namespace gulliver {
 
-BDCDecoder::BDCDecoder(const stim::Circuit& circ)
+TrialDecoder::TrialDecoder(const stim::Circuit& circ)
     :MWPMDecoder(circ)
 {}
 
 DecoderShotResult
-BDCDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
+TrialDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     // Log start time.
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
@@ -40,7 +40,7 @@ BDCDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
 #ifdef BDC_DEBUG
     std::cout << "===========================================\n";
 #endif
-    auto matching = bdc_mwpm(detector_list);
+    auto matching = hungarian(detector_list);
 
     auto correction = get_correction_from_matching(matching);
     bool is_error = is_logical_error(correction, syndrome, 
@@ -104,10 +104,9 @@ BDCDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
 }
 
 std::map<uint, uint>
-BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
+TrialDecoder::hungarian(const std::vector<uint>& detector_array) {
     // We implement the Hungarian algorithm: https://en.wikipedia.org/wiki/Hungarian_algorithm
     typedef std::pair<uint, bool> vertex_t;
-    typedef std::pair<vertex_t, vertex_t> edge_t;
 
     std::map<vertex_t, vertex_t> bp_matching;
     std::map<vertex_t, wgt_t> potential;
@@ -119,13 +118,13 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
     }
 
     while (bp_matching.size() < 2*detector_array.size()) {
-        std::deque<vertex_t> vertices;
+        std::deque<vertex_t> vertex_queue;
         std::map<vertex_t, vertex_t> prev;
         std::set<vertex_t> visited;
         for (uint d : detector_array) {
             vertex_t v = std::make_pair(d, true);
             if (!bp_matching.count(v)) {
-                vertices.push_back(v);
+                vertex_queue.push_back(v);
                 visited.insert(v);
                 prev[v] = v;
             }
@@ -133,9 +132,9 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
         // Perform a BFS to find an augmenting path.
         bool found = false;
         vertex_t end;
-        while (!vertices.empty()) {
-            vertex_t v1 = vertices.back();
-            vertices.pop_back();
+        while (!vertex_queue.empty()) {
+            vertex_t v1 = vertex_queue.back();
+            vertex_queue.pop_back();
             // Found endpoint of augmenting path.
             if (!found && !bp_matching.count(v1) && !v1.second) {
                 found = true;
@@ -150,10 +149,14 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
                 if (visited.count(v2)) {
                     continue;
                 }
-                if (v1.second && (bp_matching.count(v1) && bp_matching[v1] == v2)) {
+                if (v1.second && (bp_matching.count(v1) 
+                    && bp_matching[v1] == v2)) 
+                {
                     continue;
                 }
-                if (!v1.second && (!bp_matching.count(v1) || bp_matching[v1] != v2)) {
+                if (!v1.second && 
+                    (!bp_matching.count(v1) || bp_matching[v1] != v2)) 
+                {
                     continue;
                 }
                 // Check if edge is tight.
@@ -165,7 +168,7 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
                 }
                 prev[v2] = v1;
                 visited.insert(v2);
-                vertices.push_back(v2);
+                vertex_queue.push_back(v2);
             }
         }
         // If we found an augmenting path, then update
@@ -296,7 +299,7 @@ BDCDecoder::bdc_mwpm(const std::vector<uint>& detector_array) {
         matching[v1.first] = v2.first;
     }
 #ifdef BDC_DEBUG
-    std::cout << "\tweight = " << weight << "\n";
+    std::cout << "\tweight = " << weight*0.25 << "\n";
 #endif
     return matching;
 }
