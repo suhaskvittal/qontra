@@ -174,17 +174,10 @@ TrialDecoder::hungarian(const std::vector<uint>& detector_array) {
         // If we found an augmenting path, then update
         // the matching. Otherwise, update the potentials.
         if (found) {
-#ifdef BDC_DEBUG
-            std::cout << "augmenting path found: "
-                << end.first << "(" << end.second << ")";
-#endif
             vertex_t curr = end;
             bool add = true;
             while (prev[curr] != curr) {
                 vertex_t p = prev[curr];
-#ifdef BDC_DEBUG
-                std::cout << " " << p.first << "(" << p.second << ")";
-#endif
                 if (add) {
                     bp_matching[p] = curr;
                     bp_matching[curr] = p;
@@ -192,17 +185,7 @@ TrialDecoder::hungarian(const std::vector<uint>& detector_array) {
                 add = !add;
                 curr = p;
             }
-#ifdef BDC_DEBUG
-            std::cout << "\n";
-#endif
         } else {
-#ifdef BDC_DEBUG
-            std::cout << "Visited:";
-            for (vertex_t v : visited) {
-                std::cout << " " << v.first << "(" << v.second << ")";
-            }
-            std::cout << "\n";
-#endif
             // Compute potential update.
             wgt_t update = std::numeric_limits<wgt_t>::max();
             for (uint di : detector_array) {
@@ -239,68 +222,15 @@ TrialDecoder::hungarian(const std::vector<uint>& detector_array) {
                     potential[v2] -= update;
                 }
             }
-#ifdef BDC_DEBUG
-            // Check that invariants are not violated.       
-            for (auto match : bp_matching) {
-                vertex_t v1 = match.first;
-                vertex_t v2 = match.second;
-                auto di_dj = std::make_pair(v1.first, v2.first);
-                fp_t raw_weight = path_table[di_dj].distance;
-                wgt_t w = (wgt_t)(raw_weight * MWPM_INTEGER_SCALE);
-                wgt_t slack = w - potential[v1] - potential[v2];
-                if (slack != 0) {
-                    std::cout << "NOTE: TIGHT MATCHING INVARIANT VIOLATED.\n";
-                    break;
-                }
-                if (slack < 0) {
-                    std::cout << "NOTE: POTENTIAL INVARIANT VIOLATED.\n";
-                    break;
-                }
-            }
-            // Check which edges are available.
-            std::cout << "Available edges:\n";
-            for (uint di : detector_array) {
-                vertex_t vi = std::make_pair(di, true);
-                for (uint dj : detector_array) {
-                    if (di == dj) {
-                        continue;
-                    }
-                    vertex_t vj = std::make_pair(dj, false);
-
-                    auto di_dj = std::make_pair(di, dj);
-                    fp_t raw_weight = path_table[di_dj].distance;
-                    wgt_t w = (wgt_t)(raw_weight * MWPM_INTEGER_SCALE);
-                    wgt_t slack = w - potential[vi] - potential[vj];
-
-                    if (slack == 0) {
-                        std::cout << "\t" << vi.first << "(" << vi.second << ") , "
-                            << vj.first << "(" << vj.second << ")\n";
-                    }
-                }
-            }
-#endif
         }
     }
-#ifdef BDC_DEBUG
-    std::cout << "matching:\n";
-    fp_t weight = 0.0;
-#endif
     // Translate result into a matching of the original graph.
     std::map<uint, uint> matching;
     for (auto match : bp_matching) {
         vertex_t v1 = match.first;
         vertex_t v2 = match.second;
-#ifdef BDC_DEBUG
-        std::cout << "\t" << v1.first << "(" << v1.second << ") --> "
-            << v2.first << "(" << v2.second << ")\n";
-        auto di_dj = std::make_pair(v1.first, v2.first);
-        weight += path_table[di_dj].distance;
-#endif
         matching[v1.first] = v2.first;
     }
-#ifdef BDC_DEBUG
-    std::cout << "\tweight = " << weight*0.25 << "\n";
-#endif
     return matching;
 }
 

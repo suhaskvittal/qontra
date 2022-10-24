@@ -28,6 +28,7 @@ public:
     DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
 private:
     std::map<uint, uint> hungarian(const std::vector<uint>&);
+    std::map<uint, uint> blossom(const std::vector<uint>&);
 };
 
 }   // gulliver
