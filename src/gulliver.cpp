@@ -24,6 +24,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
     bfu_hw_threshold(params.bfu_hw_threshold),
     n_rounds(circuit.count_detectors()/n_detectors_per_round),
     main_clock_frequency(params.main_clock_frequency),
+    dram_clock_frequency(params.dram_clock_frequency),
     // Heap initialized data (to be deleted)
     dram(nullptr),
     memory_event_table(nullptr)
@@ -139,8 +140,13 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
 
         uint64_t n_cycles = 0;
         uint round = 1;
+
+        fp_t min_clock_frequency = main_clock_frequency < dram_clock_frequency
+                                    ? main_clock_frequency : dram_clock_frequency;
+        uint32_t main_tpc = (uint32_t) (main_clock_frequency / min_clock_frequency);
+        uint32_t dram_tpc = (uint32_t) (dram_clock_frequency / min_clock_frequency);
         while (!simulator->is_idle()) {
-            fp_t t = n_cycles / main_clock_frequency * 1e9;
+            fp_t t = n_cycles / min_clock_frequency * 1e9;
             if (t >= 1000) {
                 if (round < n_rounds) {
                     simulator->sig_end_round();
@@ -150,8 +156,12 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
                     break;
                 }
             }
-            dram->ClockTick();
-            simulator->tick();
+            for (uint32_t i = 0; i < dram_tpc; i++) {
+                dram->ClockTick();
+            }
+            for (uint32_t i = 0; i < main_tpc; i++) {
+                simulator->tick();
+            }
             n_cycles++;
         }
         if (round < n_rounds) {

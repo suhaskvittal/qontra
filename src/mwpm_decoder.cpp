@@ -105,9 +105,6 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     for (uint vi = 0; vi < n_vertices; vi++) {
         uint vj = pm.GetMatch(vi);
         uint di = detector_list[vi];
-        if (di != BOUNDARY_INDEX) {
-            continue;
-        }
         uint dj = detector_list[vj];
         // Update matching data structure.
         matching[di] = dj;
