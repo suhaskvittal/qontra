@@ -19,9 +19,9 @@
 #include <vector>
 #include <utility>
 
-#define MATCHING_STACK
+//#define MATCHING_STACK
 //#define MATCHING_FIFO
-//#define MATCHING_PQ
+#define MATCHING_PQ
 
 //#define GSIM_DEBUG
 #define FILTER_CUTOFF 10
@@ -109,7 +109,8 @@ protected:
         uint next_unmatched_index;
         
         bool operator<(const DequeEntry& other) const {
-            return matching_weight > other.matching_weight;
+            return matching_weight/running_matching.size() 
+                > other.matching_weight/other.running_matching.size();
         }
     };
 
