@@ -19,6 +19,10 @@
 #include <vector>
 #include <utility>
 
+#define MATCHING_STACK
+//#define MATCHING_FIFO
+//#define MATCHING_PQ
+
 //#define GSIM_DEBUG
 #define FILTER_CUTOFF 10
 #define WINDOW_SIZE 100
@@ -99,10 +103,14 @@ protected:
         bool valid;
     };
 
-    struct StackEntry {
+    struct DequeEntry {
         std::map<uint, uint> running_matching;
         fp_t matching_weight;
         uint next_unmatched_index;
+        
+        bool operator<(const DequeEntry& other) const {
+            return matching_weight > other.matching_weight;
+        }
     };
 
     struct PDScoreboardEntry {
@@ -113,7 +121,7 @@ protected:
 
     struct BFUPipelineLatch {
         std::stack<std::pair<uint, fp_t>> proposed_matches;
-        StackEntry base_entry;
+        DequeEntry base_entry;
         bool stalled;
         bool valid;
     };
@@ -133,11 +141,15 @@ protected:
     uint major_detector_register;
     std::map<uint, uint> minor_detector_table;
 // BFU
-    std::stack<StackEntry> hardware_stack;
+#ifdef MATCHING_PQ
+    std::priority_queue<DequeEntry> hardware_deque;
+#else
+    std::deque<DequeEntry> hardware_deque;
+#endif
     // Size of latches is fetch_width by (hw_threshold-1)
     std::vector<std::vector<BFUPipelineLatch>> bfu_pipeline_latches;   
     // Replacement policy
-    StackEntry best_matching_register;
+    DequeEntry best_matching_register;
     std::deque<addr_t> replacement_queue;
     // Global state machine
     State state; 

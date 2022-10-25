@@ -9,6 +9,40 @@
 namespace qrc {
 namespace gulliver {
 
+Blossom::Blossom(uint node_id)
+    :node_id(node_id),
+    is_blossom(false),
+    label(Label::S),
+    bfwdptrs(),
+    bbwdptr(nullptr),
+    is_visited(false),
+    is_matched(false),
+    mateptr(nullptr),
+    prevptr(nullptr),
+    ownerptr(this),
+    u(0),
+    z(0)
+{}
+
+bool
+Blossom::contains(Blossom * b) {
+    for (Blossom * x : bfwdptrs) {
+        if (x == b) {
+            return true;
+        } else if (x->is_blossom && x->contains(b)) {
+            return true; 
+        }
+    }
+    return false;
+}
+
+void
+Blossom::reset() {
+    is_visited = false;
+    prevptr = nullptr;
+    ownerptr = this;
+}
+
 TrialDecoder::TrialDecoder(const stim::Circuit& circ)
     :MWPMDecoder(circ)
 {}
@@ -232,6 +266,107 @@ TrialDecoder::hungarian(const std::vector<uint>& detector_array) {
         matching[v1.first] = v2.first;
     }
     return matching;
+}
+
+std::map<uint, uint>
+TrialDecoder::blossom(const std::vector<uint>& detector_array) {
+
+    // Initialize a Blossom data structure for each vertex.
+    std::map<uint, Blossom*> blossoms;
+    for (uint d : detector_array) {
+        Blossom * b = new Blossom(d);
+        blossoms[d] = b;
+    }
+    // Start search.
+    std::map<uint, uint> matching;
+    while (matching.size() < detector_array.size()) {
+        std::deque<Blossom*> queue;
+        for (auto pair : blossoms) {
+            Blossom * b = pair.second;
+            if (b->bbwdptr) {   // This is a subblossom.
+                continue;
+            }
+            if (b->is_matched) {
+                b->label = Blossom::Label::Free;
+            } else {
+                b->label = Blossom::Label::S;
+                queue.push_back(b);
+            }
+            b->reset();
+        }
+
+        Blossom * src1 = nullptr, *src2 = nullptr;
+        bool found = false;
+        while (!queue.empty()) {
+            Blossom * b1 = queue.front();
+            uint d1 = b1->node_id;
+            queue.pop_front();
+            for (auto pair : blossoms) {
+                uint d2 = pair.first; 
+                Blossom * b2 = pair.second;
+                if (b2->is_visited) {
+                    continue;
+                }
+                // Check if the edge has zero slack.
+                // Compute weight.
+                auto di_dj = std::make_pair(d1, d2);
+                fp_t raw_weight = path_table[di_dj].distance;
+                wgt_t w = (wgt_t)(raw_weight * MWPM_INTEGER_SCALE);
+                // Compute z.
+                wgt_t z = 0;
+                for (auto pair : blossoms) {
+                    Blossom * b = pair.second;
+                    if (b->contains(b1) && b->contains(b2)) {
+                        z += b->z;
+                    }
+                }
+                wgt_t slack = w - b1->u - b2->u - z;
+                if (slack != 0) {
+                    continue;
+                }
+
+
+                if (b2->label == Blossom::Label::Free) {
+                    // This has a mate. 
+                    auto b3 = b2->mateptr;
+                    b2->label = Blossom::Label::T;
+                    b3->label = Blossom::Label::S;
+                    b2->is_visited = true;
+                    b3->is_visited = true;
+                    queue.push_front(b3);
+                    continue;
+                } else if (b2->label == Blossom::Label::T) {
+                    continue;
+                }
+                // If Label = S.
+                if (b1->ownerptr != b2->ownerptr) {
+                    src1 = b1;
+                    src2 = b2;
+                    found = true;
+                    goto bfs_done;
+                } 
+                // Otherwise, we need to make a blossom.
+                // First, find the root of blossom.
+                Blossom * root;
+                std::set<Blossom*> marked;
+                Blossom * curr = b1;
+                while (curr != nullptr) {
+                    marked.insert(curr); 
+                    curr = curr->prevptr;
+                }
+                curr = b2;
+                while (curr != nullptr) {
+                    if (marked.count(curr)) {
+                        root = curr;
+                        break;
+                    }
+                    curr = curr->prevptr;
+                }
+            }
+        }
+bfs_done:
+        return matching;
+    }
 }
 
 }   // gulliver

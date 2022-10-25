@@ -29,7 +29,7 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
     ccomp_detector_register(0),
     major_detector_register(0),
     minor_detector_table(),
-    hardware_stack(),
+    hardware_deque(),
     bfu_pipeline_latches(params.bfu_fetch_width, 
             std::vector<BFUPipelineLatch>(params.bfu_hw_threshold-1)),
     best_matching_register(),
@@ -382,10 +382,14 @@ GulliverSimulator::tick_bfu_compute(uint stage) {
         }
         // Push this result onto the stack if there is a next unmatched
         // detector.
-        StackEntry ei = {matching, matching_weight, next_unmatched_index};
+        DequeEntry ei = {matching, matching_weight, next_unmatched_index};
         BFUPipelineLatch& next = bfu_pipeline_latches[f][stage+1];
         if (next_unmatched_index < detector_vector_register.size()) {
-            hardware_stack.push(ei);
+#ifdef MATCHING_PQ
+            hardware_deque.push(ei);
+#else
+            hardware_deque.push_back(ei);
+#endif
             // Update next latch.
             if (stage < bfu_hw_threshold-2) {
                 next.stalled = false;
@@ -414,7 +418,7 @@ GulliverSimulator::tick_bfu_fetch() {
         // we can support many parallel reads.
 
         BFUPipelineLatch& next = bfu_pipeline_latches[f][0];
-        if (hardware_stack.empty()) {
+        if (hardware_deque.empty()) {
             next.stalled = true;
             continue;
         }
@@ -423,7 +427,13 @@ GulliverSimulator::tick_bfu_fetch() {
         bool stall_next = false;
 
         std::stack<std::pair<uint, fp_t>> proposed_matches;
-        StackEntry ei = hardware_stack.top();
+#ifdef MATCHING_STACK
+        DequeEntry ei = hardware_deque.back();
+#elifdef MATCHING_FIFO
+        DequeEntry ei = hardware_deque.front();
+#else
+        DequeEntry ei = hardware_deque.top();
+#endif
         uint di = detector_vector_register[ei.next_unmatched_index];
 
         std::vector<std::pair<uint, fp_t>> match_list;
@@ -477,7 +487,13 @@ GulliverSimulator::tick_bfu_fetch() {
         next.base_entry = ei;
         next.stalled = stall_next;
         if (!stall_next) {
-            hardware_stack.pop();
+#ifdef MATCHING_STACK
+            hardware_deque.pop_back();
+#elifdef MATCHING_FIFO
+            hardware_deque.pop_front();
+#else
+            hardware_deque.pop();
+#endif
         }
     }
 }
@@ -564,7 +580,11 @@ GulliverSimulator::update_state() {
         std::cout << "BFU\n";
 #endif
         state = State::bfu;
-        hardware_stack.push((StackEntry) {std::map<uint, uint>(), 0.0, 0});
+#ifdef MATCHING_PQ
+        hardware_deque.push((DequeEntry) {std::map<uint, uint>(), 0.0, 0});
+#else
+        hardware_deque.push_back((DequeEntry) {std::map<uint, uint>(), 0.0, 0});
+#endif
         break;
     case State::bfu:
 #ifdef GSIM_DEBUG
@@ -592,9 +612,13 @@ GulliverSimulator::clear() {
     major_detector_register = 0;
     minor_detector_table.clear();
 
-    while (!hardware_stack.empty()) {
-        hardware_stack.pop();
+#ifdef MATCHING_PQ
+    while (!hardware_deque.empty()) {
+        hardware_deque.pop();
     }
+#else
+    hardware_deque.clear();
+#endif
     for (uint f = 0; f < bfu_fetch_width; f++) {
         for (auto& latch : bfu_pipeline_latches[f]) {
             latch.stalled = false;

@@ -22,6 +22,30 @@
 namespace qrc {
 namespace gulliver {
 
+class Blossom {
+public:
+    Blossom(uint node_id);
+
+    bool contains(Blossom*);
+    void reset(void);
+
+    enum class Label {S, T, Free};
+
+    uint node_id;
+    bool is_blossom; 
+    Label label;
+    std::vector<Blossom*> bfwdptrs;
+    Blossom * bbwdptr;
+    bool is_visited;
+    bool is_matched;
+    Blossom * mateptr;
+    Blossom * prevptr;
+    Blossom * ownerptr;
+
+    wgt_t u;
+    wgt_t z;
+}; 
+
 class TrialDecoder : public MWPMDecoder {
 public:
     TrialDecoder(const stim::Circuit&);
