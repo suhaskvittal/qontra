@@ -77,11 +77,11 @@ const {
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
         double p;
-        if (unitary1_table.count(d)) {
-            p = unitary1_table[d];
+        if (unitary1_table.count(t)) {
+            p = unitary1_table[t];
         } else {
             p = get_before_round_data_depolarization();
-            unitary1_table[d] = p;
+            unitary1_table[t] = p;
         }
         if (p > 0) {
             circuit.append_op("DEPOLARIZE1", singleton, p);
