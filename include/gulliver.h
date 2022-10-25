@@ -40,6 +40,7 @@ struct GulliverParams {
     std::string log_output_directory;
 
     fp_t main_clock_frequency;   // in Hz
+    fp_t dram_clock_frequency;
 };
 
 class Gulliver : public MWPMDecoder {
@@ -68,6 +69,7 @@ private:
     uint bfu_hw_threshold;
     uint n_rounds;
     fp_t main_clock_frequency;
+    fp_t dram_clock_frequency;
     // Delete later.
     dramsim3::MemorySystem * dram;
     std::map<addr_t, bool> * memory_event_table;

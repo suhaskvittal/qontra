@@ -66,10 +66,6 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
         uint n_observables = decoder_p->circuit.count_observables();
 
         for (uint32_t i = 0; i < shots_this_round; i++) {
-            if (i % 1000 == 0) {
-                std::cout << "Batch " << bn << ", shot " << i 
-                    << "(" << sn << ")\n";
-            }
             auto syndrome = 
                 _to_vector(sample_buffer[i], n_detectors, n_observables);
             uint hw = 

@@ -4,6 +4,7 @@
 
 #include "stim/gen/circuit_gen_params.h"
 #include <random>
+#include <map>
 
 #include "stim/arg_parse.h"
 
@@ -14,6 +15,11 @@ static std::mt19937_64 CIRCGEN_RNG(seed);
 
 #define K(m,s)  ( ((m)*(m)) / ((s)*(s)) )
 #define T(m,s)  ( ((s)*(s)) / (m) )
+
+static std::map<uint32_t, double> unitary1_table;
+static std::map<std::vector<uint32_t>, double> unitary2_table;
+static std::map<uint32_t, double> premeas_table;
+static std::map<uint32_t, double> postres_table;
 
 void append_anti_basis_error(Circuit &circuit, 
         const std::vector<uint32_t> &targets, double p, char basis) 
@@ -70,7 +76,13 @@ const {
     circuit.append_op(name, targets);
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
-        double p = get_after_clifford_depolarization();
+        double p;
+        if (unitary1_table.count(d)) {
+            p = unitary1_table[d];
+        } else {
+            p = get_before_round_data_depolarization();
+            unitary1_table[d] = p;
+        }
         if (p > 0) {
             circuit.append_op("DEPOLARIZE1", singleton, p);
         }
@@ -84,7 +96,13 @@ const {
     circuit.append_op(name, targets);
     for (uint32_t i = 0; i < targets.size(); i += 2) {
         std::vector<uint32_t> cx{targets[i], targets[i+1]};
-        double p = get_after_clifford_depolarization();
+        double p;
+        if (unitary2_table.count(cx)) {
+            p = unitary2_table[cx];
+        } else {
+            p = get_after_clifford_depolarization();
+            unitary2_table[cx] = p;
+        }
         if (p > 0) {
             circuit.append_op("DEPOLARIZE2", cx, p);
         }
@@ -98,8 +116,14 @@ const {
     circuit.append_op(std::string("R") + basis, targets);
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
-        append_anti_basis_error(circuit, singleton, 
-                get_after_reset_flip_probability(), basis);
+        double p;
+        if (premeas_table.count(t)) {
+            p = premeas_table[t];
+        } else {
+            p = get_after_reset_flip_probability();
+            premeas_table[t] = p;
+        }
+        append_anti_basis_error(circuit, singleton, p, basis);
     }
 }
 
@@ -109,6 +133,13 @@ CircuitGenParameters::append_measure(
 const {
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
+        double p;
+        if (postres_table.count(t)) {
+            p = postres_table[t];
+        } else {
+            p = get_before_measure_flip_probability();
+            postres_table[t] = p;
+        }
         append_anti_basis_error(circuit, singleton, 
                 get_before_measure_flip_probability(), basis);
     }
