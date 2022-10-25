@@ -7,8 +7,10 @@
 
 namespace qrc {
 
-MWPMDecoder::MWPMDecoder(const stim::Circuit& circ) 
-:Decoder(circ), path_table()
+MWPMDecoder::MWPMDecoder(const stim::Circuit& circ, uint max_detector) 
+    :Decoder(circ),
+    path_table(),
+    max_detector(max_detector)
 {
     path_table = compute_path_table(graph);
 }
@@ -48,6 +50,7 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     // Build Boost graph for MWPM.
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
+
     // Note to self: fault ids in pymatching are the frames in DecodingGraph.
     // Log start time.
 #ifdef __APPLE__
@@ -62,6 +65,9 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     std::vector<uint> detector_list;
     for (uint di = 0; di < n_detectors; di++) {
         auto syndrome_bit = syndrome[di];
+        if (di > max_detector) {
+            syndrome_bit = 0;
+        }
         if (syndrome_bit) {
             syndrome_is_even ^= 0x1;
             detector_list.push_back(di);
@@ -99,7 +105,7 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     for (uint vi = 0; vi < n_vertices; vi++) {
         uint vj = pm.GetMatch(vi);
         uint di = detector_list[vi];
-        if (di != BOUNDARY_INDEX && di >= match_detectors_less_than) {
+        if (di != BOUNDARY_INDEX) {
             continue;
         }
         uint dj = detector_list[vj];

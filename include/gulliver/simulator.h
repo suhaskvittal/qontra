@@ -19,9 +19,9 @@
 #include <vector>
 #include <utility>
 
-#define MATCHING_STACK
+//#define MATCHING_STACK
 //#define MATCHING_FIFO
-//#define MATCHING_PQ
+#define MATCHING_PQ
 
 //#define GSIM_DEBUG
 #define FILTER_CUTOFF 10
