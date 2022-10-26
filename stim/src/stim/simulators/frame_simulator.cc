@@ -58,8 +58,15 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       tmp_storage(batch_size),
       last_correlated_error_occurred(batch_size),
       sweep_table(0, batch_size),
-      rng(rng) {
-}
+      rng(rng),
+      // New variables
+      n_errors(batch_size, 0),
+      n_x_errors(batch_size, 0),
+      n_y_errors(batch_size, 0),
+      n_z_errors(batch_size, 0),
+      n_dp1_errors(batch_size, 0),
+      n_dp2_errors(batch_size, 0)
+{}
 
 void FrameSimulator::xor_control_bit_into(uint32_t control, simd_bits_range_ref target) {
     uint32_t raw_control = control & ~(TARGET_RECORD_BIT | TARGET_SWEEP_BIT);
@@ -431,6 +438,12 @@ void FrameSimulator::DEPOLARIZE1(const OperationData &target_data) {
         auto t = targets[target_index];
         x_table[t.data][sample_index] ^= p & 1;
         z_table[t.data][sample_index] ^= p & 2;
+
+        // Update error counts.
+        n_errors[sample_index]++;
+        n_x_errors[sample_index] += p & 1;
+        n_z_errors[sample_index] += (p & 2) >> 1;
+        n_dp1_errors[sample_index]++;
     });
 }
 
@@ -448,6 +461,11 @@ void FrameSimulator::DEPOLARIZE2(const OperationData &target_data) {
         z_table[t1][sample_index] ^= (bool)(p & 2);
         x_table[t2][sample_index] ^= (bool)(p & 4);
         z_table[t2][sample_index] ^= (bool)(p & 8);
+
+        n_errors[sample_index] += 1 + ((p & 12) ? 1 : 0);
+        n_x_errors[sample_index] += (p & 1) + ((p & 4 >> 2));
+        n_z_errors[sample_index] += ((p & 2) >> 1) + ((p & 8) >> 3);
+        n_dp2_errors[sample_index]++;
     });
 }
 
@@ -458,6 +476,9 @@ void FrameSimulator::X_ERROR(const OperationData &target_data) {
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
         x_table[t.data][sample_index] ^= true;
+        
+        n_errors[sample_index]++;
+        n_x_errors[sample_index]++;
     });
 }
 
@@ -469,6 +490,11 @@ void FrameSimulator::Y_ERROR(const OperationData &target_data) {
         auto t = targets[target_index];
         x_table[t.data][sample_index] ^= true;
         z_table[t.data][sample_index] ^= true;
+
+        n_errors[sample_index]++;
+        n_x_errors[sample_index]++;
+        n_z_errors[sample_index]++;
+        n_y_errors[sample_index]++;
     });
 }
 
@@ -479,6 +505,9 @@ void FrameSimulator::Z_ERROR(const OperationData &target_data) {
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
         z_table[t.data][sample_index] ^= true;
+
+        n_errors[sample_index]++;
+        n_z_errors[sample_index]++;
     });
 }
 

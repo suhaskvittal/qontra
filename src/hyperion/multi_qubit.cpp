@@ -21,7 +21,6 @@ HyperionMultiQubitSimulator::HyperionMultiQubitSimulator(
     max_latency(0),
     /* Memory */
     dram(nullptr),
-    caches(),
     memory_event_table(nullptr),
     /* Decoders */
     simulators(n_decoders),
@@ -56,12 +55,6 @@ HyperionMultiQubitSimulator::HyperionMultiQubitSimulator(
                         % dram->config_->banks_per_group;
         uint32_t row_offset = ROWS_PER_QUBIT * i;
 
-        QubitCache * cache = new QubitCache(params.n_cache_supertags,
-                                params.n_cache_sets,
-                                params.n_cache_lines,
-                                n_detectors - n_detectors_per_round);
-        caches.push_back(cache);
-
         HyperionSimulatorParams sim_params = {
             n_detectors,
             n_detectors_per_round,
@@ -73,7 +66,6 @@ HyperionMultiQubitSimulator::HyperionMultiQubitSimulator(
             row_offset
         };
         simulators[i] = new HyperionSimulator(dram,
-                                            nullptr,
                                             memory_event_table,
                                             path_tables[0], 
                                             sim_params);
@@ -85,9 +77,6 @@ HyperionMultiQubitSimulator::~HyperionMultiQubitSimulator() {
 
     for (HyperionSimulator * s : simulators) {
         delete s;
-    }
-    for (QubitCache * c : caches) {
-        delete c;
     }
     delete dram;
     delete memory_event_table;

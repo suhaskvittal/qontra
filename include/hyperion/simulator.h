@@ -8,7 +8,6 @@
 
 #include "defs.h"
 #include "decoding_graph.h"
-#include "hyperion/cache.h"
 
 #include <memory_system.h>
 
@@ -52,7 +51,6 @@ struct MemoryEventEntry {
 class HyperionSimulator {
 public:
     HyperionSimulator(dramsim3::MemorySystem*,
-            QubitCache*,
             std::map<addr_t, bool> * memory_event_table,
             const PathTable& path_table,
             const HyperionSimulatorParams&);
@@ -74,16 +72,13 @@ public:
     void reset_stats(void);
     
     dramsim3::MemorySystem * dram;
-    QubitCache * cache;
     // Statistics
     uint64_t rowhammer_flips(void);
     uint64_t row_activations(void);
 
-    uint64_t ccomp_cycles;
     uint64_t prefetch_cycles;
     uint64_t bfu_cycles;
 protected:
-    void tick_ccomp(void);
     void tick_prefetch(void);
     void tick_bfu(void);
 
@@ -95,7 +90,7 @@ protected:
 
     void clear(void);
 
-    enum class State { ccomp, prefetch, bfu, idle };
+    enum class State { prefetch, bfu, idle };
 
     struct Register {
         addr_t address;
@@ -135,8 +130,6 @@ protected:
                                                 // current syndrome.
     fp_t mean_weight_register;
     uint access_counter;
-// CComp
-    uint ccomp_detector_register;
 // Prefetch
     uint min_detector_register;
     uint major_detector_register;

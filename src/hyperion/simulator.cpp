@@ -10,7 +10,6 @@ namespace qrc {
 namespace hyperion {
 
 HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram, 
-        QubitCache * cache,
         std::map<addr_t, bool> * memory_event_table,
         const PathTable& path_table,
         const HyperionSimulatorParams& params)
@@ -20,13 +19,11 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     bfu_cycles(0),
     /* Microarchitecture */
     dram(dram),
-    cache(cache),
     register_file(params.n_registers, (Register){0x0, 0, false}),
     dram_await_array(),
     detector_vector_register(),
     mean_weight_register(0),
     access_counter(0),
-    ccomp_detector_register(0),
     major_detector_register(0),
     minor_detector_table(),
     hardware_deque(),
@@ -74,11 +71,7 @@ HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
 
     bool computable = detector_array.size() <= bfu_hw_threshold;
     if (!computable) {
-        if (cache == nullptr) {
-            state = State::idle;  // Don't even bother trying.
-        } else {
-            state = State::ccomp;  // Use the down time to complete pages.
-        }
+        state = State::idle;  // Don't even bother trying.
     }
     return computable;
 }
@@ -100,9 +93,6 @@ HyperionSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset)
 
 void
 HyperionSimulator::tick() {
-    if (cache != nullptr) {
-        cache->tick();
-    }
     // Update last use for every register.
     for (Register& r : register_file) {
         r.last_use++;
@@ -146,19 +136,13 @@ HyperionSimulator::tick() {
                 << "," << di_dj.second << ")\n";
 #endif
             uint di = di_dj.first;
-            if (state != State::ccomp) {
-                replacement_queue.push_back(address);
-            }
+            replacement_queue.push_back(address);
         } else {
             it++;
         }
     }
 
     switch (state) {
-    case State::ccomp:
-        ccomp_cycles++;
-        tick_ccomp();
-        break;
     case State::prefetch:
         prefetch_cycles++;
         tick_prefetch();
@@ -215,40 +199,6 @@ HyperionSimulator::rowhammer_flips() {
 uint64_t
 HyperionSimulator::row_activations() {
     return dram->dram_system_->row_activations();
-}
-
-void 
-HyperionSimulator::tick_ccomp() {
-    if (curr_max_detector >= 2 * n_detectors_per_round 
-            || cache->completion_queue.empty()) 
-    {
-        update_state();
-        return;
-    }
-    // Retrieve data from memory.
-    uint di = cache->completion_queue.front();
-    uint dj = unbound_detector(ccomp_detector_register, n_detectors);
-    if (di == dj) {
-        // Update ccomp detector register
-        ccomp_detector_register++;
-        if (ccomp_detector_register >= n_detectors) {
-            ccomp_detector_register = 0;
-            cache->complete(curr_qubit, di);
-            cache->completion_queue.pop_front();
-        }
-    }
-    addr_t address = to_address(di, dj, base_address, n_detectors);
-    if (dram->WillAcceptTransaction(address, false)) {
-        dram->AddTransaction(address, false);
-        dram_await_array.push_back(address);
-        // Update ccomp detector register
-        ccomp_detector_register++;
-        if (ccomp_detector_register >= n_detectors) {
-            ccomp_detector_register = 0;
-            cache->complete(curr_qubit, di);
-            cache->completion_queue.pop_front();
-        }
-    }
 }
 
 void
@@ -516,22 +466,6 @@ HyperionSimulator::access(addr_t address, bool set_evictable_on_hit) {
             break;
         }
     }
-    // Check the cache.
-    if (cache != nullptr) {
-        auto di_dj = from_address(address, base_address, n_detectors);
-        uint di = di_dj.first;
-        uint dj = di_dj.second;
-        QubitCache::LoadStatus s = cache->access(curr_qubit, di, dj);
-        if (s == QubitCache::LoadStatus::hit) {
-            replacement_queue.push_back(address);  // Add to register file.
-            return true;
-        } else if (s == QubitCache::LoadStatus::unknown) {
-            // We exit this function immediately because we don't
-            // want to go to DRAM yet. We are still waiting on the
-            // result.
-            return false;
-        } // Otherwise, go perform the DRAM access.
-    }
 
     if (!is_hit) {
         // If there is no hit, also check that the request has not
@@ -560,19 +494,6 @@ HyperionSimulator::access(addr_t address, bool set_evictable_on_hit) {
 void
 HyperionSimulator::update_state() {
     switch (state) {
-    case State::ccomp:
-        if (detector_vector_register.empty()) {
-#ifdef GSIM_DEBUG
-            std::cout << "IDLE\n";
-#endif
-            state = State::idle;
-        } else {
-#ifdef GSIM_DEBUG
-            std::cout << "PREFETCH\n";
-#endif
-            state = State::prefetch;
-        }
-        break;
     case State::prefetch:
         mean_weight_register /= access_counter;
 #ifdef GSIM_DEBUG
@@ -607,8 +528,6 @@ HyperionSimulator::clear() {
     mean_weight_register = 0;
     access_counter = 0;
     
-    ccomp_detector_register = 0;
-
     major_detector_register = 0;
     minor_detector_table.clear();
 
@@ -631,17 +550,10 @@ HyperionSimulator::clear() {
         0 
     };
     replacement_queue.clear();
-    if (cache == nullptr) {
-        state = State::prefetch;
+    state = State::prefetch;
 #ifdef GSIM_DEBUG
-        std::cout << "(clear)PREFETCH\n";
+    std::cout << "(clear)PREFETCH\n";
 #endif
-    } else {
-        state = State::ccomp;
-#ifdef GSIM_DEBUG
-        std::cout << "(clear)CCOMP\n";
-#endif
-    }
 }
 
 addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,

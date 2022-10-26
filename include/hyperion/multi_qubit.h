@@ -35,7 +35,6 @@ public:
     void reset_stats(void);
 
     dramsim3::MemorySystem * dram;
-    std::vector<QubitCache*> caches;
     std::vector<HyperionSimulator*> simulators;
 
     uint32_t n_timeouts;

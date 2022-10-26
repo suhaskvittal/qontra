@@ -19,7 +19,6 @@ set(QUARCH_PROGRAM_FILES
     # Gulliver code.
     src/hyperion/simulator.cpp
     src/hyperion/multi_qubit.cpp
-    src/hyperion/cache.cpp
     src/hyperion/trial_decoder.cpp)
 add_library(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options

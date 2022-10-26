@@ -54,8 +54,6 @@ Hyperion::Hyperion(const stim::Circuit circuit,
         0
     };
     simulator = new hyperion::HyperionSimulator(dram, 
-                                    nullptr,  // Single qubit experiment doesn't
-                                              // use a cache.
                                     memory_event_table,
                                     path_table, 
                                     sim_params);

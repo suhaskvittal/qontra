@@ -31,10 +31,6 @@ struct HyperionParams {
     uint bfu_hw_threshold;
     // Memory Parameters
     uint n_registers;
-    // Cache parameters
-    uint n_cache_supertags;
-    uint n_cache_sets;
-    uint n_cache_lines;
     // DRAM parameters
     std::string dram_config_file;
     std::string log_output_directory;

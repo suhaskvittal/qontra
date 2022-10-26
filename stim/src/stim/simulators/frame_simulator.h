@@ -12,12 +12,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Suhas Vittal
  */
 
 #ifndef _STIM_SIMULATORS_FRAME_SIMULATOR_H
 #define _STIM_SIMULATORS_FRAME_SIMULATOR_H
 
 #include <random>
+#include <vector>
 
 #include "stim/circuit/circuit.h"
 #include "stim/io/measure_record_batch.h"
@@ -42,6 +45,13 @@ struct FrameSimulator {
     simd_bits last_correlated_error_occurred;  // correlated error flag for each instance.
     simd_bit_table sweep_table;                // Shot-to-shot configuration data.
     std::mt19937_64 &rng;                      // Random number generator used for generating entropy.
+
+    std::vector<uint32_t>    n_errors;
+    std::vector<uint32_t>    n_x_errors;
+    std::vector<uint32_t>    n_y_errors;
+    std::vector<uint32_t>    n_z_errors;
+    std::vector<uint32_t>    n_dp1_errors;
+    std::vector<uint32_t>    n_dp2_errors;
 
     // Determines whether e.g. 50% Z errors are multiplied into the frame when measuring in the Z basis.
     // This is necessary for correct sampling.
