@@ -3,13 +3,13 @@
  *  date:   22 August 2022
  * */
 
-#include "gulliver.h"
+#include "hyperion.h"
 
 namespace qrc {
 
-Gulliver::Gulliver(const stim::Circuit circuit,
+Hyperion::Hyperion(const stim::Circuit circuit,
         uint n_detectors_per_round,
-        const GulliverParams& params)
+        const HyperionParams& params)
     :MWPMDecoder(circuit), 
     // Statistics
     n_total_accesses(0),
@@ -43,7 +43,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
                                         params.log_output_directory,
                                         cb, cb);
 
-    gulliver::GulliverSimulatorParams sim_params = {
+    hyperion::HyperionSimulatorParams sim_params = {
         circuit.count_detectors()+1,
         n_detectors_per_round,
         params.n_registers,
@@ -53,7 +53,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
         0,
         0
     };
-    simulator = new gulliver::GulliverSimulator(dram, 
+    simulator = new hyperion::HyperionSimulator(dram, 
                                     nullptr,  // Single qubit experiment doesn't
                                               // use a cache.
                                     memory_event_table,
@@ -61,7 +61,7 @@ Gulliver::Gulliver(const stim::Circuit circuit,
                                     sim_params);
 }
 
-Gulliver::~Gulliver() {
+Hyperion::~Hyperion() {
     dram->PrintStats();
 
     delete simulator;
@@ -70,28 +70,28 @@ Gulliver::~Gulliver() {
 }
 
 std::string
-Gulliver::name() {
-    return "Gulliver";
+Hyperion::name() {
+    return "Hyperion";
 }
 
 bool
-Gulliver::is_software() {
+Hyperion::is_software() {
     return false;
 }
 
 uint64_t
-Gulliver::sram_cost() {
+Hyperion::sram_cost() {
     return 0;   // TODO
 }
 
 uint64_t
-Gulliver::dram_cost() {
+Hyperion::dram_cost() {
     uint n_d = circuit.count_detectors();
     return n_d*(n_d-1)*sizeof(uint)/2;  // In bytes.
 }
 
 DecoderShotResult
-Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
+Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
     // Compute Hamming weight.

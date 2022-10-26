@@ -3,8 +3,8 @@
  *  date:   7 September 2022
  * */
 
-#ifndef GULLIVER_CACHE_h
-#define GULLIVER_CACHE_h
+#ifndef HYPERION_CACHE_h
+#define HYPERION_CACHE_h
 
 #include "defs.h"
 #include "decoding_graph.h"
@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace qrc {
-namespace gulliver {
+namespace hyperion {
 
 #define RPROT_CYCLES    8
 

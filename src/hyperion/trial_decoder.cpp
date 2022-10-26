@@ -3,11 +3,11 @@
  *  date:   2 October 2022
  * */
 
-#include "gulliver/trial_decoder.h"
+#include "hyperion/trial_decoder.h"
 #include <limits>
 
 namespace qrc {
-namespace gulliver {
+namespace hyperion {
 
 Blossom::Blossom(uint node_id)
     :node_id(node_id),
@@ -369,5 +369,5 @@ bfs_done:
     }
 }
 
-}   // gulliver
+}   // hyperion
 }   // qrc

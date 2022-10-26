@@ -3,16 +3,16 @@
  *  date:   9 September 2022
  * */
 
-#include "gulliver/multi_qubit.h"
+#include "hyperion/multi_qubit.h"
 
 namespace qrc {
-namespace gulliver {
+namespace hyperion {
 
-GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
+HyperionMultiQubitSimulator::HyperionMultiQubitSimulator(
         const std::vector<stim::Circuit>& circuits,
         uint n_decoders,
         uint n_detectors_per_round,
-        const GulliverParams& params)
+        const HyperionParams& params)
     :
     /* Statistics */
     n_timeouts(0),
@@ -62,7 +62,7 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
                                 n_detectors - n_detectors_per_round);
         caches.push_back(cache);
 
-        GulliverSimulatorParams sim_params = {
+        HyperionSimulatorParams sim_params = {
             n_detectors,
             n_detectors_per_round,
             params.n_registers,
@@ -72,7 +72,7 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
             bank,
             row_offset
         };
-        simulators[i] = new GulliverSimulator(dram,
+        simulators[i] = new HyperionSimulator(dram,
                                             nullptr,
                                             memory_event_table,
                                             path_tables[0], 
@@ -80,10 +80,10 @@ GulliverMultiQubitSimulator::GulliverMultiQubitSimulator(
     }
 }
 
-GulliverMultiQubitSimulator::~GulliverMultiQubitSimulator() {
+HyperionMultiQubitSimulator::~HyperionMultiQubitSimulator() {
     dram->PrintStats();
 
-    for (GulliverSimulator * s : simulators) {
+    for (HyperionSimulator * s : simulators) {
         delete s;
     }
     for (QubitCache * c : caches) {
@@ -94,7 +94,7 @@ GulliverMultiQubitSimulator::~GulliverMultiQubitSimulator() {
 }
 
 void
-GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
+HyperionMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
     const uint32_t shots_per_round = 100000;
 
     while (shots > 0) {
@@ -128,7 +128,7 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
             
             // Preload data.
             for (uint i = 0; i < simulators.size(); i++) {
-                GulliverSimulator * sim = simulators[i];
+                HyperionSimulator * sim = simulators[i];
                 if (service_queue.empty()) {
                     sim->force_idle();
                 } else {
@@ -153,7 +153,7 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                 done = true;
                 dram->ClockTick();
                 for (uint i = 0; i < simulators.size(); i++) {
-                    GulliverSimulator * sim = simulators[i]; 
+                    HyperionSimulator * sim = simulators[i]; 
                     if (sim->is_idle() && !service_queue.empty()) {
                         done = false;
 
@@ -181,7 +181,7 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                 n_cycles++;
                 time_taken = n_cycles / main_clock_frequency * 1e9;
                 if (time_taken > 1000.0 && round < n_rounds) {
-                    for (GulliverSimulator * sim : simulators) {
+                    for (HyperionSimulator * sim : simulators) {
                         sim->sig_end_round();
                     }
                     round++;
@@ -208,7 +208,7 @@ GulliverMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
 }
 
 void
-GulliverMultiQubitSimulator::reset_stats() {
+HyperionMultiQubitSimulator::reset_stats() {
     n_timeouts = 0;
     n_overflows = 0;
     n_uncomputable = 0;
@@ -216,8 +216,8 @@ GulliverMultiQubitSimulator::reset_stats() {
 }
 
 bool
-GulliverMultiQubitSimulator::load_simulator(
-        GulliverSimulator * sim,
+HyperionMultiQubitSimulator::load_simulator(
+        HyperionSimulator * sim,
         const stim::simd_bits_range_ref& event,
         uint qubit_id) 
 {
@@ -250,5 +250,5 @@ GulliverMultiQubitSimulator::load_simulator(
     return computable;
 }
 
-}  // gulliver
+}  // hyperion
 }  // qrc

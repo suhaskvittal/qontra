@@ -3,17 +3,17 @@
  *  date:   7 September 2022
  * */
 
-#include "gulliver/simulator.h"
+#include "hyperion/simulator.h"
 #include <limits>
 
 namespace qrc {
-namespace gulliver {
+namespace hyperion {
 
-GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram, 
+HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram, 
         QubitCache * cache,
         std::map<addr_t, bool> * memory_event_table,
         const PathTable& path_table,
-        const GulliverSimulatorParams& params)
+        const HyperionSimulatorParams& params)
     :
     /* Statistics */
     prefetch_cycles(0),
@@ -34,7 +34,7 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
             std::vector<BFUPipelineLatch>(params.bfu_hw_threshold-1)),
     best_matching_register(),
     replacement_queue(),
-    state(GulliverSimulator::State::prefetch),
+    state(HyperionSimulator::State::prefetch),
     bfu_idle(false),
     /* Data */
     memory_event_table(memory_event_table),
@@ -54,7 +54,7 @@ GulliverSimulator::GulliverSimulator(dramsim3::MemorySystem * dram,
 }
 
 bool
-GulliverSimulator::load_detectors(const std::vector<uint>& detector_array) {
+HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
     if (detector_array.size() == 0) {
         state = State::idle;
         return false;
@@ -84,22 +84,22 @@ GulliverSimulator::load_detectors(const std::vector<uint>& detector_array) {
 }
 
 void
-GulliverSimulator::load_path_table(const PathTable& pt) {
+HyperionSimulator::load_path_table(const PathTable& pt) {
     path_table = pt;  
 }
 
 void
-GulliverSimulator::load_qubit_number(uint qubit) {
+HyperionSimulator::load_qubit_number(uint qubit) {
     curr_qubit = qubit;
 }
 
 void
-GulliverSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset) {
+HyperionSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset) {
     base_address = get_base_address(bg, ba, ro_offset, dram->config_);
 }
 
 void
-GulliverSimulator::tick() {
+HyperionSimulator::tick() {
     if (cache != nullptr) {
         cache->tick();
     }
@@ -126,7 +126,7 @@ GulliverSimulator::tick() {
 
         replacement_queue.pop_front();
 #ifdef GSIM_DEBUG
-        std::cout << "\t[Gulliver] Installed " << std::hex 
+        std::cout << "\t[Hyperion] Installed " << std::hex 
             << address << std::dec << "\n";
 #endif
     }
@@ -173,7 +173,7 @@ GulliverSimulator::tick() {
 }
 
 void
-GulliverSimulator::sig_end_round(uint rounds_ended) {
+HyperionSimulator::sig_end_round(uint rounds_ended) {
     // We subtract by 1 because we don't count the boundary.
     curr_max_detector += n_detectors_per_round * rounds_ended;
     if (curr_max_detector > n_detectors-1) {
@@ -187,38 +187,38 @@ GulliverSimulator::sig_end_round(uint rounds_ended) {
 }
 
 bool
-GulliverSimulator::is_idle() {
+HyperionSimulator::is_idle() {
     return state == State::idle;
 }
 
 void
-GulliverSimulator::force_idle() {
+HyperionSimulator::force_idle() {
     state = State::idle;
 }
 
 std::map<uint, uint>
-GulliverSimulator::get_matching() {
+HyperionSimulator::get_matching() {
     return best_matching_register.running_matching;
 }
 
 void
-GulliverSimulator::reset_stats() {
+HyperionSimulator::reset_stats() {
     prefetch_cycles = 0;
     bfu_cycles = 0;
 }
 
 uint64_t
-GulliverSimulator::rowhammer_flips() {
+HyperionSimulator::rowhammer_flips() {
     return dram->dram_system_->rowhammer_flips();
 }
 
 uint64_t
-GulliverSimulator::row_activations() {
+HyperionSimulator::row_activations() {
     return dram->dram_system_->row_activations();
 }
 
 void 
-GulliverSimulator::tick_ccomp() {
+HyperionSimulator::tick_ccomp() {
     if (curr_max_detector >= 2 * n_detectors_per_round 
             || cache->completion_queue.empty()) 
     {
@@ -252,7 +252,7 @@ GulliverSimulator::tick_ccomp() {
 }
 
 void
-GulliverSimulator::tick_prefetch()  {
+HyperionSimulator::tick_prefetch()  {
     uint& ai = major_detector_register;
     if (minor_detector_table.count(ai) == 0) {
         // Start with boundary first if it exists.
@@ -324,7 +324,7 @@ GulliverSimulator::tick_prefetch()  {
 }
 
 void
-GulliverSimulator::tick_bfu() {
+HyperionSimulator::tick_bfu() {
     // We simulate the stages of the pipeline in reverse order.
     // There are bfu_hw_threshold stages. The first stage
     // is the fetch stage, the rest are computational stages.
@@ -342,7 +342,7 @@ GulliverSimulator::tick_bfu() {
 }
 
 void
-GulliverSimulator::tick_bfu_compute(uint stage) {
+HyperionSimulator::tick_bfu_compute(uint stage) {
     // Get data from the pipeline latch.
     for (uint f = 0; f < bfu_fetch_width; f++) {
         BFUPipelineLatch& latch = bfu_pipeline_latches[f][stage];
@@ -411,7 +411,7 @@ GulliverSimulator::tick_bfu_compute(uint stage) {
 }
 
 void
-GulliverSimulator::tick_bfu_fetch() {
+HyperionSimulator::tick_bfu_fetch() {
     for (uint f = 0; f < bfu_fetch_width; f++) {
         // Determine what reads need to be made to the register file.
         // As we don't ever write to the register file outside of PREFETCH,
@@ -499,7 +499,7 @@ GulliverSimulator::tick_bfu_fetch() {
 }
 
 bool
-GulliverSimulator::access(addr_t address, bool set_evictable_on_hit) {
+HyperionSimulator::access(addr_t address, bool set_evictable_on_hit) {
     // First, check that the data isn't already in the register file.
     // or in the replacement queue.
     bool is_hit = false;
@@ -548,7 +548,7 @@ GulliverSimulator::access(addr_t address, bool set_evictable_on_hit) {
             dram->AddTransaction(address, false);
             dram_await_array.push_back(address);
 #ifdef GSIM_DEBUG
-            std::cout << "\t[Gulliver] Requested " << std::hex
+            std::cout << "\t[Hyperion] Requested " << std::hex
                 << address << std::dec << "\n";
 #endif
         }
@@ -558,7 +558,7 @@ GulliverSimulator::access(addr_t address, bool set_evictable_on_hit) {
 }
 
 void
-GulliverSimulator::update_state() {
+HyperionSimulator::update_state() {
     switch (state) {
     case State::ccomp:
         if (detector_vector_register.empty()) {
@@ -601,7 +601,7 @@ GulliverSimulator::update_state() {
 }
 
 void
-GulliverSimulator::clear() {
+HyperionSimulator::clear() {
     dram_await_array.clear();
     detector_vector_register.clear();
     mean_weight_register = 0;
@@ -683,5 +683,5 @@ unbound_detector(uint d, uint n_detectors) {
     return d == n_detectors-1 ? BOUNDARY_INDEX : d;
 }
 
-}  // gulliver
+}  // hyperion
 }  // qrc

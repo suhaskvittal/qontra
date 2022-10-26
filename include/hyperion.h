@@ -3,12 +3,12 @@
  *  date:   22 August 2022
  * */
 
-#ifndef GULLIVER_h
-#define GULLIVER_h
+#ifndef HYPERION_h
+#define HYPERION_h
 
 #include "mwpm_decoder.h"
 #include "benchmark.h"
-#include "gulliver/simulator.h"
+#include "hyperion/simulator.h"
 
 #include <algorithm>
 #include <array>
@@ -24,7 +24,7 @@
 
 namespace qrc {
 
-struct GulliverParams {
+struct HyperionParams {
     // Fetch width for brute force unit
     uint bfu_fetch_width;             
     // Max Hamming weight to invoke onchip hardware. 
@@ -43,11 +43,11 @@ struct GulliverParams {
     fp_t dram_clock_frequency;
 };
 
-class Gulliver : public MWPMDecoder {
+class Hyperion : public MWPMDecoder {
 public:
-    Gulliver(const stim::Circuit, uint n_detectors_per_round, 
-            const GulliverParams&);
-    ~Gulliver();
+    Hyperion(const stim::Circuit, uint n_detectors_per_round, 
+            const HyperionParams&);
+    ~Hyperion();
 
     DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
     std::string name(void) override;
@@ -64,7 +64,7 @@ public:
     uint64_t max_prefetch_cycles;
     uint max_hamming_weight;
     // More statistics are in the simulator.
-    gulliver::GulliverSimulator * simulator;
+    hyperion::HyperionSimulator * simulator;
 private:
     uint bfu_hw_threshold;
     uint n_rounds;

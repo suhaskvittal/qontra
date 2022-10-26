@@ -3,10 +3,10 @@
  *  date:   22 September 2022
  * */
 
-#include "gulliver/cache.h"
+#include "hyperion/cache.h"
 
 namespace qrc {
-namespace gulliver {
+namespace hyperion {
 
 static QubitCache::SuperTag DEFAULT_SUPERTAG = {0, 0, false};
 static QubitCache::Tag DEFAULT_TAG = {0, 0, 0, false, true, 0}; 

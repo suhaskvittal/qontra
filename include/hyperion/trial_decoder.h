@@ -3,8 +3,8 @@
  *  date:   1 October 2022
  * */
 
-#ifndef GULLIVER_TRIAL_DECODER_h
-#define GULLIVER_TRIAL_DECODER_h
+#ifndef HYPERION_TRIAL_DECODER_h
+#define HYPERION_TRIAL_DECODER_h
 
 #include "defs.h"
 #include "mwpm_decoder.h"
@@ -20,7 +20,7 @@
 #define BDC_DEBUG
 
 namespace qrc {
-namespace gulliver {
+namespace hyperion {
 
 class Blossom {
 public:

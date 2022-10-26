@@ -3,12 +3,12 @@
  *  date:   7 September 2022
  * */
 
-#ifndef GULLIVER_SIMULATOR_h
-#define GULLIVER_SIMULATOR_h
+#ifndef HYPERION_SIMULATOR_h
+#define HYPERION_SIMULATOR_h
 
 #include "defs.h"
 #include "decoding_graph.h"
-#include "gulliver/cache.h"
+#include "hyperion/cache.h"
 
 #include <memory_system.h>
 
@@ -28,9 +28,9 @@
 #define WINDOW_SIZE 100
 
 namespace qrc {
-namespace gulliver {
+namespace hyperion {
 
-struct GulliverSimulatorParams {
+struct HyperionSimulatorParams {
     uint n_detectors;
     uint n_detectors_per_round;
 
@@ -49,13 +49,13 @@ struct MemoryEventEntry {
     uint logical_qubit;
 };
 
-class GulliverSimulator {
+class HyperionSimulator {
 public:
-    GulliverSimulator(dramsim3::MemorySystem*,
+    HyperionSimulator(dramsim3::MemorySystem*,
             QubitCache*,
             std::map<addr_t, bool> * memory_event_table,
             const PathTable& path_table,
-            const GulliverSimulatorParams&);
+            const HyperionSimulatorParams&);
 
     bool load_detectors(const std::vector<uint>&);  // Returns false if the
                                                     // syndrome is not 
@@ -183,7 +183,7 @@ std::pair<uint, uint> from_address(addr_t, addr_t base, uint n_detectors);
 uint bound_detector(uint, uint n_detectors);
 uint unbound_detector(uint, uint n_detectors);
 
-} // gulliver
+} // hyperion
 } // qrc
 
 #endif
