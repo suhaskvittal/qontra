@@ -60,7 +60,7 @@ HyperionMultiQubitSimulator::HyperionMultiQubitSimulator(
             n_detectors_per_round,
             params.n_registers,
             params.bfu_fetch_width,
-            params.bfu_hw_threshold,
+            params.bfu_compute_stages,
             bankgroup,
             bank,
             row_offset

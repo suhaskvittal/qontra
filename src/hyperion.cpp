@@ -21,7 +21,6 @@ Hyperion::Hyperion(const stim::Circuit circuit,
     // Memory system
     simulator(nullptr),
     // Properties
-    bfu_hw_threshold(params.bfu_hw_threshold),
     n_rounds(circuit.count_detectors()/n_detectors_per_round),
     main_clock_frequency(params.main_clock_frequency),
     dram_clock_frequency(params.dram_clock_frequency),
@@ -31,24 +30,25 @@ Hyperion::Hyperion(const stim::Circuit circuit,
 {
     // Initialize Memory System.
     // Define memory event table and associated callbacks.
-    memory_event_table = new std::map<addr_t, bool>();
 
-    dramsim3::Config config(params.dram_config_file, params.log_output_directory);
-    auto cb = [this](addr_t x) 
-    {
-        this->memory_event_table->insert_or_assign(x, true);
-    };
+    if (params.use_dram) {
+        memory_event_table = new std::map<addr_t, bool>();
+        auto cb = [this](addr_t x) 
+        {
+            this->memory_event_table->insert_or_assign(x, true);
+        };
 
-    dram = new dramsim3::MemorySystem(params.dram_config_file, 
-                                        params.log_output_directory,
-                                        cb, cb);
+        dram = new dramsim3::MemorySystem(params.dram_config_file, 
+                                            params.log_output_directory,
+                                            cb, cb);
+    }
 
     hyperion::HyperionSimulatorParams sim_params = {
         circuit.count_detectors()+1,
         n_detectors_per_round,
         params.n_registers,
         params.bfu_fetch_width,
-        params.bfu_hw_threshold,
+        params.bfu_compute_stages,
         0,
         0,
         0
@@ -60,11 +60,12 @@ Hyperion::Hyperion(const stim::Circuit circuit,
 }
 
 Hyperion::~Hyperion() {
-    dram->PrintStats();
-
     delete simulator;
-    delete dram;
-    delete memory_event_table;
+    if (dram != nullptr) {
+        dram->PrintStats();
+        delete dram;
+        delete memory_event_table;
+    }
 }
 
 std::string
@@ -96,18 +97,10 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
     // Don't count the observables.
     uint hw = std::accumulate(syndrome.begin(), syndrome.end()-n_observables, 0);
     n_total_accesses++;
-    if (hw > bfu_hw_threshold) {
+    if (hw > max_hamming_weight) {
         max_hamming_weight = hw;
-        n_logical_failures++;
-        DecoderShotResult res = {
-            0.0,
-            0.0,
-            true,
-            std::vector<uint8_t>(),
-            std::map<uint, uint>()
-        };
-        return res;
-    } else if (hw == 0) {
+    }
+    if (hw == 0) {
         DecoderShotResult res = {
             0.0,
             0.0,
@@ -116,69 +109,72 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
             std::map<uint, uint>()
         };
         return res;
-    } else {
-        // Invoke BFUs.
-        // We use a simulator to count the number of cycles.
-        std::vector<uint> detector_array;
-        for (uint di = 0; di < n_detectors; di++) {
-            if (syndrome[di]) {
-                detector_array.push_back(di);
-            }
+    }
+    // Invoke BFUs.
+    // We use a simulator to count the number of cycles.
+    std::vector<uint> detector_array;
+    for (uint di = 0; di < n_detectors; di++) {
+        if (syndrome[di]) {
+            detector_array.push_back(di);
         }
-        if (detector_array.size() & 0x1) {
-            // Add boundary.
-            detector_array.push_back(BOUNDARY_INDEX);
-        }
-        // Run simulator.
-#ifdef GSIM_DEBUG
-        std::cout << "==============================================\n";
+    }
+    if (detector_array.size() & 0x1) {
+        // Add boundary.
+        detector_array.push_back(BOUNDARY_INDEX);
+    }
+    // Run simulator.
+#ifdef HSIM_DEBUG
+    std::cout << "==============================================\n";
 #endif
-        simulator->reset_stats();
-        simulator->load_detectors(detector_array);
+    simulator->reset_stats();
+    simulator->load_detectors(detector_array);
 
-        uint64_t n_cycles = 0;
-        uint round = 1;
+    uint64_t n_cycles = 0;
+    uint round = 1;
 
-        fp_t min_clock_frequency = main_clock_frequency < dram_clock_frequency
-                                    ? main_clock_frequency : dram_clock_frequency;
-        uint32_t main_tpc = (uint32_t) (main_clock_frequency / min_clock_frequency);
-        uint32_t dram_tpc = (uint32_t) (dram_clock_frequency / min_clock_frequency);
-        while (!simulator->is_idle()) {
-            fp_t t = n_cycles / min_clock_frequency * 1e9;
-            if (t >= 1000) {
-                if (round < n_rounds) {
-                    simulator->sig_end_round();
-                    n_cycles = 0;
-                    round++;
-                } else {
-                    break;
-                }
+    fp_t min_clock_frequency = main_clock_frequency < dram_clock_frequency
+                                ? main_clock_frequency : dram_clock_frequency;
+    uint32_t main_tpc = (uint32_t) (main_clock_frequency / min_clock_frequency);
+    uint32_t dram_tpc = (uint32_t) (dram_clock_frequency / min_clock_frequency);
+    while (!simulator->is_idle()) {
+        fp_t t = n_cycles / min_clock_frequency * 1e9;
+        if (t >= 1000) {
+            if (round < n_rounds) {
+                simulator->sig_end_round();
+                n_cycles = 0;
+                round++;
+            } else {
+                break;
             }
+        }
+        // Only tick DRAM if used.
+        if (dram != nullptr) {
             for (uint32_t i = 0; i < dram_tpc; i++) {
                 dram->ClockTick();
             }
-            for (uint32_t i = 0; i < main_tpc; i++) {
-                simulator->tick();
-            }
-            n_cycles++;
         }
-        if (round < n_rounds) {
-            n_cycles = 0;  // We will already be finished
-                           // when the final round arrives.
+        for (uint32_t i = 0; i < main_tpc; i++) {
+            simulator->tick();
         }
-        // Get matching from simulator.
-        auto matching = simulator->get_matching();
-        std::vector<uint8_t> correction = get_correction_from_matching(matching);
+        n_cycles++;
+    }
+    if (round < n_rounds) {
+        n_cycles = 0;  // We will already be finished
+                       // when the final round arrives.
+    }
+    // Get matching from simulator.
+    auto matching = simulator->get_matching();
+    std::vector<uint8_t> correction = get_correction_from_matching(matching);
 
-        fp_t time_taken = n_cycles / main_clock_frequency * 1e9;
-        if (time_taken > max_latency) {
-            max_latency = time_taken;
-            max_bfu_cycles = simulator->bfu_cycles;
-            max_prefetch_cycles = simulator->prefetch_cycles;
-        }
+    fp_t time_taken = n_cycles / min_clock_frequency * 1e9;
+    if (time_taken > max_latency) {
+        max_latency = time_taken;
+        max_bfu_cycles = simulator->bfu_cycles;
+        max_prefetch_cycles = simulator->prefetch_cycles;
+    }
 
-        bool is_error = 
-            is_logical_error(correction, syndrome, n_detectors, n_observables);
+    bool is_error = 
+        is_logical_error(correction, syndrome, n_detectors, n_observables);
 //      if (time_taken > 1000) {
 //          n_logical_failures++;
 //          is_error = true;
@@ -189,16 +185,14 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
         std::cout << "Prefetch cycles: " << simulator->prefetch_cycles << "\n";
         std::cout << "BFU Cycles: " << simulator->bfu_cycles << "\n";
 #endif
-
-        DecoderShotResult res = {
-            time_taken,
-            0.0, // TODO
-            is_error,
-            correction,
-            matching
-        };
-        return res;
-    }
+    DecoderShotResult res = {
+        time_taken,
+        0.0, // TODO
+        is_error,
+        correction,
+        matching
+    };
+    return res;
 }
 
 }  // namespace qrc

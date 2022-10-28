@@ -34,6 +34,8 @@ public:
     bool is_software(void) override;
 
     uint64_t sram_cost(void) override;
+
+    uint32_t max_correctable_error_chain;
 protected:
     std::vector<uint8_t> get_correction_from_matching(const std::map<uint, uint>&);
 

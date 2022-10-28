@@ -9,6 +9,7 @@ namespace qrc {
 
 MWPMDecoder::MWPMDecoder(const stim::Circuit& circ, uint max_detector) 
     :Decoder(circ),
+    max_correctable_error_chain(0),
     path_table(),
     max_detector(max_detector)
 {
@@ -157,6 +158,9 @@ MWPMDecoder::get_correction_from_matching(const std::map<uint, uint>& matching) 
                     correction[obs] = !correction[obs];
                 }
             }
+        }
+        if (detector_path.size()-1 > max_correctable_error_chain) {
+            max_correctable_error_chain = detector_path.size() - 1
         }
         visited.insert(di);
         visited.insert(dj);

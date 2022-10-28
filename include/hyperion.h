@@ -27,11 +27,11 @@ namespace qrc {
 struct HyperionParams {
     // Fetch width for brute force unit
     uint bfu_fetch_width;             
-    // Max Hamming weight to invoke onchip hardware. 
-    uint bfu_hw_threshold;
+    uint bfu_compute_stages;
     // Memory Parameters
     uint n_registers;
     // DRAM parameters
+    bool use_dram;
     std::string dram_config_file;
     std::string log_output_directory;
 
@@ -62,7 +62,6 @@ public:
     // More statistics are in the simulator.
     hyperion::HyperionSimulator * simulator;
 private:
-    uint bfu_hw_threshold;
     uint n_rounds;
     fp_t main_clock_frequency;
     fp_t dram_clock_frequency;

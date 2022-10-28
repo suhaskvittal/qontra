@@ -8,13 +8,14 @@
 
 #include "defs.h"
 #include "decoding_graph.h"
+#include "mwpm_decoder.h"
 
 #include <memory_system.h>
 
 #include <algorithm>
+#include <array>
 #include <deque>
 #include <map>
-#include <stack>
 #include <vector>
 #include <utility>
 
@@ -22,7 +23,7 @@
 //#define MATCHING_FIFO
 #define MATCHING_PQ
 
-//#define GSIM_DEBUG
+//#define HSIM_DEBUG
 #define FILTER_CUTOFF 10
 #define WINDOW_SIZE 100
 
@@ -35,7 +36,7 @@ struct HyperionSimulatorParams {
 
     uint n_registers;
     uint bfu_fetch_width;
-    uint bfu_hw_threshold;
+    uint bfu_compute_stages;
 
     uint8_t bankgroup;
     uint8_t bank;
@@ -83,6 +84,7 @@ protected:
     void tick_bfu(void);
 
     void tick_bfu_compute(uint stage);
+    void tick_bfu_sort(uint stage);
     void tick_bfu_fetch();
 
     bool access(addr_t, bool set_evictable_on_hit);
@@ -100,7 +102,7 @@ protected:
 
     struct DequeEntry {
         std::map<uint, uint> running_matching;
-        fp_t matching_weight;
+        uint32_t matching_weight;
         uint next_unmatched_index;
         
         bool operator<(const DequeEntry& other) const {
@@ -109,14 +111,8 @@ protected:
         }
     };
 
-    struct PDScoreboardEntry {
-        uint best_mate_index;
-        uint n_suitors;
-        fp_t mate_weight;
-    };
-
     struct BFUPipelineLatch {
-        std::stack<std::pair<uint, fp_t>> proposed_matches;
+        std::deque<std::pair<uint, uint32_t>> proposed_matches;
         DequeEntry base_entry;
         bool stalled;
         bool valid;
@@ -128,7 +124,7 @@ protected:
     std::vector<addr_t> dram_await_array;
     std::vector<uint> detector_vector_register; // Holds the detectors from the
                                                 // current syndrome.
-    fp_t mean_weight_register;
+    uint32_t mean_weight_register;
     uint access_counter;
 // Prefetch
     uint min_detector_register;
@@ -140,7 +136,10 @@ protected:
 #else
     std::deque<DequeEntry> hardware_deque;
 #endif
-    // Size of latches is fetch_width by (hw_threshold-1)
+    // Size of latches is fetch_width by (1 + 4 + fetch_width)
+    // There is one FETCH stage,
+    //          four SORT stages,
+    //      and fetch_width COMPUTE stages.
     std::vector<std::vector<BFUPipelineLatch>> bfu_pipeline_latches;   
     // Replacement policy
     DequeEntry best_matching_register;
@@ -160,7 +159,7 @@ private:
     uint n_detectors_per_round;
 
     uint bfu_fetch_width;
-    uint bfu_hw_threshold; 
+    uint bfu_compute_stages; 
 
     uint curr_qubit;
     addr_t base_address;

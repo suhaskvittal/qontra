@@ -9,6 +9,9 @@
 namespace qrc {
 namespace hyperion {
 
+static const uint BFU_SORT_STAGES = 4;
+static const uint RADIX_WIDTH = 16 / (BFU_SORT_STAGES);
+
 HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram, 
         std::map<addr_t, bool> * memory_event_table,
         const PathTable& path_table,
@@ -28,7 +31,8 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     minor_detector_table(),
     hardware_deque(),
     bfu_pipeline_latches(params.bfu_fetch_width, 
-            std::vector<BFUPipelineLatch>(params.bfu_hw_threshold-1)),
+            std::vector<BFUPipelineLatch>(
+                BFU_SORT_STAGES+params.bfu_compute_stages)),
     best_matching_register(),
     replacement_queue(),
     state(HyperionSimulator::State::prefetch),
@@ -41,7 +45,7 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     n_detectors(params.n_detectors),
     n_detectors_per_round(params.n_detectors_per_round),
     bfu_fetch_width(params.bfu_fetch_width),
-    bfu_hw_threshold(params.bfu_hw_threshold),
+    bfu_compute_stages(params.bfu_compute_stages),
     curr_qubit(0),
     base_address(0),
     has_boundary(false)
@@ -58,7 +62,7 @@ HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
     }
     clear();
     detector_vector_register = detector_array;
-#ifdef GSIM_DEBUG
+#ifdef HSIM_DEBUG
     std::cout << "LOAD:";
     for (uint d : detector_array) {
         std::cout << " " << d; 
@@ -69,11 +73,7 @@ HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
     // Compute the critical index.
     curr_max_detector = n_detectors_per_round;
 
-    bool computable = detector_array.size() <= bfu_hw_threshold;
-    if (!computable) {
-        state = State::idle;  // Don't even bother trying.
-    }
-    return computable;
+    return true;
 }
 
 void
@@ -88,7 +88,11 @@ HyperionSimulator::load_qubit_number(uint qubit) {
 
 void
 HyperionSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset) {
-    base_address = get_base_address(bg, ba, ro_offset, dram->config_);
+    if (dram == nullptr) {
+        base_address = 0x0;
+    } else {
+        base_address = get_base_address(bg, ba, ro_offset, dram->config_);
+    }
 }
 
 void
@@ -115,30 +119,32 @@ HyperionSimulator::tick() {
         victim->last_use = 0;
 
         replacement_queue.pop_front();
-#ifdef GSIM_DEBUG
+#ifdef HSIM_DEBUG
         std::cout << "\t[Hyperion] Installed " << std::hex 
             << address << std::dec << "\n";
 #endif
     }
     // Check if any transactions to DRAM have completed.
-    for (auto it = dram_await_array.begin(); it != dram_await_array.end(); ) {
-        addr_t address = *it;
-        if (memory_event_table->count(address) 
-                && memory_event_table->at(address)) 
-        {
-            it = dram_await_array.erase(it);
-            memory_event_table->at(address) = false;
-            // Add to replacement queue.
-            auto di_dj = from_address(address, base_address, n_detectors);
-#ifdef GSIM_DEBUG
-            std::cout << "\t[DRAM] Retrieved " << std::hex
-                << address << std::dec << "(" << di_dj.first
-                << "," << di_dj.second << ")\n";
+    if (dram != nullptr) {
+        for (auto it = dram_await_array.begin(); it != dram_await_array.end(); ) {
+            addr_t address = *it;
+            if (memory_event_table->count(address) 
+                    && memory_event_table->at(address)) 
+            {
+                it = dram_await_array.erase(it);
+                memory_event_table->at(address) = false;
+                // Add to replacement queue.
+                auto di_dj = from_address(address, base_address, n_detectors);
+#ifdef HSIM_DEBUG
+                std::cout << "\t[DRAM] Retrieved " << std::hex
+                    << address << std::dec << "(" << di_dj.first
+                    << "," << di_dj.second << ")\n";
 #endif
-            uint di = di_dj.first;
-            replacement_queue.push_back(address);
-        } else {
-            it++;
+                uint di = di_dj.first;
+                replacement_queue.push_back(address);
+            } else {
+                it++;
+            }
         }
     }
 
@@ -164,7 +170,7 @@ HyperionSimulator::sig_end_round(uint rounds_ended) {
         curr_max_detector = n_detectors - 1;
     }
     major_detector_register = 0;
-#ifdef GSIM_DEBUG
+#ifdef HSIM_DEBUG
     std::cout << "SIGNAL -- ROUND END | Max detector = " 
         << curr_max_detector << "\n";
 #endif
@@ -193,11 +199,13 @@ HyperionSimulator::reset_stats() {
 
 uint64_t
 HyperionSimulator::rowhammer_flips() {
+    if (dram == nullptr) return 0;
     return dram->dram_system_->rowhammer_flips();
 }
 
 uint64_t
 HyperionSimulator::row_activations() {
+    if (dram == nullptr) return 0;
     return dram->dram_system_->row_activations();
 }
 
@@ -255,7 +263,9 @@ HyperionSimulator::tick_prefetch()  {
     addr_t address = to_address(di, dj, base_address, n_detectors);
     
     access(address, false);  // We don't care if there is a hit or miss.
-    mean_weight_register += path_table[std::make_pair(di, dj)].distance;
+    fp_t raw_weight = path_table[std::make_pair(di, dj)].distance;
+    uint32_t w = (uint32_t) (raw_weight * MWPM_INTEGER_SCALE);
+    mean_weight_register += w;
     access_counter++;
     // Update ai, aj.
     // Update varies on whether or not boundary is in the DVR.
@@ -276,14 +286,17 @@ HyperionSimulator::tick_prefetch()  {
 void
 HyperionSimulator::tick_bfu() {
     // We simulate the stages of the pipeline in reverse order.
-    // There are bfu_hw_threshold stages. The first stage
-    // is the fetch stage, the rest are computational stages.
+    // There is one FETCH stage, four SORT stages, and 
+    // a variable number of COMPUTE stages.
     bfu_idle = true;
-    for (uint stage = bfu_hw_threshold-1; stage > 0; stage--) {
+    for (uint stage = bfu_compute_stages; stage > 0; stage--) {
         tick_bfu_compute(stage-1);  // Input is the compute stage number
                                     // so the second stage of the pipeline
                                     // would be stage 0 (as it is the first
                                     // compute stage.
+    }
+    for (uint stage = BFU_SORT_STAGES; stage > 0; stage--) {
+        tick_bfu_sort(stage-1);
     }
     tick_bfu_fetch();
     if (bfu_idle) {
@@ -293,17 +306,18 @@ HyperionSimulator::tick_bfu() {
 
 void
 HyperionSimulator::tick_bfu_compute(uint stage) {
+    const uint STAGE_OFFSET = BFU_SORT_STAGES;
     // Get data from the pipeline latch.
     for (uint f = 0; f < bfu_fetch_width; f++) {
-        BFUPipelineLatch& latch = bfu_pipeline_latches[f][stage];
+        BFUPipelineLatch& latch = bfu_pipeline_latches[f][stage+STAGE_OFFSET];
         if (!latch.valid) {
             continue;
         }
 
         if (latch.stalled || latch.proposed_matches.size() == 0) {
-            if (stage < bfu_hw_threshold-2) {
+            if (stage < bfu_compute_stages-1) {
                 // Stall next pipeline stage as well.
-                bfu_pipeline_latches[f][stage+1].stalled = true;
+                bfu_pipeline_latches[f][stage+STAGE_OFFSET+1].stalled = true;
             }
             continue;
         }
@@ -311,8 +325,8 @@ HyperionSimulator::tick_bfu_compute(uint stage) {
 
         // Add entry from proposed matches to the running matching.
         std::map<uint, uint> matching(latch.base_entry.running_matching);
-        fp_t matching_weight = latch.base_entry.matching_weight;
-        auto match = latch.proposed_matches.top();
+        uint32_t matching_weight = latch.base_entry.matching_weight;
+        auto match = latch.proposed_matches.front();
         // Update matching.
         uint di = detector_vector_register[latch.base_entry.next_unmatched_index];
         uint dj = match.first;
@@ -333,7 +347,7 @@ HyperionSimulator::tick_bfu_compute(uint stage) {
         // Push this result onto the stack if there is a next unmatched
         // detector.
         DequeEntry ei = {matching, matching_weight, next_unmatched_index};
-        BFUPipelineLatch& next = bfu_pipeline_latches[f][stage+1];
+        BFUPipelineLatch& next = bfu_pipeline_latches[f][stage+STAGE_OFFSET+1];
         if (next_unmatched_index < detector_vector_register.size()) {
 #ifdef MATCHING_PQ
             hardware_deque.push(ei);
@@ -341,22 +355,62 @@ HyperionSimulator::tick_bfu_compute(uint stage) {
             hardware_deque.push_back(ei);
 #endif
             // Update next latch.
-            if (stage < bfu_hw_threshold-2) {
+            if (stage < bfu_compute_stages-1) {
                 next.stalled = false;
                 next.valid = true;
                 next.base_entry = latch.base_entry;
                 next.proposed_matches = latch.proposed_matches;
-                next.proposed_matches.pop();
+                next.proposed_matches.pop_front();
             }
         } else {
             if (matching_weight < best_matching_register.matching_weight) { 
                 best_matching_register = ei;
             }
 
-            if (stage < bfu_hw_threshold-2) {
+            if (stage < bfu_compute_stages-1) {
                 next.stalled = true;
             }
         }
+    }
+}
+
+void
+HyperionSimulator::tick_bfu_sort(uint stage) {
+    // Get pipeline latch. 
+    for (uint f = 0; f < bfu_fetch_width; f++) {
+        BFUPipelineLatch& latch = bfu_pipeline_latches[f][stage];
+        if (!latch.valid) {
+            continue;
+        }
+
+        if (latch.stalled) {
+            bfu_pipeline_latches[f][stage+1].stalled = true; 
+            continue;
+        }
+        bfu_idle = false;
+        // Get radix bins from prior round.
+        auto proposed_matches = latch.proposed_matches;
+        uint8_t nibble_pos = stage;
+        std::array<std::vector<uint>, 1<<RADIX_WIDTH> bins;
+        for (uint i = 0; i < proposed_matches.size(); i++) {
+            uint32_t w = proposed_matches[i].second;
+            // Get nibble (4-bits) at relevant position.
+            uint8_t nibble = (w >> (nibble_pos << 2)) & 0xf;
+            bins[nibble].push_back(i);
+        }
+        // Merge into one array.
+        std::deque<std::pair<uint, uint32_t>> new_matches;
+        for (auto bucket : bins) {
+            for (auto i : bucket) {
+                new_matches.push_back(proposed_matches[i]); 
+            }
+        }
+
+        BFUPipelineLatch& next = bfu_pipeline_latches[f][stage+1];
+        next.proposed_matches = new_matches;
+        next.base_entry = latch.base_entry;
+        next.stalled = false;
+        next.valid = true;
     }
 }
 
@@ -376,7 +430,7 @@ HyperionSimulator::tick_bfu_fetch() {
 
         bool stall_next = false;
 
-        std::stack<std::pair<uint, fp_t>> proposed_matches;
+        std::deque<std::pair<uint, uint32_t>> proposed_matches;
 #ifdef MATCHING_STACK
         DequeEntry ei = hardware_deque.back();
 #elifdef MATCHING_FIFO
@@ -386,8 +440,8 @@ HyperionSimulator::tick_bfu_fetch() {
 #endif
         uint di = detector_vector_register[ei.next_unmatched_index];
 
-        std::vector<std::pair<uint, fp_t>> match_list;
-        fp_t min_weight = std::numeric_limits<fp_t>::max();
+        std::vector<std::pair<uint, uint32_t>> match_list;
+        uint32_t min_weight = std::numeric_limits<uint32_t>::max();
         for (uint aj = ei.next_unmatched_index+1; 
                 aj < detector_vector_register.size(); aj++) 
         {
@@ -409,7 +463,9 @@ HyperionSimulator::tick_bfu_fetch() {
             auto di_dj = std::make_pair(di, dj);
             if (is_hit) {
                 // Get weight and add data to proposed_matches.
-                fp_t w = path_table[di_dj].distance;
+                fp_t raw_weight = path_table[di_dj].distance;
+                // Convert to integer (should be like this in DRAM).
+                uint32_t w = (uint32_t)(raw_weight * MWPM_INTEGER_SCALE);
                 match_list.push_back(std::make_pair(dj, w));
                 if (w < min_weight) {
                     min_weight = w;
@@ -422,12 +478,12 @@ HyperionSimulator::tick_bfu_fetch() {
         if (!stall_next) {
             for (auto p : match_list) {
                 uint dj = p.first;
-                fp_t w = p.second;
+                uint32_t w = p.second;
                 if (detector_vector_register.size() <= FILTER_CUTOFF
                     || w <= mean_weight_register
                     || w == min_weight)
                 {
-                    proposed_matches.push(p);
+                    proposed_matches.push_back(p);
                 }
             }
         }
@@ -470,21 +526,27 @@ HyperionSimulator::access(addr_t address, bool set_evictable_on_hit) {
     if (!is_hit) {
         // If there is no hit, also check that the request has not
         // already been put out.
-        bool is_waiting = false;
-        for (auto x : dram_await_array) {
-            if (address == x) {
-                is_waiting = true;
-                break;
+        if (dram != nullptr) {
+            bool is_waiting = false;
+            for (auto x : dram_await_array) {
+                if (address == x) {
+                    is_waiting = true;
+                    break;
+                }
             }
-        }
-        // Send out transaction to DRAM.
-        if (!is_waiting && dram->WillAcceptTransaction(address, false)) {
-            dram->AddTransaction(address, false);
-            dram_await_array.push_back(address);
-#ifdef GSIM_DEBUG
-            std::cout << "\t[Hyperion] Requested " << std::hex
-                << address << std::dec << "\n";
+            // Send out transaction to DRAM.
+            if (!is_waiting && dram->WillAcceptTransaction(address, false)) {
+                dram->AddTransaction(address, false);
+                dram_await_array.push_back(address);
+#ifdef HSIM_DEBUG
+                std::cout << "\t[Hyperion] Requested " << std::hex
+                    << address << std::dec << "\n";
 #endif
+            }
+        } else {
+            // Just directly pull the data from SRAM and add it to the
+            // replacement queue.
+            replacement_queue.push_back(address);
         }
     }
 
@@ -496,19 +558,19 @@ HyperionSimulator::update_state() {
     switch (state) {
     case State::prefetch:
         mean_weight_register /= access_counter;
-#ifdef GSIM_DEBUG
+#ifdef HSIM_DEBUG
         std::cout << "[Mean Weight] " << mean_weight_register << "\n";
         std::cout << "BFU\n";
 #endif
         state = State::bfu;
 #ifdef MATCHING_PQ
-        hardware_deque.push((DequeEntry) {std::map<uint, uint>(), 0.0, 0});
+        hardware_deque.push((DequeEntry) {std::map<uint, uint>(), 0, 0});
 #else
-        hardware_deque.push_back((DequeEntry) {std::map<uint, uint>(), 0.0, 0});
+        hardware_deque.push_back((DequeEntry) {std::map<uint, uint>(), 0, 0});
 #endif
         break;
     case State::bfu:
-#ifdef GSIM_DEBUG
+#ifdef HSIM_DEBUG
         std::cout << "IDLE\n";
         std::cout << "\tcycles in prefetch: " << prefetch_cycles << "\n";
         std::cout << "\tcycles in bfu: " << bfu_cycles << "\n";
@@ -546,12 +608,12 @@ HyperionSimulator::clear() {
     }
     best_matching_register = {
         std::map<uint, uint>(), 
-        std::numeric_limits<fp_t>::max(),
+        std::numeric_limits<uint32_t>::max(),
         0 
     };
     replacement_queue.clear();
     state = State::prefetch;
-#ifdef GSIM_DEBUG
+#ifdef HSIM_DEBUG
     std::cout << "(clear)PREFETCH\n";
 #endif
 }
@@ -570,15 +632,15 @@ addr_t
 to_address(uint di, uint dj, addr_t base, uint n_detectors) {
     uint bdi = bound_detector(di, n_detectors);
     uint bdj = bound_detector(dj, n_detectors);
-    addr_t x = base + (bdi*n_detectors + (bdj-bdi-1)) * sizeof(fp_t);
+    addr_t x = base + (bdi*n_detectors + (bdj-bdi-1)) * sizeof(uint32_t);
     return x;
 }
 
 std::pair<uint, uint>
 from_address(addr_t x, addr_t base, uint n_detectors) {
     x -= base;
-    uint bdi = x / (sizeof(fp_t) * n_detectors);
-    uint bdj = x / sizeof(fp_t) - bdi*n_detectors + bdi + 1;
+    uint bdi = x / (sizeof(uint32_t) * n_detectors);
+    uint bdj = x / sizeof(uint32_t) - bdi*n_detectors + bdi + 1;
     uint di = unbound_detector(bdi, n_detectors);
     uint dj = unbound_detector(bdj, n_detectors);
     std::pair<uint, uint> di_dj = std::make_pair(di, dj);
