@@ -462,7 +462,7 @@ void FrameSimulator::DEPOLARIZE2(const OperationData &target_data) {
         x_table[t2][sample_index] ^= (bool)(p & 4);
         z_table[t2][sample_index] ^= (bool)(p & 8);
 
-        n_errors[sample_index] += 1;
+        n_errors[sample_index] += 1 + ((p & 12) ? 1 : 0);
         n_x_errors[sample_index] += (p & 1) + ((p & 4 >> 2));
         n_z_errors[sample_index] += ((p & 2) >> 1) + ((p & 8) >> 3);
         n_dp2_errors[sample_index]++;

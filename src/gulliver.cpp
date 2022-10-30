@@ -125,7 +125,11 @@ Gulliver::decode_error(const std::vector<uint8_t>& syndrome) {
             }
             std::cout << "[MWPM]\n";
             for (auto pair : mwpm_res.matching) {
-                std::cout << "\t" << pair.first << " --> " << pair.second << "\n";
+                std::cout << "\t" << pair.first << " --> " << pair.second
+                    << "\terror chain size: " 
+                    << graph.get_chain_length(pair.first, pair.second) 
+                    << "(" << path_table[pair].distance
+                    << ")\n";
             }
         }
     }

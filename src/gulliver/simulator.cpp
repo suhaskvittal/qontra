@@ -156,6 +156,11 @@ GulliverSimulator::tick_combine() {
     matching_list.push_back(std::map<uint, uint>());
     for (auto pair : matchings) {
         uint di = pair.first;
+        if (di == BOUNDARY_INDEX 
+                && (hamming_weight_register & 0x1) == 0) 
+        {
+            continue;
+        }
         auto dj_set = pair.second;
 
         std::deque<std::map<uint, uint>> next_list;
@@ -169,6 +174,11 @@ GulliverSimulator::tick_combine() {
                 std::cout << "\tChecking matches for " << di << ":";
 #endif
                 for (uint dj : dj_set) {
+                    if (dj == BOUNDARY_INDEX 
+                            && (hamming_weight_register & 0x1) == 0) 
+                    {
+                        continue;
+                    }
 #ifdef GSIM_DEBUG
                     std::cout << " " << dj;
 #endif
@@ -259,6 +269,11 @@ GulliverSimulator::tick_traverse_read() {
     if (next.is_stalled) {
         return;
     }
+    if (!syndrome_register[current_qubit]) {
+        current_qubit++;
+        next.valid = false;
+        return;
+    }
     DecodingGraph::Vertex currv = decoding_graph.get_vertex(current_qubit);
 
     std::map<uint, uint> search_region;
@@ -280,14 +295,12 @@ GulliverSimulator::tick_traverse_read() {
         }
         search_region[search_index++] = v.detector;
         for (auto w : decoding_graph.adjacency_list(v)) {
-            if (w.detector != BOUNDARY_INDEX
-                && w.detector >= currv.detector) 
-            {
-                bfs_queue.push_back(w);
+//          if (w.detector != BOUNDARY_INDEX) {
                 if (!distance.count(w) || distance[v] + 1 < distance[w]) {
                     distance[w] = distance[v]+1;
                 }
-            }
+                bfs_queue.push_back(w);
+//          }
         }
         visited.insert(v.detector);
     }
@@ -299,32 +312,41 @@ GulliverSimulator::tick_traverse_read() {
     std::vector<uint> detector_array;
     addr_t dram_address = 0x0;
     uint num_nonzeros = 0;
+#ifdef GSIM_DEBUG
+    std::cout << "\tSearch region from " << current_qubit << ":";
+#endif
     for (auto pair : search_region) {
         uint index = pair.first;
         uint detector = pair.second;
+        if (detector < current_qubit || detector == BOUNDARY_INDEX) {
+            continue;
+        }
         if (syndrome_register[detector]) {
+#ifdef GSIM_DEBUG
+            std::cout << " " << detector << "(" << index << ")";
+#endif
             detector_array.push_back(detector); 
 #ifdef GSIM_DEBUG
             if (index > (1 << 6)) {
-                std::cout << "\tindex of detector in search region "
-                    << "is larger than expected: " 
-                    << index << "\n";
+//              std::cout << "\tindex of detector in search region "
+//                  << "is larger than expected: " 
+//                  << index << "\n";
             }
 #endif
             dram_address |= (index & 0x3f) << (num_nonzeros * 6);
             num_nonzeros++;
         }
     }
+#ifdef GSIM_DEBUG
+    std::cout << "\n";
+#endif
     dram_address |= current_qubit << 24;
 
     if (num_nonzeros > max_active_syndromes_in_box) {
         max_active_syndromes_in_box = num_nonzeros;
     }
 
-    if (num_nonzeros > 0 
-        && ((num_nonzeros & 0x1) == (hamming_weight_register & 0x1)
-            || hamming_weight_register & 0x1)) 
-    {
+    if (num_nonzeros) {
 #ifdef GSIM_DEBUG
         if (num_nonzeros > 8) {
             std::cout << "\tSearch region has more than 8 nonzeros: "

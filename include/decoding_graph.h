@@ -86,6 +86,8 @@ public:
 
     Vertex get_vertex(uint det_id);
     Edge get_edge(uint, uint);
+
+    uint32_t get_chain_length(uint det1, uint det2);
    
     std::vector<Vertex> vertices(void);
     std::vector<Vertex> adjacency_list(const Vertex&);

@@ -111,8 +111,8 @@ DecodingGraph::remove_edge(const Edge& e) {
     vertices_to_edge[std::make_pair(v,w)] = NULL_EDGE;
     vertices_to_edge[std::make_pair(w,v)] = NULL_EDGE;
     // Remove v from adjacency list of w and vice versa.
-    auto adj_list_v = adjacency_matrix[v];
-    auto adj_list_w = adjacency_matrix[w];
+    auto& adj_list_v = adjacency_matrix[v];
+    auto& adj_list_w = adjacency_matrix[w];
 
     for (auto it = adj_list_v.begin(); it != adj_list_v.end(); ) {
         if (*it == w) {
@@ -145,11 +145,44 @@ DecodingGraph::get_edge(uint det1, uint det2) {
     Vertex v1 = get_vertex(det1);
     Vertex v2 = get_vertex(det2);
     auto v1_v2 = std::make_pair(v1, v2);
+    auto v2_v1 = std::make_pair(v2, v1);
     if (vertices_to_edge.count(v1_v2)) {
         return vertices_to_edge[v1_v2]; 
+    } else if (vertices_to_edge.count(v2_v1)) {
+        return vertices_to_edge[v2_v1];
     } else {
         return NULL_EDGE; 
     }
+}
+
+uint32_t
+DecodingGraph::get_chain_length(uint det1, uint det2) {
+    Vertex src = get_vertex(det1);
+    Vertex dst = get_vertex(det2);
+    
+    std::deque<Vertex> bfs_queue{src};
+    std::set<Vertex> visited;
+    std::map<Vertex, uint32_t> distance;
+    distance[src] = 0;
+
+    while (!bfs_queue.empty()) {
+        Vertex v = bfs_queue.front();
+        bfs_queue.pop_front();
+        if (visited.count(v)) {
+            continue;
+        }
+
+        for (Vertex w : adjacency_list(v)) {
+//          if (w.detector != BOUNDARY_INDEX) {
+                if (!distance.count(w) || distance[v] + 1 < distance[w]) {
+                    distance[w] = distance[v] + 1;
+                }
+                bfs_queue.push_back(w);
+//          }
+        }
+        visited.insert(v);
+    }
+    return distance[dst];
 }
 
 std::vector<DecodingGraph::Vertex>
