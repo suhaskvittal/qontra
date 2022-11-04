@@ -174,16 +174,28 @@ GulliverSimulator::tick_combine() {
                 std::cout << "\tChecking matches for " << di << ":";
 #endif
                 for (uint dj : dj_set) {
-                    if (dj == BOUNDARY_INDEX 
-                            && (hamming_weight_register & 0x1) == 0) 
-                    {
-                        continue;
-                    }
 #ifdef GSIM_DEBUG
                     std::cout << " " << dj;
 #endif
                     if (m.count(dj)) {
-                        next_list.push_back(m);
+                        if (dj == BOUNDARY_INDEX) {
+                            // Matching di to mate[dj].
+                            uint mate_dj = m[dj];
+                            std::map<uint, uint> nm;
+                            for (auto pair : m) {
+                                if (pair.first == mate_dj) {
+                                    nm[mate_dj] = di;
+                                } else if (pair.first == BOUNDARY_INDEX) {
+                                    nm[di] = mate_dj;
+                                    continue;
+                                } else {
+                                    nm[pair.first] = pair.second;
+                                }
+                            }
+                            next_list.push_back(nm);
+                        } else {
+                            next_list.push_back(m);
+                        }
                         continue;
                     }
                     std::map<uint, uint> nm(m);
@@ -206,13 +218,27 @@ GulliverSimulator::tick_combine() {
 #ifdef GSIM_DEBUG
     std::cout << "\tMatching sizes:";
 #endif
+    fp_t min_weight = std::numeric_limits<fp_t>::max();
     for (auto m : matching_list) {
 #ifdef GSIM_DEBUG
         std::cout << " " << m.size();
 #endif
+        if ((hamming_weight_register & 0x1) == 0 
+            && m.count(BOUNDARY_INDEX))
+        {
+            continue;
+        }
         if (m.size() >= hamming_weight_register) {
-            cumulative_matching_register = m;
-            break;
+            // Check the weight.
+            fp_t w = 0.0;
+            for (auto pair : m) {
+                auto edge = decoding_graph.get_edge(pair.first, pair.second);
+                w += edge.edge_weight;
+            }
+            if (w < min_weight) {
+                min_weight = w;
+                cumulative_matching_register = m;
+            }
         }
     }
 #ifdef GSIM_DEBUG
@@ -279,8 +305,8 @@ GulliverSimulator::tick_traverse_read() {
     std::map<uint, uint> search_region;
     uint search_index = 0;
 
-    std::map<DecodingGraph::Vertex, uint> distance;
-    distance[currv] = 0;
+    std::map<uint, uint> distance;
+    distance[current_qubit] = 0;
     // Perform BFS to determine search region.
     // TODO properly simulate this step.
     std::set<uint> visited;
@@ -288,21 +314,24 @@ GulliverSimulator::tick_traverse_read() {
     while (!bfs_queue.empty()) {
         DecodingGraph::Vertex v = bfs_queue.front();
         bfs_queue.pop_front();
-        if (visited.count(v.detector) 
-            || distance[v] > search_width) 
-        {
+        if (visited.count(v.detector)) {
             continue;
         }
         search_region[search_index++] = v.detector;
+        visited.insert(v.detector);
+//      if (v.detector == BOUNDARY_INDEX) {
+//          continue;  // Do not travel across the boundary!
+//      }
         for (auto w : decoding_graph.adjacency_list(v)) {
 //          if (w.detector != BOUNDARY_INDEX) {
-                if (!distance.count(w) || distance[v] + 1 < distance[w]) {
-                    distance[w] = distance[v]+1;
+                if (!distance.count(w.detector) 
+                    || distance[v.detector] + 1 < distance[w.detector]) 
+                {
+                    distance[w.detector] = distance[v.detector]+1;
                 }
                 bfs_queue.push_back(w);
 //          }
         }
-        visited.insert(v.detector);
     }
 #ifdef GSIM_DEBUG
 //  std::cout << "\tSearch region has " << search_region.size() 
@@ -318,7 +347,9 @@ GulliverSimulator::tick_traverse_read() {
     for (auto pair : search_region) {
         uint index = pair.first;
         uint detector = pair.second;
-        if (detector < current_qubit || detector == BOUNDARY_INDEX) {
+        if (detector < current_qubit || detector == BOUNDARY_INDEX
+            || distance[detector] > search_width) 
+        {
             continue;
         }
         if (syndrome_register[detector]) {

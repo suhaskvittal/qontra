@@ -29,7 +29,8 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     access_counter(0),
     major_detector_register(0),
     minor_detector_table(),
-    hardware_deque(),
+    hardware_deques(params.bfu_fetch_width, 
+            HyperionDeque(2*params.bfu_fetch_width)),
     bfu_pipeline_latches(params.bfu_fetch_width, 
             std::vector<BFUPipelineLatch>(
                 BFU_SORT_STAGES+params.bfu_compute_stages)),
@@ -240,14 +241,6 @@ HyperionSimulator::tick_prefetch()  {
     uint di = detector_vector_register[ai];
     uint dj = detector_vector_register[aj];
 
-//    if (curr_max_detector > WINDOW_SIZE*n_detectors_per_round
-//            && detector_vector_register.size() > FILTER_CUTOFF
-//            && di < (curr_max_detector - WINDOW_SIZE*n_detectors_per_round)) 
-//    {
-//        ai++;
-//        return;
-//    }
-
     if (di != BOUNDARY_INDEX && di > curr_max_detector) {
         return;
     }
@@ -290,10 +283,7 @@ HyperionSimulator::tick_bfu() {
     // a variable number of COMPUTE stages.
     bfu_idle = true;
     for (uint stage = bfu_compute_stages; stage > 0; stage--) {
-        tick_bfu_compute(stage-1);  // Input is the compute stage number
-                                    // so the second stage of the pipeline
-                                    // would be stage 0 (as it is the first
-                                    // compute stage.
+        tick_bfu_compute(stage-1);
     }
     for (uint stage = BFU_SORT_STAGES; stage > 0; stage--) {
         tick_bfu_sort(stage-1);
@@ -314,61 +304,59 @@ HyperionSimulator::tick_bfu_compute(uint stage) {
             continue;
         }
 
-        if (latch.stalled || latch.proposed_matches.size() == 0) {
-            if (stage < bfu_compute_stages-1) {
-                // Stall next pipeline stage as well.
-                bfu_pipeline_latches[f][stage+STAGE_OFFSET+1].stalled = true;
-            }
-            continue;
-        }
         bfu_idle = false;
 
         // Add entry from proposed matches to the running matching.
-        std::map<uint, uint> matching(latch.base_entry.running_matching);
-        uint32_t matching_weight = latch.base_entry.matching_weight;
-        auto match = latch.proposed_matches.front();
-        // Update matching.
-        uint di = detector_vector_register[latch.base_entry.next_unmatched_index];
-        uint dj = match.first;
-        matching[di] = dj;
-        matching[dj] = di;
-        // Update weight
-        matching_weight += match.second;
-        // Compute next unmatched detector.
-        uint next_unmatched_index = detector_vector_register.size();
-        for (uint ai = latch.base_entry.next_unmatched_index + 1; 
-                ai < detector_vector_register.size(); ai++) 
-        {
-            if (matching.count(detector_vector_register[ai]) == 0) {
-                next_unmatched_index = ai;
+        // Push a matching onto each hardware deque.
+        for (auto& pq : hardware_deques) {
+            if (latch.proposed_matches.empty()) {
                 break;
-            } 
+            }
+            std::map<uint, uint> matching(latch.base_entry.running_matching);
+            uint32_t matching_weight = latch.base_entry.matching_weight;
+            auto match = latch.proposed_matches.front();
+            uint di = detector_vector_register[
+                        latch.base_entry.next_unmatched_index];
+            uint dj = match.first;
+            matching[di] = dj;
+            matching[dj] = di;
+            // Update weight
+            matching_weight += match.second;
+            // Compute next unmatched detector.
+            uint next_unmatched_index = detector_vector_register.size();
+            for (uint ai = latch.base_entry.next_unmatched_index + 1; 
+                    ai < detector_vector_register.size(); ai++) 
+            {
+                if (matching.count(detector_vector_register[ai]) == 0) {
+                    next_unmatched_index = ai;
+                    break;
+                } 
+            }
+            // Push this result onto the stack if there is a next unmatched
+            // detector.
+            DequeEntry ei = {matching, matching_weight, next_unmatched_index};
+            if (next_unmatched_index < detector_vector_register.size()) {
+                pq.push(ei);
+            } else {
+                // Otherwise, this is a perfect matching.
+                // Update the output register.
+                if (matching_weight < best_matching_register.matching_weight) {
+                    best_matching_register = ei;
+                }
+            }
+            latch.proposed_matches.pop_front();
         }
-        // Push this result onto the stack if there is a next unmatched
-        // detector.
-        DequeEntry ei = {matching, matching_weight, next_unmatched_index};
-        BFUPipelineLatch& next = bfu_pipeline_latches[f][stage+STAGE_OFFSET+1];
-        if (next_unmatched_index < detector_vector_register.size()) {
-#ifdef MATCHING_PQ
-            hardware_deque.push(ei);
-#else
-            hardware_deque.push_back(ei);
-#endif
-            // Update next latch.
-            if (stage < bfu_compute_stages-1) {
+        // Update next latch if we can.
+        if (stage < bfu_compute_stages-1) {
+            BFUPipelineLatch& next = bfu_pipeline_latches[f][stage+STAGE_OFFSET+1];
+            if (latch.proposed_matches.empty()) {
+                // Invalidate future stages.
+                next.valid = false;
+            } else {
                 next.stalled = false;
                 next.valid = true;
                 next.base_entry = latch.base_entry;
                 next.proposed_matches = latch.proposed_matches;
-                next.proposed_matches.pop_front();
-            }
-        } else {
-            if (matching_weight < best_matching_register.matching_weight) { 
-                best_matching_register = ei;
-            }
-
-            if (stage < bfu_compute_stages-1) {
-                next.stalled = true;
             }
         }
     }
@@ -380,13 +368,10 @@ HyperionSimulator::tick_bfu_sort(uint stage) {
     for (uint f = 0; f < bfu_fetch_width; f++) {
         BFUPipelineLatch& latch = bfu_pipeline_latches[f][stage];
         if (!latch.valid) {
+            bfu_pipeline_latches[f][stage+1].valid = false;
             continue;
         }
 
-        if (latch.stalled) {
-            bfu_pipeline_latches[f][stage+1].stalled = true; 
-            continue;
-        }
         bfu_idle = false;
         // Get radix bins from prior round.
         auto proposed_matches = latch.proposed_matches;
@@ -422,22 +407,21 @@ HyperionSimulator::tick_bfu_fetch() {
         // we can support many parallel reads.
 
         BFUPipelineLatch& next = bfu_pipeline_latches[f][0];
-        if (hardware_deque.empty()) {
-            next.stalled = true;
+        auto& pq = hardware_deques[f];
+        if (pq.empty()) {
+            // If priority queue is empty, invalidate the latch.
+            next.valid = false;
             continue;
         }
         bfu_idle = false;
+        if (next.stalled) {
+            continue;  // We'll just repeat whatever is being done.
+        }
 
-        bool stall_next = false;
+        bool invalidate_next = false;
 
         std::deque<std::pair<uint, uint32_t>> proposed_matches;
-#ifdef MATCHING_STACK
-        DequeEntry ei = hardware_deque.back();
-#elifdef MATCHING_FIFO
-        DequeEntry ei = hardware_deque.front();
-#else
-        DequeEntry ei = hardware_deque.top();
-#endif
+        DequeEntry ei = pq.top();
         uint di = detector_vector_register[ei.next_unmatched_index];
 
         std::vector<std::pair<uint, uint32_t>> match_list;
@@ -449,12 +433,6 @@ HyperionSimulator::tick_bfu_fetch() {
             if (ei.running_matching.count(dj)) {
                 continue;
             }
-//            if (dj != BOUNDARY_INDEX && di != BOUNDARY_INDEX
-//                    && detector_vector_register.size() > FILTER_CUTOFF
-//                    && (dj-di) > WINDOW_SIZE*n_detectors_per_round)
-//            {
-//                continue;
-//            }
             addr_t address = to_address(di, dj, base_address, n_detectors);
             bool is_hit = access(address, true);
             // If there is no hit on the register file, then we have to go
@@ -471,11 +449,11 @@ HyperionSimulator::tick_bfu_fetch() {
                     min_weight = w;
                 }
             } else {
-                stall_next = true;
+                invalidate_next = true;
             } 
         }
         
-        if (!stall_next) {
+        if (!invalidate_next) {
             for (auto p : match_list) {
                 uint dj = p.first;
                 uint32_t w = p.second;
@@ -488,18 +466,11 @@ HyperionSimulator::tick_bfu_fetch() {
             }
         }
         // Update the latch data.
-        next.valid = true;
+        next.valid = !invalidate_next;
         next.proposed_matches = proposed_matches;
         next.base_entry = ei;
-        next.stalled = stall_next;
-        if (!stall_next) {
-#ifdef MATCHING_STACK
-            hardware_deque.pop_back();
-#elifdef MATCHING_FIFO
-            hardware_deque.pop_front();
-#else
-            hardware_deque.pop();
-#endif
+        if (!invalidate_next) {
+            pq.pop();
         }
     }
 }
@@ -563,11 +534,7 @@ HyperionSimulator::update_state() {
         std::cout << "BFU\n";
 #endif
         state = State::bfu;
-#ifdef MATCHING_PQ
-        hardware_deque.push((DequeEntry) {std::map<uint, uint>(), 0, 0});
-#else
-        hardware_deque.push_back((DequeEntry) {std::map<uint, uint>(), 0, 0});
-#endif
+        hardware_deques[0].push((DequeEntry) {std::map<uint, uint>(), 0, 0});
         break;
     case State::bfu:
 #ifdef HSIM_DEBUG
@@ -593,13 +560,10 @@ HyperionSimulator::clear() {
     major_detector_register = 0;
     minor_detector_table.clear();
 
-#ifdef MATCHING_PQ
-    while (!hardware_deque.empty()) {
-        hardware_deque.pop();
+    for (auto& pq : hardware_deques) {
+        pq.clear();
     }
-#else
-    hardware_deque.clear();
-#endif
+
     for (uint f = 0; f < bfu_fetch_width; f++) {
         for (auto& latch : bfu_pipeline_latches[f]) {
             latch.stalled = false;
@@ -616,6 +580,130 @@ HyperionSimulator::clear() {
 #ifdef HSIM_DEBUG
     std::cout << "(clear)PREFETCH\n";
 #endif
+}
+
+HyperionDeque::HyperionDeque(uint max_size)
+    :max_size(max_size)
+{}
+
+void
+HyperionDeque::push(HyperionSimulator::DequeEntry entry) {
+    if (backing_array.size() == 0) {
+        backing_array.push_back(entry);
+    } else {
+        backing_array.push_back(entry);
+        upheap(backing_array.size()-1);
+        if (backing_array.size() > max_size) {
+            backing_array.pop_back();
+        }
+    }
+}
+
+HyperionSimulator::DequeEntry
+HyperionDeque::top() {
+    return backing_array.front();
+}
+
+void
+HyperionDeque::pop() {
+    auto back_entry = backing_array.back();
+    backing_array[0] = back_entry;
+    backing_array.pop_back();
+    downheap(0);
+}
+
+uint
+HyperionDeque::size() {
+    return backing_array.size();
+}
+
+bool
+HyperionDeque::empty() {
+    return size() == 0;
+}
+
+void
+HyperionDeque::clear() {
+    backing_array.clear();
+}
+
+void
+HyperionDeque::downheap(uint index) {
+    if (index >= size()) {
+        return;
+    }
+    auto curr = backing_array[index];
+    uint left_index = left(index);
+    uint right_index = right(index);
+    if (left_index >= size() && right_index >= size()) {
+        return;
+    }
+    if (left_index < size() && right_index < size()) {
+        auto left_child = backing_array[left_index];
+        auto right_child = backing_array[right_index];
+
+        if (curr < left_child && curr < right_child) {
+            return;
+        }
+        if (left_child < right_child) {
+            // Swap parent with left child.
+            backing_array[index] = left_child;
+            backing_array[left_index] = curr;
+            downheap(left_index);
+        } else {
+            // Swap with right child.
+            backing_array[index] = right_child;
+            backing_array[right_index] = curr;
+            downheap(right_index);
+        }
+    } else if (left_index < size()) {
+        auto left_child = backing_array[left_index];
+        if (left_child < curr) {
+            // Swap parent with left child.
+            backing_array[index] = left_child;
+            backing_array[left_index] = curr;
+            downheap(left_index);
+        } 
+    } else {
+        auto right_child = backing_array[right_index];
+        if (right_child < curr) {
+            // Swap with right child.
+            backing_array[index] = right_child;
+            backing_array[right_index] = curr;
+            downheap(right_index);
+        }
+    }
+}
+
+void
+HyperionDeque::upheap(uint index) {
+    if (index <= 0) {
+        return;
+    }
+    auto curr = backing_array[index];
+    uint parent_index = parent(index);
+    auto parent = backing_array[parent_index];
+    if (curr < parent) {
+        // Swap parent and child.
+        backing_array[parent_index] = curr;
+        backing_array[index] = parent;
+        upheap(parent_index);
+    }
+}
+
+uint
+HyperionDeque::parent(uint index) {
+    return (index-1) >> 1;
+}
+
+uint
+HyperionDeque::left(uint index) {
+    return ((index+1) << 1) + 1;
+}
+
+uint
+HyperionDeque::right(uint index) {
+    return (index+1) << 1;
 }
 
 addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,

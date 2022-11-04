@@ -19,10 +19,6 @@
 #include <vector>
 #include <utility>
 
-//#define MATCHING_STACK
-//#define MATCHING_FIFO
-#define MATCHING_PQ
-
 //#define HSIM_DEBUG
 #define FILTER_CUTOFF 10
 #define WINDOW_SIZE 100
@@ -48,6 +44,8 @@ struct MemoryEventEntry {
     uint dj;
     uint logical_qubit;
 };
+
+class HyperionDeque;
 
 class HyperionSimulator {
 public:
@@ -85,7 +83,7 @@ protected:
 
     void tick_bfu_compute(uint stage);
     void tick_bfu_sort(uint stage);
-    void tick_bfu_fetch();
+    void tick_bfu_fetch(void);
 
     bool access(addr_t, bool set_evictable_on_hit);
     void update_state(void);
@@ -107,7 +105,7 @@ protected:
         
         bool operator<(const DequeEntry& other) const {
             return matching_weight/running_matching.size() 
-                > other.matching_weight/other.running_matching.size();
+                < other.matching_weight/other.running_matching.size();
         }
     };
 
@@ -130,16 +128,12 @@ protected:
     uint min_detector_register;
     uint major_detector_register;
     std::map<uint, uint> minor_detector_table;
-// BFU
-#ifdef MATCHING_PQ
-    std::priority_queue<DequeEntry> hardware_deque;
-#else
-    std::deque<DequeEntry> hardware_deque;
-#endif
-    // Size of latches is fetch_width by (1 + 4 + fetch_width)
+    // There are fetch_width hardware deques of size 2*fetch_width
+    std::vector<HyperionDeque> hardware_deques;
+    // Size of latches is fetch_width by (1 + 4 + 1)
     // There is one FETCH stage,
     //          four SORT stages,
-    //      and fetch_width COMPUTE stages.
+    //          and 1 compute stage.
     std::vector<std::vector<BFUPipelineLatch>> bfu_pipeline_latches;   
     // Replacement policy
     DequeEntry best_matching_register;
@@ -165,6 +159,32 @@ private:
     addr_t base_address;
 
     bool has_boundary;
+
+    friend class HyperionDeque;
+};
+
+// Fixed-size priority queue.
+class HyperionDeque {
+public:
+    HyperionDeque(uint);
+
+    void push(HyperionSimulator::DequeEntry);
+    HyperionSimulator::DequeEntry top(void);
+    void pop(void);
+    uint size(void);
+    bool empty(void);
+    void clear(void);
+private:
+    void downheap(uint);
+    void upheap(uint);
+
+    uint parent(uint);
+    uint left(uint);
+    uint right(uint);
+
+    std::vector<HyperionSimulator::DequeEntry> backing_array;
+
+    uint max_size;
 };
 
 addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,

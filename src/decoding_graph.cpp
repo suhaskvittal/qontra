@@ -10,22 +10,14 @@ namespace qrc {
 static int32_t V_INDEX = 0;
 static int32_t E_INDEX = 0;
 
-static DecodingGraph::Vertex NULL_VERTEX = {
-    -1,
-    std::array<fp_t, N_COORD>(),
-    0
-};
-
-static DecodingGraph::Edge NULL_EDGE = {
-    -1,
-    std::make_pair(0, 0),
-    0.0,
-    0.0,
-    std::set<uint>()
-};
+static DecodingGraph::Vertex NULL_VERTEX(-1, std::array<fp_t, N_COORD>(), 0);
+static DecodingGraph::Edge NULL_EDGE(-1, 0, 0, 0.0, 0.0, std::set<uint>());
 
 DecodingGraph::DecodingGraph() 
     :detector_to_vertex(),
+    vertices_to_edge(),
+    vertex_to_next_round(),
+    vertex_to_prev_round(),
     boundary_coord(),
     vertex_list(),
     adjacency_matrix()
@@ -44,12 +36,14 @@ DecodingGraph::add_detector(uint det, std::array<fp_t, N_COORD>& coord) {
     if (detector_to_vertex.count(det) && detector_to_vertex[det] != NULL_VERTEX) {
         // Simple update the coord data.
         detector_to_vertex[det].coord = coord;
+        for (auto& v : vertex_list) {
+            if (v.detector == det) {
+                v.coord = coord;
+                break;
+            }
+        }
     } else {
-        Vertex v = {
-            V_INDEX++,
-            coord,
-            det
-        };
+        Vertex v(V_INDEX++, coord, det);
         detector_to_vertex[det] = v;
         vertex_list.push_back(v);
         adjacency_matrix[v] = std::vector<Vertex>();
@@ -63,13 +57,7 @@ DecodingGraph::add_edge(uint det1, uint det2,
     Vertex& v1 = detector_to_vertex[det1];
     Vertex& v2 = detector_to_vertex[det2];
     
-    Edge e = {
-        E_INDEX++,
-        std::make_pair(det1, det2),
-        weight,
-        e_prob,
-        frames
-    };
+    Edge e(E_INDEX, det1, det2, weight, e_prob, frames);
     vertices_to_edge[std::make_pair(v1,v2)] = e;
     vertices_to_edge[std::make_pair(v2,v1)] = e;
     adjacency_matrix[v1].push_back(v2);
@@ -133,17 +121,90 @@ DecodingGraph::remove_edge(const Edge& e) {
 
 DecodingGraph::Vertex
 DecodingGraph::get_vertex(uint det_id) {
-    if (!detector_to_vertex.count(det_id) || detector_to_vertex[det_id] == NULL_VERTEX) {
+    if (!detector_to_vertex.count(det_id) 
+            || detector_to_vertex[det_id] == NULL_VERTEX) 
+    {
         // Add it to the graph.
         add_detector(det_id, boundary_coord);
     }
     return detector_to_vertex[det_id];
 }
 
+DecodingGraph::Vertex
+DecodingGraph::get_next_round(uint det_id) {
+    const Vertex v = get_vertex(det_id);
+    return get_next_round(v);
+}
+
+DecodingGraph::Vertex
+DecodingGraph::get_next_round(const Vertex& v) {
+    if (vertex_to_next_round.count(v)) {
+        return vertex_to_next_round[v];
+    }
+    if (v.detector == BOUNDARY_INDEX) {
+        vertex_to_next_round[v] = v;
+        return v;
+    }
+
+    Vertex next_round = NULL_VERTEX;
+    for (Vertex tmp : vertex_list) {
+        // We have to do this because of a bug.
+        // Will fix later.
+        Vertex w = get_vertex(tmp.detector);
+        if (v.coord[0] == w.coord[0]
+            && v.coord[1] == w.coord[1]
+            && v.coord[2] + 1 == w.coord[2])
+        {
+            next_round = w;
+            break;
+        }
+    }
+    vertex_to_next_round[v] = next_round;
+    return next_round;
+}
+
+DecodingGraph::Vertex
+DecodingGraph::get_prev_round(uint det_id) {
+    const Vertex& v = get_vertex(det_id);
+    return get_prev_round(v);
+}
+
+DecodingGraph::Vertex
+DecodingGraph::get_prev_round(const Vertex& v) {
+    if (vertex_to_prev_round.count(v)) {
+        return vertex_to_prev_round[v];
+    }
+    if (v.detector == BOUNDARY_INDEX) {
+        vertex_to_prev_round[v] = v;
+        return v;
+    }
+
+    Vertex prev_round = NULL_VERTEX;
+    for (Vertex tmp : vertex_list) {
+        // We have to do this because of a bug.
+        // Will fix later.
+        Vertex w = get_vertex(tmp.detector);
+        if (v.coord[0] == w.coord[0]
+            && v.coord[1] == w.coord[1]
+            && v.coord[2] == w.coord[2] + 1)
+        {
+            prev_round = w;
+            break;
+        }
+    }
+    vertex_to_prev_round[v] = prev_round;
+    return prev_round;
+}
+
 DecodingGraph::Edge
 DecodingGraph::get_edge(uint det1, uint det2) {
     Vertex v1 = get_vertex(det1);
     Vertex v2 = get_vertex(det2);
+    return get_edge(v1, v2);
+}
+
+DecodingGraph::Edge
+DecodingGraph::get_edge(const Vertex& v1, const Vertex& v2) {
     auto v1_v2 = std::make_pair(v1, v2);
     auto v2_v1 = std::make_pair(v2, v1);
     if (vertices_to_edge.count(v1_v2)) {

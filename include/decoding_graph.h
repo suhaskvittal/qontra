@@ -42,6 +42,18 @@ public:
         std::array<fp_t, N_COORD> coord;
         uint detector;
 
+        Vertex()
+            :id(-1), coord(), detector(0)
+        {}
+
+        Vertex(uint id, std::array<fp_t, N_COORD> coord, uint detector)
+            :id(id), coord(coord), detector(detector)
+        {}
+
+        Vertex(const Vertex& other)
+            :id(other.id), coord(other.coord), detector(other.detector) 
+        {}
+
         bool operator==(const Vertex& other) const {
             return id == other.id; 
         }
@@ -61,6 +73,23 @@ public:
         fp_t edge_weight;
         fp_t error_probability;
         std::set<uint> frames;
+
+        Edge()
+            :id(-1), detectors(std::make_pair(0,0)), edge_weight(0),
+            error_probability(0), frames(std::set<uint>())
+        {}
+
+        Edge(int32_t id, uint di, uint dj, fp_t w, fp_t p, std::set<uint> frames)
+            :id(id), detectors(std::make_pair(di, dj)), edge_weight(w),
+            error_probability(p), frames(frames)
+        {}
+
+        Edge(const Edge& other)
+            :id(other.id), detectors(other.detectors), 
+            edge_weight(other.edge_weight), 
+            error_probability(other.error_probability),
+            frames(frames)
+        {}
 
         bool operator==(const Edge& other) const {
             return id == other.id; 
@@ -85,7 +114,12 @@ public:
     void remove_edge(const Edge&);
 
     Vertex get_vertex(uint det_id);
+    Vertex get_next_round(uint det_id);
+    Vertex get_next_round(const Vertex&);
+    Vertex get_prev_round(uint det_id);
+    Vertex get_prev_round(const Vertex&);
     Edge get_edge(uint, uint);
+    Edge get_edge(const Vertex&, const Vertex&);
 
     uint32_t get_chain_length(uint det1, uint det2);
    
@@ -94,6 +128,8 @@ public:
 private:
     std::map<uint, Vertex> detector_to_vertex;
     std::map<std::pair<Vertex, Vertex>, Edge> vertices_to_edge;
+    std::map<Vertex, Vertex> vertex_to_next_round;
+    std::map<Vertex, Vertex> vertex_to_prev_round;
     std::array<fp_t, N_COORD> boundary_coord;
 
     std::vector<Vertex> vertex_list;
