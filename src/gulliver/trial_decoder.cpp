@@ -16,7 +16,9 @@ TrialDecoder::TrialDecoder(const stim::Circuit& circuit,
     middle_error_table(),
     final_error_table(),
     detectors_per_round(detectors_per_round),
-    max_candidates(8)
+    max_candidates(1024),
+    baseline(circuit),
+    path_table(compute_path_table(graph))
 {
     // Read files in directory.
     for (auto file : std::filesystem::directory_iterator(table_directory)) {
@@ -60,8 +62,8 @@ TrialDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     std::map<ErrorEvent, std::set<DecodingGraph::Edge>> dependent_errors;
     std::map<ErrorEvent, bool> is_dependent;
     for (uint r = 0; r <= rounds; r++) {
+        std::sort(candidates.begin(), candidates.end(), CandidateCmp());
         if (candidates.size() > max_candidates) {
-            std::sort(candidates.begin(), candidates.end(), CandidateCmp());
             candidates = std::vector<ErrorEvent>(candidates.begin(),
                                                 candidates.begin()+max_candidates);
         }
@@ -173,13 +175,13 @@ TrialDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
             for (auto event : events) {
                 std::set<DecodingGraph::Edge> shifted_edges;
                 bool skip = false;
-#ifdef GTR_DEBUG
+#ifdef GTR_DEBUG2
                 std::cout << "\tEvent from table:\n";
 #endif
                 for (auto edge : event.first) {
                     uint di = edge.detectors.first;
                     uint dj = edge.detectors.second;
-#ifdef GTR_DEBUG
+#ifdef GTR_DEBUG2
                     std::cout << "\t\t" << di << "_" << dj;
 #endif
                     // Identify primary (in round) and secondary (out of round)
@@ -204,8 +206,8 @@ TrialDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
                         }
                         if (next_pv.id == -1 || next_sv.id == -1) {
                             skip = true;
-#ifdef GTR_DEBUG
-                            std::cout << " skipped!\n";
+#ifdef GTR_DEBUG2
+                            std::cout << " skipped: invalid id!\n";
 #endif
                             goto shift_exit;
                         }
@@ -214,13 +216,13 @@ TrialDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
                     }
                     auto shifted_edge = graph.get_edge(pd, sd);
                     if (shifted_edge.id == -1) {
-#ifdef GTR_DEBUG
-                        std::cout << " skipped!\n";
+#ifdef GTR_DEBUG2
+                        std::cout << " skipped: no edge exists!\n";
 #endif
                         skip = true;
                         break;
                     } else {
-#ifdef GTR_DEBUG
+#ifdef GTR_DEBUG2
                         std::cout << " shifted as " <<
                                     pd << "_" << sd << "\n";
 #endif
@@ -229,7 +231,7 @@ TrialDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
                 }
 shift_exit:
                 if (!shifted_edges.empty() && !skip) {
-#ifdef GTR_DEBUG
+#ifdef GTR_DEBUG2
                     std::cout << "\tShifted event added.\n";
 #endif
                     shifted_events.push_back(
@@ -239,6 +241,23 @@ shift_exit:
         }
         // Now, branch from existing candidates.
         std::vector<ErrorEvent> next_candidates;
+#ifdef GTR_DEBUG
+        std::cout << "\tParent events:\n";
+        for (auto parent : candidates) {
+            std::cout << "\t\t";
+            if (is_dependent[parent]) {
+                std::cout << "(D)";
+            }
+            std::cout << "w = " << parent.second << ":";
+            for (auto edge : parent.first) {
+                uint di = edge.detectors.first;
+                uint dj = edge.detectors.second;
+                std::cout << " " << di << "_" << dj;
+            }
+            std::cout << "\n";
+        }
+        std::cout << "\tTotal events: " << shifted_events.size() << "\n";
+#endif
         for (auto event : shifted_events) {
             // Check dependencies:
             std::set<DecodingGraph::Edge> dependencies;
@@ -268,11 +287,28 @@ shift_exit:
                     }
                 }
             }
+#ifdef GTR_DEBUG3
+            std::cout << "\tEvent (depender = " << e_is_depender
+                << ", dependent = " << e_is_dependent << "):";
+            for (auto edge : event.first) {
+                uint di = edge.detectors.first;
+                uint dj = edge.detectors.second;
+                std::cout << " " << di << "_" << dj;
+                if (dependencies.count(edge)) {
+                    std::cout << "(D)";
+                }
+            }
+            std::cout << "\n";
+#endif 
             if (candidates.size() == 0) {
                 if (!e_is_depender) {
                     is_dependent[event] = e_is_dependent;
                     dependent_errors[event] = dependencies;
                     next_candidates.push_back(event);
+#ifdef GTR_DEBUG3
+                    std::cout << "\t\tadding event with weight " << event.second 
+                        << "\n";
+#endif
                 }
                 continue;
             }
@@ -286,7 +322,7 @@ shift_exit:
                     // the depender.
                     bool all_dependencies_found = true;
                     for (auto depending_edge : dependent_errors[parent]) {
-                        if (!dependencies.count(depending_edge)) {
+                        if (!event.first.count(depending_edge)) {
                             all_dependencies_found = false;
                             break;
                         }
@@ -295,17 +331,23 @@ shift_exit:
                     if (!all_dependencies_found) {
                         continue;
                     }
+#ifdef GTR_DEBUG3
+                    std::cout << "\t\tFound matching parent.\n";
+#endif
                 } else if (!e_is_depender && !is_dependent[parent]) {
                     // Continue onwards.
                 } else {
                     // Do not add.
                     continue;
                 }
-
                 if (w < min_weight) {
                     min_weight = w;
                     min_parent = parent;
                 }
+
+#ifdef GTR_DEBUG3
+                std::cout << "\t\tadding event with weight " << w << "\n";
+#endif
                 // Update event with min_parent.
                 std::set<DecodingGraph::Edge> set_diff;
                 std::set_symmetric_difference(event.first.begin(),
@@ -339,7 +381,14 @@ shift_exit:
     }
     // Get correction.
     for (auto edge : best_candidate.first) {
-        for (uint obs : edge.frames) {
+        auto true_edge = graph.get_edge(edge.detectors.first, 
+                            edge.detectors.second);
+#ifdef GTR_DEBUG
+        std::cout << "edge: " << edge.detectors.first << ","
+                    << edge.detectors.second << "\n";
+        std::cout << "\tframes:\n";
+#endif
+        for (uint obs : true_edge.frames) {
             if (obs >= 0) {
                 correction[obs] = !correction[obs];
             }
@@ -355,7 +404,40 @@ shift_exit:
                         n_detectors, n_observables);
 #ifdef GTR_DEBUG
     std::set<ErrorEvent> visited;
+    std::cout << "Given correction: " << correction[0]+0 << "\n";
     std::cout << "Is logical error: " << is_error << "\n";
+    if (is_error) {
+        auto mwpm_res = baseline.decode_error(syndrome);
+        std::cout << "MWPM had error = " << mwpm_res.is_logical_error << "\n";
+        std::set<uint> visited;
+        std::vector<uint8_t> mwpm_corr(circuit.count_observables(), 0);
+        for (auto di_dj : mwpm_res.matching) {
+            uint di = di_dj.first;
+            uint dj = di_dj.second;
+            if (visited.count(di) || visited.count(dj)) {
+                continue;
+            }
+            // Check path between the two detectors.
+            // This is examining the error chain.
+            std::vector<uint> detector_path(path_table[di_dj].path);
+            for (uint i = 1; i < detector_path.size(); i++) {
+                // Get edge from decoding graph.
+                auto wi = detector_path[i-1];
+                auto wj = detector_path[i];
+                std::cout << "\tTraveling along " << wi << "_" << wj << "\n";
+                auto edge = graph.get_edge(wi, wj);
+                // The edge should exist.
+                for (uint obs : edge.frames) {
+                    // Flip the bit.
+                    if (obs >= 0) {
+                        mwpm_corr[obs] = !mwpm_corr[obs];
+                    }
+                }
+            }
+            visited.insert(di);
+            visited.insert(dj);
+        }
+    }
     for (auto candidate : candidates) {
         if (visited.count(candidate)) {
             continue;
@@ -422,7 +504,7 @@ TrialDecoder::load_from_file(std::ifstream& in) {
     while (std::getline(in, syndrome_string, ',')) {
         std::string n_events_str;
         std::getline(in, n_events_str, ',');
-        uint n_events = std::stoi(n_events_str);
+        int n_events = std::stoi(n_events_str);
 
         std::set<DecodingGraph::Edge> error_set;
         bool is_init_error = false;

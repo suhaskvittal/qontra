@@ -88,7 +88,7 @@ public:
             :id(other.id), detectors(other.detectors), 
             edge_weight(other.edge_weight), 
             error_probability(other.error_probability),
-            frames(frames)
+            frames(other.frames)
         {}
 
         bool operator==(const Edge& other) const {

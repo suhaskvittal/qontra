@@ -57,7 +57,7 @@ DecodingGraph::add_edge(uint det1, uint det2,
     Vertex& v1 = detector_to_vertex[det1];
     Vertex& v2 = detector_to_vertex[det2];
     
-    Edge e(E_INDEX, det1, det2, weight, e_prob, frames);
+    Edge e(E_INDEX++, det1, det2, weight, e_prob, frames);
     vertices_to_edge[std::make_pair(v1,v2)] = e;
     vertices_to_edge[std::make_pair(v2,v1)] = e;
     adjacency_matrix[v1].push_back(v2);
@@ -147,10 +147,7 @@ DecodingGraph::get_next_round(const Vertex& v) {
     }
 
     Vertex next_round = NULL_VERTEX;
-    for (Vertex tmp : vertex_list) {
-        // We have to do this because of a bug.
-        // Will fix later.
-        Vertex w = get_vertex(tmp.detector);
+    for (Vertex w : vertex_list) {
         if (v.coord[0] == w.coord[0]
             && v.coord[1] == w.coord[1]
             && v.coord[2] + 1 == w.coord[2])
@@ -180,10 +177,7 @@ DecodingGraph::get_prev_round(const Vertex& v) {
     }
 
     Vertex prev_round = NULL_VERTEX;
-    for (Vertex tmp : vertex_list) {
-        // We have to do this because of a bug.
-        // Will fix later.
-        Vertex w = get_vertex(tmp.detector);
+    for (Vertex w : vertex_list) {
         if (v.coord[0] == w.coord[0]
             && v.coord[1] == w.coord[1]
             && v.coord[2] == w.coord[2] + 1)

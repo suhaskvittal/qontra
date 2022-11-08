@@ -30,7 +30,7 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     major_detector_register(0),
     minor_detector_table(),
     hardware_deques(params.bfu_fetch_width, 
-            HyperionDeque(2*params.bfu_fetch_width)),
+            HyperionDeque(3*params.bfu_fetch_width)),
     bfu_pipeline_latches(params.bfu_fetch_width, 
             std::vector<BFUPipelineLatch>(
                 BFU_SORT_STAGES+params.bfu_compute_stages)),
@@ -155,6 +155,20 @@ HyperionSimulator::tick() {
         tick_prefetch();
         break;
     case State::bfu:
+#ifdef HSIM_DEBUG
+        if (bfu_cycles % 100 == 0) {
+            for (uint i = 0; i < hardware_deques.size(); i++) {
+                std::cout << "[PQ] Priority Queue " << i << ":\n";
+                for (auto entry : hardware_deques[i].backing_array) {
+                    std::cout << "\t";
+                    for (auto pair : entry.running_matching) {
+                        std::cout << " " << pair.first << " --> " << pair.second;
+                    }
+                    std::cout << "\n";
+                }
+            }
+        }
+#endif
         bfu_cycles++;
         tick_bfu();
         break;
@@ -303,12 +317,25 @@ HyperionSimulator::tick_bfu_compute(uint stage) {
         if (!latch.valid) {
             continue;
         }
-
+#ifdef HSIM_DEBUG2
+        if (stage == 0 && f == 0) {
+            // Check if proposed_matches are sorted.
+            std::cout << "\tProposed matches (COMPUTE 0):";
+            for (uint i = 0; i < latch.proposed_matches.size(); i++) {
+                auto pair = latch.proposed_matches[i];
+                std::cout << " " << pair.first << "( w = " << pair.second << " )";
+            }
+            std::cout << "\n";
+        }
+#endif
         bfu_idle = false;
 
         // Add entry from proposed matches to the running matching.
         // Push a matching onto each hardware deque.
-        for (auto& pq : hardware_deques) {
+        uint offset = f;
+        for (uint i = 0; i < hardware_deques.size(); i++) {
+            uint deque_index = (i + f) % hardware_deques.size();
+            auto& pq = hardware_deques[deque_index];
             if (latch.proposed_matches.empty()) {
                 break;
             }
@@ -371,6 +398,17 @@ HyperionSimulator::tick_bfu_sort(uint stage) {
             bfu_pipeline_latches[f][stage+1].valid = false;
             continue;
         }
+#ifdef HSIM_DEBUG2
+        if (f == 0) {
+            // Check if proposed_matches are sorted.
+            std::cout << "\tProposed matches (SORT " << stage << "):";
+            for (uint i = 0; i < latch.proposed_matches.size(); i++) {
+                auto pair = latch.proposed_matches[i];
+                std::cout << " " << pair.first << "( w = " << pair.second << " )";
+            }
+            std::cout << "\n";
+        }
+#endif
 
         bfu_idle = false;
         // Get radix bins from prior round.
@@ -457,6 +495,9 @@ HyperionSimulator::tick_bfu_fetch() {
             for (auto p : match_list) {
                 uint dj = p.first;
                 uint32_t w = p.second;
+                if (w >= best_matching_register.matching_weight) {
+                    continue;
+                }
                 if (detector_vector_register.size() <= FILTER_CUTOFF
                     || w <= mean_weight_register
                     || w == min_weight)
@@ -526,8 +567,7 @@ HyperionSimulator::access(addr_t address, bool set_evictable_on_hit) {
 
 void
 HyperionSimulator::update_state() {
-    switch (state) {
-    case State::prefetch:
+    if (state == State::prefetch) {
         mean_weight_register /= access_counter;
 #ifdef HSIM_DEBUG
         std::cout << "[Mean Weight] " << mean_weight_register << "\n";
@@ -535,8 +575,37 @@ HyperionSimulator::update_state() {
 #endif
         state = State::bfu;
         hardware_deques[0].push((DequeEntry) {std::map<uint, uint>(), 0, 0});
-        break;
-    case State::bfu:
+        // Construct greedy initial matching.
+        std::map<uint, uint> init_matching;
+        fp_t matching_weight = 0.0;
+        for (uint i = 0; i < detector_vector_register.size(); i++) {
+            uint di = detector_vector_register[i];
+            if (init_matching.count(di)) {
+                continue;
+            }
+            uint min_mate;
+            fp_t min_weight = std::numeric_limits<fp_t>::max();
+            for (uint j = i + 1; j < detector_vector_register.size(); j++) {
+                uint dj = detector_vector_register[j];
+                if (init_matching.count(dj)) {
+                    continue;
+                }
+                fp_t w = path_table[std::make_pair(di, dj)].distance;
+                if (w < min_weight) {
+                    min_mate = dj;
+                    min_weight = w;
+                }
+            }
+            init_matching[di] = min_mate;
+            init_matching[min_mate] = di;
+            matching_weight += path_table[std::make_pair(di, min_mate)].distance;
+        }
+        best_matching_register = (DequeEntry) {
+            init_matching,
+            (uint32_t) (matching_weight * MWPM_INTEGER_SCALE),
+            0
+        };
+    } else if (state == State::bfu) {
 #ifdef HSIM_DEBUG
         std::cout << "IDLE\n";
         std::cout << "\tcycles in prefetch: " << prefetch_cycles << "\n";
@@ -544,9 +613,6 @@ HyperionSimulator::update_state() {
         std::cout << "\thamming weight: " << detector_vector_register.size() << "\n";
 #endif
         state = State::idle;
-        break;
-    default:
-        break;
     }
 }
 

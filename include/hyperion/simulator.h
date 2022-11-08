@@ -185,6 +185,8 @@ private:
     std::vector<HyperionSimulator::DequeEntry> backing_array;
 
     uint max_size;
+
+    friend class HyperionSimulator;
 };
 
 addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,

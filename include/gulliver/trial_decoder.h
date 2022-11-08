@@ -9,6 +9,7 @@
 #include "defs.h"
 #include "decoding_graph.h"
 #include "decoder.h"
+#include "mwpm_decoder.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -23,6 +24,7 @@ namespace qrc {
 namespace gulliver {
 
 #define GTR_DEBUG
+//#define GTR_DEBUG3
 
 class TrialDecoder : public Decoder {
 public:
@@ -42,6 +44,9 @@ protected:
     uint detectors_per_round;
 private:
     uint max_candidates;
+
+    MWPMDecoder baseline;
+    PathTable path_table;
 };
 
 }  // gulliver

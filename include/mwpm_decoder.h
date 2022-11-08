@@ -19,7 +19,7 @@
 #include <time.h>
 
 #define MWPM_DECODER_NAME "MWPMDecoder"
-#define MWPM_INTEGER_SCALE 10000.0
+#define MWPM_INTEGER_SCALE 1000.0
 
 typedef qfp_t wgt_t;
 

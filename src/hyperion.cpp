@@ -24,6 +24,7 @@ Hyperion::Hyperion(const stim::Circuit circuit,
     n_rounds(circuit.count_detectors()/n_detectors_per_round),
     main_clock_frequency(params.main_clock_frequency),
     dram_clock_frequency(params.dram_clock_frequency),
+    baseline(circuit),
     // Heap initialized data (to be deleted)
     dram(nullptr),
     memory_event_table(nullptr)
@@ -179,12 +180,36 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
 //          n_logical_failures++;
 //          is_error = true;
 //      }
-#ifdef GSIM_DEBUG
+#ifdef HSIM_DEBUG
         std::cout << "Is error: " << is_error << "\n";
         std::cout << "Time taken: " << time_taken << "ns.\n";
         std::cout << "Prefetch cycles: " << simulator->prefetch_cycles << "\n";
         std::cout << "BFU Cycles: " << simulator->bfu_cycles << "\n";
 #endif
+        if (is_error) {
+            std::cout << "Prefetch cycles: " << simulator->prefetch_cycles << "\n";
+            std::cout << "BFU Cycles: " << simulator->bfu_cycles << "\n";
+            auto mwpm_res = baseline.decode_error(syndrome);
+            auto mwpm_matching = mwpm_res.matching;
+            std::cout << "MWPM Matching:\n";
+            fp_t mwpm_weight = 0.0;
+            for (auto pair : mwpm_matching) {
+                fp_t w = path_table[pair].distance;
+                std::cout << "\t" << pair.first << " --> " << pair.second 
+                    << " ( w = " << w << " )\n";
+                mwpm_weight += w;
+            }
+            fp_t weight = 0.0;
+            std::cout << "Hyperion Matching:\n";
+            for (auto pair : matching) {
+                fp_t w = path_table[pair].distance;
+                std::cout << "\t" << pair.first << " --> " << pair.second 
+                    <<  " ( w = " << w << " )\n";
+                weight += w;
+            }
+            std::cout << "mwpm = " << mwpm_weight 
+                << " , hyperion = " << weight << "\n";
+        }
     DecoderShotResult res = {
         time_taken,
         0.0, // TODO

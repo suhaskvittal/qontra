@@ -65,6 +65,8 @@ private:
     uint n_rounds;
     fp_t main_clock_frequency;
     fp_t dram_clock_frequency;
+    
+    MWPMDecoder baseline;
     // Delete later.
     dramsim3::MemorySystem * dram;
     std::map<addr_t, bool> * memory_event_table;
