@@ -50,6 +50,7 @@ Hyperion::Hyperion(const stim::Circuit circuit,
         params.n_registers,
         params.bfu_fetch_width,
         params.bfu_compute_stages,
+        params.bfu_priority_queue_size,
         0,
         0,
         0
@@ -131,7 +132,8 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
     simulator->load_detectors(detector_array);
 
     uint64_t n_cycles = 0;
-    uint round = 1;
+    uint round = 0; // There are d+1 rounds because d rounds are decoding
+                    // rounds and there is 1 round for the logical measurement.
 
     fp_t min_clock_frequency = main_clock_frequency < dram_clock_frequency
                                 ? main_clock_frequency : dram_clock_frequency;

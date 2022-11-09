@@ -28,6 +28,7 @@ struct HyperionParams {
     // Fetch width for brute force unit
     uint bfu_fetch_width;             
     uint bfu_compute_stages;
+    uint bfu_priority_queue_size;
     // Memory Parameters
     uint n_registers;
     // DRAM parameters

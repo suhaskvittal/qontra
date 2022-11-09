@@ -33,6 +33,7 @@ struct HyperionSimulatorParams {
     uint n_registers;
     uint bfu_fetch_width;
     uint bfu_compute_stages;
+    uint bfu_priority_queue_size;
 
     uint8_t bankgroup;
     uint8_t bank;

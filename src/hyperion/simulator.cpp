@@ -30,7 +30,7 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     major_detector_register(0),
     minor_detector_table(),
     hardware_deques(params.bfu_fetch_width, 
-            HyperionDeque(3*params.bfu_fetch_width)),
+            HyperionDeque(params.bfu_priority_queue_size)),
     bfu_pipeline_latches(params.bfu_fetch_width, 
             std::vector<BFUPipelineLatch>(
                 BFU_SORT_STAGES+params.bfu_compute_stages)),
@@ -72,7 +72,9 @@ HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
 #endif
     has_boundary = detector_vector_register.back() == BOUNDARY_INDEX;
     // Compute the critical index.
-    curr_max_detector = n_detectors_per_round;
+    curr_max_detector = n_detectors_per_round >> 1; // Due to STIM's weirdness,
+                                                    // only one type of stabilizer
+                                                    // is measured in the first round.
 
     return true;
 }
