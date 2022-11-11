@@ -75,7 +75,6 @@ HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
     curr_max_detector = n_detectors_per_round >> 1; // Due to STIM's weirdness,
                                                     // only one type of stabilizer
                                                     // is measured in the first round.
-
     return true;
 }
 

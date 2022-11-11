@@ -17,7 +17,8 @@ HyperionMultiQubitSimulator::HyperionMultiQubitSimulator(
     /* Statistics */
     n_timeouts(0),
     n_overflows(0),
-    n_uncomputable(0),
+    n_logical_errors(0),
+    max_faults(0),
     max_latency(0),
     /* Memory */
     dram(nullptr),
@@ -27,9 +28,11 @@ HyperionMultiQubitSimulator::HyperionMultiQubitSimulator(
     occupied(n_decoders, false),
     /* Metadata */
     circuits(circuits),
+    graphs(circuits.size()),
     path_tables(circuits.size()),
     n_rounds(circuits[0].count_detectors() / n_detectors_per_round),
-    main_clock_frequency(params.main_clock_frequency)
+    main_clock_frequency(params.main_clock_frequency),
+    dram_clock_frequency(params.dram_clock_frequency)
 {
     uint n_detectors = circuits[0].count_detectors()+1;
     // Initialize memory first.
@@ -46,6 +49,7 @@ HyperionMultiQubitSimulator::HyperionMultiQubitSimulator(
                                         cb, cb);
     for (uint i = 0; i < circuits.size(); i++) {
         DecodingGraph graph = to_decoding_graph(circuits[i]);
+        graphs[i] = graph;
         path_tables[i] = compute_path_table(graph);
     }
 
@@ -86,6 +90,16 @@ void
 HyperionMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
     const uint32_t shots_per_round = 100000;
 
+    const fp_t min_clock_frequency = main_clock_frequency < dram_clock_frequency
+                                ? main_clock_frequency : dram_clock_frequency;
+    const uint32_t main_tpc = (uint32_t) 
+                                (main_clock_frequency / min_clock_frequency);
+    const uint32_t dram_tpc = (uint32_t)
+                                (dram_clock_frequency / min_clock_frequency);
+
+    const uint n_detectors = circuits[0].count_detectors();
+    const uint n_observables = circuits[0].count_observables();
+
     while (shots > 0) {
         uint32_t shots_this_round = 
             shots > shots_per_round ? shots_per_round : shots;
@@ -105,16 +119,21 @@ HyperionMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                 if (!sample_buffers[i][j].not_zero()) {
                     continue;
                 }
-                if (service_queue.size() >= simulators.size()) {
-                    n_overflows++;
-                }
                 service_queue.push_back(i);
             }
-#ifdef GSIM_DEBUG
+            if (service_queue.size() > simulators.size()) {
+                n_overflows++;
+            }
+            if (service_queue.size() > max_faults) {
+                max_faults = service_queue.size();
+            }
+#ifdef HMSIM_DEBUG
             std::cout << "Shot " << j << ": " 
                 << service_queue.size() << " qubits have faults.\n";
 #endif
             
+            std::map<uint, uint> assignment_table;
+            std::map<uint, std::vector<uint8_t>> syndrome_table;
             // Preload data.
             for (uint i = 0; i < simulators.size(); i++) {
                 HyperionSimulator * sim = simulators[i];
@@ -124,58 +143,94 @@ HyperionMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                     // Compute data
                     uint qubit_id = service_queue.front();
                     service_queue.pop_front();
-                    load_simulator(sim, sample_buffers[qubit_id][j], qubit_id);
+                    auto syndrome = _to_vector(sample_buffers[qubit_id][j], 
+                                                n_detectors, n_observables); 
+                    load_simulator(sim, syndrome, qubit_id);
+                    // Mark qubit_id as being serviced by decoder i
+                    assignment_table[i] = qubit_id;
+                    syndrome_table[i] = syndrome;
+#ifdef HMSIM_DEBUG
+                    std::cout << "\tDecoder " << i << " --> qubit " 
+                        << qubit_id << "\n";
+#endif
                 }
             }
 
             fp_t time_taken = 0.0; 
             uint64_t n_cycles = 0;
-            uint round = 1;
+            uint round = 0;
             bool done;
             do {
-#ifdef GSIM_DEBUG
-                if (n_cycles == 1001) {
-                    std::cout << "\tTimeout: " 
-                        << service_queue.size() << " qubits unserviced.\n";
-                }
-#endif
                 done = true;
-                dram->ClockTick();
+                for (uint i = 0; i < dram_tpc; i++) {
+                    dram->ClockTick();
+                }
                 for (uint i = 0; i < simulators.size(); i++) {
                     HyperionSimulator * sim = simulators[i]; 
-                    if (sim->is_idle() && !service_queue.empty()) {
+                    if (sim->is_idle()) {
+                        if (!assignment_table.count(i)
+                            || assignment_table[i] == (uint)-1) 
+                        {
+                            continue;
+                        }
+                        // Check for a logical error.
+                        auto matching = sim->get_matching();
+                        auto correction = get_correction(matching, 
+                                                        assignment_table[i]);
+                        bool is_error = is_logical_error(correction, 
+                                                        syndrome_table[i], 
+                                                        n_detectors,
+                                                        n_observables);
+                        if (is_error) {
+                            n_logical_errors++;
+                        }
+                        assignment_table[i] = (uint)-1;
+                        // If the queue is empty, then all faults have
+                        // been assigned.
+                        if (service_queue.empty()) {
+                            continue;
+                        }
+                        // Otherwise, we can service more events.
                         done = false;
-
                         uint qubit_id = service_queue.front();
                         service_queue.pop_front();
-                        load_simulator(sim, sample_buffers[qubit_id][j], qubit_id);
-                        sim->sig_end_round(round);
-#ifdef GSIM_DEBUG
-                        std::cout << "Simulator " << i << 
-                            " finished early, loading new syndrome.\n";
+                        auto syndrome = _to_vector(sample_buffers[qubit_id][j],
+                                                    n_detectors, n_observables);
+                        load_simulator(sim, syndrome, qubit_id);
+                        assignment_table[i] = qubit_id;
+                        syndrome_table[i] = syndrome;
+                        sim->sig_end_round(round);  // Need to fastforward
+                                                  // the simulator to accept
+                                                  // syndromes from past rounds.
+#ifdef HMSIM_DEBUG
+                        std::cout << "\t[ cycle = " << n_cycles 
+                            << " ] Decoder " << i << " --> qubit " 
+                            << qubit_id << "\n";
 #endif
-                    } else if (!sim->is_idle()) {
-                        done = false;
                     } else {
-                        continue;
+                        done = false;
                     }
-#ifdef GSIM_DEBUG
-                    if (n_cycles == 1001) {
-                        std::cout << "Simulator " << i << " is not finished\n";
+                    for (uint j = 0; j < main_tpc; j++) {
+                        sim->tick();
                     }
-#endif
-                    sim->tick();
                 }
                 
                 n_cycles++;
-                time_taken = n_cycles / main_clock_frequency * 1e9;
-                if (time_taken > 1000.0 && round < n_rounds) {
-                    for (HyperionSimulator * sim : simulators) {
-                        sim->sig_end_round();
+                time_taken = n_cycles / min_clock_frequency * 1e9;
+                if (time_taken >= 1000.0) {
+                    if (round < n_rounds) {
+                        for (HyperionSimulator * sim : simulators) {
+                            sim->sig_end_round();
+                        }
+#ifdef HMSIM_DEBUG
+                        std::cout << "\tRound " << round << " ended.\n";
+#endif
+                        round++;
+                        n_cycles = 0;
+                        time_taken = 0.0;
+                    } else {
+                        done = true;
                     }
-                    round++;
-                    n_cycles = 0;
-                    time_taken = 0.0;
                 }
             } while (!done);
             if (round < n_rounds) {
@@ -183,9 +238,15 @@ HyperionMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                                // so all our computation finishes
                                // before the final round.
             }
-
-            if (time_taken > 1000.0) {
+            // Update timing statistics.
+            time_taken = n_cycles / min_clock_frequency * 1e9;
+            if (time_taken >= 1000.0 && service_queue.size() > 0) {
                 n_timeouts++;
+                n_logical_errors += service_queue.size();
+#ifdef HMSIM_DEBUG
+                std::cout << "\tTimed out: " << service_queue.size()
+                            << " faults left.\n";
+#endif
             }
 
             if (time_taken > max_latency) {
@@ -200,20 +261,20 @@ void
 HyperionMultiQubitSimulator::reset_stats() {
     n_timeouts = 0;
     n_overflows = 0;
-    n_uncomputable = 0;
+    n_logical_errors = 0;
+    max_faults = 0;
     max_latency = 0.0;
 }
 
-bool
+void
 HyperionMultiQubitSimulator::load_simulator(
         HyperionSimulator * sim,
-        const stim::simd_bits_range_ref& event,
+        const std::vector<uint8_t>& syndrome,
         uint qubit_id) 
 {
     stim::Circuit circ = circuits[qubit_id];
     uint n_detectors = circ.count_detectors();
     uint n_observables = circ.count_observables();
-    auto syndrome = _to_vector(event, n_detectors, n_observables);
     // Load data into simulator.
     auto path_table = path_tables[qubit_id];
     uint8_t bankgroup = qubit_id % dram->config_->bankgroups;
@@ -226,17 +287,63 @@ HyperionMultiQubitSimulator::load_simulator(
     sim->load_base_address(bankgroup, bank, row_offset);
     // Load the problem into the simulator.
     std::vector<uint> detector_array;
-    for (uint di = 0; di < syndrome.size(); di++) {
+#ifdef HMSIM_DEBUG
+    std::cout << "\tDetectors for qubit " << qubit_id << ":";
+#endif
+    for (uint di = 0; di < n_detectors; di++) {
         if (syndrome[di]) {
             detector_array.push_back(di);
+#ifdef HMSIM_DEBUG
+            std::cout << " " << di;
+#endif
         }
     }
-
-    bool computable = sim->load_detectors(detector_array);
-    if (!computable) {
-        n_uncomputable++;
+#ifdef HMSIM_DEBUG
+    std::cout << "\n";
+#endif
+    if (detector_array.size() & 0x1) {
+        detector_array.push_back(BOUNDARY_INDEX);
     }
-    return computable;
+
+    sim->load_detectors(detector_array);
+}
+
+std::vector<uint8_t>
+HyperionMultiQubitSimulator::get_correction(
+        const std::map<uint, uint>& matching,
+        uint qubit_id) 
+{
+    std::set<uint> visited;
+    std::vector<uint8_t> correction(circuits[qubit_id].count_observables(), 0);
+    auto& graph = graphs[qubit_id];
+    auto& path_table = path_tables[qubit_id];
+
+    for (auto di_dj : matching) {
+        uint di = di_dj.first;
+        uint dj = di_dj.second;
+        if (visited.count(di) || visited.count(dj)) {
+            continue;
+        }
+        // Check path between the two detectors.
+        // This is examining the error chain.
+        std::vector<uint> detector_path(path_table[di_dj].path);
+        for (uint i = 1; i < detector_path.size(); i++) {
+            // Get edge from decoding graph.
+            auto wi = detector_path[i-1];
+            auto wj = detector_path[i];
+            auto edge = graph.get_edge(wi, wj);
+            // The edge should exist.
+            for (uint obs : edge.frames) {
+                // Flip the bit.
+                if (obs >= 0) {
+                    correction[obs] = !correction[obs];
+                }
+            }
+        }
+        visited.insert(di);
+        visited.insert(dj);
+    }
+    return correction;
 }
 
 }  // hyperion

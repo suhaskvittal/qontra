@@ -19,6 +19,7 @@
 #include <vector>
 #include <utility>
 
+#define HMSIM_DEBUG
 #define ROWS_PER_QUBIT  4
 
 namespace qrc {
@@ -39,18 +40,22 @@ public:
 
     uint32_t n_timeouts;
     uint32_t n_overflows;
-    uint32_t n_uncomputable;
+    uint32_t n_logical_errors;
+    uint32_t max_faults;
     fp_t max_latency;
 private:
-    bool load_simulator(
-            HyperionSimulator*, const stim::simd_bits_range_ref&, uint qubit_id);
+    void load_simulator(
+            HyperionSimulator*, const std::vector<uint8_t>&, uint qubit_id);
+    std::vector<uint8_t> get_correction(const std::map<uint, uint>&, uint qubit_id);
 
     std::map<addr_t, bool> * memory_event_table;
     std::vector<bool> occupied;
     std::vector<stim::Circuit> circuits;
+    std::vector<DecodingGraph> graphs;
     std::vector<PathTable> path_tables;
     uint n_rounds;
     fp_t main_clock_frequency;
+    fp_t dram_clock_frequency;
 };
 
 }  // hyperion

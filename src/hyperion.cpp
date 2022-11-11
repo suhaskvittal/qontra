@@ -187,10 +187,7 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
         std::cout << "Time taken: " << time_taken << "ns.\n";
         std::cout << "Prefetch cycles: " << simulator->prefetch_cycles << "\n";
         std::cout << "BFU Cycles: " << simulator->bfu_cycles << "\n";
-#endif
         if (is_error) {
-            std::cout << "Prefetch cycles: " << simulator->prefetch_cycles << "\n";
-            std::cout << "BFU Cycles: " << simulator->bfu_cycles << "\n";
             auto mwpm_res = baseline.decode_error(syndrome);
             auto mwpm_matching = mwpm_res.matching;
             std::cout << "MWPM Matching:\n";
@@ -212,6 +209,7 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
             std::cout << "mwpm = " << mwpm_weight 
                 << " , hyperion = " << weight << "\n";
         }
+#endif
     DecoderShotResult res = {
         time_taken,
         0.0, // TODO

@@ -29,16 +29,15 @@ class MWPMDecoder : public Decoder {
 public:
     MWPMDecoder(const stim::Circuit&, uint max_detector=BOUNDARY_INDEX);
 
-    DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
     std::string name(void) override;
     bool is_software(void) override;
+    DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
+    std::vector<uint8_t> get_correction_from_matching(const std::map<uint, uint>&);
 
     uint64_t sram_cost(void) override;
 
     uint32_t longest_error_chain;
 protected:
-    std::vector<uint8_t> get_correction_from_matching(const std::map<uint, uint>&);
-
     PathTable path_table;
     uint max_detector;
 };

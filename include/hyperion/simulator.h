@@ -162,6 +162,7 @@ private:
     bool has_boundary;
 
     friend class HyperionDeque;
+    friend class HyperionMultiQubitSimulator;
 };
 
 // Fixed-size priority queue.
