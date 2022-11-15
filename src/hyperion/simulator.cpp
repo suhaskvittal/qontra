@@ -49,7 +49,10 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     bfu_compute_stages(params.bfu_compute_stages),
     curr_qubit(0),
     base_address(0),
-    has_boundary(false)
+    has_boundary(false),
+    use_dma(params.use_dma),
+    use_rc(params.use_rc),
+    use_greedy_init(params.use_greedy_init)
 {
     clear();
     load_base_address(params.bankgroup, params.bank, params.row_offset);
@@ -152,7 +155,6 @@ HyperionSimulator::tick() {
 
     switch (state) {
     case State::prefetch:
-        prefetch_cycles++;
         tick_prefetch();
         break;
     case State::bfu:
@@ -170,7 +172,6 @@ HyperionSimulator::tick() {
             }
         }
 #endif
-        bfu_cycles++;
         tick_bfu();
         break;
     default:
@@ -211,6 +212,8 @@ void
 HyperionSimulator::reset_stats() {
     prefetch_cycles = 0;
     bfu_cycles = 0;
+    cycles_to_converge = 0;
+    cycles_after_last_converge = 0;
 }
 
 uint64_t
@@ -227,6 +230,10 @@ HyperionSimulator::row_activations() {
 
 void
 HyperionSimulator::tick_prefetch()  {
+    if (!use_dma && curr_max_detector < n_detectors - 1) {
+        return;
+    }
+
     uint& ai = major_detector_register;
     if (minor_detector_table.count(ai) == 0) {
         // Start with boundary first if it exists.
@@ -248,7 +255,9 @@ HyperionSimulator::tick_prefetch()  {
     if (ai >= detector_vector_register.size()-1) {
         // We only transition state if all DRAM requests
         // have been processed.
-        if (dram_await_array.size() == 0) {
+        if (dram_await_array.size() == 0 
+            && (use_rc || curr_max_detector == n_detectors-1)) 
+        {
             update_state();
         }
         return;
@@ -289,6 +298,8 @@ HyperionSimulator::tick_prefetch()  {
         aj = detector_vector_register.size();
         ai++;
     }
+
+    prefetch_cycles++;
 }
 
 void
@@ -307,6 +318,9 @@ HyperionSimulator::tick_bfu() {
     if (bfu_idle) {
         update_state();
     }
+
+    bfu_cycles++;
+    cycles_after_last_converge++;
 }
 
 void
@@ -370,6 +384,8 @@ HyperionSimulator::tick_bfu_compute(uint stage) {
                 // Update the output register.
                 if (matching_weight < best_matching_register.matching_weight) {
                     best_matching_register = ei;
+                    // Update stats.
+                    cycles_to_converge = cycles_after_last_converge;
                 }
             }
             latch.proposed_matches.pop_front();
@@ -577,35 +593,45 @@ HyperionSimulator::update_state() {
         state = State::bfu;
         hardware_deques[0].push((DequeEntry) {std::map<uint, uint>(), 0, 0});
         // Construct greedy initial matching.
+        // Note: typically tracked as accesses are performed via DMA,
+        // but we'll just do it here because it is easier.
         std::map<uint, uint> init_matching;
         fp_t matching_weight = 0.0;
-        for (uint i = 0; i < detector_vector_register.size(); i++) {
-            uint di = detector_vector_register[i];
-            if (init_matching.count(di)) {
-                continue;
-            }
-            uint min_mate;
-            fp_t min_weight = std::numeric_limits<fp_t>::max();
-            for (uint j = i + 1; j < detector_vector_register.size(); j++) {
-                uint dj = detector_vector_register[j];
-                if (init_matching.count(dj)) {
+        if (use_greedy_init) {
+            for (uint i = 0; i < detector_vector_register.size(); i++) {
+                uint di = detector_vector_register[i];
+                if (init_matching.count(di)) {
                     continue;
                 }
-                fp_t w = path_table[std::make_pair(di, dj)].distance;
-                if (w < min_weight) {
-                    min_mate = dj;
-                    min_weight = w;
+                uint min_mate;
+                fp_t min_weight = std::numeric_limits<fp_t>::max();
+                for (uint j = i + 1; j < detector_vector_register.size(); j++) {
+                    uint dj = detector_vector_register[j];
+                    if (init_matching.count(dj)) {
+                        continue;
+                    }
+                    fp_t w = path_table[std::make_pair(di, dj)].distance;
+                    if (w < min_weight) {
+                        min_mate = dj;
+                        min_weight = w;
+                    }
                 }
+                init_matching[di] = min_mate;
+                init_matching[min_mate] = di;
+                matching_weight += path_table[std::make_pair(di, min_mate)].distance;
             }
-            init_matching[di] = min_mate;
-            init_matching[min_mate] = di;
-            matching_weight += path_table[std::make_pair(di, min_mate)].distance;
         }
+
         best_matching_register = (DequeEntry) {
             init_matching,
             (uint32_t) (matching_weight * MWPM_INTEGER_SCALE),
             0
         };
+        // If it was not initialized, then set the weight to max possible value.
+        if (!use_greedy_init) {
+            best_matching_register.matching_weight = 
+                std::numeric_limits<uint32_t>::max();
+        }
     } else if (state == State::bfu) {
 #ifdef HSIM_DEBUG
         std::cout << "IDLE\n";

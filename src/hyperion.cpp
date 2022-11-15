@@ -12,9 +12,10 @@ Hyperion::Hyperion(const stim::Circuit circuit,
         const HyperionParams& params)
     :MWPMDecoder(circuit), 
     // Statistics
-    n_total_accesses(0),
-    n_logical_failures(0),
-    max_latency(0),
+    n_nonzero_syndromes(0),
+    total_bfu_cycles(0),
+    total_prefetch_cycles(0),
+    total_cycles_to_converge(0),
     max_bfu_cycles(0),
     max_prefetch_cycles(0),
     max_hamming_weight(0),
@@ -53,7 +54,10 @@ Hyperion::Hyperion(const stim::Circuit circuit,
         params.bfu_priority_queue_size,
         0,
         0,
-        0
+        0,
+        params.use_dma,
+        params.use_rc,
+        params.use_greedy_init
     };
     simulator = new hyperion::HyperionSimulator(dram, 
                                     memory_event_table,
@@ -98,7 +102,6 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
     // Compute Hamming weight.
     // Don't count the observables.
     uint hw = std::accumulate(syndrome.begin(), syndrome.end()-n_observables, 0);
-    n_total_accesses++;
     if (hw > max_hamming_weight) {
         max_hamming_weight = hw;
     }
@@ -169,19 +172,25 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
     auto matching = simulator->get_matching();
     std::vector<uint8_t> correction = get_correction_from_matching(matching);
 
-    fp_t time_taken = n_cycles / min_clock_frequency * 1e9;
-    if (time_taken > max_latency) {
-        max_latency = time_taken;
+    // Update stats.
+    n_nonzero_syndromes++;
+    total_bfu_cycles += simulator->bfu_cycles;
+    total_prefetch_cycles += simulator->prefetch_cycles;
+    total_cycles_to_converge += simulator->cycles_to_converge;
+    if (simulator->bfu_cycles > max_bfu_cycles) {
         max_bfu_cycles = simulator->bfu_cycles;
+    }
+    if (simulator->prefetch_cycles > max_prefetch_cycles) {
         max_prefetch_cycles = simulator->prefetch_cycles;
     }
+    if (simulator->cycles_to_converge > max_cycles_to_converge) {
+        max_cycles_to_converge = simulator->cycles_to_converge;
+    }
+
+    fp_t time_taken = n_cycles / min_clock_frequency * 1e9;
 
     bool is_error = 
         is_logical_error(correction, syndrome, n_detectors, n_observables);
-//      if (time_taken > 1000) {
-//          n_logical_failures++;
-//          is_error = true;
-//      }
 #ifdef HSIM_DEBUG
         std::cout << "Is error: " << is_error << "\n";
         std::cout << "Time taken: " << time_taken << "ns.\n";

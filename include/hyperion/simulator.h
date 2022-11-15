@@ -38,6 +38,10 @@ struct HyperionSimulatorParams {
     uint8_t bankgroup;
     uint8_t bank;
     uint32_t row_offset;
+
+    bool use_dma;
+    bool use_rc;
+    bool use_greedy_init;
 };
 
 struct MemoryEventEntry {
@@ -78,6 +82,7 @@ public:
 
     uint64_t prefetch_cycles;
     uint64_t bfu_cycles;
+    uint64_t cycles_to_converge;
 protected:
     void tick_prefetch(void);
     void tick_bfu(void);
@@ -146,20 +151,23 @@ protected:
     /* Data */
     std::map<addr_t, bool> * memory_event_table;
     PathTable path_table;
-    /* Configuration parameters. */
+    /* Configuation parameters. */
 private:
     uint curr_max_detector;
 
     uint n_detectors;
     uint n_detectors_per_round;
-
     uint bfu_fetch_width;
     uint bfu_compute_stages; 
-
     uint curr_qubit;
     addr_t base_address;
-
     bool has_boundary;
+
+    uint32_t cycles_after_last_converge;
+
+    bool use_dma;
+    bool use_rc;
+    bool use_greedy_init;
 
     friend class HyperionDeque;
     friend class HyperionMultiQubitSimulator;

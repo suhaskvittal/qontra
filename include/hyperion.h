@@ -31,6 +31,10 @@ struct HyperionParams {
     uint bfu_priority_queue_size;
     // Memory Parameters
     uint n_registers;
+    // uArch Parameters
+    bool use_dma;
+    bool use_rc;
+    bool use_greedy_init;
     // DRAM parameters
     bool use_dram;
     std::string dram_config_file;
@@ -54,11 +58,13 @@ public:
     uint64_t dram_cost(void);
 
     // Statistics
-    uint32_t n_total_accesses;
-    uint32_t n_logical_failures;
-    fp_t max_latency;
+    uint64_t n_nonzero_syndromes;
+    uint64_t total_bfu_cycles;
+    uint64_t total_prefetch_cycles;
+    uint64_t total_cycles_to_converge;
     uint64_t max_bfu_cycles;
     uint64_t max_prefetch_cycles;
+    uint64_t max_cycles_to_converge;
     uint max_hamming_weight;
     // More statistics are in the simulator.
     hyperion::HyperionSimulator * simulator;
