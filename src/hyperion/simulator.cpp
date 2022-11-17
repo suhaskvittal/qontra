@@ -20,6 +20,7 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     /* Statistics */
     prefetch_cycles(0),
     bfu_cycles(0),
+    cycles_to_converge(0),
     /* Microarchitecture */
     dram(dram),
     register_file(params.n_registers, (Register){0x0, 0, false}),
@@ -50,6 +51,7 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     curr_qubit(0),
     base_address(0),
     has_boundary(false),
+    cycles_after_last_converge(0),
     use_dma(params.use_dma),
     use_rc(params.use_rc),
     use_greedy_init(params.use_greedy_init)
@@ -75,9 +77,7 @@ HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
 #endif
     has_boundary = detector_vector_register.back() == BOUNDARY_INDEX;
     // Compute the critical index.
-    curr_max_detector = n_detectors_per_round >> 1; // Due to STIM's weirdness,
-                                                    // only one type of stabilizer
-                                                    // is measured in the first round.
+    curr_max_detector = n_detectors_per_round;
     return true;
 }
 

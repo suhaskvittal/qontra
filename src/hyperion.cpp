@@ -18,6 +18,7 @@ Hyperion::Hyperion(const stim::Circuit circuit,
     total_cycles_to_converge(0),
     max_bfu_cycles(0),
     max_prefetch_cycles(0),
+    max_cycles_to_converge(0),
     max_hamming_weight(0),
     // Memory system
     simulator(nullptr),
@@ -142,6 +143,7 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
                                 ? main_clock_frequency : dram_clock_frequency;
     uint32_t main_tpc = (uint32_t) (main_clock_frequency / min_clock_frequency);
     uint32_t dram_tpc = (uint32_t) (dram_clock_frequency / min_clock_frequency);
+    uint32_t total_cycles = 0;
     while (!simulator->is_idle()) {
         fp_t t = n_cycles / min_clock_frequency * 1e9;
         if (t >= 1000) {
@@ -163,10 +165,7 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
             simulator->tick();
         }
         n_cycles++;
-    }
-    if (round < n_rounds) {
-        n_cycles = 0;  // We will already be finished
-                       // when the final round arrives.
+        total_cycles++;
     }
     // Get matching from simulator.
     auto matching = simulator->get_matching();
@@ -187,7 +186,7 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
         max_cycles_to_converge = simulator->cycles_to_converge;
     }
 
-    fp_t time_taken = n_cycles / min_clock_frequency * 1e9;
+    fp_t time_taken = total_cycles / min_clock_frequency * 1e9;
 
     bool is_error = 
         is_logical_error(correction, syndrome, n_detectors, n_observables);

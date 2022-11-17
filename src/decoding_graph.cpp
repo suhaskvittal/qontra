@@ -293,7 +293,7 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
                     graph.remove_edge(graph_edge);
                 }
             }
-            fp_t edge_weight = (fp_t)log((1-e_prob)/e_prob);
+            fp_t edge_weight = (fp_t)log2((1-e_prob)/e_prob);
             graph.add_edge(det1, det2, edge_weight, e_prob, frames);
         };
     detector_callback_f det_f =

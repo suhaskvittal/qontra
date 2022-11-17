@@ -152,13 +152,21 @@ GeneratedCircuit _finish_surface_code_circuit(
 
     // Build the repeated body of the circuit, including the detectors comparing to previous cycles.
     Circuit body = cycle_actions;
-    uint32_t m = measurement_qubits.size();
     body.append_op("SHIFT_COORDS", {}, {0, 0, 1});
-    for (auto m_index : measurement_qubits) {
-        auto m_coord = q2p[m_index];
-        auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
-        body.append_op(
-            "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
+    uint32_t m = measurement_qubits.size();
+    if (params.both_stabilizers) {
+        for (auto m_index : measurement_qubits) {
+            auto m_coord = q2p[m_index];
+            auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
+            body.append_op(
+                "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
+        }
+    } else {
+        for (auto measure : chosen_basis_measure_coords) {
+            auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[measure] - 1;
+            body.append_op(
+                "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {measure.x, measure.y, 0});
+        }
     }
 
     // Build the end of the circuit, getting out of the cycle state and terminating.

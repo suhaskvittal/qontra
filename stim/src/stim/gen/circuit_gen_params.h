@@ -39,6 +39,8 @@ public:
     double after_reset_flip_probability_stddev = 0;
 
     Distribution dist = Distribution::lognormal;
+    
+    bool both_stabilizers = false;
 
     void validate_params() const;
 
