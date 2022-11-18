@@ -10,11 +10,12 @@
 
 #include <PerfectMatching.h>
 
-#include <vector>
-#include <map>
+#include <algorithm>
 #include <chrono>
+#include <map>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include <time.h>
 
