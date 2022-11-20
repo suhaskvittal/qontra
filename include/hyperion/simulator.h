@@ -20,8 +20,7 @@
 #include <utility>
 
 //#define HSIM_DEBUG
-#define FILTER_CUTOFF 10
-#define WINDOW_SIZE 100
+#define HW_CUTOFF 10
 
 namespace qrc {
 namespace hyperion {
@@ -34,6 +33,8 @@ struct HyperionSimulatorParams {
     uint bfu_fetch_width;
     uint bfu_compute_stages;
     uint bfu_priority_queue_size;
+
+    uint32_t weight_filter_cutoff;
 
     uint8_t bankgroup;
     uint8_t bank;
@@ -83,6 +84,7 @@ public:
     uint64_t prefetch_cycles;
     uint64_t bfu_cycles;
     uint64_t cycles_to_converge;
+    uint64_t valid_weights_after_filter;
 protected:
     void tick_prefetch(void);
     void tick_bfu(void);
@@ -154,6 +156,7 @@ protected:
     /* Configuation parameters. */
 private:
     uint curr_max_detector;
+    uint32_t weight_filter_cutoff;
 
     uint n_detectors;
     uint n_detectors_per_round;

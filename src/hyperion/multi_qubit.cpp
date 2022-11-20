@@ -140,7 +140,6 @@ HyperionMultiQubitSimulator::benchmark(uint32_t shots, std::mt19937_64& rng) {
                 if (service_queue.empty()) {
                     sim->force_idle();
                 } else {
-                    // Compute data
                     uint qubit_id = service_queue.front();
                     service_queue.pop_front();
                     auto syndrome = _to_vector(sample_buffers[qubit_id][j], 

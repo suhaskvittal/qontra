@@ -106,7 +106,7 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
             wgt_t edge_weight = (wgt_t) (MWPM_INTEGER_SCALE * raw_weight);
             pm.AddEdge(vi, vj, edge_weight);
 #ifdef TRY_FILTER
-            if (edge_weight <= 40000) {
+            if (edge_weight <= 12000) {
                 pmfilt.AddEdge(vi, vj, edge_weight); 
                 n_filtedges++;
             }
@@ -138,34 +138,39 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     uint hw = std::accumulate(syndrome.begin(),
                                 syndrome.begin()+n_detectors,
                                 0);
-    pmfilt.Solve();
-    std::map<uint, uint> filtmatching;
-    fp_t filt_weight = 0.0;
-    for (uint vi = 0; vi < n_vertices; vi++) {
-        uint vj = pmfilt.GetMatch(vi);
-        uint di = detector_list[vi];
-        uint dj = detector_list[vj];
-        // Update matching data structure.
-        filtmatching[di] = dj;
-        filtmatching[dj] = di;
-        filt_weight += path_table[std::make_pair(di, dj)].distance;
-    }
-    auto filt_correction = get_correction_from_matching(filtmatching);
-    bool filt_is_error =
-        is_logical_error(filt_correction, syndrome, n_detectors, n_observables);
-    std::cout << "Syndrome (HW = " << hw << "): ";
-    for (uint i = 0; i < n_detectors; i++) {
-        if (syndrome[i]) {
-            std::cout << "1";
-        } else {
-            std::cout << ".";
+    if (hw > 10) {
+        pmfilt.Solve();
+        std::map<uint, uint> filtmatching;
+        std::cout << "Syndrome (HW = " << hw << "): ";
+        for (uint i = 0; i < n_detectors; i++) {
+            if (syndrome[i]) {
+                std::cout << "1";
+            } else {
+                std::cout << ".";
+            }
         }
+        std::cout << "\n";
+        fp_t filt_weight = 0.0;
+        for (uint vi = 0; vi < n_vertices; vi++) {
+            uint vj = pmfilt.GetMatch(vi);
+            uint di = detector_list[vi];
+            uint dj = detector_list[vj];
+            // Update matching data structure.
+            filtmatching[di] = dj;
+            filtmatching[dj] = di;
+            fp_t w = path_table[std::make_pair(di, dj)].distance;
+            filt_weight += w;
+            std::cout << "\tUsed weight: " << w << "\n";
+        }
+        auto filt_correction = get_correction_from_matching(filtmatching);
+        bool filt_is_error =
+            is_logical_error(filt_correction, syndrome, n_detectors, n_observables);
+        std::cout << "\tOriginal error: " << is_error 
+            << ", Filtered error: " << filt_is_error << "\n";
+        std::cout << "\tFiltered edges: " << n_filtedges << " of " << n_edges << "\n";
+        std::cout << "\tWeights: " << weight << ", " << filt_weight << "\n";
+        std::cout << "\tWeights are equal: " << (weight == filt_weight) << "\n";
     }
-    std::cout << "\n\tOriginal error: " << is_error 
-        << ", Filtered error: " << filt_is_error << "\n";
-    std::cout << "\tFiltered edges: " << n_filtedges << " of " << n_edges << "\n";
-    std::cout << "\tWeights: " << weight << ", " << filt_weight << "\n";
-    std::cout << "\tWeights are equal: " << (weight == filt_weight) << "\n";
 #endif
     // Stop time here.
 #ifdef __APPLE__

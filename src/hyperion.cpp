@@ -9,16 +9,20 @@ namespace qrc {
 
 Hyperion::Hyperion(const stim::Circuit circuit,
         uint n_detectors_per_round,
+        uint32_t weight_filter_cutoff,
         const HyperionParams& params)
     :MWPMDecoder(circuit), 
     // Statistics
     n_nonzero_syndromes(0),
+    n_hhw_syndromes(0),
     total_bfu_cycles(0),
     total_prefetch_cycles(0),
     total_cycles_to_converge(0),
+    total_filter_savings(0),
     max_bfu_cycles(0),
     max_prefetch_cycles(0),
     max_cycles_to_converge(0),
+    max_filter_savings(0),
     max_hamming_weight(0),
     // Memory system
     simulator(nullptr),
@@ -53,6 +57,7 @@ Hyperion::Hyperion(const stim::Circuit circuit,
         params.bfu_fetch_width,
         params.bfu_compute_stages,
         params.bfu_priority_queue_size,
+        weight_filter_cutoff,
         0,
         0,
         0,
@@ -172,6 +177,9 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
 
     // Update stats.
     n_nonzero_syndromes++;
+    if (hw > 10) {
+        n_hhw_syndromes++;
+    }
     total_bfu_cycles += simulator->bfu_cycles;
     total_prefetch_cycles += simulator->prefetch_cycles;
     total_cycles_to_converge += simulator->cycles_to_converge;
@@ -183,6 +191,20 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
     }
     if (simulator->cycles_to_converge > max_cycles_to_converge) {
         max_cycles_to_converge = simulator->cycles_to_converge;
+    }
+    if (hw > 10) {
+        uint64_t filter_savings;
+        if (hw & 0x1) {
+            filter_savings = (hw)*(hw+1)/2 - 
+                                simulator->valid_weights_after_filter;
+        } else {
+            filter_savings = (hw)*(hw-1)/2 - 
+                                simulator->valid_weights_after_filter;
+        }
+        total_filter_savings += filter_savings;
+        if (filter_savings > max_filter_savings) {
+            max_filter_savings = filter_savings;
+        }
     }
 
     fp_t time_taken = total_cycles / min_clock_frequency * 1e9;

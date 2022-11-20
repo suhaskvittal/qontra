@@ -46,7 +46,9 @@ struct HyperionParams {
 
 class Hyperion : public MWPMDecoder {
 public:
-    Hyperion(const stim::Circuit, uint n_detectors_per_round, 
+    Hyperion(const stim::Circuit, 
+            uint n_detectors_per_round, 
+            uint32_t weight_filter_cutoff,
             const HyperionParams&);
     ~Hyperion();
 
@@ -59,12 +61,15 @@ public:
 
     // Statistics
     uint64_t n_nonzero_syndromes;
+    uint64_t n_hhw_syndromes;
     uint64_t total_bfu_cycles;
     uint64_t total_prefetch_cycles;
     uint64_t total_cycles_to_converge;
+    uint64_t total_filter_savings;
     uint64_t max_bfu_cycles;
     uint64_t max_prefetch_cycles;
     uint64_t max_cycles_to_converge;
+    uint64_t max_filter_savings;
     uint max_hamming_weight;
     // More statistics are in the simulator.
     hyperion::HyperionSimulator * simulator;

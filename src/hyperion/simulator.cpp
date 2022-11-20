@@ -21,6 +21,7 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     prefetch_cycles(0),
     bfu_cycles(0),
     cycles_to_converge(0),
+    valid_weights_after_filter(0),
     /* Microarchitecture */
     dram(dram),
     register_file(params.n_registers, (Register){0x0, 0, false}),
@@ -44,6 +45,7 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     path_table(path_table),
     /* Config parameters */
     curr_max_detector(0),
+    weight_filter_cutoff(params.weight_filter_cutoff),
     n_detectors(params.n_detectors),
     n_detectors_per_round(params.n_detectors_per_round),
     bfu_fetch_width(params.bfu_fetch_width),
@@ -213,6 +215,7 @@ HyperionSimulator::reset_stats() {
     prefetch_cycles = 0;
     bfu_cycles = 0;
     cycles_to_converge = 0;
+    valid_weights_after_filter = 0;
     cycles_after_last_converge = 0;
 }
 
@@ -284,6 +287,9 @@ HyperionSimulator::tick_prefetch()  {
     uint32_t w = (uint32_t) (raw_weight * MWPM_INTEGER_SCALE);
     mean_weight_register += w;
     access_counter++;
+    if (w <= weight_filter_cutoff) {
+        valid_weights_after_filter++;
+    }
     // Update ai, aj.
     // Update varies on whether or not boundary is in the DVR.
     if (has_boundary && dj == BOUNDARY_INDEX) {
@@ -515,8 +521,9 @@ HyperionSimulator::tick_bfu_fetch() {
                 if (w >= best_matching_register.matching_weight) {
                     continue;
                 }
-                if (detector_vector_register.size() <= FILTER_CUTOFF
-                    || w <= mean_weight_register
+                if (detector_vector_register.size() <= HW_CUTOFF
+//                    || w <= mean_weight_register
+                    || w <= weight_filter_cutoff
                     || w == min_weight)
                 {
                     proposed_matches.push_back(p);
