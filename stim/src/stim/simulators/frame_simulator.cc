@@ -1,5 +1,4 @@
 // Copyright 2021 Google LLC
-//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -60,6 +59,8 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       sweep_table(0, batch_size),
       rng(rng),
       // New variables
+      leakage_table(num_qubits, batch_size),
+      leak_record(batch_size, max_lookback),
       n_errors(batch_size, 0),
       n_x_errors(batch_size, 0),
       n_y_errors(batch_size, 0),
@@ -68,14 +69,30 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       n_dp2_errors(batch_size, 0)
 {}
 
-void FrameSimulator::xor_control_bit_into(uint32_t control, simd_bits_range_ref target) {
+void FrameSimulator::xor_control_bit_into(uint32_t control, simd_bits_range_ref target)
+{
     uint32_t raw_control = control & ~(TARGET_RECORD_BIT | TARGET_SWEEP_BIT);
     assert(control != raw_control);
+
+    const simd_word randx(rng(), rng());
+
     if (control & TARGET_RECORD_BIT) {
-        target ^= m_record.lookback(raw_control);
+        target.for_each_word(
+            m_record.lookback(raw_control), leakage_table[raw_control],
+            [this](simd_word &t, simd_word &m, simd_word &lc)
+            {
+                const simd_word rand(rng(), rng());
+                t ^= lc.andnot(m) | (lc & rand);
+            });
     } else {
         if (raw_control < sweep_table.num_major_bits_padded()) {
-            target ^= sweep_table[raw_control];
+            target.for_each_word(
+                sweep_table[raw_control], leakage_table[raw_control],
+                [this](simd_word &t, simd_word &s, simd_word &lc)
+                {
+                    const simd_word rand(rng(), rng());
+                    t ^= lc.andnot(s) | (lc & rand);
+                });
         }
     }
 }
@@ -85,7 +102,9 @@ void FrameSimulator::reset_all() {
     if (guarantee_anticommutation_via_frame_randomization) {
         z_table.data.randomize(z_table.data.num_bits_padded(), rng);
     }
+    leakage_table.clear();
     m_record.clear();
+    leak_record.clear();
 }
 
 void FrameSimulator::reset_all_and_run(const Circuit &circuit) {
@@ -99,7 +118,9 @@ void FrameSimulator::measure_x(const OperationData &target_data) {
     m_record.reserve_noisy_space_for_results(target_data, rng);
     for (auto t : target_data.targets) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
-        m_record.xor_record_reserved_result(z_table[q]);
+        leak_record.record_result(leakage_table[q]);
+        leakage_table[q] |= z_table[q];  // Measurement results.
+        m_record.xor_record_reserved_result(leakage_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             x_table[q].randomize(x_table[q].num_bits_padded(), rng);
         }
@@ -111,7 +132,9 @@ void FrameSimulator::measure_y(const OperationData &target_data) {
     for (auto t : target_data.targets) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         x_table[q] ^= z_table[q];
-        m_record.xor_record_reserved_result(x_table[q]);
+        leak_record.record_result(leakage_table[q]);
+        leakage_table[q] |= x_table[q];  // Measurement results.
+        m_record.xor_record_reserved_result(leakage_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);
         }
@@ -123,7 +146,9 @@ void FrameSimulator::measure_z(const OperationData &target_data) {
     m_record.reserve_noisy_space_for_results(target_data, rng);
     for (auto t : target_data.targets) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
-        m_record.xor_record_reserved_result(x_table[q]);
+        leak_record.record_result(leakage_table[q]);
+        leakage_table[q] |= x_table[q];  // Measurement results.
+        m_record.xor_record_reserved_result(leakage_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);
         }
@@ -136,6 +161,7 @@ void FrameSimulator::reset_x(const OperationData &target_data) {
             x_table[q].randomize(z_table[q].num_bits_padded(), rng);
         }
         z_table[q].clear();
+        leakage_table[q].clear();
     }
 }
 
@@ -146,6 +172,7 @@ void FrameSimulator::reset_y(const OperationData &target_data) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);
         }
         x_table[q] = z_table[q];
+        leakage_table[q].clear();
     }
 }
 
@@ -156,6 +183,7 @@ void FrameSimulator::reset_z(const OperationData &target_data) {
         if (guarantee_anticommutation_via_frame_randomization) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);
         }
+        leakage_table[q].clear();
     }
 }
 
@@ -261,9 +289,17 @@ void FrameSimulator::C_ZYX(const OperationData &target_data) {
 void FrameSimulator::single_cx(uint32_t c, uint32_t t) {
     if (!((c | t) & (TARGET_RECORD_BIT | TARGET_SWEEP_BIT))) {
         x_table[c].for_each_word(
-            z_table[c], x_table[t], z_table[t], [](simd_word &x1, simd_word &z1, simd_word &x2, simd_word &z2) {
-                z1 ^= z2;
-                x2 ^= x1;
+            z_table[c], x_table[t], z_table[t],
+            leakage_table[c], leakage_table[t],
+            [this](simd_word &x1, simd_word &z1, simd_word &x2, simd_word &z2,
+                simd_word &l1, simd_word &l2) 
+            {
+                const simd_word randx(rng(), rng());
+                const simd_word randz(rng(), rng());
+                x1 ^= randx & l2;
+                z1 ^= l2.andnot(z2) | (randz & l2);
+                x2 ^= l2.andnot(x1) | (randx & l1);
+                z2 ^= randz & l1;
             });
     } else if (t & (TARGET_RECORD_BIT | TARGET_SWEEP_BIT)) {
         throw std::invalid_argument(
@@ -292,7 +328,7 @@ void FrameSimulator::single_cy(uint32_t c, uint32_t t) {
 
 void FrameSimulator::ZCX(const OperationData &target_data) {
     const auto &targets = target_data.targets;
-    assert((targets.size() & 1) == 0);
+    if ((targets.size() & 1) == 0);
     for (size_t k = 0; k < targets.size(); k += 2) {
         single_cx(targets[k].data, targets[k + 1].data);
     }
@@ -595,6 +631,21 @@ void FrameSimulator::ELSE_CORRELATED_ERROR(const OperationData &target_data) {
             z_table[q] ^= rng_buffer;
         }
     }
+}
+
+void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
+    const double p = target_data.args[0];
+    const auto& targets = target_data.targets;
+
+    auto call_f = [&](size_t s) 
+    {
+        auto target_index = s / batch_size;
+        auto sample_index = s % batch_size;
+        auto t = targets[target_index];
+        leakage_table[t.data][sample_index] ^= true;  
+    };
+
+    RareErrorIterator::for_samples(p, targets.size() * batch_size, rng, call_f);
 }
 
 void sample_out_helper(

@@ -8,6 +8,47 @@
 namespace qrc {
 
 //#define TRY_FILTER
+#ifdef TRY_FILTER
+static bool did_get_search_space_size = false;
+static std::set<std::map<uint, uint>> search_set;
+
+uint64_t _gsss_helper(
+        const std::map<uint, std::vector<uint>>& mate_list,
+        const std::map<uint, uint>& curr_matching)
+{
+    if (curr_matching.size() == mate_list.size()) {
+        if (search_set.count(curr_matching)) {
+            return 0;
+        }
+        search_set.insert(curr_matching);
+        return 1;
+    }
+    uint64_t n_matchings = 0;
+    for (auto pair : mate_list) {
+        uint vi = pair.first;
+        auto vj_list = pair.second;
+        if (curr_matching.count(vi)) {
+            continue;
+        }
+        for (uint vj : vj_list) {
+            if (curr_matching.count(vj) || vj <= vi) {
+                continue;
+            }
+            std::map<uint, uint> new_matching(curr_matching);
+            new_matching[vi] = vj;
+            new_matching[vj] = vi;
+            n_matchings += _gsss_helper(mate_list, new_matching);
+        }
+    }
+    return n_matchings;
+}
+
+uint64_t get_search_space_size(const std::map<uint, std::vector<uint>>& mate_list) {
+    std::map<uint, uint> init;
+    return _gsss_helper(mate_list, init); 
+}
+
+#endif
 
 MWPMDecoder::MWPMDecoder(const stim::Circuit& circ, uint max_detector) 
     :Decoder(circ),
@@ -90,6 +131,7 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     PerfectMatching pmfilt(n_vertices, n_edges);
     pmfilt.options.verbose = false;
     uint32_t n_filtedges = 0;
+    std::map<uint, std::vector<uint>> possible_mates;
 #endif
     // Add edges.
     for (uint vi = 0; vi < n_vertices; vi++) {
@@ -106,9 +148,18 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
             wgt_t edge_weight = (wgt_t) (MWPM_INTEGER_SCALE * raw_weight);
             pm.AddEdge(vi, vj, edge_weight);
 #ifdef TRY_FILTER
-            if (edge_weight <= 12000) {
+            if (edge_weight <= 9000) {
                 pmfilt.AddEdge(vi, vj, edge_weight); 
                 n_filtedges++;
+                if (!possible_mates.count(di)) {
+                    possible_mates[di] = std::vector<uint>();
+                }
+                possible_mates[di].push_back(dj);
+                if (!possible_mates.count(dj)) {
+                    possible_mates[dj] = std::vector<uint>();
+                }
+                possible_mates[dj].push_back(di);
+
             }
 #endif
         }
@@ -144,7 +195,7 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         std::cout << "Syndrome (HW = " << hw << "): ";
         for (uint i = 0; i < n_detectors; i++) {
             if (syndrome[i]) {
-                std::cout << "1";
+                std::cout << possible_mates[i].size();
             } else {
                 std::cout << ".";
             }
@@ -170,6 +221,27 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         std::cout << "\tFiltered edges: " << n_filtedges << " of " << n_edges << "\n";
         std::cout << "\tWeights: " << weight << ", " << filt_weight << "\n";
         std::cout << "\tWeights are equal: " << (weight == filt_weight) << "\n";
+        if (!did_get_search_space_size && hw >= 16) {
+            did_get_search_space_size = true;
+            uint64_t n_matchings = get_search_space_size(possible_mates);
+            for (auto pair : possible_mates) {
+                std::cout << pair.first << ":";
+                uint di = detector_list[pair.first];
+                for (uint vj : pair.second) {
+                    uint dj = detector_list[vj];
+                    fp_t w = path_table[std::make_pair(di, dj)].distance;
+                    std::cout << " " << vj << "(";
+                    if (w <= 7) {
+                        std::cout << "L";
+                    } else {
+                        std::cout << "M";
+                    }
+                    std::cout << ")";
+                }
+                std::cout << "\n";
+            }
+            std::cout << "\tSEARCH SPACE SIZE = " << n_matchings << "\n";
+        }
     }
 #endif
     // Stop time here.

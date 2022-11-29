@@ -46,6 +46,10 @@ struct FrameSimulator {
     simd_bit_table sweep_table;                // Shot-to-shot configuration data.
     std::mt19937_64 &rng;                      // Random number generator used for generating entropy.
 
+    /* ADDED VARIABLES */
+
+    simd_bit_table leakage_table; // leakage_table[q][k] is whether or not qubit q has leaked in instance k.
+    MeasureRecordBatch leak_record;
     std::vector<uint32_t>    n_errors;
     std::vector<uint32_t>    n_x_errors;
     std::vector<uint32_t>    n_y_errors;
@@ -144,6 +148,7 @@ struct FrameSimulator {
     void CORRELATED_ERROR(const OperationData &target_data);
     void ELSE_CORRELATED_ERROR(const OperationData &target_data);
 
+    void LEAKAGE_ERROR(const OperationData& target_data);
    private:
     void xor_control_bit_into(uint32_t control, simd_bits_range_ref target);
     void single_cx(uint32_t c, uint32_t t);
