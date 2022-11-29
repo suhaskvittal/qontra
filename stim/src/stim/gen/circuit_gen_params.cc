@@ -16,10 +16,28 @@ static std::mt19937_64 CIRCGEN_RNG(seed);
 #define K(m,s)  ( ((m)*(m)) / ((s)*(s)) )
 #define T(m,s)  ( ((s)*(s)) / (m) )
 
-static std::map<uint32_t, double> unitary1_table;
-static std::map<std::vector<uint32_t>, double> unitary2_table;
-static std::map<uint32_t, double> premeas_table;
-static std::map<uint32_t, double> postres_table;
+static std::map<uint32_t, double> rounddp_table;
+static std::map<uint32_t, double> unitary1dp_table;
+static std::map<std::vector<uint32_t>, double> unitary2dp_table;
+static std::map<uint32_t, double> premeasflip_table;
+static std::map<uint32_t, double> postresflip_table;
+
+static std::map<uint32_t, double> roundleak_table;
+static std::map<uint32_t, double> postresleak_table;
+static std::map<uint32_t, double> cliffordleak_table;
+
+template <typename K> double
+get_from(std::map<K, double>& table, K k, double store_on_fail) {
+    double p;
+    if (table.count(k)) {
+        p = table[k];
+    } else {
+        p = store_on_fail;
+        table[k] = p;
+    }
+    return p;
+}
+
 
 void append_anti_basis_error(Circuit &circuit, 
         const std::vector<uint32_t> &targets, double p, char basis) 
@@ -62,9 +80,16 @@ const {
     circuit.append_op("TICK", {});
     for (uint32_t d : data_qubits) {
         std::vector<uint32_t> singleton{d};
-        double p = get_before_round_data_depolarization();
+        double p = get_from(rounddp_table, d, 
+                get_before_round_data_depolarization());
         if (p > 0) {
             circuit.append_op("DEPOLARIZE1", singleton, p);
+        }
+
+        p = get_from(roundleak_table, d, 
+                    get_before_round_leakage_probability());
+        if (p > 0) {
+            circuit.append_op("LEAK", singleton, p);
         }
     }
 }
@@ -76,13 +101,8 @@ const {
     circuit.append_op(name, targets);
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
-        double p;
-        if (unitary1_table.count(t)) {
-            p = unitary1_table[t];
-        } else {
-            p = get_before_round_data_depolarization();
-            unitary1_table[t] = p;
-        }
+        double p = get_from(unitary1dp_table, t, 
+                    get_after_clifford_depolarization());
         if (p > 0) {
             circuit.append_op("DEPOLARIZE1", singleton, p);
         }
@@ -96,15 +116,18 @@ const {
     circuit.append_op(name, targets);
     for (uint32_t i = 0; i < targets.size(); i += 2) {
         std::vector<uint32_t> cx{targets[i], targets[i+1]};
-        double p;
-        if (unitary2_table.count(cx)) {
-            p = unitary2_table[cx];
-        } else {
-            p = get_after_clifford_depolarization();
-            unitary2_table[cx] = p;
-        }
+        double p = get_from(unitary2dp_table, cx, 
+                            get_after_clifford_depolarization());
         if (p > 0) {
             circuit.append_op("DEPOLARIZE2", cx, p);
+        }
+
+        for (uint32_t t : cx) {
+            p = get_from(cliffordleak_table, t,
+                            get_after_clifford_depolarization());
+            if (p > 0) {
+                circuit.append_op("LEAK", t, p);
+            }
         }
     }
 }
@@ -116,14 +139,15 @@ const {
     circuit.append_op(std::string("R") + basis, targets);
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
-        double p;
-        if (premeas_table.count(t)) {
-            p = premeas_table[t];
-        } else {
-            p = get_after_reset_flip_probability();
-            premeas_table[t] = p;
-        }
+        double p = get_from(postresflip_table, t, 
+                            get_after_reset_flip_probability());
         append_anti_basis_error(circuit, singleton, p, basis);
+
+        p = get_from(postresleak_table, t, 
+                        get_after_reset_leakage_probability());
+        if (p > 0) {
+            circuit.append_op("LEAK", t, p);
+        }
     }
 }
 
@@ -133,15 +157,9 @@ CircuitGenParameters::append_measure(
 const {
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
-        double p;
-        if (postres_table.count(t)) {
-            p = postres_table[t];
-        } else {
-            p = get_before_measure_flip_probability();
-            postres_table[t] = p;
-        }
-        append_anti_basis_error(circuit, singleton, 
-                get_before_measure_flip_probability(), basis);
+        double p = get_from(premeasflip_table, t, 
+                            get_before_measure_flip_probability());
+        append_anti_basis_error(circuit, singleton, p, basis);
     }
     circuit.append_op(std::string("M") + basis, targets);
 }
@@ -152,14 +170,21 @@ CircuitGenParameters::append_measure_reset(
 const {
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
-        append_anti_basis_error(circuit, singleton, 
-                get_before_measure_flip_probability(), basis);
+        double p = get_from(premeasflip_table, t,
+                            get_before_measure_flip_probability());
+        append_anti_basis_error(circuit, singleton, p, basis);
     }
     circuit.append_op(std::string("MR") + basis, targets);
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
-        append_anti_basis_error(circuit, singleton, 
-                get_after_reset_flip_probability(), basis);
+        double p = get_from(postresflip_table, t, 
+                            get_after_reset_flip_probability());
+        append_anti_basis_error(circuit, singleton, p, basis);
+        p = get_from(postresleak_table, t, 
+                        get_after_reset_leakage_probability());
+        if (p > 0) {
+            circuit.append_op("LEAK", t, p);
+        }
     }
 }
 
@@ -181,6 +206,21 @@ CircuitGenParameters::get_before_measure_flip_probability() const {
 double
 CircuitGenParameters::get_after_reset_flip_probability() const {
     return get_error(after_reset_flip_probability, after_reset_flip_probability_stddev);
+}
+
+double
+CircuitGenParameters::get_before_round_leakage_probability() const {
+    return get_error(before_round_leakage_probability, before_round_leakage_probability_stddev);
+}
+
+double
+CircuitGenParameters::get_after_reset_leakage_probability() const {
+    return get_error(after_reset_leakage_probability, after_reset_leakage_probability_stddev);
+}
+
+double
+CircuitGenParameters::get_after_clifford_leakage_probability() const {
+    return get_error(after_clifford_leakage_probability, after_clifford_leakage_probability_stddev);
 }
 
 double

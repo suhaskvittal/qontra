@@ -32,11 +32,19 @@ public:
     double before_round_data_depolarization = 0;
     double before_measure_flip_probability = 0;
     double after_reset_flip_probability = 0;
+    
+    double before_round_leakage_probability = 0;
+    double after_reset_leakage_probability = 0;
+    double after_unitary2_leakage_probability = 0;
     // These will be the standard deviation.
     double after_clifford_depolarization_stddev = 0;
     double before_round_data_depolarization_stddev = 0;
     double before_measure_flip_probability_stddev = 0;
     double after_reset_flip_probability_stddev = 0;
+
+    double before_round_leakage_probability_stddev = 0;
+    double after_reset_leakage_probability_stddev = 0;
+    double after_clifford_leakage_probability_stddev = 0;
 
     Distribution dist = Distribution::lognormal;
     
@@ -67,6 +75,9 @@ public:
     double get_before_round_data_depolarization(void) const;
     double get_before_measure_flip_probability(void) const;
     double get_after_reset_flip_probability(void) const;
+    double get_before_round_leakage_probability(void) const;
+    double get_after_reset_leakage_probability(void) const;
+    double get_after_clifford_leakage_probability_stddev(void) const;
 private:
     double get_error(double mean, double stddev) const;
 
