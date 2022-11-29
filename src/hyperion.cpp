@@ -18,11 +18,11 @@ Hyperion::Hyperion(const stim::Circuit circuit,
     total_bfu_cycles(0),
     total_prefetch_cycles(0),
     total_cycles_to_converge(0),
-    total_filter_savings(0),
+    total_logfilter_savings(0),
     max_bfu_cycles(0),
     max_prefetch_cycles(0),
     max_cycles_to_converge(0),
-    max_filter_savings(0),
+    min_filter_savings(std::numeric_limits<fp_t>::max()),
     max_hamming_weight(0),
     // Memory system
     simulator(nullptr),
@@ -105,20 +105,38 @@ DecoderShotResult
 Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
+
+    fp_t min_clock_frequency = main_clock_frequency < dram_clock_frequency
+                                ? main_clock_frequency : dram_clock_frequency;
     // Compute Hamming weight.
     // Don't count the observables.
     uint hw = std::accumulate(syndrome.begin(), syndrome.end()-n_observables, 0);
     if (hw > max_hamming_weight) {
         max_hamming_weight = hw;
     }
-    if (hw == 0) {
-        DecoderShotResult res = {
-            0.0,
-            0.0,
-            false,
-            std::vector<uint8_t>(),
-            std::map<uint, uint>()
-        };
+    if (hw > 0) {
+        n_nonzero_syndromes++;
+        if (hw > 10) {
+            n_hhw_syndromes++;
+        }
+    }
+    if (hw <= 10) {
+        uint64_t cycles;
+        if (hw & 0x1) {
+            hw++;
+        }
+        if (hw <= 2) {
+            cycles = 0;
+        } else if (hw <= 6) {
+            cycles = 3*hw*(hw-1) + 1;
+        } else if (hw == 8) {
+            cycles = 3*hw*(hw-1) + 15;
+        } else if (hw == 10) {
+            cycles = 3*hw*(hw-1) + 73;
+        }
+        fp_t time_taken = cycles / min_clock_frequency * 1e9;
+        DecoderShotResult res = MWPMDecoder::decode_error(syndrome);
+        res.execution_time = time_taken;
         return res;
     }
     // Invoke BFUs.
@@ -143,8 +161,6 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
     uint64_t n_cycles = 0;
     uint round = 1;
 
-    fp_t min_clock_frequency = main_clock_frequency < dram_clock_frequency
-                                ? main_clock_frequency : dram_clock_frequency;
     uint32_t main_tpc = (uint32_t) (main_clock_frequency / min_clock_frequency);
     uint32_t dram_tpc = (uint32_t) (dram_clock_frequency / min_clock_frequency);
     uint32_t total_cycles = 0;
@@ -176,10 +192,6 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
     std::vector<uint8_t> correction = get_correction_from_matching(matching);
 
     // Update stats.
-    n_nonzero_syndromes++;
-    if (hw > 10) {
-        n_hhw_syndromes++;
-    }
     total_bfu_cycles += simulator->bfu_cycles;
     total_prefetch_cycles += simulator->prefetch_cycles;
     total_cycles_to_converge += simulator->cycles_to_converge;
@@ -193,21 +205,23 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
         max_cycles_to_converge = simulator->cycles_to_converge;
     }
     if (hw > 10) {
-        uint64_t filter_savings;
+        fp_t filter_savings;
         if (hw & 0x1) {
-            filter_savings = (hw)*(hw+1)/2 - 
-                                simulator->valid_weights_after_filter;
+            fp_t max_pairs = hw * (hw+1) * 0.5;
+            filter_savings = ((fp_t)simulator->valid_weights_after_filter) 
+                                / max_pairs;
         } else {
-            filter_savings = (hw)*(hw-1)/2 - 
-                                simulator->valid_weights_after_filter;
+            fp_t max_pairs = hw * (hw-1) * 0.5;
+            filter_savings = ((fp_t)simulator->valid_weights_after_filter) 
+                                / max_pairs;
         }
-        total_filter_savings += filter_savings;
-        if (filter_savings > max_filter_savings) {
-            max_filter_savings = filter_savings;
+        total_logfilter_savings += log(filter_savings);
+        if (filter_savings < min_filter_savings) {
+            min_filter_savings = filter_savings;
         }
     }
 
-    fp_t time_taken = total_cycles / min_clock_frequency * 1e9;
+    fp_t time_taken = n_cycles / min_clock_frequency * 1e9;
 
     bool is_error = 
         is_logical_error(correction, syndrome, n_detectors, n_observables);
