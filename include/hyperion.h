@@ -22,6 +22,8 @@
 #include <tuple>
 #include <vector>
 
+#include <math.h>
+
 namespace qrc {
 
 struct HyperionParams {
@@ -65,11 +67,11 @@ public:
     uint64_t total_bfu_cycles;
     uint64_t total_prefetch_cycles;
     uint64_t total_cycles_to_converge;
-    uint64_t total_filter_savings;
+    fp_t total_logfilter_savings;
     uint64_t max_bfu_cycles;
     uint64_t max_prefetch_cycles;
     uint64_t max_cycles_to_converge;
-    uint64_t max_filter_savings;
+    fp_t min_filter_savings;
     uint max_hamming_weight;
     // More statistics are in the simulator.
     hyperion::HyperionSimulator * simulator;

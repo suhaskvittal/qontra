@@ -34,7 +34,7 @@ stdev(const std::vector<fp_t>& data) {
 }
 
 void
-b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
+b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
         bool save_per_shot_data) 
 {
     // Clear stats.
@@ -42,7 +42,7 @@ b_decoder_ler(Decoder * decoder_p, uint32_t shots, std::mt19937_64& rng,
     // Declare statistics
     uint32_t array_size = save_per_shot_data ? shots : 1;
 
-    uint32_t total_shots = shots;
+    uint64_t total_shots = shots;
     std::vector<std::vector<uint8_t>> syndromes(array_size);
     std::vector<fp_t> execution_times(array_size);
     std::vector<fp_t> memory_overheads(array_size);
