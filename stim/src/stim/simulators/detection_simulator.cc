@@ -20,10 +20,23 @@ using namespace stim;
 
 template <typename T>
 void xor_measurement_set_into_result(
-    const T &measurement_set, simd_bit_table &frame_samples, simd_bit_table &output, size_t &output_index_ticker) {
-    simd_bits_range_ref dst = output[output_index_ticker++];
+    const T &measurement_set, simd_bit_table &frame_samples, simd_bit_table &output, size_t output_index_ticker) {
+    simd_bits_range_ref dst = output[output_index_ticker];
     for (auto i : measurement_set) {
         dst ^= frame_samples[i];
+    }
+}
+
+template <typename T>
+void or_measurement_set_into_result(
+    const T &measurement_set, 
+    simd_bit_table &leak_samples,
+    simd_bit_table &output,
+    size_t output_index_ticker)
+{
+    simd_bits_range_ref dst = output[output_index_ticker];
+    for (auto i : measurement_set) {
+        dst |= leak_samples[i];
     }
 }
 
@@ -33,28 +46,61 @@ simd_bit_table stim::detector_samples(
     size_t num_shots,
     bool prepend_observables,
     bool append_observables,
-    std::mt19937_64 &rng) {
+    std::mt19937_64 &rng)
+{
+    simd_bit_table false_table(1, 1);
+    return detector_samples(circuit, det_obs, num_shots, prepend_observables, append_observables, rng, false, false_table);
+}
+
+
+simd_bit_table stim::detector_samples(
+    const Circuit &circuit,
+    const DetectorsAndObservables &det_obs,
+    size_t num_shots,
+    bool prepend_observables,
+    bool append_observables,
+    std::mt19937_64 &rng,
+    bool get_leakage_data,
+    simd_bit_table& leakage_table) 
+{
     // Start from measurement samples.
-    simd_bit_table frame_samples = FrameSimulator::sample_flipped_measurements(circuit, num_shots, rng);
+    FrameSimulator sim(circuit.count_qubits(), num_shots, SIZE_MAX, rng);
+    sim.reset_all_and_run(circuit);
+
+//    simd_bit_table frame_samples = FrameSimulator::sample_flipped_measurements(circuit, num_shots, rng);
+
+    auto frame_samples = sim.m_record.storage;
+    auto leakage_samples = sim.leak_record.storage;
 
     auto num_detectors = det_obs.detectors.size();
     auto num_obs = det_obs.observables.size();
     size_t num_results = num_detectors + num_obs * (prepend_observables + append_observables);
     simd_bit_table result(num_results, num_shots);
 
+    if (get_leakage_data) {
+        leakage_table = simd_bit_table(num_results, num_shots);
+    }
+
     // Xor together measurement samples to form detector samples.
     size_t offset = 0;
     if (prepend_observables) {
         for (const auto &obs : det_obs.observables) {
             xor_measurement_set_into_result(obs, frame_samples, result, offset);
+            offset++;
         }
     }
     for (const auto &det : det_obs.detectors) {
         xor_measurement_set_into_result(det, frame_samples, result, offset);
+        if (get_leakage_data) {
+            or_measurement_set_into_result(det, leakage_samples,
+                    leakage_table, offset);
+        }
+        offset++;
     }
     if (append_observables) {
         for (const auto &obs : det_obs.observables) {
             xor_measurement_set_into_result(obs, frame_samples, result, offset);
+            offset++;
         }
     }
 
@@ -62,9 +108,28 @@ simd_bit_table stim::detector_samples(
 }
 
 simd_bit_table stim::detector_samples(
-    const Circuit &circuit, size_t num_shots, bool prepend_observables, bool append_observables, std::mt19937_64 &rng) {
+    const Circuit &circuit,
+    size_t num_shots,
+    bool prepend_observables,
+    bool append_observables,
+    std::mt19937_64 &rng)
+{
+    simd_bit_table false_table(1, 1);
+    return detector_samples(circuit, num_shots, prepend_observables, 
+            append_observables, rng, false, false_table);
+}
+
+simd_bit_table stim::detector_samples(
+    const Circuit &circuit,
+    size_t num_shots,
+    bool prepend_observables,
+    bool append_observables,
+    std::mt19937_64 &rng,
+    bool get_leakage_data,
+    simd_bit_table& leakage_table) 
+{
     return detector_samples(
-        circuit, DetectorsAndObservables(circuit), num_shots, prepend_observables, append_observables, rng);
+        circuit, DetectorsAndObservables(circuit), num_shots, prepend_observables, append_observables, rng, get_leakage_data, leakage_table);
 }
 
 void detector_sample_out_helper_stream(

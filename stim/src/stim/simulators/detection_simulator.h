@@ -37,7 +37,20 @@ namespace stim {
 /// Returns:
 ///     A simd_bit_table with detector/observable index as the major index and shot index as the minor index.
 simd_bit_table detector_samples(
-    const Circuit &circuit, size_t num_shots, bool prepend_observables, bool append_observables, std::mt19937_64 &rng);
+    const Circuit &circuit,
+    size_t num_shots,
+    bool prepend_observables,
+    bool append_observables,
+    std::mt19937_64 &rng);
+
+simd_bit_table detector_samples(
+    const Circuit &circuit,
+    size_t num_shots,
+    bool prepend_observables,
+    bool append_observables,
+    std::mt19937_64 &rng,
+    bool get_leakage_data, 
+    simd_bit_table& leakage_table);
 
 /// Samples detection events from the circuit and returns them in a simd_bit_table.
 ///
@@ -61,6 +74,16 @@ simd_bit_table detector_samples(
     bool prepend_observables,
     bool append_observables,
     std::mt19937_64 &rng);
+
+simd_bit_table detector_samples(
+    const Circuit &circuit,
+    const DetectorsAndObservables &det_obs,
+    size_t num_shots,
+    bool prepend_observables,
+    bool append_observables,
+    std::mt19937_64 &rng,
+    bool get_leakage_data,
+    simd_bit_table& leakage_table);
 
 /// Samples detection events from the circuit and writes them to a file.
 ///
