@@ -425,4 +425,19 @@ Example:
                 };
             },
         });
+    add_gate(
+        failed,
+        Gate{
+            "L_ERROR",
+            1,
+            &TableauSimulator::I,
+            &FrameSimulator::LEAKAGE_ERROR,
+            &ErrorAnalyzer::I,
+            (GateFlags)(GATE_NO_FLAGS | GATE_ARGS_ARE_DISJOINT_PROBABILITIES),
+            []() -> ExtraGateData {
+                return {"Pauli+ Noise Channel", "Leakage", 
+                        {}, {}, nullptr};
+            }
+        }
+    );
 }

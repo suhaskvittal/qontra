@@ -89,7 +89,7 @@ const {
         p = get_from(roundleak_table, d, 
                     get_before_round_leakage_probability());
         if (p > 0) {
-            circuit.append_op("LEAK", singleton, p);
+            circuit.append_op("L_ERROR", singleton, p);
         }
     }
 }
@@ -123,10 +123,11 @@ const {
         }
 
         for (uint32_t t : cx) {
+            std::vector<uint32_t> singleton{t};
             p = get_from(cliffordleak_table, t,
-                            get_after_clifford_depolarization());
+                            get_after_clifford_leakage_probability());
             if (p > 0) {
-                circuit.append_op("LEAK", t, p);
+                circuit.append_op("L_ERROR", singleton, p);
             }
         }
     }
@@ -146,7 +147,7 @@ const {
         p = get_from(postresleak_table, t, 
                         get_after_reset_leakage_probability());
         if (p > 0) {
-            circuit.append_op("LEAK", t, p);
+            circuit.append_op("L_ERROR", singleton, p);
         }
     }
 }
@@ -183,7 +184,7 @@ const {
         p = get_from(postresleak_table, t, 
                         get_after_reset_leakage_probability());
         if (p > 0) {
-            circuit.append_op("LEAK", t, p);
+            circuit.append_op("L_ERROR", singleton, p);
         }
     }
 }
