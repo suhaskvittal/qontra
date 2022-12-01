@@ -303,9 +303,12 @@ void FrameSimulator::single_cx(uint32_t c, uint32_t t) {
             {
                 const simd_word randx(rng(), rng());
                 const simd_word randz(rng(), rng());
+                    
+                const simd_word tmpx1(x1);
+
                 x1 ^= randx & l2;
                 z1 ^= l2.andnot(z2) | (randz & l2);
-                x2 ^= l2.andnot(x1) | (randx & l1);
+                x2 ^= l2.andnot(tmpx1) | (randx & l1);
                 z2 ^= randz & l1;
 //                z1 ^= z2;
 //                x2 ^= x1;
@@ -381,9 +384,21 @@ void FrameSimulator::SWAP(const OperationData &target_data) {
         size_t q1 = targets[k].data;
         size_t q2 = targets[k + 1].data;
         x_table[q1].for_each_word(
-            z_table[q1], x_table[q2], z_table[q2], [](simd_word &x1, simd_word &z1, simd_word &x2, simd_word &z2) {
-                std::swap(z1, z2);
-                std::swap(x1, x2);
+            z_table[q1], x_table[q2], z_table[q2], leakage_table[q1], leakage_table[q2],
+            [this](simd_word &x1, simd_word &z1, simd_word &x2, simd_word &z2, simd_word &l1, simd_word &l2) 
+            {
+                const simd_word randx(rng(), rng());
+                const simd_word randz(rng(), rng());
+                
+                const simd_word tmpx1(x1);
+                const simd_word tmpz1(z1);
+                        
+                x1 = (l2.andnot(x2)) | (l2 & randx);
+                z1 = (l2.andnot(z2)) | (l2 & randz);
+                x2 = (l1.andnot(tmpx1)) | (l1 & randx);
+                z2 = (l1.andnot(tmpz1)) | (l1 & randz);
+//                std::swap(z1, z2);
+//                std::swap(x1, x2);
             });
     }
 }

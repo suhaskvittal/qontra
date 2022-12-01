@@ -202,8 +202,6 @@ GeneratedCircuit _finish_surface_code_circuit(
         cycle_actions.append_op("TICK", {});
         params.append_unitary_2(cycle_actions, "CNOT", targets);
     }
-    cycle_actions.append_op("TICK", {});
-    params.append_unitary_1(cycle_actions, "H", x_measurement_qubits);
     // Introduce SWAP operations into surface code cycle.
     if (params.use_swap_lru) {
         cycle_actions.append_op("TICK", {});
@@ -215,6 +213,8 @@ GeneratedCircuit _finish_surface_code_circuit(
         params.append_unitary_2(cycle_actions, "CNOT", first_round_swap_targets[1]);
 #endif
     }
+    cycle_actions.append_op("TICK", {});
+    params.append_unitary_1(cycle_actions, "H", x_measurement_qubits);
     cycle_actions.append_op("TICK", {});
     if (params.use_swap_lru) {
         params.append_measure_reset(cycle_actions, x_measurement_qubits);
