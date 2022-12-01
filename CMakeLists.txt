@@ -20,10 +20,8 @@ set(QUARCH_PROGRAM_FILES
     src/hyperion/simulator.cpp
     src/hyperion/multi_qubit.cpp
     src/hyperion/trial_decoder.cpp
-    # GULLIVER 
-    src/gulliver.cpp
-    src/gulliver/simulator.cpp
-    src/gulliver/trial_decoder.cpp)
+    # TMR
+    src/tmr_decoder.cpp)
 add_library(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
 if(CMAKE_BUILD_TYPE MATCHES Release)
