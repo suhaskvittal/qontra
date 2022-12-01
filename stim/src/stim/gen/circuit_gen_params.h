@@ -50,6 +50,7 @@ public:
     
     bool both_stabilizers = false;
     bool use_swap_lru = false;
+    bool swap_lru_with_no_swap = false;
 
     void validate_params() const;
 
