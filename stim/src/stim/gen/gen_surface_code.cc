@@ -8,6 +8,8 @@
 
 using namespace stim;
 
+#define SWAP_TEST
+
 struct surface_coord {
     float x;
     float y;
@@ -72,23 +74,32 @@ GeneratedCircuit _finish_surface_code_circuit(
     std::vector<uint32_t> data_qubits;
     std::vector<uint32_t> measurement_qubits;
     std::vector<uint32_t> x_measurement_qubits;
+    std::vector<uint32_t> z_measurement_qubits;
     std::vector<uint32_t> all_qubits;
     for (auto q : data_coords) {
         data_qubits.push_back(p2q[q]);
     }
     for (auto q : x_measure_coords) {
-        measurement_qubits.push_back(p2q[q]);
+//        measurement_qubits.push_back(p2q[q]);
         x_measurement_qubits.push_back(p2q[q]);
     }
     for (auto q : z_measure_coords) {
-        measurement_qubits.push_back(p2q[q]);
+//        measurement_qubits.push_back(p2q[q]);
+        z_measurement_qubits.push_back(p2q[q]);
     }
     all_qubits.insert(all_qubits.end(), data_qubits.begin(), data_qubits.end());
     all_qubits.insert(all_qubits.end(), measurement_qubits.begin(), measurement_qubits.end());
     std::sort(all_qubits.begin(), all_qubits.end());
     std::sort(data_qubits.begin(), data_qubits.end());
-    std::sort(measurement_qubits.begin(), measurement_qubits.end());
+//    std::sort(measurement_qubits.begin(), measurement_qubits.end());
     std::sort(x_measurement_qubits.begin(), x_measurement_qubits.end());
+    std::sort(z_measurement_qubits.begin(), z_measurement_qubits.end());
+    for (uint32_t xm : x_measurement_qubits) {
+        measurement_qubits.push_back(xm);
+    }
+    for (uint32_t zm : z_measurement_qubits) {
+        measurement_qubits.push_back(zm);
+    }
 
     // Reverse index the measurement order used for defining detectors.
     std::map<surface_coord, uint32_t> data_coord_to_order;
@@ -172,9 +183,11 @@ GeneratedCircuit _finish_surface_code_circuit(
                     first_round_swap_targets[0].push_back(swap_order[pm][0]);
                     first_round_swap_targets[1].push_back(swap_order[pm][0]);
                     first_round_swap_targets[1].push_back(pm);
+#ifndef SWAP_TEST
                     continue;
+#endif
                 }
-                cnot_targets[k].push_back(p2q[data]);
+                cnot_targets[k].push_back(pd);
                 cnot_targets[k].push_back(pm);
             }
         }
@@ -189,25 +202,31 @@ GeneratedCircuit _finish_surface_code_circuit(
         cycle_actions.append_op("TICK", {});
         params.append_unitary_2(cycle_actions, "CNOT", targets);
     }
+    cycle_actions.append_op("TICK", {});
+    params.append_unitary_1(cycle_actions, "H", x_measurement_qubits);
     // Introduce SWAP operations into surface code cycle.
     if (params.use_swap_lru) {
         cycle_actions.append_op("TICK", {});
+#ifdef SWAP_TEST
+        params.append_unitary_2(cycle_actions, "SWAP", first_round_swap_targets[0]);
+#else
         params.append_unitary_2(cycle_actions, "CNOT", first_round_swap_targets[0]);
         cycle_actions.append_op("TICK", {});
         params.append_unitary_2(cycle_actions, "CNOT", first_round_swap_targets[1]);
+#endif
     }
     cycle_actions.append_op("TICK", {});
-    params.append_unitary_1(cycle_actions, "H", x_measurement_qubits);
-    cycle_actions.append_op("TICK", {});
     if (params.use_swap_lru) {
+        params.append_measure_reset(cycle_actions, x_measurement_qubits);
         std::vector<uint32_t> local_measurement_qubits;
-        for (uint32_t m : measurement_qubits) {
-            if (swap_order.count(m) && swap_order[m][0] != INVALID_SWAP) {
+        for (uint32_t m : z_measurement_qubits) {
+            if (swap_order[m][0] != INVALID_SWAP) {
                 local_measurement_qubits.push_back(swap_order[m][0]);
             } else {
                 local_measurement_qubits.push_back(m);
             }
         }
+        cycle_actions.append_op("TICK", {});
         params.append_measure_reset(cycle_actions, local_measurement_qubits);
     } else {
         params.append_measure_reset(cycle_actions, measurement_qubits);
@@ -238,14 +257,18 @@ GeneratedCircuit _finish_surface_code_circuit(
                         if (pd == swap_order[pm][prev_cycle]) {
                             alt_pre_swap_targets.push_back(pm);
                             alt_pre_swap_targets.push_back(swap_order[pm][prev_cycle]);
+#ifndef SWAP_TEST
                             continue;
+#endif
                         }
                         if (pd == swap_order[pm][cycle]) {
                             alt_post_swap_targets[0].push_back(pm);
                             alt_post_swap_targets[0].push_back(swap_order[pm][cycle]);
                             alt_post_swap_targets[1].push_back(swap_order[pm][cycle]);
                             alt_post_swap_targets[1].push_back(pm);
+#ifndef SWAP_TEST
                             continue;
+#endif 
                         }
                         alt_cnot_targets[k].push_back(p2q[data]);
                         alt_cnot_targets[k].push_back(pm);
@@ -255,27 +278,36 @@ GeneratedCircuit _finish_surface_code_circuit(
             Circuit alt_cycle;
             params.append_begin_round_tick(alt_cycle, data_qubits);
             params.append_unitary_1(alt_cycle, "H", x_measurement_qubits);
+#ifdef SWAP_TEST
+            params.append_unitary_2(alt_cycle, "SWAP", alt_pre_swap_targets);
+#else
             params.append_unitary_2(alt_cycle, "CNOT", alt_pre_swap_targets);
+#endif
             for (const auto &targets : cnot_targets) {
                 alt_cycle.append_op("TICK", {});
                 params.append_unitary_2(alt_cycle, "CNOT", targets);
             }
             alt_cycle.append_op("TICK", {});
+            params.append_unitary_1(alt_cycle, "H", x_measurement_qubits);
+            alt_cycle.append_op("TICK", {});
+#ifdef SWAP_TEST
+            params.append_unitary_2(alt_cycle, "SWAP", alt_post_swap_targets[0]);
+#else
             params.append_unitary_2(alt_cycle, "CNOT", alt_post_swap_targets[0]);
             alt_cycle.append_op("TICK", {});
             params.append_unitary_2(alt_cycle, "CNOT", alt_post_swap_targets[1]);
+#endif
             alt_cycle.append_op("TICK", {});
-            params.append_unitary_1(alt_cycle, "H", x_measurement_qubits);
-            alt_cycle.append_op("TICK", {});
-
+            params.append_measure_reset(alt_cycle, x_measurement_qubits);
             std::vector<uint32_t> local_measurement_qubits;
-            for (uint32_t m : measurement_qubits) {
-                if (swap_order.count(m) && swap_order[m][cycle] != INVALID_SWAP) {
+            for (uint32_t m : z_measurement_qubits) {
+                if (swap_order[m][cycle] != INVALID_SWAP) {
                     local_measurement_qubits.push_back(swap_order[m][cycle]);
                 } else {
                     local_measurement_qubits.push_back(m);
                 }
             }
+            alt_cycle.append_op("TICK", {});
             params.append_measure_reset(alt_cycle, local_measurement_qubits);
 
             alt_cycle_actions[cycle] = alt_cycle;
@@ -337,7 +369,7 @@ GeneratedCircuit _finish_surface_code_circuit(
     if (params.use_swap_lru) {
         // Two final sets of CNOTs to reswap data and ancilla qubits.
         std::array<std::vector<uint32_t>, 2> final_cnot_targets;
-        size_t prev_cycle = params.rounds & 0x3;
+        size_t prev_cycle = (params.rounds & 0x3) - 1;
         for (auto measure : z_measure_coords) {
             uint32_t pm = p2q[measure];
             if (swap_order[pm][prev_cycle] != INVALID_SWAP) {
@@ -352,9 +384,13 @@ GeneratedCircuit _finish_surface_code_circuit(
         // Ignore errors -- in practice, you would just measure
         // the swapped qubits instead of swapping them back.
         tail.append_op("TICK", {});
+#ifdef SWAP_TEST
+        tail.append_op("SWAP", final_cnot_targets[0]);
+#else
         tail.append_op("CNOT", final_cnot_targets[0]);
         tail.append_op("TICK", {});
         tail.append_op("CNOT", final_cnot_targets[1]);
+#endif
     }
 
     params.append_measure(tail, data_qubits, "ZX"[is_memory_x]);

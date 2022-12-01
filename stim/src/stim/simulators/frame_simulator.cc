@@ -307,11 +307,14 @@ void FrameSimulator::single_cx(uint32_t c, uint32_t t) {
                 z1 ^= l2.andnot(z2) | (randz & l2);
                 x2 ^= l2.andnot(x1) | (randx & l1);
                 z2 ^= randz & l1;
+//                z1 ^= z2;
+//                x2 ^= x1;
             });
     } else if (t & (TARGET_RECORD_BIT | TARGET_SWEEP_BIT)) {
         throw std::invalid_argument(
             "Controlled X had a bit (" + GateTarget{t}.str() + ") as its target, instead of its control.");
     } else {
+        std::cout << "uhhhhhhhhh....\n";
         xor_control_bit_into(c, x_table[t]);
     }
 }
