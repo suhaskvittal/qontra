@@ -49,6 +49,7 @@ public:
     Distribution dist = Distribution::lognormal;
     
     bool both_stabilizers = false;
+    bool use_swap_lru = false;
 
     void validate_params() const;
 

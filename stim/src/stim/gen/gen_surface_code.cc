@@ -104,6 +104,55 @@ GeneratedCircuit _finish_surface_code_circuit(
 
     // List out CNOT gate targets using given interaction orders.
     std::array<std::vector<uint32_t>, 4> cnot_targets;
+    // Only use this if using SWAP LRU.
+    std::array<std::vector<uint32_t>, 2> first_round_swap_targets;
+    // If we are using SWAP LRU, then every 4 rounds of syndrome
+    // extraction are different. Furthermore, the first round is
+    // different from the remaining rounds.
+    // 
+    // We only perform SWAPs on Z stabilizers because the overhead
+    // is 1 CNOT. In contrast, X stabilizers require a whole SWAP
+    // (3 CNOTs).
+    const uint32_t INVALID_SWAP = (uint32_t)-1;
+    std::map<uint32_t, std::array<uint32_t, 4>> swap_order;
+    if (params.use_swap_lru) {
+        // Build swap order.
+        for (size_t k = 0; k < 4; k++) {
+            std::set<uint32_t> already_swapped;
+            for (auto measure : z_measure_coords) {
+                uint32_t pm = p2q[measure];
+                if (!swap_order.count(pm)) {
+                    swap_order[pm] = std::array<uint32_t, 4>();
+                }
+
+                bool found = true;
+                size_t i = k;
+                auto data = measure + z_order[i];
+                i = (i+1) & 0x3;
+                while (p2q.find(data) == p2q.end() 
+                        || already_swapped.count(p2q[data]))
+                {
+                    data = measure + z_order[i];
+                    i = (i + 1) & 0x3;
+                    if (i == k) {
+                        // Then we have been unable to find a proper
+                        // swap candidate. This ancilla will not be
+                        // swapping for this cycle.
+                        found = false;
+                        break;
+                    }
+                }
+
+                if (found) {
+                    swap_order[pm][k] = p2q[data];
+                    already_swapped.insert(p2q[data]);
+                } else {
+                    swap_order[pm][k] = INVALID_SWAP;
+                }
+            }
+        }
+    }
+
     for (size_t k = 0; k < 4; k++) {
         for (auto measure : x_measure_coords) {
             auto data = measure + x_order[k];
@@ -112,27 +161,126 @@ GeneratedCircuit _finish_surface_code_circuit(
                 cnot_targets[k].push_back(p2q[data]);
             }
         }
+
         for (auto measure : z_measure_coords) {
+            uint32_t pm = p2q[measure];
             auto data = measure + z_order[k];
             if (p2q.find(data) != p2q.end()) {
+                uint32_t pd = p2q[data];
+                if (params.use_swap_lru && pd == swap_order[pm][0]) {
+                    first_round_swap_targets[0].push_back(pm);
+                    first_round_swap_targets[0].push_back(swap_order[pm][0]);
+                    first_round_swap_targets[1].push_back(swap_order[pm][0]);
+                    first_round_swap_targets[1].push_back(pm);
+                    continue;
+                }
                 cnot_targets[k].push_back(p2q[data]);
-                cnot_targets[k].push_back(p2q[measure]);
+                cnot_targets[k].push_back(pm);
             }
         }
     }
 
     // Build the repeated actions that make up the surface code cycle.
-    Circuit cycle_actions;
+    Circuit cycle_actions;  // Use as the first round of syndrome
+                            // extraction if using SWAP LRU.
     params.append_begin_round_tick(cycle_actions, data_qubits);
     params.append_unitary_1(cycle_actions, "H", x_measurement_qubits);
     for (const auto &targets : cnot_targets) {
         cycle_actions.append_op("TICK", {});
         params.append_unitary_2(cycle_actions, "CNOT", targets);
     }
+    // Introduce SWAP operations into surface code cycle.
+    if (params.use_swap_lru) {
+        cycle_actions.append_op("TICK", {});
+        params.append_unitary_2(cycle_actions, "CNOT", first_round_swap_targets[0]);
+        cycle_actions.append_op("TICK", {});
+        params.append_unitary_2(cycle_actions, "CNOT", first_round_swap_targets[1]);
+    }
     cycle_actions.append_op("TICK", {});
     params.append_unitary_1(cycle_actions, "H", x_measurement_qubits);
     cycle_actions.append_op("TICK", {});
-    params.append_measure_reset(cycle_actions, measurement_qubits);
+    if (params.use_swap_lru) {
+        std::vector<uint32_t> local_measurement_qubits;
+        for (uint32_t m : measurement_qubits) {
+            if (swap_order.count(m) && swap_order[m][0] != INVALID_SWAP) {
+                local_measurement_qubits.push_back(swap_order[m][0]);
+            } else {
+                local_measurement_qubits.push_back(m);
+            }
+        }
+        params.append_measure_reset(cycle_actions, local_measurement_qubits);
+    } else {
+        params.append_measure_reset(cycle_actions, measurement_qubits);
+    }
+
+    std::array<Circuit, 4> alt_cycle_actions;
+    if (params.use_swap_lru) {
+        for (size_t cycle = 0; cycle < 4; cycle++) {
+            const size_t prev_cycle = cycle == 0 ? 3 : cycle - 1;
+
+            std::array<std::vector<uint32_t>, 4> alt_cnot_targets;
+            std::vector<uint32_t> alt_pre_swap_targets;
+            std::array<std::vector<uint32_t>, 2> alt_post_swap_targets;
+            for (size_t k = 0; k < 4; k++) {
+                for (auto measure : x_measure_coords) {
+                    auto data = measure + x_order[k];
+                    if (p2q.find(data) != p2q.end()) {
+                        alt_cnot_targets[k].push_back(p2q[measure]);
+                        alt_cnot_targets[k].push_back(p2q[data]);
+                    }
+                }
+
+                for (auto measure : z_measure_coords) {
+                    uint32_t pm = p2q[measure];
+                    auto data = measure + z_order[k];
+                    if (p2q.find(data) != p2q.end()) {
+                        uint32_t pd = p2q[data];
+                        if (pd == swap_order[pm][prev_cycle]) {
+                            alt_pre_swap_targets.push_back(pm);
+                            alt_pre_swap_targets.push_back(swap_order[pm][prev_cycle]);
+                            continue;
+                        }
+                        if (pd == swap_order[pm][cycle]) {
+                            alt_post_swap_targets[0].push_back(pm);
+                            alt_post_swap_targets[0].push_back(swap_order[pm][cycle]);
+                            alt_post_swap_targets[1].push_back(swap_order[pm][cycle]);
+                            alt_post_swap_targets[1].push_back(pm);
+                            continue;
+                        }
+                        alt_cnot_targets[k].push_back(p2q[data]);
+                        alt_cnot_targets[k].push_back(pm);
+                    }
+                }
+            }
+            Circuit alt_cycle;
+            params.append_begin_round_tick(alt_cycle, data_qubits);
+            params.append_unitary_1(alt_cycle, "H", x_measurement_qubits);
+            params.append_unitary_2(alt_cycle, "CNOT", alt_pre_swap_targets);
+            for (const auto &targets : cnot_targets) {
+                alt_cycle.append_op("TICK", {});
+                params.append_unitary_2(alt_cycle, "CNOT", targets);
+            }
+            alt_cycle.append_op("TICK", {});
+            params.append_unitary_2(alt_cycle, "CNOT", alt_post_swap_targets[0]);
+            alt_cycle.append_op("TICK", {});
+            params.append_unitary_2(alt_cycle, "CNOT", alt_post_swap_targets[1]);
+            alt_cycle.append_op("TICK", {});
+            params.append_unitary_1(alt_cycle, "H", x_measurement_qubits);
+            alt_cycle.append_op("TICK", {});
+
+            std::vector<uint32_t> local_measurement_qubits;
+            for (uint32_t m : measurement_qubits) {
+                if (swap_order.count(m) && swap_order[m][cycle] != INVALID_SWAP) {
+                    local_measurement_qubits.push_back(swap_order[m][cycle]);
+                } else {
+                    local_measurement_qubits.push_back(m);
+                }
+            }
+            params.append_measure_reset(alt_cycle, local_measurement_qubits);
+
+            alt_cycle_actions[cycle] = alt_cycle;
+        }
+    }
 
     // Build the start of the circuit, getting a state that's ready to cycle.
     // In particular, the first cycle has different detectors and so has to be handled special.
@@ -151,21 +299,34 @@ GeneratedCircuit _finish_surface_code_circuit(
     }
 
     // Build the repeated body of the circuit, including the detectors comparing to previous cycles.
-    Circuit body = cycle_actions;
-    body.append_op("SHIFT_COORDS", {}, {0, 0, 1});
-    uint32_t m = measurement_qubits.size();
-    if (params.both_stabilizers) {
-        for (auto m_index : measurement_qubits) {
-            auto m_coord = q2p[m_index];
-            auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
-            body.append_op(
-                "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
+    std::array<Circuit, 4> circuit_bodies;
+    if (params.use_swap_lru) {
+        for (size_t cycle = 0; cycle < 4; cycle++) {
+            circuit_bodies[cycle] = alt_cycle_actions[cycle];
         }
     } else {
-        for (auto measure : chosen_basis_measure_coords) {
-            auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[measure] - 1;
-            body.append_op(
-                "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {measure.x, measure.y, 0});
+        circuit_bodies[0] = cycle_actions;
+    }
+    for (size_t cycle = 0; cycle < 4; cycle++) {
+        if (!params.use_swap_lru && cycle > 0) {
+            break;
+        }
+        Circuit& body = circuit_bodies[cycle];
+        body.append_op("SHIFT_COORDS", {}, {0, 0, 1});
+        uint32_t m = measurement_qubits.size();
+        if (params.both_stabilizers) {
+            for (auto m_index : measurement_qubits) {
+                auto m_coord = q2p[m_index];
+                auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
+                body.append_op(
+                    "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
+            }
+        } else {
+            for (auto measure : chosen_basis_measure_coords) {
+                auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[measure] - 1;
+                body.append_op(
+                    "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {measure.x, measure.y, 0});
+            }
         }
     }
 
@@ -173,6 +334,29 @@ GeneratedCircuit _finish_surface_code_circuit(
     // In particular, the data measurements create detectors that have to be handled special.
     // Also, the tail is responsible for identifying the logical observable.
     Circuit tail;
+    if (params.use_swap_lru) {
+        // Two final sets of CNOTs to reswap data and ancilla qubits.
+        std::array<std::vector<uint32_t>, 2> final_cnot_targets;
+        size_t prev_cycle = params.rounds & 0x3;
+        for (auto measure : z_measure_coords) {
+            uint32_t pm = p2q[measure];
+            if (swap_order[pm][prev_cycle] != INVALID_SWAP) {
+                uint32_t pd = swap_order[pm][prev_cycle];
+                final_cnot_targets[0].push_back(pm);
+                final_cnot_targets[0].push_back(pd);
+                final_cnot_targets[1].push_back(pd);
+                final_cnot_targets[1].push_back(pm);
+            }
+        }
+
+        // Ignore errors -- in practice, you would just measure
+        // the swapped qubits instead of swapping them back.
+        tail.append_op("TICK", {});
+        tail.append_op("CNOT", final_cnot_targets[0]);
+        tail.append_op("TICK", {});
+        tail.append_op("CNOT", final_cnot_targets[1]);
+    }
+
     params.append_measure(tail, data_qubits, "ZX"[is_memory_x]);
     // Detectors.
     for (auto measure : chosen_basis_measure_coords) {
@@ -197,7 +381,23 @@ GeneratedCircuit _finish_surface_code_circuit(
     tail.append_op("OBSERVABLE_INCLUDE", obs_inc, 0);
 
     // Combine to form final circuit.
-    Circuit full_circuit = head + body * (params.rounds - 1) + tail;
+    Circuit main_body;
+    if (params.use_swap_lru) {
+        Circuit repeated_part, remaining_part;
+        if (params.rounds - 1 >= 4) {
+            repeated_part = (circuit_bodies[1] + circuit_bodies[2] + circuit_bodies[3] + circuit_bodies[0])
+                                * ((params.rounds - 1) >> 2);
+        }
+        size_t cycles_left = (params.rounds - 1) % 4;
+        size_t c = 1;
+        while (cycles_left--) {
+            remaining_part += circuit_bodies[c++];
+        }
+        main_body = repeated_part + remaining_part;
+    } else {
+        main_body = circuit_bodies[0] * (params.rounds - 1);
+    }
+    Circuit full_circuit = head + main_body + tail;
 
     // Produce a 2d layout.
     std::map<std::pair<uint32_t, uint32_t>, std::pair<std::string, uint32_t>> layout;

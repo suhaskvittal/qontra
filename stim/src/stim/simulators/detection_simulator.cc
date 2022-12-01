@@ -22,9 +22,12 @@ template <typename T>
 void xor_measurement_set_into_result(
     const T &measurement_set, simd_bit_table &frame_samples, simd_bit_table &output, size_t output_index_ticker) {
     simd_bits_range_ref dst = output[output_index_ticker];
+    std::cout << "detector " << output_index_ticker << ":";
     for (auto i : measurement_set) {
+        std::cout << " " << i;
         dst ^= frame_samples[i];
     }
+    std::cout << "\n";
 }
 
 template <typename T>
