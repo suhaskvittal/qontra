@@ -385,7 +385,7 @@ GeneratedCircuit _finish_surface_code_circuit(
         size_t prev_cycle = (params.rounds % lru_cycles) - 1;
         for (auto measure : z_measure_coords) {
             uint32_t pm = p2q[measure];
-            if (swap_order[pm][prev_cycle] != INVALID_SWAP) {
+            if (swap_order[pm][prev_cycle] != INVALID_SWAP && swap_order[pm][prev_cycle] != pm) {
                 uint32_t pd = swap_order[pm][prev_cycle];
                 final_cnot_targets[0].push_back(pm);
                 final_cnot_targets[0].push_back(pd);

@@ -6,12 +6,16 @@
 #ifndef TMR_DECODER_h
 #define TMR_DECODER_h
 
-#include "decoder.h"
+#include "mwpm_decoder.h"
 #include "defs.h"
+
+#include <algorithm>
+
+#define TMR_DEBUG
 
 namespace qrc {
 
-class TMRDecoder : public Decoder {
+class TMRDecoder : public MWPMDecoder {
 public:
     TMRDecoder(const stim::Circuit&, Decoder*, uint detectors_per_round);
 
@@ -20,6 +24,10 @@ public:
     DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
 private:
     void unxor(std::vector<uint8_t>&);
+    std::vector<uint8_t> majority(
+            const std::vector<uint8_t>&, 
+            const std::vector<uint8_t>&,
+            const std::vector<uint8_t>&);
 
     Decoder * baseline;
     uint detectors_per_round;
