@@ -139,7 +139,7 @@ to_lattice_graph(const stim::Circuit& circuit) {
         } else if (opname == "DETECTOR") {
             const auto& targets = op.target_data.targets;
             for (auto target : targets) {
-                int32_t q = measurement_order[(int32_t)target.data];
+                int32_t q = measurement_order[(int32_t)(target.data ^ stim::TARGET_RECORD_BIT)];
                 if (!already_measured_once.count(q)) {
                     graph.add_qubit(q, false, detector_counter++);
                     already_measured_once.insert(q);

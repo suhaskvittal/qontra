@@ -681,8 +681,10 @@ FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
         reset_all();
     }
 
-    for (uint32_t i = checkpoint; i < circuit.operations.size(); i++) {
-        const Operation& op = circuit.operations[i];
+    Circuit flat_circ = circuit.flattened();
+
+    for (uint32_t i = checkpoint; i < flat_circ.operations.size(); i++) {
+        const Operation& op = flat_circ.operations[i];
         if (strcmp(op.gate->name, "SIMHALT") == 0) {
             checkpoint = i+1;
             return false;

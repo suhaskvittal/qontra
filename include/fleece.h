@@ -20,11 +20,12 @@
 
 /*
  *  FLEECE = Fast LEakagE CorrEction
+ *
+ *  TODO: Implement basis-aware FLEECE. Only supports
+ *  Z basis operations at the moment.
  * */
 
 namespace qrc {
-
-const uint64_t MAX_SHOTS = 100000;
 
 class Fleece {
 public:
@@ -38,7 +39,7 @@ public:
 
     typedef std::pair<stim::simd_bit_table, stim::simd_bit_table> SyndromeOutput;
 
-    SyndromeOutput generate_syndromes(uint64_t shots);
+    SyndromeOutput generate_syndromes(uint64_t shots, uint64_t seed=0);
 private:
     void tower_correct(uint64_t shots);
 
@@ -63,6 +64,15 @@ private:
 
     std::mt19937_64 rng;
 };
+
+stim::simd_bit_table
+double_stabilizer_to_single_stabilizer(
+        stim::simd_bit_table,
+        uint code_dist,
+        uint num_detectors,
+        uint num_observables,
+        uint num_shots,
+        bool is_memory_z=true);
 
 } // qrc
 

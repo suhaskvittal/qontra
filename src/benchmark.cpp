@@ -169,6 +169,9 @@ build_circuit(
     params.after_clifford_leakage_probability_stddev = CHS(error_stddev, pauliplus_error_stddev, clifford_leak_stddev);
     params.after_reset_leakage_probability_stddev = CHS(error_stddev, pauliplus_error_stddev, reset_leak_stddev);
 
+    params.both_stabilizers = both_stabilizers;
+    params.use_swap_lru = use_swap_lru;
+
     stim::Circuit circ = generate_surface_code_circuit(params).circuit;
     return circ;
 }

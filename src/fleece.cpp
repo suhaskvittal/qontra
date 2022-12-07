@@ -7,6 +7,10 @@
 
 namespace qrc {
 
+#define FLEECE_DEBUG
+
+static const uint64_t MAX_SHOTS = 100000;
+
 Fleece::Fleece(const stim::Circuit& circuit,
                 std::mt19937_64& rng,
                 uint detectors_per_round,
@@ -37,16 +41,32 @@ Fleece::Fleece(const stim::Circuit& circuit,
     } else {
         curr_max_detector = detectors_per_round;
     }
+
+#ifdef FLEECE_DEBUG
+    // Print out lattice graph.
+    for (const auto& v : lattice_graph.vertices()) {
+        std::cout << v.qubit << " | is_data=" << v.is_data << ", base=" << v.base_detector
+                    << ", mtimes={";
+        for (auto t : v.measurement_times) {
+            std::cout << " " << t;
+        }
+        std::cout << " }\n";
+    }
+#endif
 }
 
 Fleece::SyndromeOutput
-Fleece::generate_syndromes(uint64_t shots) {
+Fleece::generate_syndromes(uint64_t shots, uint64_t seed) {
     uint32_t row_size = circuit.count_detectors() + circuit.count_observables();
     meas_results = stim::simd_bit_table(row_size, shots);
     leak_results = stim::simd_bit_table(row_size, shots);
 
     auto det_obs = stim::DetectorsAndObservables(circuit);
+
+    rng.seed(seed);
     while (!sim.cycle_level_simulation(circuit)) {
+        meas_results.clear();
+        leak_results.clear();
         stim::read_from_sim(sim, det_obs, false, true, true, meas_results, leak_results);
         // Correct data qubit "tower-like" errors.
         tower_correct(shots);
@@ -60,6 +80,8 @@ Fleece::generate_syndromes(uint64_t shots) {
         }
     }
 
+    meas_results.clear();
+    leak_results.clear();
     stim::read_from_sim(sim, det_obs, false, true, false, meas_results, leak_results);
     SyndromeOutput out = std::make_pair(meas_results, leak_results);
     return out;
@@ -76,7 +98,7 @@ Fleece::tower_correct(uint64_t shots) {
     
     std::vector<std::vector<uint8_t>> table(
             shots, std::vector<uint8_t>(detectors, 0));
-    for (uint i = curr_min_detector; i < curr_max_detector; i++) {
+    for (uint i = 0; i < curr_max_detector; i++) {
         uint d = base_detector(i);
         for (uint64_t s = 0; s < shots; s++) {
             table[s][d] += meas_results[i][s];
@@ -103,7 +125,7 @@ Fleece::tower_correct(uint64_t shots) {
         // been affected by a leakage.
         std::set<uint32_t> clear_parity_qubits;
         for (auto entry : marking_table) {
-            if (entry.second.size() > 1) {
+            if (entry.second.size() >= 1) {
                 for (uint32_t parity_qubit : entry.second) {
                     clear_parity_qubits.insert(parity_qubit);
                 }
@@ -123,8 +145,8 @@ Fleece::tower_correct(uint64_t shots) {
             const auto& v = lattice_graph.get_vertex_by_qubit(q);             
             uint currd = v.base_detector;
             while (currd < curr_max_detector) {
-                meas_results[s][currd] = 0;
-                leak_results[s][currd] = 0;
+                meas_results[currd][s] = 0;
+                leak_results[currd][s] = 0;
                 currd = next_detector(currd);
             }
 
@@ -160,6 +182,33 @@ Fleece::next_detector(uint detector) {
     return detector + detectors_per_round;
 }
 
+stim::simd_bit_table
+double_stabilizer_to_single_stabilizer(
+    stim::simd_bit_table orig,
+    uint code_dist,
+    uint num_detectors,
+    uint num_observables,
+    uint num_shots,
+    bool is_memory_z) 
+{
+    stim::simd_bit_table mod(num_detectors + num_observables, num_shots);
 
+    const uint detectors_per_round = code_dist*code_dist - 1;
+    const uint dprdiv2 = detectors_per_round >> 1;
+    uint32_t orig_ptr = 0, mod_ptr = 0;
+    while (mod_ptr < num_detectors) {
+        if (orig_ptr % detectors_per_round < dprdiv2
+            || mod_ptr >= num_detectors - dprdiv2) 
+        {
+            mod[mod_ptr++] |= orig[orig_ptr++];
+        } else {
+            orig_ptr++;
+        }
+    }
+    for (uint i = 0; i < num_observables; i++) {
+        mod[mod_ptr++] |= orig[orig_ptr++];
+    }
+    return mod;
+}
 
 } // qrc
