@@ -35,6 +35,40 @@ void
 b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&,
         bool save_per_shot_data=true);
 
+
+stim::Circuit
+build_circuit(
+    // Required
+    uint code_dist, 
+    fp_t error_mean,
+    fp_t error_stddev,
+    // Optionals
+    bool is_memory_z=true,
+    bool is_rotated=true,
+    bool both_stabilizers=false,
+    bool use_swap_lru=false,
+    // Level 1 Specificity
+    uint rounds=0,
+    fp_t clevel_error_mean=-1,
+    fp_t clevel_error_stddev=-1,
+    fp_t pauliplus_error_mean=-1,
+    fp_t pauliplus_error_stddev=-1,
+    // Level 2 Specificity
+    fp_t round_dp_mean=-1,
+    fp_t clifford_dp_mean=-1,
+    fp_t reset_flip_mean=-1,
+    fp_t meas_flip_mean=-1,
+    fp_t round_dp_stddev=-1,
+    fp_t clifford_dp_stddev=-1,
+    fp_t reset_flip_stddev=-1,
+    fp_t meas_flip_stddev=-1,
+    fp_t round_leak_mean=-1,
+    fp_t clifford_leak_mean=-1,
+    fp_t reset_leak_mean=-1,
+    fp_t round_leak_stddev=-1,
+    fp_t clifford_leak_stddev=-1,
+    fp_t reset_leak_stddev=-1);
+
 }  // qrc
 
 #endif

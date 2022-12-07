@@ -111,6 +111,68 @@ b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
         max_execution_time_for_correctable;
 }
 
+#define CHS(x,y,z) ((z)>=0?(z):((y)>=0?(y):(x)))
+
+stim::Circuit
+build_circuit(
+    uint code_dist,
+    fp_t error_mean,
+    fp_t error_stddev,
+    bool is_memory_z,
+    bool is_rotated,
+    bool both_stabilizers,
+    bool use_swap_lru,
+    uint rounds,
+    fp_t clevel_error_mean,
+    fp_t clevel_error_stddev,
+    fp_t pauliplus_error_mean,
+    fp_t pauliplus_error_stddev,
+    fp_t round_dp_mean,
+    fp_t clifford_dp_mean,
+    fp_t reset_flip_mean,
+    fp_t meas_flip_mean,
+    fp_t round_dp_stddev,
+    fp_t clifford_dp_stddev,
+    fp_t reset_flip_stddev,
+    fp_t meas_flip_stddev,
+    fp_t round_leak_mean,
+    fp_t clifford_leak_mean,
+    fp_t reset_leak_mean,
+    fp_t round_leak_stddev,
+    fp_t clifford_leak_stddev,
+    fp_t reset_leak_stddev)
+{
+    if (rounds == 0) {
+        rounds = code_dist;
+    }
+    std::string circ_type = (is_rotated ? "" : "un");
+    circ_type += "rotated_memory_";
+    circ_type += (is_memory_z ? "z" : "x");
+
+    stim::CircuitGenParameters params(rounds, code_dist, circ_type);
+    // Declare error rates.
+    params.before_round_data_depolarization = CHS(error_mean, clevel_error_mean, round_dp_mean);
+    params.after_clifford_depolarization = CHS(error_mean, clevel_error_mean, clifford_dp_mean);
+    params.after_reset_flip_probability = CHS(error_mean, clevel_error_mean, reset_flip_mean);
+    params.before_measure_flip_probability = CHS(error_mean, clevel_error_mean, meas_flip_mean);
+
+    params.before_round_data_depolarization_stddev = CHS(error_stddev, clevel_error_stddev, round_dp_stddev);
+    params.after_clifford_depolarization_stddev = CHS(error_stddev, clevel_error_stddev, clifford_dp_stddev);
+    params.after_reset_flip_probability_stddev = CHS(error_stddev, clevel_error_stddev, reset_flip_stddev);
+    params.before_measure_flip_probability_stddev = CHS(error_stddev, clevel_error_stddev, meas_flip_stddev);
+
+    params.before_round_leakage_probability = CHS(error_mean, pauliplus_error_mean, round_leak_mean);
+    params.after_clifford_leakage_probability = CHS(error_mean, pauliplus_error_mean, clifford_leak_mean);
+    params.after_reset_leakage_probability = CHS(error_mean, pauliplus_error_mean, reset_leak_mean);
+    
+    params.before_round_leakage_probability_stddev = CHS(error_stddev, pauliplus_error_stddev, round_leak_stddev);
+    params.after_clifford_leakage_probability_stddev = CHS(error_stddev, pauliplus_error_stddev, clifford_leak_stddev);
+    params.after_reset_leakage_probability_stddev = CHS(error_stddev, pauliplus_error_stddev, reset_leak_stddev);
+
+    stim::Circuit circ = generate_surface_code_circuit(params).circuit;
+    return circ;
+}
+
 std::vector<uint8_t> _to_vector(const stim::simd_bits_range_ref& array,
         uint n_detectors, uint n_observables) 
 {
