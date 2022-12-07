@@ -358,4 +358,24 @@ Example:
             }
         )
     );
+
+    add_gate(
+        failed,
+        Gate(
+            "TAILSTART",
+            0,
+            &TableauSimulator::I,
+            &FrameSimulator::I,
+            &ErrorAnalyzer::I,
+            (GateFlags)(GATE_IS_NOT_FUSABLE | GATE_TAKES_NO_TARGETS),
+            []() -> ExtraGateData {
+                return {
+                    "Sim Annotation", 
+                    "Signals start of the TAIL region of the circuit.\n",
+                    {},
+                    {},
+                    nullptr};
+            }
+        )
+    );
 }

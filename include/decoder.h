@@ -27,7 +27,7 @@ struct DecoderShotResult {
 
 class Decoder {
 public: 
-    Decoder(const stim::Circuit& circ);
+    Decoder(const stim::Circuit&);
     virtual ~Decoder() {}
 
     virtual DecoderShotResult decode_error(const std::vector<uint8_t>&) =0;
