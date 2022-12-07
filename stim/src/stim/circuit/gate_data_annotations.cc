@@ -338,4 +338,24 @@ Example:
                 };
             },
         });
+
+    add_gate(
+        failed,
+        Gate(
+            "SIMHALT",
+            0,
+            &TableauSimulator::I,
+            &FrameSimulator::I,
+            &ErrorAnalyzer::I,
+            (GateFlags)(GATE_IS_NOT_FUSABLE | GATE_TAKES_NO_TARGETS),
+            []() -> ExtraGateData {
+                return {
+                    "Sim Annotation", 
+                    "Stops Frame Simulator in cycle mode.\n",
+                    {},
+                    {},
+                    nullptr};
+            }
+        )
+    );
 }

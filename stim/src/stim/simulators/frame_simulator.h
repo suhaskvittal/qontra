@@ -149,6 +149,8 @@ struct FrameSimulator {
     void ELSE_CORRELATED_ERROR(const OperationData &target_data);
 
     void LEAKAGE_ERROR(const OperationData& target_data);
+
+    void cycle_level_simulation(const Circuit&);
    private:
     void xor_control_bit_into(uint32_t control, simd_bits_range_ref target);
     void single_cx(uint32_t c, uint32_t t);
