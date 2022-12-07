@@ -342,6 +342,7 @@ GeneratedCircuit _finish_surface_code_circuit(
             {(uint32_t)(measurement_qubits.size() - measure_coord_to_order[measure]) | TARGET_RECORD_BIT},
             {measure.x, measure.y, 0});
     }
+    head.append_op("SIMHALT", {});
 
     // Build the repeated body of the circuit, including the detectors comparing to previous cycles.
     std::array<Circuit, 5> circuit_bodies;
@@ -373,12 +374,14 @@ GeneratedCircuit _finish_surface_code_circuit(
                     "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {measure.x, measure.y, 0});
             }
         }
+        body.append_op("SIMHALT", {});
     }
 
     // Build the end of the circuit, getting out of the cycle state and terminating.
     // In particular, the data measurements create detectors that have to be handled special.
     // Also, the tail is responsible for identifying the logical observable.
     Circuit tail;
+    tail.append_op("TAILSTART", {});
     if (params.use_swap_lru) {
         // Two final sets of CNOTs to reswap data and ancilla qubits.
         std::array<std::vector<uint32_t>, 2> final_cnot_targets;

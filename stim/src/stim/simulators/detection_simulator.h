@@ -25,6 +25,15 @@
 
 namespace stim {
 
+void read_from_sim(
+    FrameSimulator &sim,
+    const DetectorsAndObservables &det_obs,
+    bool prepend_observables,
+    bool append_observables,
+    bool get_leakage_data,
+    simd_bit_table &result_table,
+    simd_bit_table &leakage_table);
+
 /// Samples detection events from the circuit and returns them in a simd_bit_table.
 ///
 /// Args:
@@ -84,6 +93,7 @@ simd_bit_table detector_samples(
     std::mt19937_64 &rng,
     bool get_leakage_data,
     simd_bit_table& leakage_table);
+
 
 /// Samples detection events from the circuit and writes them to a file.
 ///

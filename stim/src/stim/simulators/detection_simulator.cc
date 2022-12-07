@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "stim/simulators/detection_simulator.h"
+#include <random>
 
 #include "stim/simulators/frame_simulator.h"
 
@@ -39,6 +40,43 @@ void or_measurement_set_into_result(
         dst |= leak_samples[i];
     }
 }
+
+void stim::read_from_sim(
+    FrameSimulator &sim,
+    const DetectorsAndObservables &det_obs,
+    bool prepend_observables,
+    bool append_observables,
+    bool get_leakage_data,
+    simd_bit_table &result_table,
+    simd_bit_table &leakage_table)
+{
+    auto frame_samples = sim.m_record.storage;
+    auto leakage_samples = sim.leak_record.storage;
+
+    // Xor together measurement samples to form detector samples.
+    size_t offset = 0;
+    if (prepend_observables) {
+        for (const auto &obs : det_obs.observables) {
+            xor_measurement_set_into_result(obs, frame_samples, result_table, offset);
+            offset++;
+        }
+    }
+    for (const auto &det : det_obs.detectors) {
+        xor_measurement_set_into_result(det, frame_samples, result_table, offset);
+        if (get_leakage_data) {
+            or_measurement_set_into_result(det, leakage_samples,
+                    leakage_table, offset);
+        }
+        offset++;
+    }
+    if (append_observables) {
+        for (const auto &obs : det_obs.observables) {
+            xor_measurement_set_into_result(obs, frame_samples, result_table, offset);
+            offset++;
+        }
+    }
+}
+
 
 simd_bit_table stim::detector_samples(
     const Circuit &circuit,
@@ -67,44 +105,18 @@ simd_bit_table stim::detector_samples(
     FrameSimulator sim(circuit.count_qubits(), num_shots, SIZE_MAX, rng);
     sim.reset_all_and_run(circuit);
 
-//    simd_bit_table frame_samples = FrameSimulator::sample_flipped_measurements(circuit, num_shots, rng);
-
-    auto frame_samples = sim.m_record.storage;
-    auto leakage_samples = sim.leak_record.storage;
-
     auto num_detectors = det_obs.detectors.size();
     auto num_obs = det_obs.observables.size();
     size_t num_results = num_detectors + num_obs * (prepend_observables + append_observables);
-    simd_bit_table result(num_results, num_shots);
-
+    simd_bit_table result_table(num_results, num_shots);
     if (get_leakage_data) {
         leakage_table = simd_bit_table(num_results, num_shots);
     }
 
-    // Xor together measurement samples to form detector samples.
-    size_t offset = 0;
-    if (prepend_observables) {
-        for (const auto &obs : det_obs.observables) {
-            xor_measurement_set_into_result(obs, frame_samples, result, offset);
-            offset++;
-        }
-    }
-    for (const auto &det : det_obs.detectors) {
-        xor_measurement_set_into_result(det, frame_samples, result, offset);
-        if (get_leakage_data) {
-            or_measurement_set_into_result(det, leakage_samples,
-                    leakage_table, offset);
-        }
-        offset++;
-    }
-    if (append_observables) {
-        for (const auto &obs : det_obs.observables) {
-            xor_measurement_set_into_result(obs, frame_samples, result, offset);
-            offset++;
-        }
-    }
+    read_from_sim(sim, det_obs, prepend_observables, append_observables,
+            get_leakage_data, result_table, leakage_table);
 
-    return result;
+    return result_table;
 }
 
 simd_bit_table stim::detector_samples(

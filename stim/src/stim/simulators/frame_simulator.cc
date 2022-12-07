@@ -673,7 +673,7 @@ void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
     RareErrorIterator::for_samples(p, targets.size() * batch_size, rng, call_f);
 }
 
-void
+bool
 FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
     static uint32_t checkpoint = 0;
 
@@ -685,11 +685,12 @@ FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
         const Operation& op = circuit.operations[i];
         if (strcmp(op.gate->name, "SIMHALT") == 0) {
             checkpoint = i+1;
-            return;
+            return false;
         }
         (this->*op.gate->frame_simulator_function)(op.target_data);
     }
     checkpoint = 0;
+    return true;
 }
 
 void sample_out_helper(

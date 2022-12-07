@@ -26,31 +26,39 @@ public:
         int32_t qubit;
         bool is_data;
         int32_t base_detector;
+        std::vector<uint32_t> measurement_times;
 
         Vertex()
-            :qubit(-1), is_data(false), base_detector(-1)
+            :qubit(-1),
+            is_data(false),
+            base_detector(-1),
+            measurement_times()
         {}
 
         Vertex(int32_t q, bool is_data, int32_t base)
-            :qubit(q), is_data(is_data), base_detector(base)
+            :qubit(q),
+            is_data(is_data),
+            base_detector(base),
+            measurement_times()
         {}
 
         Vertex(const Vertex& other)
             :qubit(other.qubit), 
             is_data(other.is_data), 
-            base_detector(other.base_detector)
+            base_detector(other.base_detector),
+            measurement_times(other.measurement_times)
         {}
 
-        bool operator==(const Vertex& other) {
+        bool operator==(const Vertex& other) const {
             return qubit == other.qubit;
         }
 
-        bool operator<(const Vertex& other) {
+        bool operator<(const Vertex& other) const {
             return qubit < other.qubit;
         }
     };
 
-    void add_qubit(int32_t, bool is_data, int32_t base_detector);
+    void add_qubit(int32_t, bool is_data, int32_t base_detector, int32_t meas_time=-1);
     void add_coupling(int32_t, int32_t);
     void add_coupling(const Vertex&, const Vertex&);
 

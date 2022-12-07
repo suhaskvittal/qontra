@@ -5,8 +5,6 @@ project(Quarch VERSION 0.1)
 # Declare CPP Version
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-# Declare execution options.
-option(ROWHAMMER "ON=perform Rowhammer tracking" OFF)
 # Declare executable.
 set(QUARCH_PROGRAM_FILES
     # Main code.
@@ -15,13 +13,16 @@ set(QUARCH_PROGRAM_FILES
     src/decoder.cpp
     src/mwpm_decoder.cpp
     src/defs.cpp
-    # HYPERION.
+    # HYPERION
     src/hyperion.cpp
     src/hyperion/simulator.cpp
     src/hyperion/multi_qubit.cpp
     src/hyperion/trial_decoder.cpp
     # TMR
-    src/tmr_decoder.cpp)
+    src/tmr_decoder.cpp
+    # FLEECE
+    src/fleece.cpp
+    src/fleece/lattice_graph.cpp)
 add_library(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
 if(CMAKE_BUILD_TYPE MATCHES Release)

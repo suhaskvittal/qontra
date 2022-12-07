@@ -18,11 +18,14 @@ LatticeGraph::LatticeGraph()
 {}
 
 void
-LatticeGraph::add_qubit(int32_t qubit, bool is_data, int32_t base_detector) {
+LatticeGraph::add_qubit(int32_t qubit, bool is_data, int32_t base_detector, int32_t meas_time) {
     if (qubit_to_vertex.count(qubit)) {
         // Update the data.
         qubit_to_vertex[qubit].is_data = is_data;
         qubit_to_vertex[qubit].base_detector = base_detector;
+        if (meas_time >= 0) {
+            qubit_to_vertex[qubit].measurement_times.push_back(meas_time);
+        }
         if (base_detector >= 0) {
             detector_to_vertex[base_detector] = qubit_to_vertex[qubit];
         }
@@ -30,6 +33,9 @@ LatticeGraph::add_qubit(int32_t qubit, bool is_data, int32_t base_detector) {
             if (v.qubit == qubit) {
                 v.is_data = is_data;
                 v.base_detector = base_detector;
+                if (meas_time >= 0) {
+                    v.measurement_times.push_back(meas_time);
+                }
             }
         }
         return;
@@ -40,6 +46,9 @@ LatticeGraph::add_qubit(int32_t qubit, bool is_data, int32_t base_detector) {
     qubit_to_vertex[qubit] = v;
     if (base_detector >= 0) {
         detector_to_vertex[base_detector] = v;
+    }
+    if (meas_time >= 0) {
+        v.measurement_times.push_back(meas_time);
     }
     adjacency_list[v] = std::vector<Vertex>();
 }
@@ -65,7 +74,7 @@ LatticeGraph::add_coupling(const Vertex& v1, const Vertex& v2) {
 }
 
 LatticeGraph::Vertex
-LatticeGraph::get_vertex_by_vertex(int32_t q) {
+LatticeGraph::get_vertex_by_qubit(int32_t q) {
     if (qubit_to_vertex.count(q)) {
         return qubit_to_vertex[q];
     } else {
@@ -107,29 +116,30 @@ to_lattice_graph(const stim::Circuit& circuit) {
 
     LatticeGraph graph;
 
-    for (const Operation& op : circuit.operations) {
+    for (const stim::Operation& op : circuit.operations) {
         std::string opname(op.gate->name);  
         if (opname == "QUBIT_COORDS") {
             // This is a declaration of a qubit. Create a vertex.
-            int32_t qubit = op.target_data.targets[0];
+            int32_t qubit = (int32_t)op.target_data.targets[0].data;
             graph.add_qubit(qubit, true, -1);
         } else if (opname == "CX" || opname == "ZCX") {
             // This is a CNOT, indicating a coupling.
             const auto& targets = op.target_data.targets;
             for (uint32_t i = 0; i < targets.size(); i += 2) {
-                int32_t q1 = targets[i];
-                int32_t q2 = targets[i+1];
+                int32_t q1 = (int32_t)targets[i].data;
+                int32_t q2 = (int32_t)targets[i+1].data;
                 graph.add_coupling(q1, q2);
             }
-        } else if (opname == "M" || opname == "MX" || opname == "MZ") {
+        } else if (opname == "M" || opname == "MX" || opname == "MZ" || opname == "MR") {
             const auto& targets = op.target_data.targets;
             for (auto target : targets) {
-                measurement_order.push_front(target);
+                graph.add_qubit((int32_t)target.data, false, -1, measurement_order.size());
+                measurement_order.push_front((int32_t)target.data);
             } 
         } else if (opname == "DETECTOR") {
             const auto& targets = op.target_data.targets;
             for (auto target : targets) {
-                int32_t q = measurement_order[target];
+                int32_t q = measurement_order[(int32_t)target.data];
                 if (!already_measured_once.count(q)) {
                     graph.add_qubit(q, false, detector_counter++);
                     already_measured_once.insert(q);
