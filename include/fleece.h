@@ -35,11 +35,11 @@ public:
             bool double_stabilizer=true,
             char reset_basis='Z',
             char output_basis='Z',
-            uint32_t tower_cutoff=2);
+            uint32_t tower_cutoff=4);
 
     typedef std::pair<stim::simd_bit_table, stim::simd_bit_table> SyndromeOutput;
 
-    SyndromeOutput generate_syndromes(uint64_t shots, uint64_t seed=0);
+    SyndromeOutput generate_syndromes(uint64_t shots, uint64_t seed=0, bool nofilter=false);
 private:
     void tower_correct(uint64_t shots);
 

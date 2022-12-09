@@ -58,6 +58,10 @@ void stim::read_from_sim(
     if (prepend_observables) {
         for (const auto &obs : det_obs.observables) {
             xor_measurement_set_into_result(obs, frame_samples, result_table, offset);
+            if (get_leakage_data) {
+                or_measurement_set_into_result(obs, leakage_samples,
+                        leakage_table, offset);
+            }
             offset++;
         }
     }
@@ -72,6 +76,10 @@ void stim::read_from_sim(
     if (append_observables) {
         for (const auto &obs : det_obs.observables) {
             xor_measurement_set_into_result(obs, frame_samples, result_table, offset);
+            if (get_leakage_data) {
+                or_measurement_set_into_result(obs, leakage_samples,
+                        leakage_table, offset);
+            }
             offset++;
         }
     }

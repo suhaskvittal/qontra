@@ -10,6 +10,7 @@ namespace qrc {
 #define FLEECE_DEBUG
 
 static const uint64_t MAX_SHOTS = 100000;
+static std::mt19937_64 LOCAL_RNG(0);
 
 Fleece::Fleece(const stim::Circuit& circuit,
                 std::mt19937_64& rng,
@@ -45,10 +46,16 @@ Fleece::Fleece(const stim::Circuit& circuit,
 #ifdef FLEECE_DEBUG
     // Print out lattice graph.
     for (const auto& v : lattice_graph.vertices()) {
+        if (v.base_detector >= 0) continue;
         std::cout << v.qubit << " | is_data=" << v.is_data << ", base=" << v.base_detector
                     << ", mtimes={";
         for (auto t : v.measurement_times) {
             std::cout << " " << t;
+        }
+        std::cout << " }\n";
+        std::cout << "\tadj={";
+        for (auto& v : lattice_graph.get_adjacency_list(v)) {
+            std::cout << " " << v.qubit;
         }
         std::cout << " }\n";
     }
@@ -56,7 +63,7 @@ Fleece::Fleece(const stim::Circuit& circuit,
 }
 
 Fleece::SyndromeOutput
-Fleece::generate_syndromes(uint64_t shots, uint64_t seed) {
+Fleece::generate_syndromes(uint64_t shots, uint64_t seed, bool nofilter) {
     uint32_t row_size = circuit.count_detectors() + circuit.count_observables();
     meas_results = stim::simd_bit_table(row_size, shots);
     leak_results = stim::simd_bit_table(row_size, shots);
@@ -64,13 +71,22 @@ Fleece::generate_syndromes(uint64_t shots, uint64_t seed) {
     auto det_obs = stim::DetectorsAndObservables(circuit);
 
     rng.seed(seed);
+    sim.reset_all();
+    curr_min_detector = 0;
+    if (double_stabilizer) {
+        curr_max_detector = detectors_per_round >> 1;
+    } else {
+        curr_max_detector = detectors_per_round;
+    }
     while (!sim.cycle_level_simulation(circuit)) {
         meas_results.clear();
         leak_results.clear();
+        std::cout << "(min, max) = (" << curr_min_detector << ", " << curr_max_detector << ")\n";
         stim::read_from_sim(sim, det_obs, false, true, true, meas_results, leak_results);
         // Correct data qubit "tower-like" errors.
-        tower_correct(shots);
-
+        if (!nofilter) {
+            tower_correct(shots);
+        }
 
         // Update curr min and curr max detectors.
         curr_min_detector = curr_max_detector;
@@ -82,7 +98,7 @@ Fleece::generate_syndromes(uint64_t shots, uint64_t seed) {
 
     meas_results.clear();
     leak_results.clear();
-    stim::read_from_sim(sim, det_obs, false, true, false, meas_results, leak_results);
+    stim::read_from_sim(sim, det_obs, false, true, true, meas_results, leak_results);
     SyndromeOutput out = std::make_pair(meas_results, leak_results);
     return out;
 }
@@ -90,55 +106,57 @@ Fleece::generate_syndromes(uint64_t shots, uint64_t seed) {
 
 void
 Fleece::tower_correct(uint64_t shots) {
-    // First detect which data qubits have leaked. We do this by identifying 
-    // all "towers" syndrome bits and group each tower based on adjacent data
-    // qubits. Groups of towers with >1 syndrome bits for a data qubit are 
-    // cleared and the FTQC is directed to reset the corresponding data qubits.
-    uint detectors = curr_max_detector - curr_min_detector;
-    
-    std::vector<std::vector<uint8_t>> table(
-            shots, std::vector<uint8_t>(detectors, 0));
-    for (uint i = 0; i < curr_max_detector; i++) {
-        uint d = base_detector(i);
-        for (uint64_t s = 0; s < shots; s++) {
-            table[s][d] += meas_results[i][s];
-        }
-    }
-
+    // To make this fast, we need to optimize for the cache.
+    // Thus, we transpose the meas_results and leak_results to improve cache hits.
+    auto meas_results_T = meas_results.transposed();
     for (uint64_t s = 0; s < shots; s++) {
-        std::map<uint32_t, std::vector<uint32_t>> marking_table;
-        std::vector<uint8_t> freq_row(table[s]);
-        for (uint i = 0; i < detectors; i++) {
-            if (freq_row[i] >= tower_cutoff) {
-                auto v = lattice_graph.get_vertex_by_detector(i);
-                auto adjlist = lattice_graph.get_adjacency_list(v);
-                for (const auto& w : adjlist) {
-                    if (!marking_table.count(w.qubit)) {
-                        marking_table[w.qubit] = std::vector<uint32_t>();
-                    }
-                    marking_table[w.qubit].push_back(v.qubit);
-                }
-            }
+        // We first identify which data qubits have leaked by
+        // checking the adjacent stabilizers of each data qubit.
+        // If there is a tower larger than tower_cutoff, then
+        // we declare a leak.
+        if (!meas_results_T[s].not_zero()) {
+            continue;
         }
-
-        // Collect all the parity qubits that have
-        // been affected by a leakage.
         std::set<uint32_t> clear_parity_qubits;
-        for (auto entry : marking_table) {
-            if (entry.second.size() >= 1) {
-                for (uint32_t parity_qubit : entry.second) {
-                    clear_parity_qubits.insert(parity_qubit);
+        for (const auto& v : lattice_graph.vertices()) {
+            if (!v.is_data) {
+                continue; 
+            }
+            std::array<uint8_t, 100> level_is_active;
+            level_is_active.fill(0);
+            std::set<fleece::LatticeGraph::Vertex> adj_set;
+            for (const auto& w : lattice_graph.get_adjacency_list(v)) {
+                adj_set.insert(w);
+            }
+
+            for (uint32_t d = 0; d < curr_max_detector; d++) {
+                const auto& w = lattice_graph.get_vertex_by_detector(base_detector(d));
+                if (!adj_set.count(w)) {
+                    continue;
                 }
-                // Also, reset the data qubit.
-                uint32_t q = entry.first;
-                sim.x_table[q][s] = 0;
+                uint level;
+                if (double_stabilizer) {
+                    level = (d + (detectors_per_round>>1)) / detectors_per_round;
+                } else {
+                    level = d / detectors_per_round;
+                }
+                level_is_active[level] += meas_results_T[s][d];
+            }
+            uint length = std::accumulate(level_is_active.begin(), level_is_active.end(), 0);
+            if (length >= tower_cutoff) {
+                // Reset the data qubit.
+                std::cout << "shot " << s << " reset " << v.qubit << "\n";
+                sim.x_table[v.qubit][s] = 0;
                 if (sim.guarantee_anticommutation_via_frame_randomization) {
-                    sim.z_table[q][s] = rng() & 0x1;
+                    sim.z_table[v.qubit][s] = LOCAL_RNG() & 0x1;
                 }
-                sim.leakage_table[q][s] = 0;
+                sim.leakage_table[v.qubit][s] = 0;
+                for (const auto& w : lattice_graph.get_adjacency_list(v)) {
+                    clear_parity_qubits.insert(w.qubit);
+                }
             }
         }
-
+    
         for (uint32_t q : clear_parity_qubits) {
             // Clear bits in the measurement and leakage records
             // and the syndromes.
@@ -147,6 +165,7 @@ Fleece::tower_correct(uint64_t shots) {
             while (currd < curr_max_detector) {
                 meas_results[currd][s] = 0;
                 leak_results[currd][s] = 0;
+
                 currd = next_detector(currd);
             }
 

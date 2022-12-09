@@ -66,7 +66,8 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       n_y_errors(batch_size, 0),
       n_z_errors(batch_size, 0),
       n_dp1_errors(batch_size, 0),
-      n_dp2_errors(batch_size, 0)
+      n_dp2_errors(batch_size, 0),
+      sim_checkpoint(0)
 {}
 
 void FrameSimulator::xor_control_bit_into(uint32_t control, simd_bits_range_ref target)
@@ -103,6 +104,7 @@ void FrameSimulator::reset_all() {
     leakage_table.clear();
     m_record.clear();
     leak_record.clear();
+    sim_checkpoint = 0;
 }
 
 void FrameSimulator::reset_all_and_run(const Circuit &circuit) {
@@ -675,23 +677,18 @@ void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
 
 bool
 FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
-    static uint32_t checkpoint = 0;
-
-    if (checkpoint == 0) {
-        reset_all();
-    }
-
     Circuit flat_circ = circuit.flattened();
 
-    for (uint32_t i = checkpoint; i < flat_circ.operations.size(); i++) {
+    for (uint32_t i = sim_checkpoint; 
+            i < flat_circ.operations.size(); i++) 
+    {
         const Operation& op = flat_circ.operations[i];
         if (strcmp(op.gate->name, "SIMHALT") == 0) {
-            checkpoint = i+1;
+            sim_checkpoint = i+1;
             return false;
         }
         (this->*op.gate->frame_simulator_function)(op.target_data);
     }
-    checkpoint = 0;
     return true;
 }
 

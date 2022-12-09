@@ -72,6 +72,8 @@ public:
     void append_measure_reset(
             Circuit &circuit, const std::vector<uint32_t> targets,
             char basis = 'Z') const;
+    
+    void reset_tables(void) const;
 
     double get_after_clifford_depolarization(void) const;
     double get_before_round_data_depolarization(void) const;

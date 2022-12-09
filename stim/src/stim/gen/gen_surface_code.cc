@@ -75,29 +75,33 @@ GeneratedCircuit _finish_surface_code_circuit(
     std::vector<uint32_t> measurement_qubits;
     std::vector<uint32_t> x_measurement_qubits;
     std::vector<uint32_t> z_measurement_qubits;
+    std::vector<uint32_t> chosen_basis_measurement_qubits;
     std::vector<uint32_t> all_qubits;
     for (auto q : data_coords) {
         data_qubits.push_back(p2q[q]);
     }
     for (auto q : x_measure_coords) {
-//        measurement_qubits.push_back(p2q[q]);
         x_measurement_qubits.push_back(p2q[q]);
     }
     for (auto q : z_measure_coords) {
-//        measurement_qubits.push_back(p2q[q]);
         z_measurement_qubits.push_back(p2q[q]);
     }
     all_qubits.insert(all_qubits.end(), data_qubits.begin(), data_qubits.end());
     all_qubits.insert(all_qubits.end(), measurement_qubits.begin(), measurement_qubits.end());
     std::sort(all_qubits.begin(), all_qubits.end());
     std::sort(data_qubits.begin(), data_qubits.end());
-//    std::sort(measurement_qubits.begin(), measurement_qubits.end());
     std::sort(x_measurement_qubits.begin(), x_measurement_qubits.end());
     std::sort(z_measurement_qubits.begin(), z_measurement_qubits.end());
     for (uint32_t xm : x_measurement_qubits) {
+        if (is_memory_x) {
+            chosen_basis_measurement_qubits.push_back(xm);
+        }
         measurement_qubits.push_back(xm);
     }
     for (uint32_t zm : z_measurement_qubits) {
+        if (!is_memory_x) {
+            chosen_basis_measurement_qubits.push_back(zm);
+        }
         measurement_qubits.push_back(zm);
     }
 
@@ -336,7 +340,8 @@ GeneratedCircuit _finish_surface_code_circuit(
     params.append_reset(head, data_qubits, "ZX"[is_memory_x]);
     params.append_reset(head, measurement_qubits);
     head += cycle_actions;
-    for (auto measure : chosen_basis_measure_coords) {
+    for (auto m_index : chosen_basis_measurement_qubits) {
+        auto measure = q2p[m_index];
         head.append_op(
             "DETECTOR",
             {(uint32_t)(measurement_qubits.size() - measure_coord_to_order[measure]) | TARGET_RECORD_BIT},
@@ -368,7 +373,8 @@ GeneratedCircuit _finish_surface_code_circuit(
                     "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
             }
         } else {
-            for (auto measure : chosen_basis_measure_coords) {
+            for (auto m_index : chosen_basis_measurement_qubits) {
+                auto measure = q2p[m_index];
                 auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[measure] - 1;
                 body.append_op(
                     "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {measure.x, measure.y, 0});
@@ -413,7 +419,8 @@ GeneratedCircuit _finish_surface_code_circuit(
 
     params.append_measure(tail, data_qubits, "ZX"[is_memory_x]);
     // Detectors.
-    for (auto measure : chosen_basis_measure_coords) {
+    for (auto m_index : chosen_basis_measurement_qubits) {
+        auto measure = q2p[m_index];
         std::vector<uint32_t> detectors;
         for (auto delta : z_order) {
             auto data = measure + delta;
@@ -495,12 +502,12 @@ GeneratedCircuit _generate_rotated_surface_code_circuit(const CircuitGenParamete
         for (float y = 0.5; y <= d; y++) {
             surface_coord q{x * 2, y * 2};
             data_coords.insert(q);
-            if (y == 0.5) {
+//          if (y == 0.5) {
                 z_observable.push_back(q);
-            }
-            if (x == 0.5) {
+//          }
+//          if (x == 0.5) {
                 x_observable.push_back(q);
-            }
+//          }
         }
     }
 
@@ -615,6 +622,7 @@ GeneratedCircuit _generate_unrotated_surface_code_circuit(const CircuitGenParame
 }
 
 GeneratedCircuit stim::generate_surface_code_circuit(const CircuitGenParameters &params) {
+    params.reset_tables();
     if (params.task == "rotated_memory_x") {
         return _generate_rotated_surface_code_circuit(params, true);
     } else if (params.task == "rotated_memory_z") {

@@ -57,6 +57,8 @@ struct FrameSimulator {
     std::vector<uint32_t>    n_dp1_errors;
     std::vector<uint32_t>    n_dp2_errors;
 
+    uint64_t sim_checkpoint;
+
     // Determines whether e.g. 50% Z errors are multiplied into the frame when measuring in the Z basis.
     // This is necessary for correct sampling.
     // It should only be disabled when e.g. using the frame simulator to understand how a fixed set of errors will

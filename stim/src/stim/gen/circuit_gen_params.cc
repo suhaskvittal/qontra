@@ -26,6 +26,18 @@ static std::map<uint32_t, double> roundleak_table;
 static std::map<uint32_t, double> postresleak_table;
 static std::map<uint32_t, double> cliffordleak_table;
 
+void
+CircuitGenParameters::reset_tables() const {
+    rounddp_table.clear();
+    unitary1dp_table.clear();
+    unitary2dp_table.clear();
+    premeasflip_table.clear();
+    postresflip_table.clear();
+    roundleak_table.clear();
+    postresleak_table.clear();
+    cliffordleak_table.clear();
+}
+
 template <typename K> double
 get_from(std::map<K, double>& table, K k, double store_on_fail) {
     double p;

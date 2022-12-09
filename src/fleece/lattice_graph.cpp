@@ -22,7 +22,9 @@ LatticeGraph::add_qubit(int32_t qubit, bool is_data, int32_t base_detector, int3
     if (qubit_to_vertex.count(qubit)) {
         // Update the data.
         qubit_to_vertex[qubit].is_data = is_data;
-        qubit_to_vertex[qubit].base_detector = base_detector;
+        if (base_detector >= 0) {
+            qubit_to_vertex[qubit].base_detector = base_detector;
+        }
         if (meas_time >= 0) {
             qubit_to_vertex[qubit].measurement_times.push_back(meas_time);
         }
@@ -32,7 +34,9 @@ LatticeGraph::add_qubit(int32_t qubit, bool is_data, int32_t base_detector, int3
         for (Vertex& v : vertex_list) {
             if (v.qubit == qubit) {
                 v.is_data = is_data;
-                v.base_detector = base_detector;
+                if (base_detector >= 0) {
+                    v.base_detector = base_detector;
+                }
                 if (meas_time >= 0) {
                     v.measurement_times.push_back(meas_time);
                 }
@@ -116,7 +120,9 @@ to_lattice_graph(const stim::Circuit& circuit) {
 
     LatticeGraph graph;
 
-    for (const stim::Operation& op : circuit.operations) {
+    stim::Circuit flat_circ = circuit.flattened();
+
+    for (const stim::Operation& op : flat_circ.operations) {
         std::string opname(op.gate->name);  
         if (opname == "QUBIT_COORDS") {
             // This is a declaration of a qubit. Create a vertex.
@@ -139,7 +145,8 @@ to_lattice_graph(const stim::Circuit& circuit) {
         } else if (opname == "DETECTOR") {
             const auto& targets = op.target_data.targets;
             for (auto target : targets) {
-                int32_t q = measurement_order[(int32_t)(target.data ^ stim::TARGET_RECORD_BIT)];
+                int32_t index = (int32_t)(target.data ^ stim::TARGET_RECORD_BIT) - 1;
+                int32_t q = measurement_order[index];
                 if (!already_measured_once.count(q)) {
                     graph.add_qubit(q, false, detector_counter++);
                     already_measured_once.insert(q);
