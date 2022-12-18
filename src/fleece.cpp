@@ -18,13 +18,15 @@ Fleece::Fleece(const stim::Circuit& circuit,
                 bool double_stabilizer,
                 char reset_basis,
                 char output_basis,
-                uint32_t tower_cutoff)
+                uint32_t tower_cutoff,
+                uint32_t sliding_window_size)
     :circuit(circuit),
     detectors_per_round(detectors_per_round),
     double_stabilizer(double_stabilizer),
     reset_basis(reset_basis),
     output_basis(output_basis),
     tower_cutoff(tower_cutoff),
+    sliding_window_size(sliding_window_size),
     sim(circuit.count_qubits(), MAX_SHOTS, SIZE_MAX, rng),
     meas_results(
             circuit.count_detectors() + circuit.count_observables(), MAX_SHOTS),
@@ -33,6 +35,7 @@ Fleece::Fleece(const stim::Circuit& circuit,
     lattice_graph(),
     curr_min_detector(0),
     curr_max_detector(0),
+    fake_run(false),
     rng(rng)
 {
     lattice_graph = fleece::to_lattice_graph(circuit);
@@ -63,7 +66,7 @@ Fleece::Fleece(const stim::Circuit& circuit,
 }
 
 Fleece::SyndromeOutput
-Fleece::generate_syndromes(uint64_t shots, uint64_t seed, bool nofilter) {
+Fleece::generate_syndromes(uint64_t shots, uint64_t seed) {
     uint32_t row_size = circuit.count_detectors() + circuit.count_observables();
     meas_results = stim::simd_bit_table(row_size, shots);
     leak_results = stim::simd_bit_table(row_size, shots);
@@ -81,12 +84,12 @@ Fleece::generate_syndromes(uint64_t shots, uint64_t seed, bool nofilter) {
     while (!sim.cycle_level_simulation(circuit)) {
         meas_results.clear();
         leak_results.clear();
+#ifdef FLEECE_DEBUG
         std::cout << "(min, max) = (" << curr_min_detector << ", " << curr_max_detector << ")\n";
+#endif
         stim::read_from_sim(sim, det_obs, false, true, true, meas_results, leak_results);
         // Correct data qubit "tower-like" errors.
-        if (!nofilter) {
-            tower_correct(shots);
-        }
+        tower_correct(shots);
 
         // Update curr min and curr max detectors.
         curr_min_detector = curr_max_detector;
@@ -103,6 +106,13 @@ Fleece::generate_syndromes(uint64_t shots, uint64_t seed, bool nofilter) {
     return out;
 }
 
+bool
+Fleece::toggle_fake_run() {
+    fake_run = !fake_run;
+    return fake_run;
+}
+
+#define TOWER_SIZE 30
 
 void
 Fleece::tower_correct(uint64_t shots) {
@@ -117,82 +127,114 @@ Fleece::tower_correct(uint64_t shots) {
         if (!meas_results_T[s].not_zero()) {
             continue;
         }
-        std::set<uint32_t> clear_parity_qubits;
-        for (const auto& v : lattice_graph.vertices()) {
-            if (!v.is_data) {
-                continue; 
+        std::map<uint32_t, std::array<uint8_t, TOWER_SIZE>> tower_table;
+        for (uint i = 0; i < curr_max_detector; i++) {
+            if (!meas_results_T[s][i]) {
+                continue;
             }
-            std::array<uint8_t, 100> level_is_active;
-            level_is_active.fill(0);
-            std::set<fleece::LatticeGraph::Vertex> adj_set;
-            for (const auto& w : lattice_graph.get_adjacency_list(v)) {
-                adj_set.insert(w);
+            uint d = base_detector(i);
+            uint level;
+            if (double_stabilizer) {
+                level = (i + (detectors_per_round>>1)) / detectors_per_round;
+            } else {
+                level = i / detectors_per_round;
             }
 
-            for (uint32_t d = 0; d < curr_max_detector; d++) {
-                const auto& w = lattice_graph.get_vertex_by_detector(base_detector(d));
-                if (!adj_set.count(w)) {
-                    continue;
+            const auto& v = lattice_graph.get_vertex_by_detector(d);
+            for (const auto& w : lattice_graph.get_adjacency_list(v)) {
+                if (!tower_table.count(w.qubit)) {
+                    tower_table[w.qubit] = std::array<uint8_t, TOWER_SIZE>();
+                    tower_table[w.qubit].fill(0);
                 }
-                uint level;
-                if (double_stabilizer) {
-                    level = (d + (detectors_per_round>>1)) / detectors_per_round;
+                if (d < (detectors_per_round>>1)) {
+                    tower_table[w.qubit][level] |= 0b01;
                 } else {
-                    level = d / detectors_per_round;
-                }
-                level_is_active[level] += meas_results_T[s][d];
-            }
-            uint length = std::accumulate(level_is_active.begin(), level_is_active.end(), 0);
-            if (length >= tower_cutoff) {
-                // Reset the data qubit.
-                std::cout << "shot " << s << " reset " << v.qubit << "\n";
-                sim.x_table[v.qubit][s] = 0;
-                if (sim.guarantee_anticommutation_via_frame_randomization) {
-                    sim.z_table[v.qubit][s] = LOCAL_RNG() & 0x1;
-                }
-                sim.leakage_table[v.qubit][s] = 0;
-                for (const auto& w : lattice_graph.get_adjacency_list(v)) {
-                    clear_parity_qubits.insert(w.qubit);
+                    tower_table[w.qubit][level] |= 0b10;
                 }
             }
         }
-    
-        for (uint32_t q : clear_parity_qubits) {
-            // Clear bits in the measurement and leakage records
-            // and the syndromes.
-            const auto& v = lattice_graph.get_vertex_by_qubit(q);             
-            uint currd = v.base_detector;
-            while (currd < curr_max_detector) {
-                meas_results[currd][s] = 0;
-                leak_results[currd][s] = 0;
 
-                currd = next_detector(currd);
+        const uint max_level = curr_max_detector / detectors_per_round;
+        for (auto pair : tower_table) {
+            uint32_t q = pair.first;
+            std::array<uint8_t, TOWER_SIZE> tower = pair.second;
+            // Using a sliding window to find the tower.
+            uint left = 0;
+            uint right = max_level < sliding_window_size ? max_level : sliding_window_size;
+            bool is_leaked = false;
+
+            while (left < max_level) {
+                uint s = 0;
+                for (uint i = left; i <= right; i++) {
+                    s += (tower[i] & 0b10) + (tower[i] & 0b01);
+                }
+                if (s >= tower_cutoff && !fake_run) {
+                    is_leaked = true;
+                    // Clear the syndrome bits and measurement outcomes in this window. 
+                    for (const auto& v : lattice_graph.get_adjacency_list(q)) {
+                        clean_parity_qubit(v.qubit, left, right, s);
+                        for (uint i = left; i <= right; i++) {
+                            tower[i] = 0;
+                        }
+                    }
+                }
+                left++;
+                right++;
+                if (right > max_level) {
+                    right = max_level;
+                }
             }
 
-            for (uint32_t meas_t : v.measurement_times) {
-                sim.m_record.storage[meas_t][s] = 0; 
-                sim.leak_record.storage[meas_t][s] = 0; 
+            if (is_leaked && !fake_run) {
+                // Reset data qubit.
+                sim.x_table[q][s] = 0;
+                if (sim.guarantee_anticommutation_via_frame_randomization) {
+                    sim.z_table[q][s] = LOCAL_RNG() & 0x1;
+                }
+                sim.leakage_table[q][s] = 0;
             }
         }
     }
 }
 
+void
+Fleece::clean_parity_qubit(uint32_t q, uint lower_level, uint upper_level, uint64_t shot) {
+    if (fake_run) {
+        return;
+    }
+
+    const auto& v = lattice_graph.get_vertex_by_qubit(q);
+    const uint8_t offset = v.base_detector < (detectors_per_round>>1) ? 0 : 1;
+    if (offset && lower_level == 0) {
+        return;
+    }
+    lower_level -= offset;
+    upper_level -= offset;
+
+    uint8_t prev_meas;
+    if (lower_level == 0) {
+        prev_meas = 0;
+    } else {
+        uint32_t prev_meas_t = v.measurement_times[lower_level - 1];
+        prev_meas = sim.m_record.storage[prev_meas_t][shot];
+    }
+    for (uint i = lower_level; i < upper_level; i++) {
+        uint32_t meas_t = v.measurement_times[i];
+        sim.m_record.storage[meas_t][shot] = prev_meas;
+        sim.leak_record.storage[meas_t][shot] = 0;
+    }
+    // Clear syndrome bits.
+    uint currd = v.base_detector + lower_level*detectors_per_round;
+    const uint maxd = v.base_detector + upper_level*detectors_per_round;
+    while (currd < maxd) {
+        meas_results[currd][shot] = 0;
+        leak_results[currd][shot] = 0;
+        currd = next_detector(currd);
+    }
+}
+
 uint
 Fleece::base_detector(uint detector) {
-    /*
-    if (double_stabilizer) {
-        const uint dprdiv2 = detectors_per_round >> 1;
-        if (detector < dprdiv2) {
-            return detector;
-        } else if (detector >= circuit.count_detectors() - dprdiv2) {
-            return detector - (circuit.count_detectors() - dprdiv2);
-        } else {
-            return detector % detectors_per_round;
-        }
-    } else {
-        return detector % detectors_per_round;
-    }
-    */
     return detector % detectors_per_round;
 }
 

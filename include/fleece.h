@@ -35,13 +35,17 @@ public:
             bool double_stabilizer=true,
             char reset_basis='Z',
             char output_basis='Z',
-            uint32_t tower_cutoff=4);
+            uint32_t tower_cutoff=2,
+            uint32_t sliding_window_size=4);
 
     typedef std::pair<stim::simd_bit_table, stim::simd_bit_table> SyndromeOutput;
 
-    SyndromeOutput generate_syndromes(uint64_t shots, uint64_t seed=0, bool nofilter=false);
+    SyndromeOutput generate_syndromes(uint64_t shots, uint64_t seed=0);
+
+    bool toggle_fake_run(void);
 private:
     void tower_correct(uint64_t shots);
+    void clean_parity_qubit(uint32_t, uint lower_level, uint upper_level, uint64_t shot);
 
     uint base_detector(uint);
     uint next_detector(uint);
@@ -52,6 +56,7 @@ private:
     const char reset_basis;
     const char output_basis;
     const uint32_t tower_cutoff;
+    const uint32_t sliding_window_size;
 
     stim::FrameSimulator sim;
     stim::simd_bit_table meas_results;
@@ -61,6 +66,8 @@ private:
 
     uint curr_min_detector;
     uint curr_max_detector;
+
+    bool fake_run;
 
     std::mt19937_64 rng;
 };

@@ -172,7 +172,7 @@ build_circuit(
     params.after_reset_leakage_probability_stddev = __CHS(error_stddev, pauliplus_error_stddev, reset_leak_stddev);
 
     params.both_stabilizers = both_stabilizers;
-    params.use_swap_lru = use_swap_lru;
+    params.swap_lru_with_no_swap = use_swap_lru;
 
     std::cout << params.before_round_data_depolarization << "," << error_mean
                 << "," << clevel_error_mean << "," << round_dp_mean << "\n";
