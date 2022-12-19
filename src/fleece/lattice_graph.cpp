@@ -106,7 +106,6 @@ to_lattice_graph(const stim::Circuit& circuit) {
     uint32_t detector_counter = 0;
 
     LatticeGraph graph;
-
     stim::Circuit flat_circ = circuit.flattened();
 
     for (const stim::Operation& op : flat_circ.operations) {
@@ -123,10 +122,13 @@ to_lattice_graph(const stim::Circuit& circuit) {
                 int32_t q2 = (int32_t)targets[i+1].data;
                 graph.add_coupling(q1, q2);
             }
-        } else if (opname == "M" || opname == "MX" || opname == "MZ" || opname == "MR") {
+        } else if (opname == "M" || opname == "MX" 
+                || opname == "MZ" || opname == "MR") 
+        {
             const auto& targets = op.target_data.targets;
             for (auto target : targets) {
-                graph.add_qubit((int32_t)target.data, false, -1, measurement_order.size());
+                graph.add_qubit(
+                        (int32_t)target.data, false, -1, measurement_order.size());
                 measurement_order.push_front((int32_t)target.data);
             } 
         } else if (opname == "DETECTOR") {
@@ -145,6 +147,19 @@ to_lattice_graph(const stim::Circuit& circuit) {
     }
 
     return graph;
+}
+
+graph::PathTable<LatticeGraph::Vertex>
+compute_path_table(LatticeGraph& graph) {
+    typedef LatticeGraph G;
+    typedef LatticeGraph::Vertex V;
+
+    graph::ewf_t<G, V> w = [] (G& g, V * v1, V * v2)
+    {
+        return 1;
+    };
+
+    return graph::compute_path_table(graph, w);
 }
 
 }  // fleece

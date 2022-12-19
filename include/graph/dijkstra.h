@@ -8,7 +8,9 @@
 
 #include "defs.h"
 
+#include <deque>
 #include <functional>
+#include <limits>
 #include <map>
 #include <queue>
 #include <set>
@@ -26,6 +28,41 @@ struct DijkstraResult {
 
 template <class V>
 using PathTable = std::map<std::pair<V*, V*>, DijkstraResult<V>>;
+
+template <class G, class V> void
+bfs(G& graph,
+    V * src,
+    std::map<V*, fp_t>& distances,
+    std::map<V*, V*>& predecessors)
+{
+    std::deque<V*> bfsq;
+    for (V * v : graph.vertices()) {
+        if (v == src) {
+            distances[v] = 0;
+        } else {
+            distances[v] = std::numeric_limits<fp_t>::max();
+        }
+        predecessors[v] = 0;
+        bfsq.push_back(v);
+    }
+
+    std::set<V*> visited;
+    while (!bfsq.empty()) {
+        auto v = bfsq.front();
+        bfsq.pop_front();
+        if (visited.count(v)) {
+            continue;
+        }
+
+        for (auto w : graph.adjacency_list(v)) {
+            bfsq.push_back(w);
+            if (distances[w] > distances[v] + 1) {
+                distances[w] = distances[v] + 1;
+            }
+        }
+        visited.insert(v);
+    }
+}
 
 template <class G, class V> void
 dijkstra(G& graph,
@@ -111,6 +148,32 @@ failed_to_find_path:
     DijkstraResult<V> res = {path, distance};
     path_table[std::make_pair(src, dst)] = res;
     path_table[std::make_pair(dst, src)] = res;
+}
+
+// Edge weight function type.
+template <class G, class V>
+using ewf_t = std::function<fp_t(G&, V*, V*)>;
+
+template <class G, class V> PathTable<V>
+compute_path_table(G& graph, ewf_t<G, V>& w) {
+    graph::PathTable<V> path_table;
+    // Perform Dijkstra's algorithm on the graph.
+    auto vertices = graph.vertices();
+    for (uint i = 0; i < vertices.size(); i++) {
+        V * s = vertices[i];
+        // Build data structures for call.
+        std::map<V*, V*> predecessors;
+        std::map<V*, fp_t> distances;
+
+        graph::dijkstra(graph, s, distances, predecessors, w);
+
+        for (uint j = i + 1; j < vertices.size(); j++) {
+            V * t = vertices[j];
+            graph::update_path_table(
+                    path_table, s, t, distances, predecessors);
+        }
+    }
+    return path_table;
 }
 
 }   // graph

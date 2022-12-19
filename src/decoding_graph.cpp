@@ -322,30 +322,13 @@ compute_path_table(DecodingGraph& graph) {
     typedef DecodingGraph G;
     typedef DecodingGraph::Vertex V;
 
-    graph::PathTable<V> path_table;
-    // Perform Dijkstra's algorithm on the graph.
-    auto vertices = graph.vertices();
-    uint n_detectors = graph.count_detectors();
-    for (uint i = 0; i < n_detectors; i++) {
-        V * s = vertices[i];
-        // Build data structures for call.
-        std::map<V*, V*> predecessors;
-        std::map<V*, fp_t> distances;
+    graph::ewf_t<G, V> w = [] (G& g, V * v1, V * v2)
+    {
+        auto e = g.get_edge(v1, v2);
+        return e->edge_weight;
+    };
 
-        std::function<fp_t(G&, V*, V*)> ewf = [] (G& graph, V* v1, V* v2)
-        {
-            auto e = graph.get_edge(v1, v2);
-            return e->edge_weight;
-        };
-        graph::dijkstra(graph, s, distances, predecessors, ewf);
-
-        for (uint j = i + 1; j < n_detectors; j++) {
-            V * t = vertices[j];
-            graph::update_path_table(
-                    path_table, s, t, distances, predecessors);
-        }
-    }
-    return path_table;
+    return graph::compute_path_table(graph, w);
 }
 
 void 
