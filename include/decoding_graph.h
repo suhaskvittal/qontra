@@ -7,6 +7,7 @@
 #define DECODING_GRAPH_h
 
 #include "defs.h"
+#include "graph/dijkstra.h"
 
 #include <stim.h>
 
@@ -23,13 +24,6 @@
 #define N_COORD 100
 
 namespace qrc {
-
-struct DijkstraResult {
-    std::vector<uint> path;
-    fp_t distance;
-};
-
-typedef std::map<std::pair<uint, uint>, DijkstraResult> PathTable;
 
 #define BOUNDARY_INDEX ((uint)-1)
 
@@ -140,7 +134,7 @@ private:
 DecodingGraph
 to_decoding_graph(const stim::Circuit&);
 
-PathTable
+graph::PathTable<DecodingGraph::Vertex>
 compute_path_table(DecodingGraph&);
 
 typedef std::function<void(fp_t, std::vector<uint>, std::set<uint>)>
@@ -153,18 +147,6 @@ _read_detector_error_model(const stim::DetectorErrorModel&,
         uint n_iter, uint& det_offset, 
         std::array<fp_t, N_COORD>& coord_offset,
         error_callback_f, detector_callback_f);
-
-void
-_dijkstra(DecodingGraph&, DecodingGraph::Vertex*, 
-        std::map<DecodingGraph::Vertex*, fp_t>& distances,
-        std::map<DecodingGraph::Vertex*, DecodingGraph::Vertex*>& predecessors);
-void
-_update_path_table(PathTable&,
-        DecodingGraph&, 
-        DecodingGraph::Vertex*,
-        DecodingGraph::Vertex*, 
-        std::map<DecodingGraph::Vertex*, fp_t>& distances,
-        std::map<DecodingGraph::Vertex*, DecodingGraph::Vertex*>& predecessors);
 
 }  // qrc
 

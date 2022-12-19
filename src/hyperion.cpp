@@ -67,7 +67,7 @@ Hyperion::Hyperion(const stim::Circuit circuit,
     };
     simulator = new hyperion::HyperionSimulator(dram, 
                                     memory_event_table,
-                                    path_table, 
+                                    graph, 
                                     sim_params);
 }
 

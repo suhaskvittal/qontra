@@ -52,7 +52,7 @@ private:
     std::vector<bool> occupied;
     std::vector<stim::Circuit> circuits;
     std::vector<DecodingGraph> graphs;
-    std::vector<PathTable> path_tables;
+    std::vector<graph::PathTable<DecodingGraph::Vertex>> path_tables;
     uint n_rounds;
     fp_t main_clock_frequency;
     fp_t dram_clock_frequency;

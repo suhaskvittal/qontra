@@ -14,7 +14,7 @@ static const uint RADIX_WIDTH = 16 / (BFU_SORT_STAGES);
 
 HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram, 
         std::map<addr_t, bool> * memory_event_table,
-        const PathTable& path_table,
+        DecodingGraph& graph,
         const HyperionSimulatorParams& params)
     :
     /* Statistics */
@@ -42,7 +42,8 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     bfu_idle(false),
     /* Data */
     memory_event_table(memory_event_table),
-    path_table(path_table),
+    graph(graph),
+    path_table(compute_path_table(graph)),
     /* Config parameters */
     curr_max_detector(0),
     weight_filter_cutoff(params.weight_filter_cutoff),
@@ -62,11 +63,10 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     load_base_address(params.bankgroup, params.bank, params.row_offset);
 }
 
-bool
+void
 HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
     if (detector_array.size() == 0) {
         state = State::idle;
-        return false;
     }
     clear();
     detector_vector_register = detector_array;
@@ -80,12 +80,14 @@ HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
     has_boundary = detector_vector_register.back() == BOUNDARY_INDEX;
     // Compute the critical index.
     curr_max_detector = n_detectors_per_round;
-    return true;
 }
 
 void
-HyperionSimulator::load_path_table(const PathTable& pt) {
-    path_table = pt;  
+HyperionSimulator::load_graph(DecodingGraph& g, 
+        const graph::PathTable<DecodingGraph::Vertex>& pt) 
+{
+    graph = g;
+    path_table = pt;
 }
 
 void
@@ -283,7 +285,11 @@ HyperionSimulator::tick_prefetch()  {
     addr_t address = to_address(di, dj, base_address, n_detectors);
     
     access(address, false);  // We don't care if there is a hit or miss.
-    fp_t raw_weight = path_table[std::make_pair(di, dj)].distance;
+    
+    auto vdi = graph.get_vertex(di);
+    auto vdj = graph.get_vertex(dj);
+
+    fp_t raw_weight = path_table[std::make_pair(vdi, vdj)].distance;
     uint32_t w = (uint32_t) (raw_weight * MWPM_INTEGER_SCALE);
     mean_weight_register += w;
     access_counter++;
@@ -499,10 +505,12 @@ HyperionSimulator::tick_bfu_fetch() {
             // If there is no hit on the register file, then we have to go
             // to DRAM. We will stall the pipeline until DRAM gives us
             // the value.
-            auto di_dj = std::make_pair(di, dj);
+            auto vdi = graph.get_vertex(di);
+            auto vdj = graph.get_vertex(dj);
+            auto vdi_vdj = std::make_pair(vdi, vdj);
             if (is_hit) {
                 // Get weight and add data to proposed_matches.
-                fp_t raw_weight = path_table[di_dj].distance;
+                fp_t raw_weight = path_table[vdi_vdj].distance;
                 // Convert to integer (should be like this in DRAM).
                 uint32_t w = (uint32_t)(raw_weight * MWPM_INTEGER_SCALE);
                 match_list.push_back(std::make_pair(dj, w));
@@ -607,25 +615,28 @@ HyperionSimulator::update_state() {
         if (use_greedy_init) {
             for (uint i = 0; i < detector_vector_register.size(); i++) {
                 uint di = detector_vector_register[i];
+                auto vdi = graph.get_vertex(di);
                 if (init_matching.count(di)) {
                     continue;
                 }
-                uint min_mate;
+                DecodingGraph::Vertex * min_mate;
                 fp_t min_weight = std::numeric_limits<fp_t>::max();
                 for (uint j = i + 1; j < detector_vector_register.size(); j++) {
                     uint dj = detector_vector_register[j];
                     if (init_matching.count(dj)) {
                         continue;
                     }
-                    fp_t w = path_table[std::make_pair(di, dj)].distance;
+                    auto vdj = graph.get_vertex(dj);
+                    fp_t w = path_table[std::make_pair(vdi, vdj)].distance;
                     if (w < min_weight) {
-                        min_mate = dj;
+                        min_mate = vdj;
                         min_weight = w;
                     }
                 }
-                init_matching[di] = min_mate;
-                init_matching[min_mate] = di;
-                matching_weight += path_table[std::make_pair(di, min_mate)].distance;
+                init_matching[di] = min_mate->detector;
+                init_matching[min_mate->detector] = di;
+                matching_weight += 
+                    path_table[std::make_pair(vdi, min_mate)].distance;
             }
         }
 

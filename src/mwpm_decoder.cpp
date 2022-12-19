@@ -11,7 +11,6 @@ namespace qrc {
 #ifdef TRY_FILTER
 static bool did_get_search_space_size = false;
 static std::set<std::map<uint, uint>> search_set;
-
 uint64_t _gsss_helper(
         const std::map<uint, std::vector<uint>>& mate_list,
         const std::map<uint, uint>& curr_matching)
@@ -47,7 +46,6 @@ uint64_t get_search_space_size(const std::map<uint, std::vector<uint>>& mate_lis
     std::map<uint, uint> init;
     return _gsss_helper(mate_list, init); 
 }
-
 #endif
 
 MWPMDecoder::MWPMDecoder(const stim::Circuit& circ, uint max_detector) 
@@ -74,9 +72,8 @@ MWPMDecoder::sram_cost() {
     // We examine the size of the path_table.
     uint64_t n_bytes_sram = 0;   
     for (auto kv_pair : path_table) {
-        std::pair<uint, uint> di_dj = kv_pair.first;
-        DijkstraResult res = kv_pair.second;
-        // We assume that the di_dj pair is stored
+        auto res = kv_pair.second;
+        // We assume that the entry is stored
         // in a hardware matrix. We don't count the 
         // SRAM required to store keys.
         // 
@@ -136,14 +133,16 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     // Add edges.
     for (uint vi = 0; vi < n_vertices; vi++) {
         uint di = detector_list[vi];
+        DecodingGraph::Vertex * vdi = graph.get_vertex(di);
         for (uint vj = vi + 1; vj < n_vertices; vj++) {
             uint dj = detector_list[vj];
-            std::pair<uint, uint> di_dj = std::make_pair(di,dj);
-            if (path_table[di_dj].distance >= 1000.0) 
+            DecodingGraph::Vertex * vdj = graph.get_vertex(dj);
+            auto vdi_vdj = std::make_pair(vdi, vdj);
+            if (path_table[vdi_vdj].distance >= 1000.0) 
             {
                 continue;  // There is no path.
             }
-            fp_t raw_weight = path_table[di_dj].distance;
+            fp_t raw_weight = path_table[vdi_vdj].distance;
             // Note that we have already typedef'd qfp_t as wgt_t.
             wgt_t edge_weight = (wgt_t) (MWPM_INTEGER_SCALE * raw_weight);
             pm.AddEdge(vi, vj, edge_weight);
@@ -276,7 +275,10 @@ MWPMDecoder::get_correction_from_matching(const std::map<uint, uint>& matching) 
         }
         // Check path between the two detectors.
         // This is examining the error chain.
-        std::vector<uint> detector_path(path_table[di_dj].path);
+        DecodingGraph::Vertex * vdi = graph.get_vertex(di);
+        DecodingGraph::Vertex * vdj = graph.get_vertex(dj);
+        auto vdi_vdj = std::make_pair(vdi, vdj);
+        std::vector<DecodingGraph::Vertex*> detector_path(path_table[vdi_vdj].path);
         for (uint i = 1; i < detector_path.size(); i++) {
             // Get edge from decoding graph.
             auto wi = detector_path[i-1];

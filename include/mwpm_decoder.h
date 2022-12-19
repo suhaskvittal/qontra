@@ -7,6 +7,8 @@
 #define MWPM_DECODER_h
 
 #include "decoder.h"
+#include "decoding_graph.h"
+#include "graph/dijkstra.h"
 
 #include <PerfectMatching.h>
 
@@ -39,7 +41,7 @@ public:
 
     uint32_t longest_error_chain;
 protected:
-    PathTable path_table;
+    graph::PathTable<DecodingGraph::Vertex> path_table;
     uint max_detector;
 };
 

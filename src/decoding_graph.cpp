@@ -317,23 +317,32 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
     return graph;
 }
 
-PathTable
+graph::PathTable<DecodingGraph::Vertex>
 compute_path_table(DecodingGraph& graph) {
-    PathTable path_table;
+    typedef DecodingGraph G;
+    typedef DecodingGraph::Vertex V;
+
+    graph::PathTable<V> path_table;
     // Perform Dijkstra's algorithm on the graph.
     auto vertices = graph.vertices();
     uint n_detectors = graph.count_detectors();
     for (uint i = 0; i < n_detectors; i++) {
-        DecodingGraph::Vertex * s = vertices[i];
+        V * s = vertices[i];
         // Build data structures for call.
-        std::map<DecodingGraph::Vertex*, DecodingGraph::Vertex*> predecessors;
-        std::map<DecodingGraph::Vertex*, fp_t> distances;
+        std::map<V*, V*> predecessors;
+        std::map<V*, fp_t> distances;
 
-        _dijkstra(graph, s, distances, predecessors);
+        std::function<fp_t(G&, V*, V*)> ewf = [] (G& graph, V* v1, V* v2)
+        {
+            auto e = graph.get_edge(v1, v2);
+            return e->edge_weight;
+        };
+        graph::dijkstra(graph, s, distances, predecessors, ewf);
 
         for (uint j = i + 1; j < n_detectors; j++) {
-            DecodingGraph::Vertex * t = vertices[j];
-            _update_path_table(path_table, graph, s, t, distances, predecessors);
+            V * t = vertices[j];
+            graph::update_path_table(
+                    path_table, s, t, distances, predecessors);
         }
     }
     return path_table;
@@ -356,7 +365,7 @@ _read_detector_error_model(
                 stim::DetectorErrorModel subblock = 
                     dem.blocks[inst.target_data[1].data];
                 _read_detector_error_model(subblock, n_repeats,
-                        det_offset, coord_offset, err_f, det_f);
+                           det_offset, coord_offset, err_f, det_f);
             } else if (type == stim::DemInstructionType::DEM_ERROR) {
                 std::vector<uint> detectors;
                 std::set<uint> frames;
@@ -404,91 +413,5 @@ _read_detector_error_model(
     }
 }
 
-void
-_dijkstra(DecodingGraph& graph, 
-        DecodingGraph::Vertex * src,
-        std::map<DecodingGraph::Vertex*, fp_t>& distances,
-        std::map<DecodingGraph::Vertex*, DecodingGraph::Vertex*>& predecessors)
-{
-    typedef std::pair<DecodingGraph::Vertex*, fp_t> PQVertex;
-
-    struct DijkstraCmp {
-        bool operator()(const PQVertex& v1, const PQVertex& v2) {
-            return v1.second > v2.second; 
-        };
-    };
-    std::map<DecodingGraph::Vertex*, PQVertex> v2pv;
-    std::priority_queue<PQVertex, std::vector<PQVertex>, DijkstraCmp> queue;
-    for (DecodingGraph::Vertex * v : graph.vertices()) {
-        if (v == src) {
-            distances[v] = 0; 
-        } else {
-            distances[v] = std::numeric_limits<fp_t>::max();
-        } 
-        predecessors[v] = v;
-
-        PQVertex pv = std::make_pair(v, distances[v]);
-        queue.push(pv);
-        v2pv[v] = pv;
-    }
-
-    std::set<DecodingGraph::Vertex*> visited;
-    while (!queue.empty()) {
-        PQVertex pvi = queue.top(); 
-        auto vi = pvi.first;
-        queue.pop();
-        if (pvi.second != distances[vi]) {
-            continue; 
-        }
-
-        auto adj_list = graph.adjacency_list(vi);
-        for (DecodingGraph::Vertex * vj : adj_list) {
-            if (visited.count(vj)) {
-                continue; 
-            }
-            DecodingGraph::Edge * e = graph.get_edge(vi, vj);
-            fp_t new_dist = distances[vi] + e->edge_weight;
-            if (new_dist < distances[vj]) {
-                distances[vj] = new_dist; 
-                predecessors[vj] = vi;
-                // Insert new entry into the priority queue.
-                PQVertex pvj = std::make_pair(vj, new_dist);
-                queue.push(pvj);
-            }
-        }
-        visited.insert(vi);
-    } 
-}
-
-void
-_update_path_table(PathTable& path_table,
-        DecodingGraph& graph, 
-        DecodingGraph::Vertex * src, 
-        DecodingGraph::Vertex * dst,
-        std::map<DecodingGraph::Vertex*, fp_t>& distances,
-        std::map<DecodingGraph::Vertex*, DecodingGraph::Vertex*>& predecessors)
-{
-    // Compute path.
-    DecodingGraph::Vertex * curr = dst;
-    fp_t distance = distances[dst];
-    std::vector<uint> path;
-
-    while (curr != src) {
-        if (curr == predecessors[curr]) {
-            distance = std::numeric_limits<fp_t>::max();
-            path.clear();
-            goto failed_to_find_path;
-        }
-        uint det = curr->detector;
-        path.push_back(det);
-        curr = predecessors[curr];
-    }
-    path.push_back(curr->detector);
-failed_to_find_path:
-    // Build result.
-    DijkstraResult res = {path, distance};
-    path_table[std::make_pair(src->detector, dst->detector)] = res;
-    path_table[std::make_pair(dst->detector, src->detector)] = res;
-}
 
 }  // qrc

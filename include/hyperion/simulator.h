@@ -8,6 +8,7 @@
 
 #include "defs.h"
 #include "decoding_graph.h"
+#include "graph/dijkstra.h"
 #include "mwpm_decoder.h"
 
 #include <memory_system.h>
@@ -57,13 +58,12 @@ class HyperionSimulator {
 public:
     HyperionSimulator(dramsim3::MemorySystem*,
             std::map<addr_t, bool> * memory_event_table,
-            const PathTable& path_table,
+            DecodingGraph&,
             const HyperionSimulatorParams&);
 
-    bool load_detectors(const std::vector<uint>&);  // Returns false if the
-                                                    // syndrome is not 
-                                                    // servicable.
-    void load_path_table(const PathTable&);
+    void load_detectors(const std::vector<uint>&);
+    void load_graph(DecodingGraph&, 
+            const graph::PathTable<DecodingGraph::Vertex>&);
     void load_qubit_number(uint);
     void load_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset);
 
@@ -152,7 +152,8 @@ protected:
 
     /* Data */
     std::map<addr_t, bool> * memory_event_table;
-    PathTable path_table;
+    DecodingGraph graph;
+    graph::PathTable<DecodingGraph::Vertex> path_table;
     /* Configuation parameters. */
 private:
     uint curr_max_detector;

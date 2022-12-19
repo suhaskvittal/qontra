@@ -71,7 +71,7 @@ HyperionMultiQubitSimulator::HyperionMultiQubitSimulator(
         };
         simulators[i] = new HyperionSimulator(dram,
                                             memory_event_table,
-                                            path_tables[0], 
+                                            graphs[0], 
                                             sim_params);
     }
 }
@@ -275,6 +275,7 @@ HyperionMultiQubitSimulator::load_simulator(
     uint n_detectors = circ.count_detectors();
     uint n_observables = circ.count_observables();
     // Load data into simulator.
+    auto graph = graphs[qubit_id];
     auto path_table = path_tables[qubit_id];
     uint8_t bankgroup = qubit_id % dram->config_->bankgroups;
     uint8_t bank = (qubit_id / dram->config_->bankgroups)
@@ -282,7 +283,7 @@ HyperionMultiQubitSimulator::load_simulator(
     uint32_t row_offset = ROWS_PER_QUBIT * qubit_id;
 
     sim->load_qubit_number(qubit_id);
-    sim->load_path_table(path_table);
+    sim->load_graph(graph, path_table);
     sim->load_base_address(bankgroup, bank, row_offset);
     // Load the problem into the simulator.
     std::vector<uint> detector_array;
@@ -325,7 +326,10 @@ HyperionMultiQubitSimulator::get_correction(
         }
         // Check path between the two detectors.
         // This is examining the error chain.
-        std::vector<uint> detector_path(path_table[di_dj].path);
+        auto vdi = graph.get_vertex(di);
+        auto vdj = graph.get_vertex(dj);
+        auto vdi_vdj = std::make_pair(vdi, vdj);
+        std::vector<DecodingGraph::Vertex*> detector_path(path_table[vdi_vdj].path);
         for (uint i = 1; i < detector_path.size(); i++) {
             // Get edge from decoding graph.
             auto wi = detector_path[i-1];

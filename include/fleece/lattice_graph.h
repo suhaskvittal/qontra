@@ -10,6 +10,7 @@
 
 #include "decoding_graph.h"
 #include "defs.h"
+#include "graph/dijkstra.h"
 
 #include <deque>
 #include <map>
@@ -82,7 +83,7 @@ private:
 
 LatticeGraph 
 to_lattice_graph(const stim::Circuit&);
-PathTable
+graph::PathTable<LatticeGraph::Vertex>
 compute_path_table(LatticeGraph&);
 
 }  // fleece
