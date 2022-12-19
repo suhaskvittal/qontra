@@ -8,6 +8,7 @@
 
 #include <stim.h>
 
+#include "decoding_graph.h"
 #include "defs.h"
 
 #include <deque>
@@ -21,6 +22,7 @@ namespace fleece {
 class LatticeGraph {
 public:
     LatticeGraph();
+    ~LatticeGraph();
 
     struct Vertex {
         int32_t qubit;
@@ -60,26 +62,28 @@ public:
 
     void add_qubit(int32_t, bool is_data, int32_t base_detector, int32_t meas_time=-1);
     void add_coupling(int32_t, int32_t);
-    void add_coupling(const Vertex&, const Vertex&);
+    void add_coupling(Vertex*, Vertex*);
 
-    Vertex get_vertex_by_qubit(int32_t);
-    Vertex get_vertex_by_detector(int32_t);
+    Vertex* get_vertex_by_qubit(int32_t);
+    Vertex* get_vertex_by_detector(int32_t);
 
-    std::vector<Vertex> vertices(void);
+    std::vector<Vertex*> vertices(void);
 
-    std::vector<Vertex> get_adjacency_list(int32_t);
-    std::vector<Vertex> get_adjacency_list(const Vertex&);
+    std::vector<Vertex*> adjacency_list(int32_t);
+    std::vector<Vertex*> adjacency_list(Vertex*);
 private:
-    std::vector<Vertex> vertex_list;
-    std::map<int32_t, Vertex> qubit_to_vertex;
-    std::map<int32_t, Vertex> detector_to_vertex;
-    std::map<Vertex, std::vector<Vertex>> adjacency_list;
+    std::vector<Vertex*> vertex_list;
+    std::map<int32_t, Vertex*> qubit_to_vertex;
+    std::map<int32_t, Vertex*> detector_to_vertex;
+    std::map<Vertex*, std::vector<Vertex*>> adjacency_matrix;
 
     friend LatticeGraph to_lattice_graph(const stim::Circuit&);
 };
 
 LatticeGraph 
 to_lattice_graph(const stim::Circuit&);
+PathTable
+compute_path_table(LatticeGraph&);
 
 }  // fleece
 }  // qrc

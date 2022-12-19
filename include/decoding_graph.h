@@ -36,6 +36,7 @@ typedef std::map<std::pair<uint, uint>, DijkstraResult> PathTable;
 class DecodingGraph {
 public:
     DecodingGraph();
+    ~DecodingGraph();
 
     struct Vertex {
         int32_t id;
@@ -110,30 +111,30 @@ public:
     void add_edge(uint det1, uint det2, fp_t weight,
             fp_t e_prob, std::set<uint>& frames);
 
-    void remove_vertex(const Vertex&);
-    void remove_edge(const Edge&);
+    void remove_vertex(Vertex*);
+    void remove_edge(Edge*);
 
-    Vertex get_vertex(uint det_id);
-    Vertex get_next_round(uint det_id);
-    Vertex get_next_round(const Vertex&);
-    Vertex get_prev_round(uint det_id);
-    Vertex get_prev_round(const Vertex&);
-    Edge get_edge(uint, uint);
-    Edge get_edge(const Vertex&, const Vertex&);
+    Vertex * get_vertex(uint det_id);
+    Vertex * get_next_round(uint det_id);
+    Vertex * get_next_round(Vertex*);
+    Vertex * get_prev_round(uint det_id);
+    Vertex * get_prev_round(Vertex*);
+    Edge * get_edge(uint, uint);
+    Edge * get_edge(Vertex*, Vertex*);
 
     uint32_t get_chain_length(uint det1, uint det2);
    
-    std::vector<Vertex> vertices(void);
-    std::vector<Vertex> adjacency_list(const Vertex&);
+    std::vector<Vertex*> vertices(void);
+    std::vector<Vertex*> adjacency_list(Vertex*);
 private:
-    std::map<uint, Vertex> detector_to_vertex;
-    std::map<std::pair<Vertex, Vertex>, Edge> vertices_to_edge;
-    std::map<Vertex, Vertex> vertex_to_next_round;
-    std::map<Vertex, Vertex> vertex_to_prev_round;
+    std::map<uint, Vertex*> detector_to_vertex;
+    std::map<std::pair<Vertex*, Vertex*>, Edge*> vertices_to_edge;
+    std::map<Vertex*, Vertex*> vertex_to_next_round;
+    std::map<Vertex*, Vertex*> vertex_to_prev_round;
     std::array<fp_t, N_COORD> boundary_coord;
 
-    std::vector<Vertex> vertex_list;
-    std::map<Vertex, std::vector<Vertex>> adjacency_matrix;
+    std::vector<Vertex*> vertex_list;
+    std::map<Vertex*, std::vector<Vertex*>> adjacency_matrix;
 };
 
 DecodingGraph
@@ -154,16 +155,16 @@ _read_detector_error_model(const stim::DetectorErrorModel&,
         error_callback_f, detector_callback_f);
 
 void
-_dijkstra(DecodingGraph&, const DecodingGraph::Vertex&, 
-        std::map<DecodingGraph::Vertex, fp_t>& distances,
-        std::map<DecodingGraph::Vertex, DecodingGraph::Vertex>& predecessors);
+_dijkstra(DecodingGraph&, DecodingGraph::Vertex*, 
+        std::map<DecodingGraph::Vertex*, fp_t>& distances,
+        std::map<DecodingGraph::Vertex*, DecodingGraph::Vertex*>& predecessors);
 void
 _update_path_table(PathTable&,
         DecodingGraph&, 
-        const DecodingGraph::Vertex&,
-        const DecodingGraph::Vertex&, 
-        std::map<DecodingGraph::Vertex, fp_t>& distances,
-        std::map<DecodingGraph::Vertex, DecodingGraph::Vertex>& predecessors);
+        DecodingGraph::Vertex*,
+        DecodingGraph::Vertex*, 
+        std::map<DecodingGraph::Vertex*, fp_t>& distances,
+        std::map<DecodingGraph::Vertex*, DecodingGraph::Vertex*>& predecessors);
 
 }  // qrc
 

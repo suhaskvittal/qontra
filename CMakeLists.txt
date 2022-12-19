@@ -17,7 +17,6 @@ set(QUARCH_PROGRAM_FILES
     src/hyperion.cpp
     src/hyperion/simulator.cpp
     src/hyperion/multi_qubit.cpp
-    src/hyperion/trial_decoder.cpp
     # TMR
     src/tmr_decoder.cpp
     # FLEECE

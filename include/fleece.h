@@ -8,6 +8,8 @@
 
 #include <stim.h>
 
+#include <PerfectMatching.h>
+
 #include "defs.h"
 #include "fleece/lattice_graph.h"
 

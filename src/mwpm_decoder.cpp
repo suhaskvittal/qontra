@@ -283,7 +283,7 @@ MWPMDecoder::get_correction_from_matching(const std::map<uint, uint>& matching) 
             auto wj = detector_path[i];
             auto edge = graph.get_edge(wi, wj);
             // The edge should exist.
-            for (uint obs : edge.frames) {
+            for (uint obs : edge->frames) {
                 // Flip the bit.
                 if (obs >= 0) {
                     correction[obs] = !correction[obs];
