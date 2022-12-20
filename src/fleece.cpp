@@ -51,7 +51,6 @@ Fleece::Fleece(const stim::Circuit& circuit,
 #ifdef FLEECE_DEBUG
     // Print out lattice graph.
     for (auto v : lattice_graph.vertices()) {
-        if (v->base_detector >= 0) continue;
         std::cout << v->qubit << " | is_data=" 
             << v->is_data << ", base=" 
             << v->base_detector << ", mtimes={";
@@ -99,9 +98,13 @@ Fleece::generate_syndromes(uint64_t shots, uint last_leakage_round, uint64_t see
         meas_results.clear();
         leak_results.clear();
 #ifdef FLEECE_DEBUG
-        std::cout << "(min, max) = (" << curr_min_detector << ", " << curr_max_detector << ")\n";
+        std::cout << "Round = " << round << "\n";
+        std::cout << "(min, max, ndet) = (" 
+            << curr_min_detector << ", " << curr_max_detector 
+            << ", " << circuit.count_detectors() << ")\n";
 #endif
-        stim::read_from_sim(sim, det_obs, false, true, true, meas_results, leak_results);
+        stim::read_from_sim(sim, det_obs, false, false, true, 
+                meas_results, leak_results, curr_max_detector);
         // Correct data qubit "tower-like" errors.
         if (!fake_run) {
             tower_correct(shots);
