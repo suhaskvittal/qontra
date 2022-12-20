@@ -49,7 +49,7 @@ public:
     Distribution dist = Distribution::lognormal;
     
     bool both_stabilizers = false;
-    bool use_swap_lru = false;
+    bool swap_lru = false;
     bool swap_lru_with_no_swap = false;
 
     void validate_params() const;
@@ -72,8 +72,7 @@ public:
     void append_measure_reset(
             Circuit &circuit, const std::vector<uint32_t> targets,
             char basis = 'Z') const;
-    
-    void reset_tables(void) const;
+    void reset_data(void) const;
 
     double get_after_clifford_depolarization(void) const;
     double get_before_round_data_depolarization(void) const;

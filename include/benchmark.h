@@ -46,7 +46,7 @@ build_circuit(
     bool is_memory_z=true,
     bool is_rotated=true,
     bool both_stabilizers=false,
-    bool use_swap_lru=false,
+    uint8_t swap_lru=0b00,
     // Level 1 Specificity
     uint rounds=0,
     fp_t clevel_error_mean=-1,

@@ -131,7 +131,7 @@ GeneratedCircuit _finish_surface_code_circuit(
     const uint32_t INVALID_SWAP = (uint32_t)-1;
     const uint32_t lru_cycles = params.swap_lru_with_no_swap ? 5 : 4;
     std::map<uint32_t, std::array<uint32_t, 5>> swap_order;
-    if (params.use_swap_lru) {
+    if (params.swap_lru) {
         // Build swap order.
         for (size_t cycle = 0; cycle < 4; cycle++) {
             std::set<uint32_t> already_swapped;
@@ -190,7 +190,7 @@ GeneratedCircuit _finish_surface_code_circuit(
             auto data = measure + z_order[k];
             if (p2q.find(data) != p2q.end()) {
                 uint32_t pd = p2q[data];
-                if (params.use_swap_lru && pd == swap_order[pm][0]) {
+                if (params.swap_lru && pd == swap_order[pm][0]) {
                     first_round_swap_targets[0].push_back(pm);
                     first_round_swap_targets[0].push_back(swap_order[pm][0]);
                     first_round_swap_targets[1].push_back(swap_order[pm][0]);
@@ -215,7 +215,7 @@ GeneratedCircuit _finish_surface_code_circuit(
         params.append_unitary_2(cycle_actions, "CNOT", targets);
     }
     // Introduce SWAP operations into surface code cycle.
-    if (params.use_swap_lru) {
+    if (params.swap_lru) {
         cycle_actions.append_op("TICK", {});
 #ifdef USE_SWAPS
         params.append_unitary_2(cycle_actions, "SWAP", first_round_swap_targets[0]);
@@ -228,7 +228,7 @@ GeneratedCircuit _finish_surface_code_circuit(
     cycle_actions.append_op("TICK", {});
     params.append_unitary_1(cycle_actions, "H", x_measurement_qubits);
     cycle_actions.append_op("TICK", {});
-    if (params.use_swap_lru) {
+    if (params.swap_lru) {
         params.append_measure_reset(cycle_actions, x_measurement_qubits);
         std::vector<uint32_t> local_measurement_qubits;
         for (uint32_t m : z_measurement_qubits) {
@@ -245,7 +245,7 @@ GeneratedCircuit _finish_surface_code_circuit(
     }
 
     std::array<Circuit, 5> alt_cycle_actions;
-    if (params.use_swap_lru) {
+    if (params.swap_lru) {
         for (size_t cycle = 0; cycle < lru_cycles; cycle++) {
             const size_t prev_cycle = cycle == 0 
                                          ? lru_cycles-1 : cycle - 1;
@@ -351,7 +351,7 @@ GeneratedCircuit _finish_surface_code_circuit(
 
     // Build the repeated body of the circuit, including the detectors comparing to previous cycles.
     std::array<Circuit, 5> circuit_bodies;
-    if (params.use_swap_lru) {
+    if (params.swap_lru) {
         for (size_t cycle = 0; cycle < lru_cycles; cycle++) {
             circuit_bodies[cycle] = alt_cycle_actions[cycle];
         }
@@ -359,7 +359,7 @@ GeneratedCircuit _finish_surface_code_circuit(
         circuit_bodies[0] = cycle_actions;
     }
     for (size_t cycle = 0; cycle < lru_cycles; cycle++) {
-        if (!params.use_swap_lru && cycle > 0) {
+        if (!params.swap_lru && cycle > 0) {
             break;
         }
         Circuit& body = circuit_bodies[cycle];
@@ -388,7 +388,7 @@ GeneratedCircuit _finish_surface_code_circuit(
     // Also, the tail is responsible for identifying the logical observable.
     Circuit tail;
     tail.append_op("TAILSTART", {});
-    if (params.use_swap_lru) {
+    if (params.swap_lru) {
         // Two final sets of CNOTs to reswap data and ancilla qubits.
         std::array<std::vector<uint32_t>, 2> final_cnot_targets;
         size_t prev_cycle = (params.rounds % lru_cycles) - 1;
@@ -443,7 +443,7 @@ GeneratedCircuit _finish_surface_code_circuit(
 
     // Combine to form final circuit.
     Circuit main_body;
-    if (params.use_swap_lru) {
+    if (params.swap_lru) {
         Circuit repeated_part, remaining_part;
         if (params.rounds - 1 >= lru_cycles) {
             repeated_part = circuit_bodies[1] + circuit_bodies[2] + circuit_bodies[3];
@@ -622,7 +622,7 @@ GeneratedCircuit _generate_unrotated_surface_code_circuit(const CircuitGenParame
 }
 
 GeneratedCircuit stim::generate_surface_code_circuit(const CircuitGenParameters &params) {
-    params.reset_tables();
+    params.reset_data();
     if (params.task == "rotated_memory_x") {
         return _generate_rotated_surface_code_circuit(params, true);
     } else if (params.task == "rotated_memory_z") {

@@ -16,20 +16,18 @@ LatticeGraph::LatticeGraph()
 {}
 
 LatticeGraph::~LatticeGraph() {
-    for (Vertex * v : vertex_list) {
-        delete v;
-    }
 }
 
 void
-LatticeGraph::add_qubit(int32_t qubit, bool is_data, int32_t base_detector, int32_t meas_time) {
+LatticeGraph::add_qubit(int32_t qubit, bool is_data, int32_t base_detector, int32_t meas_time, bool force_record) {
     if (qubit_to_vertex.count(qubit)) {
         // Update the data.
         qubit_to_vertex[qubit]->is_data = is_data;
-        if (base_detector >= 0) {
+        if (base_detector >= 0 || force_record) {
             qubit_to_vertex[qubit]->base_detector = base_detector;
+            detector_to_vertex[base_detector] = qubit_to_vertex[qubit];
         }
-        if (meas_time >= 0) {
+        if (meas_time >= 0 || force_record) {
             qubit_to_vertex[qubit]->measurement_times.push_back(meas_time);
         }
         return;
@@ -38,10 +36,10 @@ LatticeGraph::add_qubit(int32_t qubit, bool is_data, int32_t base_detector, int3
     Vertex * v = new Vertex(qubit, is_data, base_detector);
     vertex_list.push_back(v);
     qubit_to_vertex[qubit] = v;
-    if (base_detector >= 0) {
+    if (base_detector >= 0 || force_record) {
         detector_to_vertex[base_detector] = v;
     }
-    if (meas_time >= 0) {
+    if (meas_time >= 0 || force_record) {
         v->measurement_times.push_back(meas_time);
     }
     adjacency_matrix[v] = std::vector<Vertex*>();
@@ -102,6 +100,7 @@ LatticeGraph
 to_lattice_graph(const stim::Circuit& circuit) {
     std::deque<int32_t> measurement_order;
     std::set<int32_t> already_measured_once;
+    std::map<int32_t, uint8_t> neighbor_count;
 
     uint32_t detector_counter = 0;
 
@@ -121,6 +120,18 @@ to_lattice_graph(const stim::Circuit& circuit) {
                 int32_t q1 = (int32_t)targets[i].data;
                 int32_t q2 = (int32_t)targets[i+1].data;
                 graph.add_coupling(q1, q2);
+                if (!already_measured_once.count(q1) 
+                        && !already_measured_once.count(q2)) 
+                {
+                    if (!neighbor_count.count(q1)) {
+                        neighbor_count[q1] = 0;
+                    }
+                    if (!neighbor_count.count(q2)) {
+                        neighbor_count[q2] = 0;
+                    }
+                    neighbor_count[q1]++;
+                    neighbor_count[q2]++;
+                }
             }
         } else if (opname == "M" || opname == "MX" 
                 || opname == "MZ" || opname == "MR") 
@@ -143,6 +154,17 @@ to_lattice_graph(const stim::Circuit& circuit) {
             }
         } else if (opname == "TAILSTART") {
             break;
+        }
+    }
+    // Now, identify any data qubits connected to less than 4 parity qubits.
+    // Connect these to the boundary.
+    graph.add_qubit(LATTICE_BOUNDARY, false, LATTICE_BOUNDARY_DETECTOR, -1, true);
+    for (auto pair : neighbor_count) {
+        if (already_measured_once.count(pair.first)) {
+            continue;  // This is a parity qubits.
+        }
+        if (pair.second < 4) {
+            graph.add_coupling(LATTICE_BOUNDARY, pair.first);
         }
     }
 

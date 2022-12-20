@@ -123,7 +123,7 @@ build_circuit(
     bool is_memory_z,
     bool is_rotated,
     bool both_stabilizers,
-    bool use_swap_lru,
+    uint8_t swap_lru,
     uint rounds,
     fp_t clevel_error_mean,
     fp_t clevel_error_stddev,
@@ -172,7 +172,8 @@ build_circuit(
     params.after_reset_leakage_probability_stddev = __CHS(error_stddev, pauliplus_error_stddev, reset_leak_stddev);
 
     params.both_stabilizers = both_stabilizers;
-    params.swap_lru_with_no_swap = use_swap_lru;
+    params.swap_lru = swap_lru & 0b01;
+    params.swap_lru_with_no_swap = swap_lru & 0b10;
 
     std::cout << params.before_round_data_depolarization << "," << error_mean
                 << "," << clevel_error_mean << "," << round_dp_mean << "\n";

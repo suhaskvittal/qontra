@@ -33,12 +33,14 @@ Fleece::Fleece(const stim::Circuit& circuit,
     leak_results(
             circuit.count_detectors() + circuit.count_observables(), MAX_SHOTS),
     lattice_graph(),
+    path_table(),
     curr_min_detector(0),
     curr_max_detector(0),
     fake_run(false),
     rng(rng)
 {
     lattice_graph = fleece::to_lattice_graph(circuit);
+    path_table = fleece::compute_path_table(lattice_graph);
 
     if (double_stabilizer) {
         curr_max_detector = detectors_per_round >> 1;
@@ -63,11 +65,20 @@ Fleece::Fleece(const stim::Circuit& circuit,
         }
         std::cout << " }\n";
     }
+    // Print out path table
+    for (auto v1 : lattice_graph.vertices()) {
+        for (auto v2 : lattice_graph.vertices()) {
+            std::cout << path_table[std::make_pair(v1, v2)].distance << "("
+                << path_table[std::make_pair(v1, v2)].path.size() << ")"
+                << " ";
+        }
+        std::cout << "\n";
+    }
 #endif
 }
 
 Fleece::SyndromeOutput
-Fleece::generate_syndromes(uint64_t shots, uint64_t seed) {
+Fleece::generate_syndromes(uint64_t shots, uint last_leakage_round, uint64_t seed) {
     uint32_t row_size = circuit.count_detectors() + circuit.count_observables();
     meas_results = stim::simd_bit_table(row_size, shots);
     leak_results = stim::simd_bit_table(row_size, shots);
@@ -82,6 +93,8 @@ Fleece::generate_syndromes(uint64_t shots, uint64_t seed) {
     } else {
         curr_max_detector = detectors_per_round;
     }
+
+    uint round = 0;
     while (!sim.cycle_level_simulation(circuit)) {
         meas_results.clear();
         leak_results.clear();
@@ -90,13 +103,20 @@ Fleece::generate_syndromes(uint64_t shots, uint64_t seed) {
 #endif
         stim::read_from_sim(sim, det_obs, false, true, true, meas_results, leak_results);
         // Correct data qubit "tower-like" errors.
-        tower_correct(shots);
+        if (!fake_run) {
+            tower_correct(shots);
+        }
 
         // Update curr min and curr max detectors.
         curr_min_detector = curr_max_detector;
         curr_max_detector += detectors_per_round;
         if (curr_max_detector > circuit.count_detectors()) {
             curr_max_detector = circuit.count_detectors();
+        }
+
+        round++;
+        if (round == last_leakage_round) {
+            sim.toggle_leakage();
         }
     }
 
@@ -129,8 +149,7 @@ Fleece::tower_correct(uint64_t shots) {
             continue;
         }
         std::map<uint32_t, uint8_t> activity_table;
-        std::vector<uint32_t> leak_detections;
-        uint32_t n_mwpm_vertices = 0;
+        std::vector<int32_t> leak_detections;
         for (uint i = 0; i < curr_max_detector; i++) {
             if (!meas_results_T[s][i]) {
                 continue;
@@ -139,57 +158,91 @@ Fleece::tower_correct(uint64_t shots) {
             if (!activity_table.count(d)) {
                 activity_table[d] = 0;
             }
-            if ((++activity_table[d]) >= tower_cutoff) {
-                n_mwpm_vertices++;
+            if ((++activity_table[d]) == tower_cutoff) {
                 leak_detections.push_back(d);
             }
         }
+        if (leak_detections.size() & 0x1) {
+            leak_detections.push_back(LATTICE_BOUNDARY_DETECTOR);
+        }
+        if (leak_detections.size() == 0) {
+            continue;
+        } else {
+            std::cout << "leak detected with " 
+                    << leak_detections.size() << " measurements in shot "
+                    << s << ":";
+            for (int32_t d : leak_detections) {
+                if (d == LATTICE_BOUNDARY_DETECTOR) {
+                    std::cout << " B";
+                } else {
+                    std::cout << " " << d;
+                }
+            }
+            std::cout << "\n";
+        }
         // Accumulate leakage detections and perform MWPM.
-        uint32_t n_mwpm_edges = (n_mwpm_vertices * (n_mwpm_vertices-1)) >> 1;
+        const uint32_t n_mwpm_vertices = leak_detections.size();
+        const uint32_t n_mwpm_edges = (n_mwpm_vertices * (n_mwpm_vertices-1)) >> 1;
         PerfectMatching pm(n_mwpm_vertices, n_mwpm_edges);
 
-        const uint max_level = curr_max_detector / detectors_per_round;
-        /*
-        for (auto pair : tower_table) {
-            uint32_t q = pair.first;
-            std::array<uint8_t, TOWER_SIZE> tower = pair.second;
-            // Using a sliding window to find the tower.
-            uint left = 0;
-            uint right = max_level < sliding_window_size ? max_level : sliding_window_size;
-            bool is_leaked = false;
+        for (uint i = 0; i < n_mwpm_vertices; i++) {
+            int32_t di = leak_detections[i];
+            auto vi = lattice_graph.get_vertex_by_detector(di);
+            for (uint j = i+1; j < n_mwpm_vertices; j++) {
+                int32_t dj = leak_detections[i];
+                auto vj = lattice_graph.get_vertex_by_detector(dj);
 
-            while (left < max_level) {
-                uint s = 0;
-                for (uint i = left; i <= right; i++) {
-                    s += (tower[i] & 0b10) + (tower[i] & 0b01);
-                }
-                if (s >= tower_cutoff && !fake_run) {
-                    is_leaked = true;
-                    // Clear the syndrome bits and measurement outcomes in this window. 
-                    for (const auto& v : lattice_graph.get_adjacency_list(q)) {
-                        clean_parity_qubit(v.qubit, left, right, s);
-                        for (uint i = left; i <= right; i++) {
-                            tower[i] = 0;
-                        }
-                    }
-                }
-                left++;
-                right++;
-                if (right > max_level) {
-                    right = max_level;
-                }
-            }
-
-            if (is_leaked && !fake_run) {
-                // Reset data qubit.
-                sim.x_table[q][s] = 0;
-                if (sim.guarantee_anticommutation_via_frame_randomization) {
-                    sim.z_table[q][s] = LOCAL_RNG() & 0x1;
-                }
-                sim.leakage_table[q][s] = 0;
+                auto vi_vj = std::make_pair(vi, vj);
+                pm.AddEdge(i, j, path_table[vi_vj].distance);
             }
         }
-        */
+        pm.options.verbose = false;
+        pm.Solve();
+
+        // For each matched detector,
+        // (1) clear all syndrome bits for those detectors for the suspected
+        //  leaked rounds.
+        // (2) reset the data qubits between the matched syndrome qubits and clear
+        //  all parity qubit measurements in between the matched qubits.
+        std::set<int32_t> visited;
+        std::set<int32_t> affected_parity_qubits;
+        for (uint i = 0; i < n_mwpm_vertices; i++) {
+            int32_t di = leak_detections[i];
+            if (visited.count(di)) {
+                continue;
+            }
+            uint j = pm.GetMatch(i);
+            int32_t dj = leak_detections[j];
+
+            auto vi = lattice_graph.get_vertex_by_detector(di);
+            auto vj = lattice_graph.get_vertex_by_detector(dj);
+            auto vi_vj = std::make_pair(vi, vj);
+
+            auto correcting_path = path_table[vi_vj].path;
+            std::cout << "\tcorrecting(" << correcting_path.size() << "):";
+            for (auto w : correcting_path) {
+                int32_t q = w->qubit;
+                std::cout << " " << q;
+                if (w->is_data) {
+                    std::cout << "(D)";
+                    sim.x_table[q][s] = 0;
+                    if (sim.guarantee_anticommutation_via_frame_randomization) {
+                        sim.z_table[q][s] = LOCAL_RNG() & 0x1;
+                    }
+                    sim.leakage_table[q][s] = 0;
+                } else {
+                    if (q != LATTICE_BOUNDARY_DETECTOR) {
+                        affected_parity_qubits.insert(q);
+                    }
+                }
+            }
+            std::cout << "\n";
+        }
+
+        const uint max_level = curr_max_detector / detectors_per_round;
+        for (int32_t q : affected_parity_qubits) {
+            clean_parity_qubit(q, 0, max_level, s);
+        }
     }
 }
 

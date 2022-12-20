@@ -67,7 +67,8 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       n_z_errors(batch_size, 0),
       n_dp1_errors(batch_size, 0),
       n_dp2_errors(batch_size, 0),
-      sim_checkpoint(0)
+      sim_checkpoint(0),
+      leakage_enabled(true)
 {}
 
 void FrameSimulator::xor_control_bit_into(uint32_t control, simd_bits_range_ref target)
@@ -105,6 +106,7 @@ void FrameSimulator::reset_all() {
     m_record.clear();
     leak_record.clear();
     sim_checkpoint = 0;
+    leakage_enabled = true;
 }
 
 void FrameSimulator::reset_all_and_run(const Circuit &circuit) {
@@ -661,6 +663,9 @@ void FrameSimulator::ELSE_CORRELATED_ERROR(const OperationData &target_data) {
 }
 
 void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
+    if (!leakage_enabled) {
+        return;
+    }
     const double p = target_data.args[0];
     const auto& targets = target_data.targets;
 
@@ -690,6 +695,11 @@ FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
         (this->*op.gate->frame_simulator_function)(op.target_data);
     }
     return true;
+}
+
+void
+FrameSimulator::toggle_leakage() {
+    leakage_enabled = !leakage_enabled;
 }
 
 void sample_out_helper(

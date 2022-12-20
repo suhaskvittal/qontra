@@ -20,6 +20,9 @@
 namespace qrc {
 namespace fleece {
 
+#define LATTICE_BOUNDARY -1
+#define LATTICE_BOUNDARY_DETECTOR -1
+
 class LatticeGraph {
 public:
     LatticeGraph();
@@ -61,7 +64,8 @@ public:
         }
     };
 
-    void add_qubit(int32_t, bool is_data, int32_t base_detector, int32_t meas_time=-1);
+    void add_qubit(int32_t, bool is_data, int32_t base_detector, 
+            int32_t meas_time=-1, bool force_record=false);
     void add_coupling(int32_t, int32_t);
     void add_coupling(Vertex*, Vertex*);
 

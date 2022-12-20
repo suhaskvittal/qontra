@@ -27,7 +27,7 @@ static std::map<uint32_t, double> postresleak_table;
 static std::map<uint32_t, double> cliffordleak_table;
 
 void
-CircuitGenParameters::reset_tables() const {
+CircuitGenParameters::reset_data() const {
     rounddp_table.clear();
     unitary1dp_table.clear();
     unitary2dp_table.clear();

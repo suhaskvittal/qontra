@@ -12,6 +12,7 @@
 
 #include "defs.h"
 #include "fleece/lattice_graph.h"
+#include "graph/dijkstra.h"
 
 #include <map>
 #include <random>
@@ -42,7 +43,8 @@ public:
 
     typedef std::pair<stim::simd_bit_table, stim::simd_bit_table> SyndromeOutput;
 
-    SyndromeOutput generate_syndromes(uint64_t shots, uint64_t seed=0);
+    SyndromeOutput generate_syndromes(
+            uint64_t shots, uint last_leakage_round, uint64_t seed=0);
 
     bool toggle_fake_run(void);
 private:
@@ -65,6 +67,7 @@ private:
     stim::simd_bit_table leak_results;
 
     fleece::LatticeGraph lattice_graph;
+    graph::PathTable<fleece::LatticeGraph::Vertex> path_table;
 
     uint curr_min_detector;
     uint curr_max_detector;
