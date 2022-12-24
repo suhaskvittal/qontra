@@ -97,8 +97,10 @@ const {
         if (p > 0) {
             circuit.append_op("DEPOLARIZE1", singleton, p);
         }
-
-        p = get_from(roundleak_table, d, 
+    }
+    for (uint32_t d : data_qubits) {
+        std::vector<uint32_t> singleton{d};
+        double p = get_from(roundleak_table, d, 
                     get_before_round_leakage_probability());
         if (p > 0) {
             circuit.append_op("L_ERROR", singleton, p);
@@ -133,14 +135,15 @@ const {
         if (p > 0) {
             circuit.append_op("DEPOLARIZE2", cx, p);
         }
-
-        for (uint32_t t : cx) {
-            std::vector<uint32_t> singleton{t};
-            p = get_from(cliffordleak_table, t,
-                            get_after_clifford_leakage_probability());
-            if (p > 0) {
-                circuit.append_op("L_ERROR", singleton, p);
-            }
+    }
+    // I know this is "less optimal", but it is easier to read.
+    for (uint32_t i = 0; i < targets.size(); i++) {
+        uint32_t t = targets[i];
+        std::vector<uint32_t> singleton{t};
+        double p = get_from(cliffordleak_table, t,
+                        get_after_clifford_leakage_probability());
+        if (p > 0) {
+            circuit.append_op("L_ERROR", singleton, p);
         }
     }
 }
@@ -155,8 +158,10 @@ const {
         double p = get_from(postresflip_table, t, 
                             get_after_reset_flip_probability());
         append_anti_basis_error(circuit, singleton, p, basis);
-
-        p = get_from(postresleak_table, t, 
+    }
+    for (uint32_t t : targets) {
+        std::vector<uint32_t> singleton{t};
+        double p = get_from(postresleak_table, t, 
                         get_after_reset_leakage_probability());
         if (p > 0) {
             circuit.append_op("L_ERROR", singleton, p);
@@ -193,7 +198,10 @@ const {
         double p = get_from(postresflip_table, t, 
                             get_after_reset_flip_probability());
         append_anti_basis_error(circuit, singleton, p, basis);
-        p = get_from(postresleak_table, t, 
+    }
+    for (uint32_t t : targets) {
+        std::vector<uint32_t> singleton{t};
+        double p = get_from(postresleak_table, t, 
                         get_after_reset_leakage_probability());
         if (p > 0) {
             circuit.append_op("L_ERROR", singleton, p);
