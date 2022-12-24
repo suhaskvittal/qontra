@@ -38,8 +38,7 @@ public:
             bool double_stabilizer=true,
             char reset_basis='Z',
             char output_basis='Z',
-            uint32_t tower_cutoff=2,
-            uint32_t sliding_window_size=4);
+            uint32_t tower_cutoff=3);
 
     typedef std::pair<stim::simd_bit_table, stim::simd_bit_table> SyndromeOutput;
 
@@ -50,7 +49,7 @@ public:
 private:
     void tower_correct(uint64_t shots);
     void clean_parity_qubit(uint32_t, uint lower_level, uint upper_level, uint64_t shot);
-
+    uint get_level(uint);
     uint base_detector(uint);
     uint next_detector(uint);
 
@@ -60,7 +59,6 @@ private:
     const char reset_basis;
     const char output_basis;
     const uint32_t tower_cutoff;
-    const uint32_t sliding_window_size;
 
     stim::FrameSimulator sim;
     stim::simd_bit_table meas_results;

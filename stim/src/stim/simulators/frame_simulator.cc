@@ -307,12 +307,10 @@ void FrameSimulator::single_cx(uint32_t c, uint32_t t) {
             {
                 const simd_word randx(rng(), rng());
                 const simd_word randz(rng(), rng());
-                    
-                const simd_word tmpx1(x1);
 
-                x1 ^= randx & l2;
+                x2 ^= l2.andnot(x1) | (randx & l1);
                 z1 ^= l2.andnot(z2) | (randz & l2);
-                x2 ^= l2.andnot(tmpx1) | (randx & l1);
+                x1 ^= randx & l2;
                 z2 ^= randz & l1;
 //                z1 ^= z2;
 //                x2 ^= x1;
@@ -321,7 +319,6 @@ void FrameSimulator::single_cx(uint32_t c, uint32_t t) {
         throw std::invalid_argument(
             "Controlled X had a bit (" + GateTarget{t}.str() + ") as its target, instead of its control.");
     } else {
-        std::cout << "uhhhhhhhhh....\n";
         xor_control_bit_into(c, x_table[t]);
     }
 }
@@ -674,7 +671,7 @@ void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
-        leakage_table[t.data][sample_index] ^= true;  
+        leakage_table[t.data][sample_index] |= true;  
     };
 
     RareErrorIterator::for_samples(p, targets.size() * batch_size, rng, call_f);
