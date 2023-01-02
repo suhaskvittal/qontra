@@ -31,27 +31,27 @@ public:
     struct Vertex {
         int32_t qubit;
         bool is_data;
-        int32_t base_detector;
+        std::vector<int32_t> detectors;
         std::vector<uint32_t> measurement_times;
 
         Vertex()
             :qubit(-1),
             is_data(false),
-            base_detector(-1),
+            detectors(),
             measurement_times()
         {}
 
-        Vertex(int32_t q, bool is_data, int32_t base)
+        Vertex(int32_t q, bool is_data)
             :qubit(q),
             is_data(is_data),
-            base_detector(base),
+            detectors(),
             measurement_times()
         {}
 
         Vertex(const Vertex& other)
             :qubit(other.qubit), 
             is_data(other.is_data), 
-            base_detector(other.base_detector),
+            detectors(other.detectors),
             measurement_times(other.measurement_times)
         {}
 
@@ -64,10 +64,12 @@ public:
         }
     };
 
-    void add_qubit(int32_t, bool is_data, int32_t base_detector, 
+    // Adding returns false if the qubit already exists
+    // Data may be updated though.
+    bool add_qubit(int32_t, uint8_t is_data, int32_t detector=-1, 
             int32_t meas_time=-1, bool force_record=false);
-    void add_coupling(int32_t, int32_t);
-    void add_coupling(Vertex*, Vertex*);
+    bool add_coupling(int32_t, int32_t);
+    bool add_coupling(Vertex*, Vertex*);
 
     Vertex* get_vertex_by_qubit(int32_t);
     Vertex* get_vertex_by_detector(int32_t);

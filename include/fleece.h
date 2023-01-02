@@ -37,28 +37,33 @@ public:
             uint detectors_per_round,
             bool double_stabilizer=true,
             char reset_basis='Z',
-            char output_basis='Z',
-            uint32_t tower_cutoff=3);
+            char output_basis='Z');
 
     typedef std::pair<stim::simd_bit_table, stim::simd_bit_table> SyndromeOutput;
 
     SyndromeOutput generate_syndromes(
             uint64_t shots, uint last_leakage_round, uint64_t seed=0);
 
-    bool toggle_fake_run(void);
+    bool fake_run;
 private:
-    void tower_correct(uint64_t shots);
-    void clean_parity_qubit(uint32_t, uint lower_level, uint upper_level, uint64_t shot);
+    void correct_leak(uint64_t shots);
+    void correct_data_qubit(uint64_t shot_number, 
+            uint detector, fleece::LatticeGraph::Vertex*);
+    void correct_parity_qubit(uint64_t shot_number,
+            uint detector, fleece::LatticeGraph::Vertex*);
+
     uint get_level(uint);
+    uint jump_to_level(uint base, uint level);
     uint base_detector(uint);
+    uint prev_detector(uint);
     uint next_detector(uint);
+    uint32_t get_measurement_time(uint);
 
     const stim::Circuit circuit;
     const uint detectors_per_round;
     const bool double_stabilizer;
     const char reset_basis;
     const char output_basis;
-    const uint32_t tower_cutoff;
 
     stim::FrameSimulator sim;
     stim::simd_bit_table meas_results;
@@ -69,8 +74,6 @@ private:
 
     uint curr_min_detector;
     uint curr_max_detector;
-
-    bool fake_run;
 
     std::mt19937_64 rng;
 };

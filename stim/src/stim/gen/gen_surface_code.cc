@@ -118,7 +118,7 @@ GeneratedCircuit _finish_surface_code_circuit(
     // List out CNOT gate targets using given interaction orders.
     std::array<std::vector<uint32_t>, 4> cnot_targets;
     // Only use this if using SWAP LRU.
-    std::array<std::vector<uint32_t>, 2> first_round_swap_targets;
+    std::vector<uint32_t> swap_targets;
     // If we are using SWAP LRU, then every 4 rounds of syndrome
     // extraction are different. Furthermore, the first round is
     // different from the remaining rounds.
@@ -127,6 +127,7 @@ GeneratedCircuit _finish_surface_code_circuit(
     // is 1 CNOT. In contrast, X stabilizers require a whole SWAP
     // (3 CNOTs).
     const uint32_t lru_cycles = params.swap_lru_with_no_swap ? 5 : 4;
+    const uint32_t offset = params.swap_lru_with_no_swap;
     std::map<uint32_t, std::array<uint32_t, 5>> swap_order;
     if (params.swap_lru) {
         // Build swap order.
@@ -159,10 +160,10 @@ GeneratedCircuit _finish_surface_code_circuit(
                 }
 
                 if (found) {
-                    swap_order[pm][cycle] = p2q[data];
+                    swap_order[pm][cycle+offset] = p2q[data];
                     already_swapped.insert(p2q[data]);
                 } else {
-                    swap_order[pm][cycle] = pm;
+                    swap_order[pm][cycle+offset] = pm;
                 }
             }
             swapped_last_round = already_swapped;
@@ -171,7 +172,7 @@ GeneratedCircuit _finish_surface_code_circuit(
         if (params.swap_lru_with_no_swap) {
             for (auto measure : z_measure_coords) {
                 auto pm = p2q[measure];
-                swap_order[pm][4] = pm;
+                swap_order[pm][0] = pm;
             }
         }
     }
@@ -190,114 +191,23 @@ GeneratedCircuit _finish_surface_code_circuit(
             auto data = measure + z_order[k];
             if (p2q.find(data) != p2q.end()) {
                 uint32_t pd = p2q[data];
-                if (params.swap_lru && pd == swap_order[pm][0]) {
-                    first_round_swap_targets[0].push_back(pm);
-                    first_round_swap_targets[0].push_back(swap_order[pm][0]);
-                    first_round_swap_targets[1].push_back(swap_order[pm][0]);
-                    first_round_swap_targets[1].push_back(pm);
-                }
                 cnot_targets[k].push_back(pd);
                 cnot_targets[k].push_back(pm);
             }
         }
     }
 
-    // Build the repeated actions that make up the surface code cycle.
-    Circuit cycle_actions;  // Use as the first round of syndrome
-                            // extraction if using SWAP LRU.
-    params.append_begin_round_tick(cycle_actions, data_qubits);
-    params.append_unitary_1(cycle_actions, "H", x_measurement_qubits);
+    Circuit head_cycle;
+    params.append_begin_round_tick(head_cycle, data_qubits);
+    params.append_unitary_1(head_cycle, "H", x_measurement_qubits);
     for (const auto &targets : cnot_targets) {
-        cycle_actions.append_op("TICK", {});
-        params.append_unitary_2(cycle_actions, "CNOT", targets);
+        head_cycle.append_op("TICK", {});
+        params.append_unitary_2(head_cycle, "CNOT", targets);
     }
-    // Introduce SWAP operations into surface code cycle.
-    if (params.swap_lru) {
-        cycle_actions.append_op("TICK", {});
-        params.append_unitary_2(cycle_actions, "SWAP", first_round_swap_targets[0]);
-    }
-    cycle_actions.append_op("TICK", {});
-    params.append_unitary_1(cycle_actions, "H", x_measurement_qubits);
-    cycle_actions.append_op("TICK", {});
-    if (params.swap_lru) {
-        params.append_measure_reset(cycle_actions, x_measurement_qubits);
-        std::vector<uint32_t> local_measurement_qubits;
-        for (uint32_t m : z_measurement_qubits) {
-            local_measurement_qubits.push_back(swap_order[m][0]);
-        }
-        cycle_actions.append_op("TICK", {});
-        params.append_measure_reset(cycle_actions, local_measurement_qubits);
-    } else {
-        params.append_measure_reset(cycle_actions, measurement_qubits);
-    }
-
-    std::array<Circuit, 5> alt_cycle_actions;
-    if (params.swap_lru) {
-        for (size_t cycle = 0; cycle < lru_cycles; cycle++) {
-            const size_t prev_cycle = cycle == 0 
-                                         ? lru_cycles-1 : cycle - 1;
-
-            std::array<std::vector<uint32_t>, 4> alt_cnot_targets;
-            std::vector<uint32_t> alt_pre_swap_targets;
-            std::array<std::vector<uint32_t>, 2> alt_post_swap_targets;
-            for (size_t k = 0; k < 4; k++) {
-                for (auto measure : x_measure_coords) {
-                    auto data = measure + x_order[k];
-                    if (p2q.find(data) != p2q.end()) {
-                        alt_cnot_targets[k].push_back(p2q[measure]);
-                        alt_cnot_targets[k].push_back(p2q[data]);
-                    }
-                }
-
-                for (auto measure : z_measure_coords) {
-                    uint32_t pm = p2q[measure];
-                    auto data = measure + z_order[k];
-                    if (p2q.find(data) != p2q.end()) {
-                        uint32_t pd = p2q[data];
-                        if (pd == swap_order[pm][prev_cycle]) {
-                            alt_pre_swap_targets.push_back(pm);
-                            alt_pre_swap_targets.push_back(swap_order[pm][prev_cycle]);
-                        }
-                        if (pd == swap_order[pm][cycle]) {
-                            alt_post_swap_targets[0].push_back(pm);
-                            alt_post_swap_targets[0].push_back(swap_order[pm][cycle]);
-                            alt_post_swap_targets[1].push_back(swap_order[pm][cycle]);
-                            alt_post_swap_targets[1].push_back(pm);
-                        }
-                        alt_cnot_targets[k].push_back(p2q[data]);
-                        alt_cnot_targets[k].push_back(pm);
-                    }
-                }
-            }
-            Circuit alt_cycle;
-            params.append_begin_round_tick(alt_cycle, data_qubits);
-            params.append_unitary_1(alt_cycle, "H", x_measurement_qubits);
-            if (!alt_pre_swap_targets.empty()) {
-                params.append_unitary_2(alt_cycle, "SWAP", alt_pre_swap_targets);
-            }
-            for (const auto &targets : cnot_targets) {
-                alt_cycle.append_op("TICK", {});
-                params.append_unitary_2(alt_cycle, "CNOT", targets);
-            }
-            alt_cycle.append_op("TICK", {});
-            params.append_unitary_1(alt_cycle, "H", x_measurement_qubits);
-            if (!alt_post_swap_targets[0].empty()) {
-                alt_cycle.append_op("TICK", {});
-                params.append_unitary_2(alt_cycle, "SWAP", alt_post_swap_targets[0]);
-            }
-            alt_cycle.append_op("TICK", {});
-            params.append_measure_reset(alt_cycle, x_measurement_qubits);
-            std::vector<uint32_t> local_measurement_qubits;
-            for (uint32_t m : z_measurement_qubits) {
-                local_measurement_qubits.push_back(swap_order[m][cycle]);
-            }
-            alt_cycle.append_op("TICK", {});
-            params.append_measure_reset(alt_cycle, local_measurement_qubits);
-
-            alt_cycle_actions[cycle] = alt_cycle;
-        }
-    }
-
+    head_cycle.append_op("TICK", {});
+    params.append_unitary_1(head_cycle, "H", x_measurement_qubits);
+    head_cycle.append_op("TICK", {});
+    params.append_measure_reset(head_cycle, measurement_qubits);
     // Build the start of the circuit, getting a state that's ready to cycle.
     // In particular, the first cycle has different detectors and so has to be handled special.
     Circuit head;
@@ -306,7 +216,7 @@ GeneratedCircuit _finish_surface_code_circuit(
     }
     params.append_reset(head, data_qubits, "ZX"[is_memory_x]);
     params.append_reset(head, measurement_qubits);
-    head += cycle_actions;
+    head += head_cycle;
     for (auto m_index : chosen_basis_measurement_qubits) {
         auto measure = q2p[m_index];
         head.append_op(
@@ -316,38 +226,100 @@ GeneratedCircuit _finish_surface_code_circuit(
     }
     head.append_op("SIMHALT", {});
 
-    // Build the repeated body of the circuit, including the detectors comparing to previous cycles.
-    std::array<Circuit, 5> circuit_bodies;
+    Circuit main_body;
     if (params.swap_lru) {
-        for (size_t cycle = 0; cycle < lru_cycles; cycle++) {
-            circuit_bodies[cycle] = alt_cycle_actions[cycle];
+        std::map<uint32_t, uint32_t> swap_table;
+        for (uint32_t r = 1; r < params.rounds; r++) {
+            const uint32_t cycle = r % lru_cycles;
+            // Add initial operations.
+            std::vector<uint32_t> adjusted_data_qubits(data_qubits);
+            for (uint32_t i = 0; i < adjusted_data_qubits.size(); i++) {
+                uint32_t d = adjusted_data_qubits[i];
+                if (swap_table.count(d)) {
+                    adjusted_data_qubits[i] = swap_table[d];
+                }
+            }
+            params.append_begin_round_tick(main_body, adjusted_data_qubits);
+            params.append_unitary_1(main_body, "H", x_measurement_qubits);
+            // Unswap all previously swapped qubits.
+            if (!swap_targets.empty()) {
+                params.append_unitary_2(main_body, "SWAP", swap_targets);
+            }
+            // Clear data streuctures.
+            for (uint32_t i = 0; i < 4; i++) {
+                cnot_targets[i].clear();
+            }
+            swap_targets.clear();
+            swap_table.clear();
+
+            for (size_t k = 0; k < 4; k++) {
+                for (auto measure : x_measure_coords) {
+                    auto data = measure + x_order[k];
+                    if (p2q.find(data) != p2q.end()) {
+                        cnot_targets[k].push_back(p2q[measure]);
+                        cnot_targets[k].push_back(p2q[data]);
+                    }
+                }
+
+                for (auto measure : z_measure_coords) {
+                    uint32_t pm = p2q[measure];
+                    auto data = measure + z_order[k];
+                    if (p2q.find(data) != p2q.end()) {
+                        uint32_t pd = p2q[data];
+                        if (pd == swap_order[pm][cycle]) {
+                            swap_targets.push_back(pm);
+                            swap_targets.push_back(swap_order[pm][cycle]);
+                            swap_table[pm] = swap_order[pm][cycle];
+                            swap_table[swap_order[pm][cycle]] = pm;
+                        }
+                        cnot_targets[k].push_back(p2q[data]);
+                        cnot_targets[k].push_back(pm);
+                    }
+                }
+            }
+            for (const auto &targets : cnot_targets) {
+                main_body.append_op("TICK", {});
+                params.append_unitary_2(main_body, "CNOT", targets);
+            }
+            main_body.append_op("TICK", {});
+            params.append_unitary_1(main_body, "H", x_measurement_qubits);
+            if (!swap_targets.empty()) {
+                main_body.append_op("TICK", {});
+                params.append_unitary_2(main_body, "SWAP", swap_targets);
+            }
+            main_body.append_op("TICK", {});
+            params.append_measure_reset(main_body, x_measurement_qubits);
+            std::vector<uint32_t> local_measurement_qubits;
+            for (uint32_t m : z_measurement_qubits) {
+                local_measurement_qubits.push_back(swap_order[m][cycle]);
+            }
+            main_body.append_op("TICK", {});
+            params.append_measure_reset(main_body, local_measurement_qubits);
+            // Add detector operations
+            auto measure_list = params.both_stabilizers ? measurement_qubits : chosen_basis_measurement_qubits;
+            for (auto m_index : measure_list) {
+                auto m_coord = q2p[m_index];
+                auto m = measurement_qubits.size();
+                auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
+                main_body.append_op(
+                    "DETECTOR", 
+                    {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
+            }
+            main_body.append_op("SIMHALT", {});
         }
     } else {
-        circuit_bodies[0] = cycle_actions;
-    }
-    for (size_t cycle = 0; cycle < lru_cycles; cycle++) {
-        if (!params.swap_lru && cycle > 0) {
-            break;
+        Circuit body_cycle(head_cycle);
+        auto measure_list = params.both_stabilizers ? measurement_qubits : chosen_basis_measurement_qubits;
+        for (auto m_index : measure_list) {
+            auto m_coord = q2p[m_index];
+            auto m = measurement_qubits.size();
+            auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
+            body_cycle.append_op(
+                "DETECTOR", 
+                {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
         }
-        Circuit& body = circuit_bodies[cycle];
-        body.append_op("SHIFT_COORDS", {}, {0, 0, 1});
-        uint32_t m = measurement_qubits.size();
-        if (params.both_stabilizers) {
-            for (auto m_index : measurement_qubits) {
-                auto m_coord = q2p[m_index];
-                auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
-                body.append_op(
-                    "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
-            }
-        } else {
-            for (auto m_index : chosen_basis_measurement_qubits) {
-                auto measure = q2p[m_index];
-                auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[measure] - 1;
-                body.append_op(
-                    "DETECTOR", {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {measure.x, measure.y, 0});
-            }
-        }
-        body.append_op("SIMHALT", {});
+        body_cycle.append_op("SIMHALT", {});
+        main_body = body_cycle * (params.rounds - 1); 
     }
 
     // Build the end of the circuit, getting out of the cycle state and terminating.
@@ -403,27 +375,6 @@ GeneratedCircuit _finish_surface_code_circuit(
     tail.append_op("OBSERVABLE_INCLUDE", obs_inc, 0);
 
     // Combine to form final circuit.
-    Circuit main_body;
-    if (params.swap_lru) {
-        Circuit repeated_part, remaining_part;
-        if (params.rounds - 1 >= lru_cycles) {
-            repeated_part = circuit_bodies[1] + circuit_bodies[2] + circuit_bodies[3];
-            if (params.swap_lru_with_no_swap) {
-                repeated_part += circuit_bodies[4];
-            }
-            repeated_part += circuit_bodies[0];
-            repeated_part *= (params.rounds - 1) / lru_cycles;
-
-        }
-        size_t cycles_left = (params.rounds - 1) % lru_cycles;
-        size_t c = 1;
-        while (cycles_left--) {
-            remaining_part += circuit_bodies[c++];
-        }
-        main_body = repeated_part + remaining_part;
-    } else {
-        main_body = circuit_bodies[0] * (params.rounds - 1);
-    }
     Circuit full_circuit = head + main_body + tail;
 
     // Produce a 2d layout.
