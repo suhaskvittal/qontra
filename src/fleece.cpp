@@ -89,10 +89,13 @@ Fleece::generate_syndromes(uint64_t shots, uint last_leakage_round, uint64_t see
         stim::read_from_sim(sim, det_obs, false, false, true, 
                 meas_results, leak_results, curr_max_detector);
         if (!fake_run) {
+#ifdef FLEECE_DEBUG
+            std::cout << "round = " << round << "\n";
+#endif
             correct_leak(shots);
         }
         // Update curr min and curr max detectors.
-        curr_min_detector += curr_max_detector; 
+        curr_min_detector = curr_max_detector; 
         curr_max_detector += detectors_per_round;
         if (curr_max_detector > circuit.count_detectors()) {
             curr_max_detector = circuit.count_detectors();
@@ -111,6 +114,19 @@ Fleece::generate_syndromes(uint64_t shots, uint last_leakage_round, uint64_t see
     return out;
 }
 
+std::map<uint32_t, uint8_t>
+Fleece::get_data_qubit_states(uint64_t shot_number) {
+    std::map<uint32_t, uint8_t> state_table; 
+    for (auto v : lattice_graph.vertices()) {
+        if (v->is_data) {
+            uint8_t x = sim.x_table[v->qubit][shot_number];
+            uint8_t z = sim.z_table[v->qubit][shot_number];
+            state_table[v->qubit] = (x << 1) | z;
+        }
+    }
+    return state_table;
+}
+
 void
 Fleece::correct_leak(uint64_t shots) {
     meas_results = meas_results.transposed();
@@ -124,10 +140,20 @@ Fleece::correct_leak(uint64_t shots) {
         for (uint32_t i = curr_min_detector; i < curr_max_detector; i++) {
             if (leak_results[s][i]) {
                 auto vleak = lattice_graph.get_vertex_by_detector(i);
-                if (vleak->is_data) {
-                    correct_data_qubit(s, i, vleak);
-                } else {
-                    correct_parity_qubit(s, i, vleak);
+                if (await_detector_set.count(i)) {
+                    uint32_t j = prev_detector(i);
+                    auto vleak = lattice_graph.get_vertex_by_detector(j);
+                    // We need the results of the next round to accurately
+                    // kill leakage errors.
+                    if (vleak->is_data) {
+                        correct_data_qubit(s, i, vleak);
+                    } else {
+                        correct_parity_qubit(s, i, vleak);
+                    }
+                } else if (next_detector(i) < 
+                        circuit.count_detectors() - (detectors_per_round >> 1))
+                {
+                    await_detector_set.insert(next_detector(i));
                 }
             }
         }
@@ -144,72 +170,198 @@ Fleece::correct_data_qubit(uint64_t shot_number, uint detector,
     // time this data qubit was used as a proxy parity qubit (if at all).
     uint start = base_detector(detector);
     for (uint d : vleak->detectors) {
-        if (detector == d) {
+        if (prev_detector(detector) == d) {
             break;
         }
         start = d;
     }
 #ifdef FLEECE_DEBUG
-    std::cout << "Correcting leak in shot=" << shot_number 
+    std::cout << "[data] Correcting leak in shot=" << shot_number 
         << ", detector=" << detector << " from qubit " << vleak->qubit 
         << " (start=" << start << ")\n";
 #endif
-    // Iteratively, clear any flips in potentially affected rounds and
-    // adjacent parity qubits to vleak.
-    while (start <= detector) {
-        const uint level = get_level(start);
-        // Clear errors on prior rounds.
-        meas_results[shot_number][start] = 0;
-        const uint32_t mtime = get_measurement_time(start);
-        if (level == 0) {
-            sim.m_record.storage[mtime][shot_number] = 0;
-        } else {
-            const uint32_t pmtime = get_measurement_time(prev_detector(start));
-            sim.m_record.storage[mtime][shot_number] = 
-                sim.m_record.storage[pmtime][shot_number];
+    // Iteratively, search for flips in detectors adjacent to the leaked qubit.
+    // If we hit a critical point, reset measurements in those detectors.
+    const uint level = get_level(start);
+    std::vector<uint> adjacent_detectors;
+#ifdef FLEECE_DEBUG
+    std::cout << "\tadjacent detectors:";
+#endif
+    for (auto w : lattice_graph.adjacency_list(vleak)) {
+        if (w->detectors[0] == -1) {
+            continue;
         }
-        // Clear errors in adjacent parity qubits.
-        for (auto par : lattice_graph.adjacency_list(vleak)) {
-            if (par->detectors[0] == -1) {
-                continue;
-            }
-            const uint d = jump_to_level(par->detectors[0], level);
-            if (d == BOUNDARY_INDEX) {
-                continue;
-            }
-            const uint32_t t = get_measurement_time(d);
+        uint base = base_detector(w->detectors[0]);
+        adjacent_detectors.push_back(jump_to_level(base, level));
 #ifdef FLEECE_DEBUG
-            std::cout << "\tUpdating measurement record for time=" << t
-                << " for neighbor " << par->qubit << "(d=" << d << "):"
-                << " was " << sim.m_record.storage[t][shot_number]
-                << " (detector = " << meas_results[shot_number][d] << ")\n";
+        std::cout << " " << base;
 #endif
+    }
+#ifdef FLEECE_DEBUG
+    std::cout << "\n";
+#endif
+    uint curr_level = level;
+    const uint target_level = get_level(detector);
+    while (curr_level <= target_level) {
+        // Clear measurements
+        for (uint d : adjacent_detectors) {
+            if (get_level(d) != curr_level) {
+                continue;
+            }
             meas_results[shot_number][d] = 0;
-            if (level == 0) {
-                sim.m_record.storage[t][shot_number] = 0;
+            const uint32_t mt = get_measurement_time(d);
+            if (curr_level == 0) {
+                sim.m_record.storage[mt][shot_number] = 0;
             } else {
-                const uint32_t pt = get_measurement_time(prev_detector(d));
-                std::cout << "\t\tusing measurement at time " << pt << "\n";
-                sim.m_record.storage[t][shot_number] = 
-                    sim.m_record.storage[pt][shot_number];
+                const uint32_t pmt = get_measurement_time(prev_detector(d));
+                sim.m_record.storage[mt][shot_number] = 
+                    sim.m_record.storage[pmt][shot_number];
             }
-#ifdef FLEECE_DEBUG
-            std::cout << "\t\tchanged to " 
-                << sim.m_record.storage[t][shot_number] << "\n";
-#endif
-        } 
+        }
 
-        start = next_detector(start);
+        for (uint i = 0; i < adjacent_detectors.size(); i++) {
+            if (get_level(adjacent_detectors[i]) != curr_level) {
+                continue;
+            }
+            adjacent_detectors[i] = next_detector(adjacent_detectors[i]);
+        }
+        curr_level++;
     }
     // Clear the leakage.
-    sim.leak_record.storage[get_measurement_time(detector)][shot_number] = 0;
+    const uint32_t mt = get_measurement_time(detector);
+    const uint32_t pmt = get_measurement_time(prev_detector(detector));
+    sim.leak_record.storage[mt][shot_number] = 0;
+    sim.leak_record.storage[pmt][shot_number] = 0;
 }
 
 void
 Fleece::correct_parity_qubit(uint64_t shot_number, uint detector,
         fleece::LatticeGraph::Vertex * vleak) 
 {
+    // The leakage (in the worst case) could have only started after the last
+    // time this parity qubit was measured.
+    uint start = base_detector(detector);
+    for (uint d : vleak->detectors) {
+        if (prev_detector(detector) == d) {
+            break;
+        }
+        start = d;
+    }
+#ifdef FLEECE_DEBUG
+    std::cout << "[parity] Correcting leak in shot=" << shot_number 
+        << ", detector=" << detector << " from qubit " << vleak->qubit 
+        << " (start=" << start << ")\n";
+#endif
+    uint curr_level = get_level(start); 
+    const uint max_level = get_level(detector);
+    
+    std::map<uint32_t, uint8_t> paradjust;
 
+    while (curr_level <= max_level) {
+        // Find other detectors which are active.
+        std::vector<uint> other_active;
+        uint ds = curr_level * detectors_per_round - (detectors_per_round>>1);
+        uint dt;
+        if (curr_level == 0) {
+            dt = detectors_per_round >> 1;
+        } else {
+            dt = ds + detectors_per_round;
+        }
+        for (uint i = ds; i < dt; i++) {
+            if (!paradjust.count(base_detector(i))) {
+                paradjust[base_detector(i)] = 0;
+            }
+            const uint8_t offset = paradjust[base_detector(i)];
+            if (meas_results[shot_number][i] ^ offset) {
+                other_active.push_back(i);
+            }
+        }
+#ifdef FLEECE_DEBUG
+        std::cout << "\tclearing active detectors:\n";
+#endif
+        std::set<fleece::LatticeGraph::Vertex*> xflipped;
+        std::set<fleece::LatticeGraph::Vertex*> zflipped;
+        for (uint d : other_active) {
+            auto vbase = lattice_graph.get_vertex_by_detector(base_detector(d));
+            auto common = lattice_graph.get_common_neighbors(vleak, vbase);
+            if (common.empty()) {
+                continue;
+            }
+#ifdef FLEECE_DEBUG
+            std::cout << "\t" << d << "\treset:";
+#endif
+            // If there are shared data qubits, flip them.
+            // Unless this detector has the same base (first round) detector
+            // as the leaked detector. Then, only clear the measurement.
+            if (base_detector(d) != base_detector(detector)) {
+                for (auto vdata : common) {
+#ifdef FLEECE_DEBUG
+                    std::cout << " " << vdata->qubit;
+#endif
+                    bool flippedx = false;
+                    bool flippedz = false;
+                    if (base_detector(d) < (detectors_per_round>>1)
+                        && !xflipped.count(vdata)) 
+                    {
+#ifdef FLEECE_DEBUG
+                        std::cout << "(X)";
+#endif
+                        sim.x_table[vdata->qubit][shot_number] ^= 1;
+                        xflipped.insert(vdata);
+                        flippedx = true;
+                    } 
+                    if (base_detector(d) >= (detectors_per_round>>1)
+                        && !zflipped.count(vdata))
+                    {
+#ifdef FLEECE_DEBUG
+                        std::cout << "(Z)";
+#endif
+                        sim.z_table[vdata->qubit][shot_number] ^= 1;
+                        zflipped.insert(vdata);
+                        flippedz = true;
+                    }
+                    // Update parity adjustments.
+                    for (auto w : lattice_graph.adjacency_list(vdata)) {
+                        if (w->detectors[0] == -1) {
+                            continue;
+                        }
+                        if (!paradjust.count(w->detectors[0])) {
+                            paradjust[w->detectors[0]] = 0;
+                        }
+                        uint8_t update;
+                        if (w->detectors[0] < (detectors_per_round>>1)) {
+                            update = flippedx;
+                        } else {
+                            update = flippedz;
+                        }
+                        paradjust[w->detectors[0]] ^= update;
+                    }
+                }
+            }
+            // Then, clear the measurements for the detector.
+            const uint32_t mt = get_measurement_time(d);
+            if (!paradjust.count(base_detector(d))) {
+                paradjust[base_detector(d)] = 0;
+            }
+            const uint8_t offset = paradjust[base_detector(d)];
+            if (curr_level == 0) {
+                sim.m_record.storage[mt][shot_number] = 0;
+            } else {
+                const uint32_t pmt = get_measurement_time(prev_detector(d));
+                sim.m_record.storage[mt][shot_number] = 
+                    sim.m_record.storage[pmt][shot_number];
+            }
+#ifdef FLEECE_DEBUG
+            std::cout << "\n";
+#endif
+        }
+        curr_level++;
+    }
+    // Clear leakage
+    const uint32_t mt = get_measurement_time(detector);
+    const uint32_t pmt = get_measurement_time(prev_detector(detector));
+    sim.leak_record.storage[mt][shot_number] = 0;
+    sim.leak_record.storage[pmt][shot_number] = 0;
 }
 
 uint
@@ -221,7 +373,7 @@ uint
 Fleece::jump_to_level(uint base, uint level) {
     const uint32_t offset = base >= (detectors_per_round>>1);
     if (level == 0 && offset > 0) {
-        return BOUNDARY_INDEX;
+        return base;
     } else if (level-offset == 0) {
         return base;
     } else {

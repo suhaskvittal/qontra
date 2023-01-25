@@ -78,6 +78,8 @@ public:
 
     std::vector<Vertex*> adjacency_list(int32_t);
     std::vector<Vertex*> adjacency_list(Vertex*);
+
+    std::vector<Vertex*> get_common_neighbors(Vertex*, Vertex*);
 private:
     std::vector<Vertex*> vertex_list;
     std::map<int32_t, Vertex*> qubit_to_vertex;

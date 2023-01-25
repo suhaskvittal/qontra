@@ -43,6 +43,7 @@ public:
 
     SyndromeOutput generate_syndromes(
             uint64_t shots, uint last_leakage_round, uint64_t seed=0);
+    std::map<uint32_t, uint8_t> get_data_qubit_states(uint64_t shot_number);
 
     bool fake_run;
 private:
@@ -74,6 +75,8 @@ private:
 
     uint curr_min_detector;
     uint curr_max_detector;
+
+    std::set<uint32_t> await_detector_set;
 
     std::mt19937_64 rng;
 };

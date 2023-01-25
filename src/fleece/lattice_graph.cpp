@@ -103,6 +103,24 @@ LatticeGraph::adjacency_list(Vertex * v) {
     return adjacency_matrix[v];
 }
 
+std::vector<LatticeGraph::Vertex*>
+LatticeGraph::get_common_neighbors(Vertex * v1, Vertex * v2) {
+    std::vector<Vertex*> adj1 = adjacency_list(v1);
+    std::vector<Vertex*> adj2 = adjacency_list(v2);
+
+    std::vector<Vertex*> common;
+    for (auto w1 : adj1) {
+        for (auto w2 : adj2) {
+            if (w1 == w2) {
+                common.push_back(w1);
+                break;
+            }
+        }
+    }
+    
+    return common;
+}
+
 LatticeGraph
 to_lattice_graph(const stim::Circuit& circuit) {
     std::deque<int32_t> measurement_order;

@@ -241,10 +241,6 @@ GeneratedCircuit _finish_surface_code_circuit(
             }
             params.append_begin_round_tick(main_body, adjusted_data_qubits);
             params.append_unitary_1(main_body, "H", x_measurement_qubits);
-            // Unswap all previously swapped qubits.
-            if (!swap_targets.empty()) {
-                params.append_unitary_2(main_body, "SWAP", swap_targets);
-            }
             // Clear data streuctures.
             for (uint32_t i = 0; i < 4; i++) {
                 cnot_targets[i].clear();
@@ -305,6 +301,10 @@ GeneratedCircuit _finish_surface_code_circuit(
                     "DETECTOR", 
                     {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
             }
+            // Unswap all previously swapped qubits.
+            if (!swap_targets.empty()) {
+                params.append_unitary_2(main_body, "SWAP", swap_targets);
+            }
             main_body.append_op("SIMHALT", {});
         }
     } else {
@@ -327,28 +327,6 @@ GeneratedCircuit _finish_surface_code_circuit(
     // Also, the tail is responsible for identifying the logical observable.
     Circuit tail;
     tail.append_op("TAILSTART", {});
-    if (params.swap_lru) {
-        // Two final sets of CNOTs to reswap data and ancilla qubits.
-        std::array<std::vector<uint32_t>, 2> final_cnot_targets;
-        size_t prev_cycle = (params.rounds % lru_cycles) - 1;
-        for (auto measure : z_measure_coords) {
-            uint32_t pm = p2q[measure];
-            if (swap_order[pm][prev_cycle] != pm) {
-                uint32_t pd = swap_order[pm][prev_cycle];
-                final_cnot_targets[0].push_back(pm);
-                final_cnot_targets[0].push_back(pd);
-                final_cnot_targets[1].push_back(pd);
-                final_cnot_targets[1].push_back(pm);
-            }
-        }
-
-        // Ignore errors -- in practice, you would just measure
-        // the swapped qubits instead of swapping them back.
-        if (!final_cnot_targets[0].empty()) {
-            tail.append_op("TICK", {});
-            tail.append_op("SWAP", final_cnot_targets[0]);
-        }
-    }
 
     params.append_measure(tail, data_qubits, "ZX"[is_memory_x]);
     // Detectors.
