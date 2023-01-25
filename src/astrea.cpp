@@ -3,14 +3,14 @@
  *  date:   22 August 2022
  * */
 
-#include "hyperion.h"
+#include "astrea.h"
 
 namespace qrc {
 
-Hyperion::Hyperion(const stim::Circuit circuit,
+Astrea::Astrea(const stim::Circuit circuit,
         uint n_detectors_per_round,
         uint32_t weight_filter_cutoff,
-        const HyperionParams& params)
+        const AstreaParams& params)
     :MWPMDecoder(circuit), 
     // Statistics
     n_nonzero_syndromes(0),
@@ -50,7 +50,7 @@ Hyperion::Hyperion(const stim::Circuit circuit,
                                             cb, cb);
     }
 
-    hyperion::HyperionSimulatorParams sim_params = {
+    astrea::AstreaSimulatorParams sim_params = {
         circuit.count_detectors()+1,
         n_detectors_per_round,
         params.n_registers,
@@ -65,13 +65,13 @@ Hyperion::Hyperion(const stim::Circuit circuit,
         params.use_rc,
         params.use_greedy_init
     };
-    simulator = new hyperion::HyperionSimulator(dram, 
+    simulator = new astrea::AstreaSimulator(dram, 
                                     memory_event_table,
                                     graph, 
                                     sim_params);
 }
 
-Hyperion::~Hyperion() {
+Astrea::~Astrea() {
     delete simulator;
     if (dram != nullptr) {
         dram->PrintStats();
@@ -81,28 +81,28 @@ Hyperion::~Hyperion() {
 }
 
 std::string
-Hyperion::name() {
-    return "Hyperion";
+Astrea::name() {
+    return "Astrea";
 }
 
 bool
-Hyperion::is_software() {
+Astrea::is_software() {
     return false;
 }
 
 uint64_t
-Hyperion::sram_cost() {
+Astrea::sram_cost() {
     return 0;   // TODO
 }
 
 uint64_t
-Hyperion::dram_cost() {
+Astrea::dram_cost() {
     uint n_d = circuit.count_detectors();
     return n_d*(n_d-1)*sizeof(uint)/2;  // In bytes.
 }
 
 DecoderShotResult
-Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
+Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
 
@@ -152,7 +152,7 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
         detector_array.push_back(BOUNDARY_INDEX);
     }
     // Run simulator.
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
     std::cout << "==============================================\n";
 #endif
     simulator->reset_stats();
@@ -225,7 +225,7 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
 
     bool is_error = 
         is_logical_error(correction, syndrome, n_detectors, n_observables);
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
         std::cout << "Is error: " << is_error << "\n";
         std::cout << "Time taken: " << time_taken << "ns.\n";
         std::cout << "Prefetch cycles: " << simulator->prefetch_cycles << "\n";
@@ -242,7 +242,7 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
                 mwpm_weight += w;
             }
             fp_t weight = 0.0;
-            std::cout << "Hyperion Matching:\n";
+            std::cout << "Astrea Matching:\n";
             for (auto pair : matching) {
                 fp_t w = path_table[pair].distance;
                 std::cout << "\t" << pair.first << " --> " << pair.second 
@@ -250,7 +250,7 @@ Hyperion::decode_error(const std::vector<uint8_t>& syndrome) {
                 weight += w;
             }
             std::cout << "mwpm = " << mwpm_weight 
-                << " , hyperion = " << weight << "\n";
+                << " , astrea = " << weight << "\n";
         }
 #endif
     DecoderShotResult res = {

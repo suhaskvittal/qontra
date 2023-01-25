@@ -70,7 +70,7 @@ HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
     }
     clear();
     detector_vector_register = detector_array;
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
     std::cout << "LOAD:";
     for (uint d : detector_array) {
         std::cout << " " << d; 
@@ -128,7 +128,7 @@ HyperionSimulator::tick() {
         victim->last_use = 0;
 
         replacement_queue.pop_front();
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
         std::cout << "\t[Hyperion] Installed " << std::hex 
             << address << std::dec << "\n";
 #endif
@@ -144,7 +144,7 @@ HyperionSimulator::tick() {
                 memory_event_table->at(address) = false;
                 // Add to replacement queue.
                 auto di_dj = from_address(address, base_address, n_detectors);
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
                 std::cout << "\t[DRAM] Retrieved " << std::hex
                     << address << std::dec << "(" << di_dj.first
                     << "," << di_dj.second << ")\n";
@@ -162,7 +162,7 @@ HyperionSimulator::tick() {
         tick_prefetch();
         break;
     case State::bfu:
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
         if (bfu_cycles % 100 == 0) {
             for (uint i = 0; i < hardware_deques.size(); i++) {
                 std::cout << "[PQ] Priority Queue " << i << ":\n";
@@ -191,7 +191,7 @@ HyperionSimulator::sig_end_round(uint rounds_ended) {
         curr_max_detector = n_detectors - 1;
     }
     major_detector_register = 0;
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
     std::cout << "SIGNAL -- ROUND END | Max detector = " 
         << curr_max_detector << "\n";
 #endif
@@ -344,7 +344,7 @@ HyperionSimulator::tick_bfu_compute(uint stage) {
         if (!latch.valid) {
             continue;
         }
-#ifdef HSIM_DEBUG2
+#ifdef ASTREA_DEBUG2
         if (stage == 0 && f == 0) {
             // Check if proposed_matches are sorted.
             std::cout << "\tProposed matches (COMPUTE 0):";
@@ -427,7 +427,7 @@ HyperionSimulator::tick_bfu_sort(uint stage) {
             bfu_pipeline_latches[f][stage+1].valid = false;
             continue;
         }
-#ifdef HSIM_DEBUG2
+#ifdef ASTREA_DEBUG2
         if (f == 0) {
             // Check if proposed_matches are sorted.
             std::cout << "\tProposed matches (SORT " << stage << "):";
@@ -582,7 +582,7 @@ HyperionSimulator::access(addr_t address, bool set_evictable_on_hit) {
             if (!is_waiting && dram->WillAcceptTransaction(address, false)) {
                 dram->AddTransaction(address, false);
                 dram_await_array.push_back(address);
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
                 std::cout << "\t[Hyperion] Requested " << std::hex
                     << address << std::dec << "\n";
 #endif
@@ -601,7 +601,7 @@ void
 HyperionSimulator::update_state() {
     if (state == State::prefetch) {
         mean_weight_register /= access_counter;
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
         std::cout << "[Mean Weight] " << mean_weight_register << "\n";
         std::cout << "BFU\n";
 #endif
@@ -651,7 +651,7 @@ HyperionSimulator::update_state() {
                 std::numeric_limits<uint32_t>::max();
         }
     } else if (state == State::bfu) {
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
         std::cout << "IDLE\n";
         std::cout << "\tcycles in prefetch: " << prefetch_cycles << "\n";
         std::cout << "\tcycles in bfu: " << bfu_cycles << "\n";
@@ -688,7 +688,7 @@ HyperionSimulator::clear() {
     };
     replacement_queue.clear();
     state = State::prefetch;
-#ifdef HSIM_DEBUG
+#ifdef ASTREA_DEBUG
     std::cout << "(clear)PREFETCH\n";
 #endif
 }

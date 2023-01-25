@@ -3,8 +3,8 @@
  *  date:   7 September 2022
  * */
 
-#ifndef HYPERION_SIMULATOR_h
-#define HYPERION_SIMULATOR_h
+#ifndef ASTREA_SIMULATOR_h
+#define ASTREA_SIMULATOR_h
 
 #include "defs.h"
 #include "decoding_graph.h"
@@ -20,13 +20,13 @@
 #include <vector>
 #include <utility>
 
-//#define HSIM_DEBUG
+//#define ASTREA_DEBUG
 #define HW_CUTOFF 10
 
 namespace qrc {
-namespace hyperion {
+namespace astrea {
 
-struct HyperionSimulatorParams {
+struct AstreaSimulatorParams {
     uint n_detectors;
     uint n_detectors_per_round;
 
@@ -52,14 +52,14 @@ struct MemoryEventEntry {
     uint logical_qubit;
 };
 
-class HyperionDeque;
+class AstreaDeque;
 
-class HyperionSimulator {
+class AstreaSimulator {
 public:
-    HyperionSimulator(dramsim3::MemorySystem*,
+    AstreaSimulator(dramsim3::MemorySystem*,
             std::map<addr_t, bool> * memory_event_table,
             DecodingGraph&,
-            const HyperionSimulatorParams&);
+            const AstreaSimulatorParams&);
 
     void load_detectors(const std::vector<uint>&);
     void load_graph(DecodingGraph&, 
@@ -137,7 +137,7 @@ protected:
     uint major_detector_register;
     std::map<uint, uint> minor_detector_table;
     // There are fetch_width hardware deques of size 2*fetch_width
-    std::vector<HyperionDeque> hardware_deques;
+    std::vector<AstreaDeque> hardware_deques;
     // Size of latches is fetch_width by (1 + 4 + 1)
     // There is one FETCH stage,
     //          four SORT stages,
@@ -173,17 +173,16 @@ private:
     bool use_rc;
     bool use_greedy_init;
 
-    friend class HyperionDeque;
-    friend class HyperionMultiQubitSimulator;
+    friend class AstreaDeque;
 };
 
 // Fixed-size priority queue.
-class HyperionDeque {
+class AstreaDeque {
 public:
-    HyperionDeque(uint);
+    AstreaDeque(uint);
 
-    void push(HyperionSimulator::DequeEntry);
-    HyperionSimulator::DequeEntry top(void);
+    void push(AstreaSimulator::DequeEntry);
+    AstreaSimulator::DequeEntry top(void);
     void pop(void);
     uint size(void);
     bool empty(void);
@@ -196,11 +195,11 @@ private:
     uint left(uint);
     uint right(uint);
 
-    std::vector<HyperionSimulator::DequeEntry> backing_array;
+    std::vector<AstreaSimulator::DequeEntry> backing_array;
 
     uint max_size;
 
-    friend class HyperionSimulator;
+    friend class AstreaSimulator;
 };
 
 addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,
@@ -211,7 +210,7 @@ std::pair<uint, uint> from_address(addr_t, addr_t base, uint n_detectors);
 uint bound_detector(uint, uint n_detectors);
 uint unbound_detector(uint, uint n_detectors);
 
-} // hyperion
+} // astrea
 } // qrc
 
 #endif

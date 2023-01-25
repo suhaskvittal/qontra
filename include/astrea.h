@@ -3,12 +3,12 @@
  *  date:   22 August 2022
  * */
 
-#ifndef HYPERION_h
-#define HYPERION_h
+#ifndef ASTREA_h
+#define ASTREA_h
 
 #include "mwpm_decoder.h"
 #include "benchmark.h"
-#include "hyperion/simulator.h"
+#include "astrea/simulator.h"
 
 #include <algorithm>
 #include <array>
@@ -26,7 +26,7 @@
 
 namespace qrc {
 
-struct HyperionParams {
+struct AstreaParams {
     // Fetch width for brute force unit
     uint bfu_fetch_width;             
     uint bfu_compute_stages;
@@ -46,13 +46,13 @@ struct HyperionParams {
     fp_t dram_clock_frequency;
 };
 
-class Hyperion : public MWPMDecoder {
+class Astrea : public MWPMDecoder {
 public:
-    Hyperion(const stim::Circuit, 
+    Astrea(const stim::Circuit, 
             uint n_detectors_per_round, 
             uint32_t weight_filter_cutoff,
-            const HyperionParams&);
-    ~Hyperion();
+            const AstreaParams&);
+    ~Astrea();
 
     DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
     std::string name(void) override;
@@ -74,7 +74,7 @@ public:
     fp_t min_filter_savings;
     uint max_hamming_weight;
     // More statistics are in the simulator.
-    hyperion::HyperionSimulator * simulator;
+    astrea::AstreaSimulator * simulator;
 private:
     uint n_rounds;
     fp_t main_clock_frequency;
