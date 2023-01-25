@@ -17,6 +17,7 @@
 #ifndef _STIM_SIMULATORS_DETECTION_SIMULATOR_H
 #define _STIM_SIMULATORS_DETECTION_SIMULATOR_H
 
+#include <cstdint>
 #include <random>
 
 #include "stim/circuit/circuit.h"
@@ -32,7 +33,8 @@ void read_from_sim(
     bool append_observables,
     bool get_leakage_data,
     simd_bit_table &result_table,
-    simd_bit_table &leakage_table);
+    simd_bit_table &leakage_table,
+    uint64_t max_detector=UINT64_MAX);
 
 /// Samples detection events from the circuit and returns them in a simd_bit_table.
 ///

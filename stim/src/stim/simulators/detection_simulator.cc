@@ -48,7 +48,8 @@ void stim::read_from_sim(
     bool append_observables,
     bool get_leakage_data,
     simd_bit_table &result_table,
-    simd_bit_table &leakage_table)
+    simd_bit_table &leakage_table,
+    uint64_t max_detector)
 {
     auto frame_samples = sim.m_record.storage;
     auto leakage_samples = sim.leak_record.storage;
@@ -72,6 +73,9 @@ void stim::read_from_sim(
                     leakage_table, offset);
         }
         offset++;
+        if (offset >= max_detector) {
+            break;
+        }
     }
     if (append_observables) {
         for (const auto &obs : det_obs.observables) {
