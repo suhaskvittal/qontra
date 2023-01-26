@@ -48,9 +48,6 @@ AstreaSimulator::AstreaSimulator(DecodingGraph& graph, const AstreaSimulatorPara
     curr_qubit(0),
     has_boundary(false),
     cycles_after_last_converge(0),
-    use_dma(params.use_dma),
-    use_rc(params.use_rc),
-    use_greedy_init(params.use_greedy_init)
 {
     clear();
 }
@@ -170,10 +167,6 @@ AstreaSimulator::reset_stats() {
 
 void
 AstreaSimulator::tick_prefetch()  {
-    if (!use_dma && curr_max_detector < n_detectors - 1) {
-        return;
-    }
-
     uint& ai = major_detector_register;
     if (minor_detector_table.count(ai) == 0) {
         // Start with boundary first if it exists.
@@ -195,9 +188,7 @@ AstreaSimulator::tick_prefetch()  {
     if (ai >= detector_vector_register.size()-1) {
         // We only transition state if all DRAM requests
         // have been processed.
-        if (use_rc || curr_max_detector == n_detectors-1) {
-            update_state();
-        }
+        update_state();
         return;
     }
     uint di = detector_vector_register[ai];
@@ -463,7 +454,6 @@ AstreaSimulator::tick_bfu_fetch() {
                     continue;
                 }
                 if (detector_vector_register.size() <= HW_CUTOFF
-//                    || w <= mean_weight_register
                     || w <= weight_filter_cutoff
                     || w == min_weight)
                 {
@@ -522,32 +512,32 @@ AstreaSimulator::update_state() {
         // but we'll just do it here because it is easier.
         std::map<uint, uint> init_matching;
         fp_t matching_weight = 0.0;
-        if (use_greedy_init) {
-            for (uint i = 0; i < detector_vector_register.size(); i++) {
-                uint di = detector_vector_register[i];
-                auto vdi = graph.get_vertex(di);
-                if (init_matching.count(di)) {
+        // Load the output register with a greedily computed matching
+        // found during weight retrieval.
+        for (uint i = 0; i < detector_vector_register.size(); i++) {
+            uint di = detector_vector_register[i];
+            auto vdi = graph.get_vertex(di);
+            if (init_matching.count(di)) {
+                continue;
+            }
+            DecodingGraph::Vertex * min_mate;
+            fp_t min_weight = std::numeric_limits<fp_t>::max();
+            for (uint j = i + 1; j < detector_vector_register.size(); j++) {
+                uint dj = detector_vector_register[j];
+                if (init_matching.count(dj)) {
                     continue;
                 }
-                DecodingGraph::Vertex * min_mate;
-                fp_t min_weight = std::numeric_limits<fp_t>::max();
-                for (uint j = i + 1; j < detector_vector_register.size(); j++) {
-                    uint dj = detector_vector_register[j];
-                    if (init_matching.count(dj)) {
-                        continue;
-                    }
-                    auto vdj = graph.get_vertex(dj);
-                    fp_t w = path_table[std::make_pair(vdi, vdj)].distance;
-                    if (w < min_weight) {
-                        min_mate = vdj;
-                        min_weight = w;
-                    }
+                auto vdj = graph.get_vertex(dj);
+                fp_t w = path_table[std::make_pair(vdi, vdj)].distance;
+                if (w < min_weight) {
+                    min_mate = vdj;
+                    min_weight = w;
                 }
-                init_matching[di] = min_mate->detector;
-                init_matching[min_mate->detector] = di;
-                matching_weight += 
-                    path_table[std::make_pair(vdi, min_mate)].distance;
             }
+            init_matching[di] = min_mate->detector;
+            init_matching[min_mate->detector] = di;
+            matching_weight += 
+                path_table[std::make_pair(vdi, min_mate)].distance;
         }
 
         best_matching_register = (DequeEntry) {
@@ -555,11 +545,6 @@ AstreaSimulator::update_state() {
             (uint32_t) (matching_weight * MWPM_INTEGER_SCALE),
             0
         };
-        // If it was not initialized, then set the weight to max possible value.
-        if (!use_greedy_init) {
-            best_matching_register.matching_weight = 
-                std::numeric_limits<uint32_t>::max();
-        }
     } else if (state == State::bfu) {
 #ifdef ASTREA_DEBUG
         std::cout << "IDLE\n";
@@ -601,6 +586,10 @@ AstreaSimulator::clear() {
     std::cout << "(clear)PREFETCH\n";
 #endif
 }
+
+//
+// ASTREA SUPPLEMENTAL STRUCTURES
+//
 
 AstreaDeque::AstreaDeque(uint max_size)
     :max_size(max_size)

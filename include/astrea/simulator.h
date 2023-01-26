@@ -34,10 +34,6 @@ struct AstreaSimulatorParams {
     uint bfu_priority_queue_size;
 
     uint32_t weight_filter_cutoff;
-
-    bool use_dma;
-    bool use_rc;
-    bool use_greedy_init;
 };
 
 typedef std::pair<uint, uint> addr_t;
@@ -153,9 +149,7 @@ private:
 
     uint32_t cycles_after_last_converge;
 
-    bool use_dma;
-    bool use_rc;
-    bool use_greedy_init;
+    MWPMDecoder hw6decoder;  // Only used once HW <= 6.
 
     friend class AstreaDeque;
 };
