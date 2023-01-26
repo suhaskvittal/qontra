@@ -12,10 +12,7 @@ namespace astrea {
 static const uint BFU_SORT_STAGES = 4;
 static const uint RADIX_WIDTH = 16 / (BFU_SORT_STAGES);
 
-AstreaSimulator::AstreaSimulator(dramsim3::MemorySystem * dram, 
-        std::map<addr_t, bool> * memory_event_table,
-        DecodingGraph& graph,
-        const AstreaSimulatorParams& params)
+AstreaSimulator::AstreaSimulator(DecodingGraph& graph, const AstreaSimulatorParams& params)
     :
     /* Statistics */
     prefetch_cycles(0),
@@ -23,9 +20,7 @@ AstreaSimulator::AstreaSimulator(dramsim3::MemorySystem * dram,
     cycles_to_converge(0),
     valid_weights_after_filter(0),
     /* Microarchitecture */
-    dram(dram),
     register_file(params.n_registers, (Register){0x0, 0, false}),
-    dram_await_array(),
     detector_vector_register(),
     mean_weight_register(0),
     access_counter(0),
@@ -36,12 +31,11 @@ AstreaSimulator::AstreaSimulator(dramsim3::MemorySystem * dram,
     bfu_pipeline_latches(params.bfu_fetch_width, 
             std::vector<BFUPipelineLatch>(
                 BFU_SORT_STAGES+params.bfu_compute_stages)),
-    best_matching_register(),
     replacement_queue(),
+    best_matching_register(),
     state(AstreaSimulator::State::prefetch),
     bfu_idle(false),
     /* Data */
-    memory_event_table(memory_event_table),
     graph(graph),
     path_table(compute_path_table(graph)),
     /* Config parameters */
@@ -52,7 +46,6 @@ AstreaSimulator::AstreaSimulator(dramsim3::MemorySystem * dram,
     bfu_fetch_width(params.bfu_fetch_width),
     bfu_compute_stages(params.bfu_compute_stages),
     curr_qubit(0),
-    base_address(0),
     has_boundary(false),
     cycles_after_last_converge(0),
     use_dma(params.use_dma),
@@ -60,7 +53,6 @@ AstreaSimulator::AstreaSimulator(dramsim3::MemorySystem * dram,
     use_greedy_init(params.use_greedy_init)
 {
     clear();
-    load_base_address(params.bankgroup, params.bank, params.row_offset);
 }
 
 void
@@ -80,28 +72,6 @@ AstreaSimulator::load_detectors(const std::vector<uint>& detector_array) {
     has_boundary = detector_vector_register.back() == BOUNDARY_INDEX;
     // Compute the critical index.
     curr_max_detector = n_detectors_per_round;
-}
-
-void
-AstreaSimulator::load_graph(DecodingGraph& g, 
-        const graph::PathTable<DecodingGraph::Vertex>& pt) 
-{
-    graph = g;
-    path_table = pt;
-}
-
-void
-AstreaSimulator::load_qubit_number(uint qubit) {
-    curr_qubit = qubit;
-}
-
-void
-AstreaSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset) {
-    if (dram == nullptr) {
-        base_address = 0x0;
-    } else {
-        base_address = get_base_address(bg, ba, ro_offset, dram->config_);
-    }
 }
 
 void
@@ -132,29 +102,6 @@ AstreaSimulator::tick() {
         std::cout << "\t[Astrea] Installed " << std::hex 
             << address << std::dec << "\n";
 #endif
-    }
-    // Check if any transactions to DRAM have completed.
-    if (dram != nullptr) {
-        for (auto it = dram_await_array.begin(); it != dram_await_array.end(); ) {
-            addr_t address = *it;
-            if (memory_event_table->count(address) 
-                    && memory_event_table->at(address)) 
-            {
-                it = dram_await_array.erase(it);
-                memory_event_table->at(address) = false;
-                // Add to replacement queue.
-                auto di_dj = from_address(address, base_address, n_detectors);
-#ifdef ASTREA_DEBUG
-                std::cout << "\t[DRAM] Retrieved " << std::hex
-                    << address << std::dec << "(" << di_dj.first
-                    << "," << di_dj.second << ")\n";
-#endif
-                uint di = di_dj.first;
-                replacement_queue.push_back(address);
-            } else {
-                it++;
-            }
-        }
     }
 
     switch (state) {
@@ -221,18 +168,6 @@ AstreaSimulator::reset_stats() {
     cycles_after_last_converge = 0;
 }
 
-uint64_t
-AstreaSimulator::rowhammer_flips() {
-    if (dram == nullptr) return 0;
-    return dram->dram_system_->rowhammer_flips();
-}
-
-uint64_t
-AstreaSimulator::row_activations() {
-    if (dram == nullptr) return 0;
-    return dram->dram_system_->row_activations();
-}
-
 void
 AstreaSimulator::tick_prefetch()  {
     if (!use_dma && curr_max_detector < n_detectors - 1) {
@@ -260,9 +195,7 @@ AstreaSimulator::tick_prefetch()  {
     if (ai >= detector_vector_register.size()-1) {
         // We only transition state if all DRAM requests
         // have been processed.
-        if (dram_await_array.size() == 0 
-            && (use_rc || curr_max_detector == n_detectors-1)) 
-        {
+        if (use_rc || curr_max_detector == n_detectors-1) {
             update_state();
         }
         return;
@@ -282,7 +215,7 @@ AstreaSimulator::tick_prefetch()  {
         return;
     }
 
-    addr_t address = to_address(di, dj, base_address, n_detectors);
+    addr_t address = std::make_pair(di, dj);
     
     access(address, false);  // We don't care if there is a hit or miss.
     
@@ -568,30 +501,7 @@ AstreaSimulator::access(addr_t address, bool set_evictable_on_hit) {
     }
 
     if (!is_hit) {
-        // If there is no hit, also check that the request has not
-        // already been put out.
-        if (dram != nullptr) {
-            bool is_waiting = false;
-            for (auto x : dram_await_array) {
-                if (address == x) {
-                    is_waiting = true;
-                    break;
-                }
-            }
-            // Send out transaction to DRAM.
-            if (!is_waiting && dram->WillAcceptTransaction(address, false)) {
-                dram->AddTransaction(address, false);
-                dram_await_array.push_back(address);
-#ifdef ASTREA_DEBUG
-                std::cout << "\t[Astrea] Requested " << std::hex
-                    << address << std::dec << "\n";
-#endif
-            }
-        } else {
-            // Just directly pull the data from SRAM and add it to the
-            // replacement queue.
-            replacement_queue.push_back(address);
-        }
+        replacement_queue.push_back(address);
     }
 
     return is_hit;
@@ -663,7 +573,6 @@ AstreaSimulator::update_state() {
 
 void
 AstreaSimulator::clear() {
-    dram_await_array.clear();
     detector_vector_register.clear();
     mean_weight_register = 0;
     access_counter = 0;
@@ -815,35 +724,6 @@ AstreaDeque::left(uint index) {
 uint
 AstreaDeque::right(uint index) {
     return (index+1) << 1;
-}
-
-addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,
-        dramsim3::Config * config) 
-{
-    addr_t base_address = bankgroup << config->bg_pos
-                        | bank << config->ba_pos
-                        | row_offset << config->ro_pos;
-    base_address <<= config->shift_bits;
-    return base_address;
-}
-
-addr_t
-to_address(uint di, uint dj, addr_t base, uint n_detectors) {
-    uint bdi = bound_detector(di, n_detectors);
-    uint bdj = bound_detector(dj, n_detectors);
-    addr_t x = base + (bdi*n_detectors + (bdj-bdi-1)) * sizeof(uint32_t);
-    return x;
-}
-
-std::pair<uint, uint>
-from_address(addr_t x, addr_t base, uint n_detectors) {
-    x -= base;
-    uint bdi = x / (sizeof(uint32_t) * n_detectors);
-    uint bdj = x / sizeof(uint32_t) - bdi*n_detectors + bdi + 1;
-    uint di = unbound_detector(bdi, n_detectors);
-    uint dj = unbound_detector(bdj, n_detectors);
-    std::pair<uint, uint> di_dj = std::make_pair(di, dj);
-    return di_dj;
 }
 
 uint

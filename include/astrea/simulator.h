@@ -11,8 +11,6 @@
 #include "graph/dijkstra.h"
 #include "mwpm_decoder.h"
 
-#include <memory_system.h>
-
 #include <algorithm>
 #include <array>
 #include <deque>
@@ -37,29 +35,18 @@ struct AstreaSimulatorParams {
 
     uint32_t weight_filter_cutoff;
 
-    uint8_t bankgroup;
-    uint8_t bank;
-    uint32_t row_offset;
-
     bool use_dma;
     bool use_rc;
     bool use_greedy_init;
 };
 
-struct MemoryEventEntry {
-    uint di;
-    uint dj;
-    uint logical_qubit;
-};
+typedef std::pair<uint, uint> addr_t;
 
 class AstreaDeque;
 
 class AstreaSimulator {
 public:
-    AstreaSimulator(dramsim3::MemorySystem*,
-            std::map<addr_t, bool> * memory_event_table,
-            DecodingGraph&,
-            const AstreaSimulatorParams&);
+    AstreaSimulator(DecodingGraph&, const AstreaSimulatorParams&);
 
     void load_detectors(const std::vector<uint>&);
     void load_graph(DecodingGraph&, 
@@ -75,12 +62,8 @@ public:
     std::map<uint, uint> get_matching(void);
 
     void reset_stats(void);
-    
-    dramsim3::MemorySystem * dram;
-    // Statistics
-    uint64_t rowhammer_flips(void);
-    uint64_t row_activations(void);
 
+    // Statistics
     uint64_t prefetch_cycles;
     uint64_t bfu_cycles;
     uint64_t cycles_to_converge;
@@ -127,31 +110,33 @@ protected:
 /* Microarchitectural components.*/
     // Global memory
     std::vector<Register> register_file;    
-    std::vector<addr_t> dram_await_array;
     std::vector<uint> detector_vector_register; // Holds the detectors from the
                                                 // current syndrome.
     uint32_t mean_weight_register;
     uint access_counter;
-// Prefetch
+
+    // Prefetch
     uint min_detector_register;
     uint major_detector_register;
     std::map<uint, uint> minor_detector_table;
+
     // There are fetch_width hardware deques of size 2*fetch_width
     std::vector<AstreaDeque> hardware_deques;
+
     // Size of latches is fetch_width by (1 + 4 + 1)
     // There is one FETCH stage,
     //          four SORT stages,
     //          and 1 compute stage.
     std::vector<std::vector<BFUPipelineLatch>> bfu_pipeline_latches;   
-    // Replacement policy
-    DequeEntry best_matching_register;
+    
     std::deque<addr_t> replacement_queue;
+
+    DequeEntry best_matching_register;
     // Global state machine
     State state; 
     bool bfu_idle;
 
     /* Data */
-    std::map<addr_t, bool> * memory_event_table;
     DecodingGraph graph;
     graph::PathTable<DecodingGraph::Vertex> path_table;
     /* Configuation parameters. */
@@ -164,7 +149,6 @@ private:
     uint bfu_fetch_width;
     uint bfu_compute_stages; 
     uint curr_qubit;
-    addr_t base_address;
     bool has_boundary;
 
     uint32_t cycles_after_last_converge;
@@ -201,11 +185,6 @@ private:
 
     friend class AstreaSimulator;
 };
-
-addr_t get_base_address(uint8_t bankgroup, uint8_t bank, uint32_t row_offset,
-        dramsim3::Config*);
-addr_t to_address(uint, uint, addr_t base, uint n_detectors);
-std::pair<uint, uint> from_address(addr_t, addr_t base, uint n_detectors);
 
 uint bound_detector(uint, uint n_detectors);
 uint unbound_detector(uint, uint n_detectors);
