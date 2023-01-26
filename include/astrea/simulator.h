@@ -42,7 +42,7 @@ class AstreaDeque;
 
 class AstreaSimulator {
 public:
-    AstreaSimulator(DecodingGraph&, const AstreaSimulatorParams&);
+    AstreaSimulator(DecodingGraph&, MWPMDecoder&, const AstreaSimulatorParams&);
 
     void load_detectors(const std::vector<uint>&);
     void load_graph(DecodingGraph&, 

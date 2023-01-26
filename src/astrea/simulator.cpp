@@ -12,7 +12,7 @@ namespace astrea {
 static const uint BFU_SORT_STAGES = 4;
 static const uint RADIX_WIDTH = 16 / (BFU_SORT_STAGES);
 
-AstreaSimulator::AstreaSimulator(DecodingGraph& graph, const AstreaSimulatorParams& params)
+AstreaSimulator::AstreaSimulator(DecodingGraph& graph, MWPMDecoder& hw6decoder, const AstreaSimulatorParams& params)
     :
     /* Statistics */
     prefetch_cycles(0),
@@ -48,6 +48,7 @@ AstreaSimulator::AstreaSimulator(DecodingGraph& graph, const AstreaSimulatorPara
     curr_qubit(0),
     has_boundary(false),
     cycles_after_last_converge(0),
+    hw6decoder(hw6decoder)
 {
     clear();
 }
@@ -310,13 +311,27 @@ AstreaSimulator::tick_bfu_compute(uint stage) {
                     break;
                 } 
             }
-            // Push this result onto the stack if there is a next unmatched
-            // detector.
+            // Push this result onto the stack if there is a next unmatched detector
+            // and hamming weight > 6.
             DequeEntry ei = {matching, matching_weight, next_unmatched_index};
-            if (next_unmatched_index < detector_vector_register.size()) {
+            uint hw = detector_vector_register.size() - matching.size();
+            if (next_unmatched_index < detector_vector_register.size() && hw > 6) {
                 pq.push(ei);
             } else {
-                // Otherwise, this is a perfect matching.
+                // Match the rest using MWPM.
+                std::vector<uint8_t> subsyndrome(n_detectors, 0);
+                for (uint d : detector_vector_register) {
+                    if (!matching.count(d)) {
+                        subsyndrome[d] = 1;
+                    }
+                }
+                auto hw6res = hw6decoder.decode_error(subsyndrome);
+                // Combine hw6 matching with existing matching.
+                for (auto pair : hw6res.matching) {
+                    matching[pair.first] = matching[pair.second];
+                    matching[pair.second] = matching[pair.first];
+                    matching_weight += path_table[pair].distance;
+                }
                 // Update the output register.
                 if (matching_weight < best_matching_register.matching_weight) {
                     best_matching_register = ei;
