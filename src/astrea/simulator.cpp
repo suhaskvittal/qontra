@@ -3,19 +3,19 @@
  *  date:   7 September 2022
  * */
 
-#include "hyperion/simulator.h"
+#include "astrea/simulator.h"
 #include <limits>
 
 namespace qrc {
-namespace hyperion {
+namespace astrea {
 
 static const uint BFU_SORT_STAGES = 4;
 static const uint RADIX_WIDTH = 16 / (BFU_SORT_STAGES);
 
-HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram, 
+AstreaSimulator::AstreaSimulator(dramsim3::MemorySystem * dram, 
         std::map<addr_t, bool> * memory_event_table,
         DecodingGraph& graph,
-        const HyperionSimulatorParams& params)
+        const AstreaSimulatorParams& params)
     :
     /* Statistics */
     prefetch_cycles(0),
@@ -32,13 +32,13 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
     major_detector_register(0),
     minor_detector_table(),
     hardware_deques(params.bfu_fetch_width, 
-            HyperionDeque(params.bfu_priority_queue_size)),
+            AstreaDeque(params.bfu_priority_queue_size)),
     bfu_pipeline_latches(params.bfu_fetch_width, 
             std::vector<BFUPipelineLatch>(
                 BFU_SORT_STAGES+params.bfu_compute_stages)),
     best_matching_register(),
     replacement_queue(),
-    state(HyperionSimulator::State::prefetch),
+    state(AstreaSimulator::State::prefetch),
     bfu_idle(false),
     /* Data */
     memory_event_table(memory_event_table),
@@ -64,7 +64,7 @@ HyperionSimulator::HyperionSimulator(dramsim3::MemorySystem * dram,
 }
 
 void
-HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
+AstreaSimulator::load_detectors(const std::vector<uint>& detector_array) {
     if (detector_array.size() == 0) {
         state = State::idle;
     }
@@ -83,7 +83,7 @@ HyperionSimulator::load_detectors(const std::vector<uint>& detector_array) {
 }
 
 void
-HyperionSimulator::load_graph(DecodingGraph& g, 
+AstreaSimulator::load_graph(DecodingGraph& g, 
         const graph::PathTable<DecodingGraph::Vertex>& pt) 
 {
     graph = g;
@@ -91,12 +91,12 @@ HyperionSimulator::load_graph(DecodingGraph& g,
 }
 
 void
-HyperionSimulator::load_qubit_number(uint qubit) {
+AstreaSimulator::load_qubit_number(uint qubit) {
     curr_qubit = qubit;
 }
 
 void
-HyperionSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset) {
+AstreaSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset) {
     if (dram == nullptr) {
         base_address = 0x0;
     } else {
@@ -105,7 +105,7 @@ HyperionSimulator::load_base_address(uint8_t bg, uint8_t ba, uint32_t ro_offset)
 }
 
 void
-HyperionSimulator::tick() {
+AstreaSimulator::tick() {
     // Update last use for every register.
     for (Register& r : register_file) {
         r.last_use++;
@@ -129,7 +129,7 @@ HyperionSimulator::tick() {
 
         replacement_queue.pop_front();
 #ifdef ASTREA_DEBUG
-        std::cout << "\t[Hyperion] Installed " << std::hex 
+        std::cout << "\t[Astrea] Installed " << std::hex 
             << address << std::dec << "\n";
 #endif
     }
@@ -184,7 +184,7 @@ HyperionSimulator::tick() {
 }
 
 void
-HyperionSimulator::sig_end_round(uint rounds_ended) {
+AstreaSimulator::sig_end_round(uint rounds_ended) {
     // We subtract by 1 because we don't count the boundary.
     curr_max_detector += n_detectors_per_round * rounds_ended;
     if (curr_max_detector > n_detectors-1) {
@@ -198,22 +198,22 @@ HyperionSimulator::sig_end_round(uint rounds_ended) {
 }
 
 bool
-HyperionSimulator::is_idle() {
+AstreaSimulator::is_idle() {
     return state == State::idle;
 }
 
 void
-HyperionSimulator::force_idle() {
+AstreaSimulator::force_idle() {
     state = State::idle;
 }
 
 std::map<uint, uint>
-HyperionSimulator::get_matching() {
+AstreaSimulator::get_matching() {
     return best_matching_register.running_matching;
 }
 
 void
-HyperionSimulator::reset_stats() {
+AstreaSimulator::reset_stats() {
     prefetch_cycles = 0;
     bfu_cycles = 0;
     cycles_to_converge = 0;
@@ -222,19 +222,19 @@ HyperionSimulator::reset_stats() {
 }
 
 uint64_t
-HyperionSimulator::rowhammer_flips() {
+AstreaSimulator::rowhammer_flips() {
     if (dram == nullptr) return 0;
     return dram->dram_system_->rowhammer_flips();
 }
 
 uint64_t
-HyperionSimulator::row_activations() {
+AstreaSimulator::row_activations() {
     if (dram == nullptr) return 0;
     return dram->dram_system_->row_activations();
 }
 
 void
-HyperionSimulator::tick_prefetch()  {
+AstreaSimulator::tick_prefetch()  {
     if (!use_dma && curr_max_detector < n_detectors - 1) {
         return;
     }
@@ -315,7 +315,7 @@ HyperionSimulator::tick_prefetch()  {
 }
 
 void
-HyperionSimulator::tick_bfu() {
+AstreaSimulator::tick_bfu() {
     // We simulate the stages of the pipeline in reverse order.
     // There is one FETCH stage, four SORT stages, and 
     // a variable number of COMPUTE stages.
@@ -336,7 +336,7 @@ HyperionSimulator::tick_bfu() {
 }
 
 void
-HyperionSimulator::tick_bfu_compute(uint stage) {
+AstreaSimulator::tick_bfu_compute(uint stage) {
     const uint STAGE_OFFSET = BFU_SORT_STAGES;
     // Get data from the pipeline latch.
     for (uint f = 0; f < bfu_fetch_width; f++) {
@@ -419,7 +419,7 @@ HyperionSimulator::tick_bfu_compute(uint stage) {
 }
 
 void
-HyperionSimulator::tick_bfu_sort(uint stage) {
+AstreaSimulator::tick_bfu_sort(uint stage) {
     // Get pipeline latch. 
     for (uint f = 0; f < bfu_fetch_width; f++) {
         BFUPipelineLatch& latch = bfu_pipeline_latches[f][stage];
@@ -467,7 +467,7 @@ HyperionSimulator::tick_bfu_sort(uint stage) {
 }
 
 void
-HyperionSimulator::tick_bfu_fetch() {
+AstreaSimulator::tick_bfu_fetch() {
     for (uint f = 0; f < bfu_fetch_width; f++) {
         // Determine what reads need to be made to the register file.
         // As we don't ever write to the register file outside of PREFETCH,
@@ -549,7 +549,7 @@ HyperionSimulator::tick_bfu_fetch() {
 }
 
 bool
-HyperionSimulator::access(addr_t address, bool set_evictable_on_hit) {
+AstreaSimulator::access(addr_t address, bool set_evictable_on_hit) {
     // First, check that the data isn't already in the register file.
     // or in the replacement queue.
     bool is_hit = false;
@@ -583,7 +583,7 @@ HyperionSimulator::access(addr_t address, bool set_evictable_on_hit) {
                 dram->AddTransaction(address, false);
                 dram_await_array.push_back(address);
 #ifdef ASTREA_DEBUG
-                std::cout << "\t[Hyperion] Requested " << std::hex
+                std::cout << "\t[Astrea] Requested " << std::hex
                     << address << std::dec << "\n";
 #endif
             }
@@ -598,7 +598,7 @@ HyperionSimulator::access(addr_t address, bool set_evictable_on_hit) {
 }
 
 void
-HyperionSimulator::update_state() {
+AstreaSimulator::update_state() {
     if (state == State::prefetch) {
         mean_weight_register /= access_counter;
 #ifdef ASTREA_DEBUG
@@ -662,7 +662,7 @@ HyperionSimulator::update_state() {
 }
 
 void
-HyperionSimulator::clear() {
+AstreaSimulator::clear() {
     dram_await_array.clear();
     detector_vector_register.clear();
     mean_weight_register = 0;
@@ -693,12 +693,12 @@ HyperionSimulator::clear() {
 #endif
 }
 
-HyperionDeque::HyperionDeque(uint max_size)
+AstreaDeque::AstreaDeque(uint max_size)
     :max_size(max_size)
 {}
 
 void
-HyperionDeque::push(HyperionSimulator::DequeEntry entry) {
+AstreaDeque::push(AstreaSimulator::DequeEntry entry) {
     if (backing_array.size() == 0) {
         backing_array.push_back(entry);
     } else {
@@ -710,13 +710,13 @@ HyperionDeque::push(HyperionSimulator::DequeEntry entry) {
     }
 }
 
-HyperionSimulator::DequeEntry
-HyperionDeque::top() {
+AstreaSimulator::DequeEntry
+AstreaDeque::top() {
     return backing_array.front();
 }
 
 void
-HyperionDeque::pop() {
+AstreaDeque::pop() {
     auto back_entry = backing_array.back();
     backing_array[0] = back_entry;
     backing_array.pop_back();
@@ -724,22 +724,22 @@ HyperionDeque::pop() {
 }
 
 uint
-HyperionDeque::size() {
+AstreaDeque::size() {
     return backing_array.size();
 }
 
 bool
-HyperionDeque::empty() {
+AstreaDeque::empty() {
     return size() == 0;
 }
 
 void
-HyperionDeque::clear() {
+AstreaDeque::clear() {
     backing_array.clear();
 }
 
 void
-HyperionDeque::downheap(uint index) {
+AstreaDeque::downheap(uint index) {
     if (index >= size()) {
         return;
     }
@@ -787,7 +787,7 @@ HyperionDeque::downheap(uint index) {
 }
 
 void
-HyperionDeque::upheap(uint index) {
+AstreaDeque::upheap(uint index) {
     if (index <= 0) {
         return;
     }
@@ -803,17 +803,17 @@ HyperionDeque::upheap(uint index) {
 }
 
 uint
-HyperionDeque::parent(uint index) {
+AstreaDeque::parent(uint index) {
     return (index-1) >> 1;
 }
 
 uint
-HyperionDeque::left(uint index) {
+AstreaDeque::left(uint index) {
     return ((index+1) << 1) + 1;
 }
 
 uint
-HyperionDeque::right(uint index) {
+AstreaDeque::right(uint index) {
     return (index+1) << 1;
 }
 
@@ -856,5 +856,5 @@ unbound_detector(uint d, uint n_detectors) {
     return d == n_detectors-1 ? BOUNDARY_INDEX : d;
 }
 
-}  // hyperion
+}  // astrea
 }  // qrc
