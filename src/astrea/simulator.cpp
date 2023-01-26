@@ -319,7 +319,7 @@ AstreaSimulator::tick_bfu_compute(uint stage) {
                 pq.push(ei);
             } else {
                 // Match the rest using MWPM.
-                std::vector<uint8_t> subsyndrome(n_detectors, 0);
+                std::vector<uint8_t> subsyndrome(n_detectors-1, 0);
                 for (uint d : detector_vector_register) {
                     if (!matching.count(d)) {
                         subsyndrome[d] = 1;

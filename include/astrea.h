@@ -33,17 +33,8 @@ struct AstreaParams {
     uint bfu_priority_queue_size;
     // Memory Parameters
     uint n_registers;
-    // uArch Parameters
-    bool use_dma;
-    bool use_rc;
-    bool use_greedy_init;
-    // DRAM parameters
-    bool use_dram;
-    std::string dram_config_file;
-    std::string log_output_directory;
 
     fp_t main_clock_frequency;   // in Hz
-    fp_t dram_clock_frequency;
 };
 
 class Astrea : public MWPMDecoder {
@@ -59,7 +50,6 @@ public:
     bool is_software(void) override;
 
     uint64_t sram_cost(void) override;
-    uint64_t dram_cost(void);
 
     // Statistics
     uint64_t n_nonzero_syndromes;
@@ -78,12 +68,8 @@ public:
 private:
     uint n_rounds;
     fp_t main_clock_frequency;
-    fp_t dram_clock_frequency;
     
     MWPMDecoder baseline;
-    // Delete later.
-    dramsim3::MemorySystem * dram;
-    std::map<addr_t, bool> * memory_event_table;
 };
 
 }  // qrc

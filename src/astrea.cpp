@@ -14,8 +14,7 @@ Astrea::Astrea(const stim::Circuit circuit,
     :MWPMDecoder(circuit), 
     // Statistics
     n_nonzero_syndromes(0),
-    n_hhw_syndromes(0),
-    total_bfu_cycles(0),
+    n_hhw_syndromes(0), total_bfu_cycles(0),
     total_prefetch_cycles(0),
     total_cycles_to_converge(0),
     total_logfilter_savings(0),
@@ -29,26 +28,10 @@ Astrea::Astrea(const stim::Circuit circuit,
     // Properties
     n_rounds(circuit.count_detectors()/n_detectors_per_round),
     main_clock_frequency(params.main_clock_frequency),
-    dram_clock_frequency(params.dram_clock_frequency),
     baseline(circuit),
-    // Heap initialized data (to be deleted)
-    dram(nullptr),
-    memory_event_table(nullptr)
 {
     // Initialize Memory System.
     // Define memory event table and associated callbacks.
-
-    if (params.use_dram) {
-        memory_event_table = new std::map<addr_t, bool>();
-        auto cb = [this](addr_t x) 
-        {
-            this->memory_event_table->insert_or_assign(x, true);
-        };
-
-        dram = new dramsim3::MemorySystem(params.dram_config_file, 
-                                            params.log_output_directory,
-                                            cb, cb);
-    }
 
     astrea::AstreaSimulatorParams sim_params = {
         circuit.count_detectors()+1,
@@ -57,27 +40,13 @@ Astrea::Astrea(const stim::Circuit circuit,
         params.bfu_fetch_width,
         params.bfu_compute_stages,
         params.bfu_priority_queue_size,
-        weight_filter_cutoff,
-        0,
-        0,
-        0,
-        params.use_dma,
-        params.use_rc,
-        params.use_greedy_init
+        weight_filter_cutoff
     };
-    simulator = new astrea::AstreaSimulator(dram, 
-                                    memory_event_table,
-                                    graph, 
-                                    sim_params);
+    simulator = new astrea::AstreaSimulator(graph, baseline, sim_params);
 }
 
 Astrea::~Astrea() {
     delete simulator;
-    if (dram != nullptr) {
-        dram->PrintStats();
-        delete dram;
-        delete memory_event_table;
-    }
 }
 
 std::string
@@ -95,19 +64,11 @@ Astrea::sram_cost() {
     return 0;   // TODO
 }
 
-uint64_t
-Astrea::dram_cost() {
-    uint n_d = circuit.count_detectors();
-    return n_d*(n_d-1)*sizeof(uint)/2;  // In bytes.
-}
-
 DecoderShotResult
 Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
     uint n_detectors = circuit.count_detectors();
     uint n_observables = circuit.count_observables();
 
-    fp_t min_clock_frequency = main_clock_frequency < dram_clock_frequency
-                                ? main_clock_frequency : dram_clock_frequency;
     // Compute Hamming weight.
     // Don't count the observables.
     uint hw = std::accumulate(syndrome.begin(), syndrome.end()-n_observables, 0);
@@ -134,7 +95,7 @@ Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
         } else if (hw == 10) {
             cycles = 3*hw*(hw-1) + 73;
         }
-        fp_t time_taken = cycles / min_clock_frequency * 1e9;
+        fp_t time_taken = cycles / main_clock_frequency * 1e9;
         DecoderShotResult res = MWPMDecoder::decode_error(syndrome);
         res.execution_time = time_taken;
         return res;
@@ -161,11 +122,9 @@ Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
     uint64_t n_cycles = 0;
     uint round = 1;
 
-    uint32_t main_tpc = (uint32_t) (main_clock_frequency / min_clock_frequency);
-    uint32_t dram_tpc = (uint32_t) (dram_clock_frequency / min_clock_frequency);
     uint32_t total_cycles = 0;
     while (!simulator->is_idle()) {
-        fp_t t = n_cycles / min_clock_frequency * 1e9;
+        fp_t t = n_cycles / main_clock_frequency * 1e9;
         if (t >= 1000) {
             if (round < n_rounds) {
                 simulator->sig_end_round();
@@ -175,15 +134,7 @@ Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
                 break;
             }
         }
-        // Only tick DRAM if used.
-        if (dram != nullptr) {
-            for (uint32_t i = 0; i < dram_tpc; i++) {
-                dram->ClockTick();
-            }
-        }
-        for (uint32_t i = 0; i < main_tpc; i++) {
-            simulator->tick();
-        }
+        simulator->tick();
         n_cycles++;
         total_cycles++;
     }
@@ -221,7 +172,7 @@ Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
         }
     }
 
-    fp_t time_taken = n_cycles / min_clock_frequency * 1e9;
+    fp_t time_taken = n_cycles / main_clock_frequency * 1e9;
 
     bool is_error = 
         is_logical_error(correction, syndrome, n_detectors, n_observables);
