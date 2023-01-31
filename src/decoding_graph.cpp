@@ -24,21 +24,6 @@ DecodingGraph::DecodingGraph()
 }
 
 DecodingGraph::~DecodingGraph() {
-    for (auto pair : vertices_to_edge) {
-        auto vertex_pair = pair.first;
-        if (vertex_pair.first > vertex_pair.second) {
-            continue;
-        }
-        if (pair.second != nullptr) {
-            delete pair.second; 
-        }
-    }
-
-    for (Vertex * v : vertex_list) {
-        if (v != nullptr) {
-            delete v;
-        }
-    }
 }
 
 uint

@@ -20,7 +20,7 @@ AstreaSimulator::AstreaSimulator(DecodingGraph& graph, MWPMDecoder& hw6decoder, 
     cycles_to_converge(0),
     valid_weights_after_filter(0),
     /* Microarchitecture */
-    register_file(params.n_registers, (Register){0x0, 0, false}),
+    register_file(params.n_registers, (Register){std::make_pair(0,0), 0, false}),
     detector_vector_register(),
     mean_weight_register(0),
     access_counter(0),
@@ -96,10 +96,6 @@ AstreaSimulator::tick() {
         victim->last_use = 0;
 
         replacement_queue.pop_front();
-#ifdef ASTREA_DEBUG
-        std::cout << "\t[Astrea] Installed " << std::hex 
-            << address << std::dec << "\n";
-#endif
     }
 
     switch (state) {
@@ -321,6 +317,9 @@ AstreaSimulator::tick_bfu_compute(uint stage) {
                 // Match the rest using MWPM.
                 std::vector<uint8_t> subsyndrome(n_detectors-1, 0);
                 for (uint d : detector_vector_register) {
+                    if (d == BOUNDARY_INDEX) {
+                        continue;
+                    }
                     if (!matching.count(d)) {
                         subsyndrome[d] = 1;
                     }
@@ -328,13 +327,18 @@ AstreaSimulator::tick_bfu_compute(uint stage) {
                 auto hw6res = hw6decoder.decode_error(subsyndrome);
                 // Combine hw6 matching with existing matching.
                 for (auto pair : hw6res.matching) {
-                    matching[pair.first] = matching[pair.second];
-                    matching[pair.second] = matching[pair.first];
-                    matching_weight += path_table[pair].distance;
+                    if (matching.count(pair.first) || matching.count(pair.second)) {
+                        continue;
+                    }
+                    matching[pair.first] = pair.second;
+                    matching[pair.second] = pair.first;
+                    auto vdi = graph.get_vertex(pair.first);
+                    auto vdj = graph.get_vertex(pair.second);
+                    matching_weight += (uint32_t) (path_table[std::make_pair(vdi, vdj)].distance * MWPM_INTEGER_SCALE);
                 }
                 // Update the output register.
                 if (matching_weight < best_matching_register.matching_weight) {
-                    best_matching_register = ei;
+                    best_matching_register = {matching, matching_weight, detector_vector_register.size()};
                     // Update stats.
                     cycles_to_converge = cycles_after_last_converge;
                 }
@@ -439,7 +443,7 @@ AstreaSimulator::tick_bfu_fetch() {
             if (ei.running_matching.count(dj)) {
                 continue;
             }
-            addr_t address = to_address(di, dj, base_address, n_detectors);
+            addr_t address = std::make_pair(di, dj);
             bool is_hit = access(address, true);
             // If there is no hit on the register file, then we have to go
             // to DRAM. We will stall the pipeline until DRAM gives us

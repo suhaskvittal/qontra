@@ -28,7 +28,7 @@ Astrea::Astrea(const stim::Circuit circuit,
     // Properties
     n_rounds(circuit.count_detectors()/n_detectors_per_round),
     main_clock_frequency(params.main_clock_frequency),
-    baseline(circuit),
+    baseline(circuit)
 {
     // Initialize Memory System.
     // Define memory event table and associated callbacks.
@@ -187,7 +187,9 @@ Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
             std::cout << "MWPM Matching:\n";
             fp_t mwpm_weight = 0.0;
             for (auto pair : mwpm_matching) {
-                fp_t w = path_table[pair].distance;
+                auto vdi = graph.get_vertex(pair.first);
+                auto vdj = graph.get_vertex(pair.second);
+                fp_t w = path_table[std::make_pair(vdi, vdj)].distance;
                 std::cout << "\t" << pair.first << " --> " << pair.second 
                     << " ( w = " << w << " )\n";
                 mwpm_weight += w;
@@ -195,7 +197,9 @@ Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
             fp_t weight = 0.0;
             std::cout << "Astrea Matching:\n";
             for (auto pair : matching) {
-                fp_t w = path_table[pair].distance;
+                auto vdi = graph.get_vertex(pair.first);
+                auto vdj = graph.get_vertex(pair.second);
+                fp_t w = path_table[std::make_pair(vdi, vdj)].distance;
                 std::cout << "\t" << pair.first << " --> " << pair.second 
                     <<  " ( w = " << w << " )\n";
                 weight += w;

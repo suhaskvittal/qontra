@@ -13,10 +13,9 @@ set(QUARCH_PROGRAM_FILES
     src/decoder.cpp
     src/mwpm_decoder.cpp
     src/defs.cpp
-    # HYPERION
-    src/hyperion.cpp
-    src/hyperion/simulator.cpp
-    src/hyperion/multi_qubit.cpp
+    # ASTREA
+    src/astrea.cpp
+    src/astrea/simulator.cpp
     # TMR
     src/tmr_decoder.cpp
     # FLEECE
