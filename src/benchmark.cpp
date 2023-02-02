@@ -7,14 +7,11 @@
 
 namespace qrc {
 
-//#define STATBENCH_DEBUG
+#define STATBENCH_DEBUG
 //#define STATBENCH_DEBUG2
 
 /* Helper Functions */
 inline fp_t __lognCk(fp_t n, fp_t k) {
-#ifdef STATBENCH_DEBUG
-    std::cout << lgamma(n+1) << "," << lgamma(n-k+1) << "," << lgamma(k+1) << "\n";
-#endif
     return lgamma(n+1) - lgamma(n-k+1) - lgamma(k+1);
 }
 
@@ -184,7 +181,9 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
 
     fp_t pc = p;    // Current physical error rate
     fp_t nlogpuc = min_uncorrectable_nlogprob;  // Current uncorrectable probability
-    fp_t prev_ss = -1;
+    fp_t prev_ss = shots < update_rate ? shots : update_rate;
+
+    bool first_iter = true;  // We need to adjust any inaccuracies in our model in the first iteration only.
     while (shots > 0) {
 #ifdef STATBENCH_DEBUG
         std::cout << "shots left: " << shots << "\n";
@@ -194,7 +193,9 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
         uint64_t s = shots_this_round;
 
         std::map<uint, fp_t> local_freq;
-        fp_t mean_hamming_weight = 0;
+        uint64_t local_errors = 0;
+
+        fp_t ss = 0.0;
         while (s > 0) {
             uint64_t shots_this_batch = s < 100'000 ? s : 100'000;
             stim::simd_bit_table sample_buffer = 
@@ -215,31 +216,33 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
                     local_freq[hw] = 0;
                 }
                 local_freq[hw]++;
-                mean_hamming_weight += hw;
-                auto res = curr_decoder->decode_error(syndrome);
-                statres.n_logical_errors += res.is_logical_error;
-                statres.mean_execution_time += res.execution_time;
-                if (res.execution_time > statres.max_execution_time) {
-                    statres.max_execution_time = res.execution_time;
+                if (hw) {
+                    auto res = curr_decoder->decode_error(syndrome);
+                    local_errors += res.is_logical_error;
+                    statres.mean_execution_time += res.execution_time;
+                    if (res.execution_time > statres.max_execution_time) {
+                        statres.max_execution_time = res.execution_time;
+                    }
                 }
+                // Compute statistical shots for this batch.
+                // Probability of achieving a certain Hamming weight follows Bin(n_error_sources, mean_flip_prob).
+                const fp_t hwdiv2 = hw * 0.5;
+                fp_t loghwprob = __lognCk(n_error_sources, hwdiv2)
+                                + hwdiv2 * log(mean_flip_prob)
+                                + ( ((fp_t)n_error_sources) - hwdiv2 ) * log(1.0-mean_flip_prob);
+                fp_t logss = logehwprob - loghwprob;
+                ss += pow(M_E, logss);
             }
             
             s -= shots_this_batch;
         }
-        mean_hamming_weight /= (fp_t)shots_this_round;
-        // Compute statistical shots for this batch.
-        // Probability of achieving a certain Hamming weight follows Bin(n_error_sources, mean_flip_prob).
-        fp_t loghwprob = __lognCk(n_error_sources, mean_hamming_weight) 
-                        + mean_hamming_weight * log(mean_flip_prob)
-                        + ( ((fp_t)n_error_sources) - mean_hamming_weight ) * log(1.0 - mean_flip_prob);
-        fp_t logss = log( (fp_t) shots_this_round ) + ( logehwprob - loghwprob );
-        fp_t ss = pow(M_E, logss); 
+        if (first_iter) {
+            ss = shots_this_round;
+        }
         // Update hamming_weight_freq table
-        if (prev_ss > 0) {
-            for (auto pair : hamming_weight_freq) {
-                // Apply prior probabilities to "fill up" other shots (the ss - shots_per_round shots).
-                hamming_weight_freq[pair.first] = pair.second * (ss - shots_this_round)/prev_ss;
-            }
+        for (auto pair : hamming_weight_freq) {
+            // Apply prior probabilities to "fill up" other shots (the ss - shots_per_round shots).
+            hamming_weight_freq[pair.first] = pair.second * (ss - shots_this_round)/prev_ss;
         }
         for (auto pair : local_freq) {
             if (!hamming_weight_freq.count(pair.first)) {
@@ -247,26 +250,21 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
             }
             hamming_weight_freq[pair.first] += pair.second;
         }
-        prev_ss = ss;
         // Record statistics and delete current decoder afterward.
+        statres.n_logical_errors = statres.n_logical_errors * (ss - shots_this_round)/prev_ss + local_errors;
         statres.statistical_shots += ss;
-        statres.n_logical_errors += curr_decoder->n_logical_errors;
-        statres.mean_execution_time += curr_decoder->mean_execution_time * ss;
-        if (curr_decoder->max_execution_time > statres.max_execution_time) {
-            statres.max_execution_time = curr_decoder->max_execution_time;
-        }
         delete curr_decoder;
         // Update noise and create a new decoder.
+        prev_ss = ss;
         nlogpuc -= pucupdate;
         pc = uncorrectable_nlogprob_to_error_prob(code_dist, nlogpuc) * r;
 #ifdef STATBENCH_DEBUG
         std::cout << "\tphysical error rate: " << pc << "\n";
-        std::cout << "\tmean hamming weight = " << mean_hamming_weight << "\n";
-        std::cout << "\tloghwprob = " << loghwprob << ", logss = " << logss << "\n";
         std::cout << "\tstatistical shots: " << ss << "\n";
 #endif
         curr_decoder = mkdec(pc);
         shots -= shots_this_round;
+        first_iter = false;
     }
     statres.mean_execution_time /= statres.statistical_shots;
 #ifdef STATBENCH_DEBUG

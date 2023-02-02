@@ -35,7 +35,7 @@ fp_t
 stdev(const std::vector<fp_t>&);
 
 struct StatisticalResult {
-    uint64_t n_logical_errors = 0;
+    fp_t n_logical_errors = 0;
     fp_t mean_execution_time = 0;
     fp_t max_execution_time = 0;
     uint64_t true_shots = 0;
