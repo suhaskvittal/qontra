@@ -16,6 +16,16 @@
 
 namespace qrc {
 
+struct StatisticalResult;   // In benchmark.h
+
+class Decoder;
+
+/*
+ *  Decoder pointers from a dgf_t should be
+ *  allocated on the heap.
+ * */
+typedef std::function<Decoder*(fp_t)> dgf_t;
+
 /* Benchmark functions and structures*/
 struct DecoderShotResult {
     fp_t execution_time;
@@ -68,10 +78,11 @@ public:
     std::vector<std::vector<uint8_t>> syndromes;
     std::vector<fp_t> execution_times;  // in nanoseconds
     std::vector<fp_t> memory_overheads; // in bytes
-    uint32_t n_logical_errors;
+    uint64_t n_logical_errors;
     fp_t mean_execution_time;
     fp_t max_execution_time;
     fp_t max_execution_time_for_correctable;
+    std::map<uint, fp_t> hamming_weight_dist;
     // Benchmarking circuit.
     stim::Circuit circuit;
 protected:
@@ -80,7 +91,7 @@ protected:
     // Give all benchmarking functions
     // friendship.
     friend void b_decoder_ler(Decoder*, uint64_t, std::mt19937_64&, bool);
-    friend void b_statistical_ler(Decoder*, uint, fp_t, uint64_t, std::m19937_64&);
+    friend StatisticalResult b_statistical_ler(dgf_t&, uint, fp_t, uint64_t, std::mt19937_64&, uint64_t);
 };
 
 uint32_t

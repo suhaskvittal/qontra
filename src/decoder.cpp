@@ -16,7 +16,8 @@ Decoder::Decoder(const stim::Circuit& circ)
     n_logical_errors(0),
     mean_execution_time(0),
     max_execution_time(0),
-    max_execution_time_for_correctable(0)
+    max_execution_time_for_correctable(0),
+    hamming_weight_dist()
 {}
 
 void
