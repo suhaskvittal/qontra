@@ -14,9 +14,12 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <random>
 #include <string>
 #include <utility>
+
+#include <math.h>
 
 #define MAX_SHOTS 100000
 
@@ -31,9 +34,35 @@ mean(const std::vector<fp_t>&);
 fp_t
 stdev(const std::vector<fp_t>&);
 
+/*
+ *  Decoder pointers from a dgf_t should be
+ *  allocated on the heap.
+ * */
+typedef std::function<Decoder*(fp_t)> dgf_t;
+
+struct StatisticalResults {
+    uint64_t n_logical_errors = 0;
+    fp_t mean_execution_time = 0;
+    fp_t max_execution_time = 0;
+    uint64_t true_shots = 0;
+    fp_t statistical_shots = 0;
+};
+
 void
-b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&,
-        bool save_per_shot_data=true);
+b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool save_per_shot_data=false);
+uint64_t
+b_statistical_ler(dgf_t&, uint code_dist, fp_t p, uint64_t shots, std::mt19937_64&, uint64_t update_rate=100'000);
+
+inline fp_t
+error_prob_to_uncorrectable_nlogprob(uint code_dist, fp_t flip_prob) {
+    // The long fp constant is ln(2.5).
+    return -0.91629073187 - log( ((fp_t)code_dist)-1 ) - ((fp_t)code_dist+1)*0.5*log(flip_prob);
+}
+
+inline fp_t
+uncorrectable_nlogprob_to_error_prob(uint code_dist, fp_t ucnlogprob) {
+    return pow(M_E, 2.0/(( (fp_t)code_dist )+1.0) * (ucnlogprob + 0.91629073187 + log( ((fp_t)code_dist) + 1 )));
+}
 
 stim::Circuit
 build_circuit(

@@ -135,4 +135,14 @@ is_logical_error(const std::vector<uint8_t>& correction,
     return !corr_matches_obs;
 }
 
+std::vector<uint8_t> _to_vector(const stim::simd_bits_range_ref& array,
+        uint n_detectors, uint n_observables) 
+{
+    std::vector<uint8_t> syndrome(n_detectors+n_observables);
+    for (uint i = 0; i < n_detectors + n_observables; i++) {
+        syndrome[i] = array[i];
+    }
+    return syndrome;
+}
+
 }  // qrc
