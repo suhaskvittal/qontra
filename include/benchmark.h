@@ -35,7 +35,6 @@ void
 b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&,
         bool save_per_shot_data=true);
 
-
 stim::Circuit
 build_circuit(
     // Required
