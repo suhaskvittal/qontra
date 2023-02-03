@@ -161,9 +161,11 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
     const fp_t pucupdate = 
         ((fp_t)update_rate) * (min_uncorrectable_nlogprob - max_uncorrectable_nlogprob) / ((fp_t)shots);
     const fp_t ehw = n_error_sources * mean_flip_prob;
-    const fp_t logehwprob = __lognCk(n_error_sources, ehw)
-                            + ehw * log(mean_flip_prob)
-                            + (n_error_sources - ehw) * log(1.0-mean_flip_prob);
+    const fp_t shw = sqrt(n_error_sources * mean_flip_prob * (1-mean_flip_prob));
+//  const fp_t logehwprob = __lognCk(n_error_sources, ehw)
+//                          + ehw * log(mean_flip_prob)
+//                          + (n_error_sources - ehw) * log(1.0-mean_flip_prob);
+    const fp_t logehwprob = -log(shw * sqrt(2*M_PI));
 
 #ifdef STATBENCH_DEBUG
     std::cout << "mean flip prob: " << mean_flip_prob << "\n";
@@ -172,6 +174,7 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
     std::cout << "ratio: " << r << "\n";
     std::cout << "error sources: " << n_error_sources << "\n";
     std::cout << "expected hamming weight: " << ehw << " logprob = " << logehwprob << "\n";
+    std::cout << "standard deviation of hamming weight: " << shw << "\n";
 #endif
 
     StatisticalResult statres;
@@ -229,9 +232,10 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
                 // Compute statistical shots for this batch.
                 // Probability of achieving a certain Hamming weight follows Bin(n_error_sources, mean_flip_prob).
                 const fp_t hwdiv2 = hw * 0.5;
-                fp_t loghwprob = __lognCk(n_error_sources, hwdiv2)
-                                + hwdiv2 * log(mean_flip_prob)
-                                + ( ((fp_t)n_error_sources) - hwdiv2 ) * log(1.0-mean_flip_prob);
+//              fp_t loghwprob = __lognCk(n_error_sources, hwdiv2)
+//                              + hwdiv2 * log(mean_flip_prob)
+//                              + ( ((fp_t)n_error_sources) - hwdiv2 ) * log(1.0-mean_flip_prob);
+                fp_t loghwprob = -log(shw * sqrt(2*M_PI)) - 0.5*pow((hwdiv2-ehw)/shw, 2);
                 fp_t logss = logehwprob - loghwprob;
                 ss += pow(M_E, logss);
             }
@@ -278,7 +282,7 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
         statres.hamming_weight_dist[pair.first] = pair.second / statres.statistical_shots;
 #ifdef STATBENCH_DEBUG
         if (pair.second) {
-            std::cout << "prob(" << pair.first << ") = " << statres.hamming_weight_dist[pair.first] << "\n";
+            std::cout << "\tprob(" << pair.first << ") = " << statres.hamming_weight_dist[pair.first] << "\n";
         }
 #endif
     }
