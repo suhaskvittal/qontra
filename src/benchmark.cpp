@@ -140,7 +140,7 @@ b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
 
 StatisticalResult
 b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt19937_64& rng, uint64_t update_rate) {
-    const fp_t max_uncorrectable_nlogprob = 11.512925465;  // Represents uncorrectable probability 1e-3;
+    const fp_t max_uncorrectable_nlogprob = -log(1e-6);
     
     Decoder * curr_decoder = mkdec(p);
     // Compute mean physical error rate from Decoding Graph.
@@ -196,6 +196,7 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
         uint64_t local_errors = 0;
 
         fp_t ss = 0.0;
+        fp_t mhw = 0;
         while (s > 0) {
             uint64_t shots_this_batch = s < 100'000 ? s : 100'000;
             stim::simd_bit_table sample_buffer = 
@@ -212,6 +213,7 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
                 if (hw & 0x1) {
                     hw++;
                 }
+                mhw += hw;
                 if (!local_freq.count(hw)) {
                     local_freq[hw] = 0;
                 }
@@ -236,6 +238,7 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
             
             s -= shots_this_batch;
         }
+        mhw /= shots_this_round;
         if (first_iter) {
             ss = shots_this_round;
         }
@@ -260,6 +263,7 @@ b_statistical_ler(dgf_t& mkdec, uint code_dist, fp_t p, uint64_t shots, std::mt1
         pc = uncorrectable_nlogprob_to_error_prob(code_dist, nlogpuc) * r;
 #ifdef STATBENCH_DEBUG
         std::cout << "\tphysical error rate: " << pc << "\n";
+        std::cout << "\tmean hamming weight: " << mhw << "\n";
         std::cout << "\tstatistical shots: " << ss << "\n";
 #endif
         curr_decoder = mkdec(pc);
