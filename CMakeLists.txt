@@ -32,12 +32,6 @@ endif()
 # Add include directory to include path.
 target_include_directories(quarch PUBLIC "include")
 # Link OpenMP to Quarch
-if (ENABLE_OPENMP)
-    find_package(OpenMP)
-    if (OpenMP_CXX_FOUND)
-        target_link_libraries(quarch OpenMP::OpenMP_CXX)
-    endif()
-endif()
 # Add Stim to Quarch.
 add_subdirectory(stim)
 target_link_libraries(quarch libstim)
@@ -47,3 +41,7 @@ target_link_libraries(quarch libblossom5)
 # Add DRAMSim to Quarch
 add_subdirectory(dramsim3)
 target_link_libraries(quarch dramsim3)
+
+find_package(MPI REQUIRED)
+target_include_directories(quarch PRIVATE ${MPI_INCLUDE_PATH})
+target_link_libraries(quarch ${MPI_CXX_LIBRARIES})

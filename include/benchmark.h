@@ -8,6 +8,7 @@
 
 #include <stim.h>
 
+#include "benchmark/statbench.h"
 #include "defs.h"
 #include "decoder.h"
 
@@ -20,6 +21,7 @@
 #include <utility>
 
 #include <math.h>
+#include <mpi.h>
 
 #define MAX_SHOTS 100000
 
@@ -34,19 +36,14 @@ mean(const std::vector<fp_t>&);
 fp_t
 stdev(const std::vector<fp_t>&);
 
-struct StatisticalResult {
-    fp_t n_logical_errors = 0;
-    fp_t mean_execution_time = 0;
-    fp_t max_execution_time = 0;
-    uint64_t true_shots = 0;
-    fp_t statistical_shots = 0;
-    std::map<uint, fp_t> hamming_weight_dist;
-};
-
 void
 b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool save_per_shot_data=false);
-StatisticalResult
-b_statistical_ler(dgf_t&, uint code_dist, fp_t p, uint64_t shots, std::mt19937_64&, uint64_t update_rate=100'000);
+/*
+ *  Pre-condition: MPI is initialized before call and exited after call.
+ * */
+benchmark::StatisticalResult
+b_statistical_ler(dgf_t&, uint code_dist, fp_t p, uint64_t shots, std::mt19937_64&, uint64_t update_rate=100'000,
+                fp_t max_uncorrectable_nlogprob=log(1e5), bool use_mpi=false);
 
 inline fp_t
 error_prob_to_uncorrectable_nlogprob(uint code_dist, fp_t flip_prob) {

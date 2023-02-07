@@ -8,6 +8,7 @@
 
 #include <stim.h>
 
+#include "benchmark/statbench.h"
 #include "defs.h"
 #include "decoding_graph.h"
 
@@ -15,8 +16,6 @@
 #include <utility>
 
 namespace qrc {
-
-struct StatisticalResult;   // In benchmark.h
 
 class Decoder;
 
@@ -91,7 +90,8 @@ protected:
     // Give all benchmarking functions
     // friendship.
     friend void b_decoder_ler(Decoder*, uint64_t, std::mt19937_64&, bool);
-    friend StatisticalResult b_statistical_ler(dgf_t&, uint, fp_t, uint64_t, std::mt19937_64&, uint64_t);
+    friend benchmark::StatisticalResult 
+            b_statistical_ler(dgf_t&, uint, fp_t, uint64_t, std::mt19937_64&, uint64_t, fp_t, bool);
 };
 
 uint32_t
