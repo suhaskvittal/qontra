@@ -10,7 +10,8 @@ namespace qrc {
 Astrea::Astrea(const stim::Circuit circuit,
         uint n_detectors_per_round,
         uint32_t weight_filter_cutoff,
-        const AstreaParams& params)
+        const AstreaParams& params,
+        fp_t time_limit)
     :MWPMDecoder(circuit), 
     // Statistics
     n_nonzero_syndromes(0),
@@ -28,6 +29,7 @@ Astrea::Astrea(const stim::Circuit circuit,
     // Properties
     n_rounds(circuit.count_detectors()/n_detectors_per_round),
     main_clock_frequency(params.main_clock_frequency),
+    time_limit(time_limit),
     baseline(circuit)
 {
     // Initialize Memory System.
@@ -125,7 +127,7 @@ Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
     uint32_t total_cycles = 0;
     while (!simulator->is_idle()) {
         fp_t t = n_cycles / main_clock_frequency * 1e9;
-        if (t >= 1000) {
+        if (t >= time_limit) {
             if (round < n_rounds) {
                 simulator->sig_end_round();
                 n_cycles = 0;

@@ -425,8 +425,6 @@ double_stabilizer_to_single_stabilizer(
             mod[mod_ptr++] |= orig[orig_ptr++];
         } else {
             orig_ptr++;
-    void tower_correct(uint64_t shots);
-    void clean_parity_qubit(uint32_t, uint lower_level, uint upper_level, uint64_t shot);
         }
     }
     for (uint i = 0; i < num_observables; i++) {

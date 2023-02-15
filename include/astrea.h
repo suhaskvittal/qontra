@@ -42,7 +42,8 @@ public:
     Astrea(const stim::Circuit, 
             uint n_detectors_per_round, 
             uint32_t weight_filter_cutoff,
-            const AstreaParams&);
+            const AstreaParams&,
+            fp_t time_limit=1000);
     ~Astrea();
 
     DecoderShotResult decode_error(const std::vector<uint8_t>&) override;
@@ -68,6 +69,7 @@ public:
 private:
     uint n_rounds;
     fp_t main_clock_frequency;
+    fp_t time_limit;
     
     MWPMDecoder baseline;
 };
