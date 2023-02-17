@@ -41,7 +41,7 @@ target_link_libraries(quarch libstim)
 add_subdirectory(blossom5)
 target_link_libraries(quarch libblossom5)
 # Add DRAMSim to Quarch
-add_subdirectory(dramsim3)
-target_link_libraries(quarch dramsim3)
+#add_subdirectory(dramsim3)
+#target_link_libraries(quarch dramsim3)
 
 target_link_libraries(quarch ${MPI_CXX_LIBRARIES})

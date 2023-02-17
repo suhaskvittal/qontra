@@ -63,7 +63,7 @@ public:
     uint64_t max_prefetch_cycles;
     uint64_t max_cycles_to_converge;
     fp_t min_filter_savings;
-    uint max_hamming_weight;
+    uint64_t max_hamming_weight;
     // More statistics are in the simulator.
     astrea::AstreaSimulator * simulator;
 private:
