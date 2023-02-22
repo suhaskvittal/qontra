@@ -343,11 +343,13 @@ build_circuit(
     fp_t pauliplus_error_mean,
     fp_t pauliplus_error_stddev,
     fp_t round_dp_mean,
-    fp_t clifford_dp_mean,
+    fp_t sq_dp_mean,
+    fp_t cx_dp_mean,
     fp_t reset_flip_mean,
     fp_t meas_flip_mean,
     fp_t round_dp_stddev,
-    fp_t clifford_dp_stddev,
+    fp_t sq_dp_stddev,
+    fp_t cx_dp_stddev,
     fp_t reset_flip_stddev,
     fp_t meas_flip_stddev,
     fp_t round_leak_mean,
@@ -367,12 +369,14 @@ build_circuit(
     stim::CircuitGenParameters params(rounds, code_dist, circ_type);
     // Declare error rates.
     params.before_round_data_depolarization = __CHS(error_mean, clevel_error_mean, round_dp_mean);
-    params.after_clifford_depolarization = __CHS(error_mean, clevel_error_mean, clifford_dp_mean);
+    params.after_clifford_depolarization = __CHS(error_mean, clevel_error_mean, cx_dp_mean);
+    params.after_clifford_sq_depolarization = __CHS(error_mean, clevel_error_mean, sq_dp_mean);
     params.after_reset_flip_probability = __CHS(error_mean, clevel_error_mean, reset_flip_mean);
     params.before_measure_flip_probability = __CHS(error_mean, clevel_error_mean, meas_flip_mean);
 
     params.before_round_data_depolarization_stddev = __CHS(error_stddev, clevel_error_stddev, round_dp_stddev);
-    params.after_clifford_depolarization_stddev = __CHS(error_stddev, clevel_error_stddev, clifford_dp_stddev);
+    params.after_clifford_depolarization_stddev = __CHS(error_stddev, clevel_error_stddev, cx_dp_stddev);
+    params.after_clifford_sq_depolarization_stddev = __CHS(error_mean, clevel_error_mean, sq_dp_stddev);
     params.after_reset_flip_probability_stddev = __CHS(error_stddev, clevel_error_stddev, reset_flip_stddev);
     params.before_measure_flip_probability_stddev = __CHS(error_stddev, clevel_error_stddev, meas_flip_stddev);
 

@@ -32,6 +32,8 @@ public:
     double before_round_data_depolarization = 0;
     double before_measure_flip_probability = 0;
     double after_reset_flip_probability = 0;
+
+    double after_clifford_sq_depolarization = -1;  // If negative, then will use after_clifford_depolarization.
     
     double before_round_leakage_probability = 0;
     double after_reset_leakage_probability = 0;
@@ -41,6 +43,8 @@ public:
     double before_round_data_depolarization_stddev = 0;
     double before_measure_flip_probability_stddev = 0;
     double after_reset_flip_probability_stddev = 0;
+
+    double after_clifford_sq_depolarization_stddev = -1;
 
     double before_round_leakage_probability_stddev = 0;
     double after_reset_leakage_probability_stddev = 0;
@@ -74,7 +78,7 @@ public:
             char basis = 'Z') const;
     void reset_data(void) const;
 
-    double get_after_clifford_depolarization(void) const;
+    double get_after_clifford_depolarization(bool single_qubit_gate=false) const;
     double get_before_round_data_depolarization(void) const;
     double get_before_measure_flip_probability(void) const;
     double get_after_reset_flip_probability(void) const;
