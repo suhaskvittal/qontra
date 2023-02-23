@@ -254,8 +254,6 @@ Fleece::correct_parity_qubit(uint64_t shot_number, uint detector,
 #endif
     uint curr_level = get_level(start); 
     const uint max_level = get_level(detector);
-    
-    std::map<uint32_t, uint8_t> paradjust;
 
     while (curr_level <= max_level) {
         // Find other detectors which are active.
@@ -268,82 +266,21 @@ Fleece::correct_parity_qubit(uint64_t shot_number, uint detector,
             dt = ds + detectors_per_round;
         }
         for (uint i = ds; i < dt; i++) {
-            if (!paradjust.count(base_detector(i))) {
-                paradjust[base_detector(i)] = 0;
-            }
-            const uint8_t offset = paradjust[base_detector(i)];
-            if (meas_results[shot_number][i] ^ offset) {
+            if (meas_results[shot_number][i]) {
                 other_active.push_back(i);
             }
         }
 #ifdef FLEECE_DEBUG
         std::cout << "\tclearing active detectors:\n";
 #endif
-        std::set<fleece::LatticeGraph::Vertex*> xflipped;
-        std::set<fleece::LatticeGraph::Vertex*> zflipped;
         for (uint d : other_active) {
             auto vbase = lattice_graph.get_vertex_by_detector(base_detector(d));
             auto common = lattice_graph.get_common_neighbors(vleak, vbase);
             if (common.empty()) {
                 continue;
             }
-#ifdef FLEECE_DEBUG
-            std::cout << "\t" << d << "\treset:";
-#endif
-            // If there are shared data qubits, flip them.
-            // Unless this detector has the same base (first round) detector
-            // as the leaked detector. Then, only clear the measurement.
-            if (base_detector(d) != base_detector(detector)) {
-                for (auto vdata : common) {
-#ifdef FLEECE_DEBUG
-                    std::cout << " " << vdata->qubit;
-#endif
-                    bool flippedx = false;
-                    bool flippedz = false;
-                    if (base_detector(d) < (detectors_per_round>>1)
-                        && !xflipped.count(vdata)) 
-                    {
-#ifdef FLEECE_DEBUG
-                        std::cout << "(X)";
-#endif
-                        sim.x_table[vdata->qubit][shot_number] ^= 1;
-                        xflipped.insert(vdata);
-                        flippedx = true;
-                    } 
-                    if (base_detector(d) >= (detectors_per_round>>1)
-                        && !zflipped.count(vdata))
-                    {
-#ifdef FLEECE_DEBUG
-                        std::cout << "(Z)";
-#endif
-                        sim.z_table[vdata->qubit][shot_number] ^= 1;
-                        zflipped.insert(vdata);
-                        flippedz = true;
-                    }
-                    // Update parity adjustments.
-                    for (auto w : lattice_graph.adjacency_list(vdata)) {
-                        if (w->detectors[0] == -1) {
-                            continue;
-                        }
-                        if (!paradjust.count(w->detectors[0])) {
-                            paradjust[w->detectors[0]] = 0;
-                        }
-                        uint8_t update;
-                        if (w->detectors[0] < (detectors_per_round>>1)) {
-                            update = flippedx;
-                        } else {
-                            update = flippedz;
-                        }
-                        paradjust[w->detectors[0]] ^= update;
-                    }
-                }
-            }
             // Then, clear the measurements for the detector.
             const uint32_t mt = get_measurement_time(d);
-            if (!paradjust.count(base_detector(d))) {
-                paradjust[base_detector(d)] = 0;
-            }
-            const uint8_t offset = paradjust[base_detector(d)];
             if (curr_level == 0) {
                 sim.m_record.storage[mt][shot_number] = 0;
             } else {
