@@ -8,7 +8,7 @@
 
 #include <stim.h>
 
-#include "benchmark/statbench.h"
+#include "benchmark/statbench/analytical_dist.h"
 #include "defs.h"
 #include "decoding_graph.h"
 
@@ -16,14 +16,6 @@
 #include <utility>
 
 namespace qrc {
-
-class Decoder;
-
-/*
- *  Decoder pointers from a dgf_t should be
- *  allocated on the heap.
- * */
-typedef std::function<Decoder*(fp_t)> dgf_t;
 
 /* Benchmark functions and structures*/
 struct DecoderShotResult {
@@ -89,9 +81,8 @@ protected:
     DecodingGraph graph;
     // Give all benchmarking functions
     // friendship.
-    friend void b_decoder_ler(Decoder*, uint64_t, std::mt19937_64&, bool);
-    friend benchmark::StatisticalResult 
-            b_statistical_ler(dgf_t&, uint, fp_t, uint64_t, std::mt19937_64&, uint64_t, fp_t, bool);
+    friend void 
+        b_decoder_ler(Decoder*, uint64_t, std::mt19937_64&, bool);
 };
 
 uint32_t

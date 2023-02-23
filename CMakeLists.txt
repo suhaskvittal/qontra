@@ -20,7 +20,10 @@ set(QUARCH_PROGRAM_FILES
     src/tmr_decoder.cpp
     # FLEECE
     src/fleece.cpp
-    src/fleece/lattice_graph.cpp)
+    src/fleece/lattice_graph.cpp
+    # STATBENCH
+    src/benchmark/statbench/analytical_dist.cpp
+    src/benchmark/statbench/numerical_dist.cpp)
 add_library(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
 if(CMAKE_BUILD_TYPE MATCHES Release)
