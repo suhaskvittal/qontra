@@ -21,6 +21,7 @@ set(QUARCH_PROGRAM_FILES
     # FLEECE
     src/fleece.cpp
     src/fleece/lattice_graph.cpp
+    src/fleece/rtanalysis.cpp
     # STATBENCH
     src/benchmark/statbench/analytical_dist.cpp
     src/benchmark/statbench/numerical_dist.cpp)

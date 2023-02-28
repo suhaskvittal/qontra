@@ -71,6 +71,8 @@ Fleece::generate_syndromes(uint64_t shots, uint last_leakage_round, uint64_t see
     meas_results = stim::simd_bit_table(row_size, shots);
     leak_results = stim::simd_bit_table(row_size, shots);
 
+    std::cout << "================= FLEECE START ==================\n";
+
     auto det_obs = stim::DetectorsAndObservables(circuit);
 
     rng.seed(seed);
@@ -88,12 +90,10 @@ Fleece::generate_syndromes(uint64_t shots, uint last_leakage_round, uint64_t see
         leak_results.clear();
         stim::read_from_sim(sim, det_obs, false, false, true, 
                 meas_results, leak_results, curr_max_detector);
-        if (!fake_run) {
 #ifdef FLEECE_DEBUG
-            std::cout << "round = " << round << "\n";
+        std::cout << "round = " << round << "\n";
 #endif
-            correct_leak(shots);
-        }
+        correct_leak(shots);
         // Update curr min and curr max detectors.
         curr_min_detector = curr_max_detector; 
         curr_max_detector += detectors_per_round;
@@ -279,6 +279,9 @@ Fleece::correct_parity_qubit(uint64_t shot_number, uint detector,
             if (common.empty()) {
                 continue;
             }
+#ifdef FLEECE_DEBUG
+            std::cout << "\t\t" << d << ", with #common = " << common.size() << "\n";
+#endif
             // Then, clear the measurements for the detector.
             const uint32_t mt = get_measurement_time(d);
             if (curr_level == 0) {

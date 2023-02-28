@@ -68,12 +68,14 @@ b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
     while (shots > 0) {
         uint32_t shots_this_round = shots > MAX_SHOTS ? MAX_SHOTS : shots;
         // Get samples from Stim.
+        stim::simd_bit_table leakage_buffer(1, 1);
         stim::simd_bit_table sample_buffer = 
             stim::detector_samples(decoder_p->circuit, shots_this_round,
-                    false, true, rng);
+                    false, true, rng, true, leakage_buffer);
         // Last part of samples is the actual observable.
         // We are trying to match that.
         sample_buffer = sample_buffer.transposed();
+        leakage_buffer = leakage_buffer.transposed();
         uint n_detectors = decoder_p->circuit.count_detectors();
         uint n_observables = decoder_p->circuit.count_observables();
 
@@ -96,7 +98,7 @@ b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
             if (hw > 0) {
                 DecoderShotResult res = decoder_p->decode_error(syndrome);
                 // Update statistics.
-                n_logical_errors += res.is_logical_error ? 1 : 0;
+                n_logical_errors += (res.is_logical_error || leakage_buffer[i][n_detectors]);
                 mean_execution_time += res.execution_time / ((fp_t)total_shots);
                 if (res.execution_time > max_execution_time) {
                     max_execution_time = res.execution_time;

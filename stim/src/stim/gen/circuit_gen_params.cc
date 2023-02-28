@@ -210,7 +210,7 @@ const {
 
 double
 CircuitGenParameters::get_after_clifford_depolarization(bool single_qubit_gate) const {
-    if (single_qubit_gate) {
+    if (single_qubit_gate && after_clifford_sq_depolarization_stddev < 0) {
         return get_error(after_clifford_sq_depolarization, after_clifford_sq_depolarization_stddev);
     } else {
         return get_error(after_clifford_depolarization, after_clifford_depolarization_stddev);
