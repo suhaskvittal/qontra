@@ -9,6 +9,8 @@
 #include <stim.h>
 
 #include "benchmark/statbench.h"
+#include "benchmark/statbench/analytical_dist.h"
+#include "benchmark/statbench/numerical_dist.h"
 #include "defs.h"
 #include "decoder.h"
 
@@ -34,7 +36,7 @@ max(const std::vector<fp_t>&);
 fp_t
 mean(const std::vector<fp_t>&);
 fp_t
-stdev(const std::vector<fp_t>&);
+stddev(const std::vector<fp_t>&);
 
 void
 b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool save_per_shot_data=false);
@@ -42,19 +44,19 @@ b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool save_per_shot_dat
  *  Pre-condition: MPI is initialized before call and exited after call.
  * */
 benchmark::StatisticalResult
-b_statistical_ler(dgf_t&, uint code_dist, fp_t p, uint64_t shots, std::mt19937_64&, uint64_t update_rate=100'000,
-                fp_t max_uncorrectable_nlogprob=log(1e5), bool use_mpi=false);
-
-inline fp_t
-error_prob_to_uncorrectable_nlogprob(uint code_dist, fp_t flip_prob) {
-    // The long fp constant is ln(2.5).
-    return -0.91629073187 - log( ((fp_t)code_dist)-1 ) - ((fp_t)code_dist+1)*0.5*log(flip_prob);
-}
-
-inline fp_t
-uncorrectable_nlogprob_to_error_prob(uint code_dist, fp_t ucnlogprob) {
-    return pow(M_E, -(2.0/(( (fp_t)code_dist )+1.0) * (ucnlogprob + 0.91629073187 + log( ((fp_t)code_dist) + 1 ))));
-}
+b_statistical_ler(
+    dgf_t&,
+    uint code_dist,
+    fp_t start_p,
+    fp_t final_p, 
+    uint64_t shots,
+    uint64_t update_rate,
+    std::mt19937_64&, 
+    bool use_mpi=false,
+    bool bootstrap_model=false, 
+    std::map<uint, uint64_t> bootstrap_data=std::map<uint, uint64_t>(),
+    fp_t use_bootstrap_model_until_p=1
+);
 
 stim::Circuit
 build_circuit(
@@ -75,11 +77,13 @@ build_circuit(
     fp_t pauliplus_error_stddev=-1,
     // Level 2 Specificity
     fp_t round_dp_mean=-1,
-    fp_t clifford_dp_mean=-1,
+    fp_t sq_dp_mean=-1,
+    fp_t cx_dp_mean=-1,
     fp_t reset_flip_mean=-1,
     fp_t meas_flip_mean=-1,
     fp_t round_dp_stddev=-1,
-    fp_t clifford_dp_stddev=-1,
+    fp_t sq_dp_stddev=-1,
+    fp_t cx_dp_stddev=-1,
     fp_t reset_flip_stddev=-1,
     fp_t meas_flip_stddev=-1,
     fp_t round_leak_mean=-1,

@@ -31,12 +31,14 @@ public:
     struct Vertex {
         int32_t qubit;
         bool is_data;
+        bool is_x_parity;
         std::vector<int32_t> detectors;
         std::vector<uint32_t> measurement_times;
 
         Vertex()
             :qubit(-1),
             is_data(false),
+            is_x_parity(false),
             detectors(),
             measurement_times()
         {}
@@ -44,6 +46,7 @@ public:
         Vertex(int32_t q, bool is_data)
             :qubit(q),
             is_data(is_data),
+            is_x_parity(false),
             detectors(),
             measurement_times()
         {}
@@ -51,6 +54,7 @@ public:
         Vertex(const Vertex& other)
             :qubit(other.qubit), 
             is_data(other.is_data), 
+            is_x_parity(other.is_x_parity),
             detectors(other.detectors),
             measurement_times(other.measurement_times)
         {}

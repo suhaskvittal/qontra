@@ -139,7 +139,14 @@ to_lattice_graph(const stim::Circuit& circuit) {
             // This is a declaration of a qubit. Create a vertex.
             int32_t qubit = (int32_t)op.target_data.targets[0].data;
             graph.add_qubit(qubit, true, -1);
-        } else if (opname == "CX" || opname == "ZCX" && first_round) {
+        } else if (opname == "H" && first_round) {
+            const auto& targets = op.target_data.targets;
+            for (uint32_t i = 0; i < targets.size(); i++) {
+                int32_t q = (int32_t)targets[i].data;
+                auto v = graph.get_vertex_by_qubit(q);
+                v->is_x_parity = true;
+            }
+        } else if ((opname == "CX" || opname == "ZCX") && first_round) {
             // This is a CNOT, indicating a coupling.
             const auto& targets = op.target_data.targets;
             for (uint32_t i = 0; i < targets.size(); i += 2) {
@@ -184,6 +191,7 @@ to_lattice_graph(const stim::Circuit& circuit) {
             break;
         }
     }
+    /*
     // Now, identify any data qubits connected to less than 4 parity qubits.
     // Connect these to the boundary.
     graph.add_qubit(LATTICE_BOUNDARY, false, LATTICE_BOUNDARY_DETECTOR, -1, true);
@@ -192,6 +200,7 @@ to_lattice_graph(const stim::Circuit& circuit) {
             graph.add_coupling(LATTICE_BOUNDARY, pair.first);
         }
     }
+    */
 
     return graph;
 }

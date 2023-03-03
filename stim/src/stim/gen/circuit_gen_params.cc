@@ -115,8 +115,7 @@ const {
     circuit.append_op(name, targets);
     for (uint32_t t : targets) {
         std::vector<uint32_t> singleton{t};
-        double p = get_from(unitary1dp_table, t, 
-                    get_after_clifford_depolarization());
+        double p = get_from(unitary1dp_table, t, get_after_clifford_depolarization(true));
         if (p > 0) {
             circuit.append_op("DEPOLARIZE1", singleton, p);
         }
@@ -210,8 +209,12 @@ const {
 }
 
 double
-CircuitGenParameters::get_after_clifford_depolarization() const {
-    return get_error(after_clifford_depolarization, after_clifford_depolarization_stddev);
+CircuitGenParameters::get_after_clifford_depolarization(bool single_qubit_gate) const {
+    if (single_qubit_gate && after_clifford_sq_depolarization_stddev < 0) {
+        return get_error(after_clifford_sq_depolarization, after_clifford_sq_depolarization_stddev);
+    } else {
+        return get_error(after_clifford_depolarization, after_clifford_depolarization_stddev);
+    }
 }
 
 double
