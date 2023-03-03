@@ -1,5 +1,5 @@
 # Declare CMAKE version
-cmake_minimum_required(VERSION 3.20.3)
+cmake_minimum_required(VERSION 3.20.2)
 #2a4e7ca86be5b659c7227ed05c2faaf0c287e807 Declare Project and Version number
 project(Quarch VERSION 0.1)
 # Declare CPP Version
