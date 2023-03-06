@@ -77,11 +77,16 @@ Fleece::~Fleece() {
     delete sim;
 }
 
-std::vector<std::vector<uint8_t>>
+stim::simd_bit_table
 Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
-    std::vector<std::vector<uint8_t>> syndromes;
+    const size_t num_results = base_circuit.count_detectors() + base_circuit.count_observables() + 1;
+    stim::simd_bit_table syndromes(2*shots, num_results);
+    syndromes.clear();
+
+    uint64_t syndrome_table_index = 0;
     while (shots) {
         sim->reset_all();
+        sim->leakage_enabled = true;
         //
         // Do first round -- special.
         //
@@ -138,6 +143,7 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
             for (uint32_t i = 0; i < parity_qubits.size(); i++) {
                 if (leakages[i]) {
                     auto v = acting_parity_qubits[i];
+                    std::cout << "leak detected on qubit " << v->qubit << "\n";
                     // If v is a data qubit, then only the adjacent stabilizers were affected.
                     // So, clear the measurements.
                     //
@@ -246,11 +252,10 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
                                 measure_results, leakage_results);
         measure_results = measure_results.transposed();
         leakage_results = leakage_results.transposed();
-
+#ifdef FLEECE_DEBUG
         auto msyn = _to_vector(measure_results[0], base_circuit.count_detectors(), base_circuit.count_observables());
         auto lsyn = _to_vector(leakage_results[0], base_circuit.count_detectors(), base_circuit.count_observables());
 
-#ifdef FLEECE_DEBUG
         const uint d = circuit_params.distance;
         const uint n_detectors = (d*d - 1) >> 1;
         std::cout << "================================\n";
@@ -278,9 +283,8 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
             std::cout << "L\t.\n";
         }
 #endif
-
-        syndromes.push_back(msyn);
-        syndromes.push_back(lsyn);
+        syndromes[syndrome_table_index++] |= measure_results[0];
+        syndromes[syndrome_table_index++] |= leakage_results[0];
         shots--;
     }
     return syndromes;
@@ -390,15 +394,17 @@ Fleece::apply_CX(int32_t qubit1, int32_t qubit2) {
 void
 Fleece::apply_measure(int32_t qubit, bool add_error) {
     stim::GateTarget q{qubit};
-    fp_t p;
-    if (premeasflip_table.count(qubit)) {
-        p = premeasflip_table[qubit];
-    } else {
-        p = circuit_params.get_before_measure_flip_probability();
-        premeasflip_table[qubit] = p;
+    if (add_error) {
+        fp_t p;
+        if (premeasflip_table.count(qubit)) {
+            p = premeasflip_table[qubit];
+        } else {
+            p = circuit_params.get_before_measure_flip_probability();
+            premeasflip_table[qubit] = p;
+        }
+        stim::OperationData flip_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
+        sim->X_ERROR(flip_data);
     }
-    stim::OperationData flip_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
-    sim->X_ERROR(flip_data);
 
     stim::OperationData meas_data{PTR<double>(), PTR<stim::GateTarget>(&q)};
     sim->measure_z(meas_data);

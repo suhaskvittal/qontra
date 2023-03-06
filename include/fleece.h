@@ -41,7 +41,7 @@ public:
             char output_basis='Z');
     ~Fleece();
 
-    std::vector<std::vector<uint8_t>> create_syndromes(uint64_t shots, uint disable_leakage_at_round);
+    stim::simd_bit_table create_syndromes(uint64_t shots, uint disable_leakage_at_round);
 
     bool fake_run;
 private:
