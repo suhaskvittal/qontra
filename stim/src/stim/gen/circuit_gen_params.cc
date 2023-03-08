@@ -26,6 +26,8 @@ static std::map<uint32_t, double> roundleak_table;
 static std::map<uint32_t, double> postresleak_table;
 static std::map<uint32_t, double> cliffordleak_table;
 
+static bool leakage_on = true;
+
 void
 CircuitGenParameters::reset_data() const {
     rounddp_table.clear();
@@ -36,6 +38,13 @@ CircuitGenParameters::reset_data() const {
     roundleak_table.clear();
     postresleak_table.clear();
     cliffordleak_table.clear();
+
+    leakage_on = true;
+}
+
+void
+CircuitGenParameters::set_leakage_on(bool x) const {
+    leakage_on = x;
 }
 
 template <typename K> double
@@ -102,7 +111,7 @@ const {
         std::vector<uint32_t> singleton{d};
         double p = get_from(roundleak_table, d, 
                     get_before_round_leakage_probability());
-        if (p > 0) {
+        if (p > 0 && leakage_on) {
             circuit.append_op("L_ERROR", singleton, p);
         }
     }
@@ -141,7 +150,7 @@ const {
         std::vector<uint32_t> singleton{t};
         double p = get_from(cliffordleak_table, t,
                         get_after_clifford_leakage_probability());
-        if (p > 0) {
+        if (p > 0 && leakage_on) {
             circuit.append_op("L_ERROR", singleton, p);
         }
     }
@@ -162,7 +171,7 @@ const {
         std::vector<uint32_t> singleton{t};
         double p = get_from(postresleak_table, t, 
                         get_after_reset_leakage_probability());
-        if (p > 0) {
+        if (p > 0 && leakage_on) {
             circuit.append_op("L_ERROR", singleton, p);
         }
     }
@@ -202,7 +211,7 @@ const {
         std::vector<uint32_t> singleton{t};
         double p = get_from(postresleak_table, t, 
                         get_after_reset_leakage_probability());
-        if (p > 0) {
+        if (p > 0 && leakage_on) {
             circuit.append_op("L_ERROR", singleton, p);
         }
     }

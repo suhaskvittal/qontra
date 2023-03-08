@@ -77,6 +77,7 @@ public:
             Circuit &circuit, const std::vector<uint32_t> targets,
             char basis = 'Z') const;
     void reset_data(void) const;
+    void set_leakage_on(bool) const;
 
     double get_after_clifford_depolarization(bool single_qubit_gate=false) const;
     double get_before_round_data_depolarization(void) const;

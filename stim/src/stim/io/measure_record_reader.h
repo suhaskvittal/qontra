@@ -388,7 +388,10 @@ size_t read_file_data_into_shot_table(
     SampleFormat format,
     char dets_char,
     simd_bit_table &out_table,
-    bool shots_is_major_index_of_out_table);
+    bool shots_is_major_index_of_out_table,
+    size_t num_meas_per_shot=0,
+    size_t num_dets_per_shot=0,
+    size_t num_obs_per_shot=0);
 
 }  // namespace stim
 

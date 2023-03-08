@@ -31,6 +31,9 @@
  *  Z basis operations at the moment.
  * */
 
+//#define FLEECE_DEBUG
+//#define FLEECE_DEBUG2
+
 namespace qrc {
 
 class Fleece {
@@ -45,12 +48,12 @@ public:
 
     bool fake_run;
 private:
-    void apply_reset(int32_t qubit, bool add_error=true);
-    void apply_round_start_error(int32_t qubit);
-    void apply_H(int32_t qubit);
-    void apply_CX(int32_t, int32_t);
-    void apply_measure(int32_t qubit, bool add_error=true);
-    void apply_SWAP(int32_t, int32_t, bool add_error=true);
+    void apply_reset(uint32_t qubit, bool add_error=true);
+    void apply_round_start_error(uint32_t qubit);
+    void apply_H(uint32_t qubit);
+    void apply_CX(uint32_t, uint32_t);
+    void apply_measure(uint32_t qubit, bool add_error=true);
+    void apply_SWAP(uint32_t, uint32_t, bool add_error=true);
 
     const stim::CircuitGenParameters circuit_params;
     const char reset_basis;
@@ -59,19 +62,23 @@ private:
     stim::Circuit base_circuit;
     stim::FrameSimulator * sim;
 
+#ifdef FLEECE_DEBUG
+    std::string op_buffer;
+#endif
+
     fleece::LatticeGraph lattice_graph;
     std::vector<fleece::LatticeGraph::Vertex*> data_qubits;
     std::vector<fleece::LatticeGraph::Vertex*> parity_qubits;
 
-    std::map<int32_t, fp_t> rounddp_table;
-    std::map<int32_t, fp_t> clifforddp1_table;
-    std::map<std::vector<int32_t>, fp_t> clifforddp2_table;
-    std::map<int32_t, fp_t> premeasflip_table;
-    std::map<int32_t, fp_t> postresflip_table;
+    std::map<uint32_t, fp_t> rounddp_table;
+    std::map<uint32_t, fp_t> clifforddp1_table;
+    std::map<std::vector<uint32_t>, fp_t> clifforddp2_table;
+    std::map<uint32_t, fp_t> premeasflip_table;
+    std::map<uint32_t, fp_t> postresflip_table;
 
-    std::map<int32_t, fp_t> roundleak_table;
-    std::map<std::vector<int32_t>, fp_t> cliffordleak_table;
-    std::map<int32_t, fp_t> postresleak_table;
+    std::map<uint32_t, fp_t> roundleak_table;
+    std::map<std::vector<uint32_t>, fp_t> cliffordleak_table;
+    std::map<uint32_t, fp_t> postresleak_table;
 
     std::mt19937_64 rng;
 };

@@ -544,13 +544,17 @@ size_t stim::read_file_data_into_shot_table(
     SampleFormat format,
     char dets_char,
     simd_bit_table &out_table,
-    bool shots_is_major_index_of_out_table) {
+    bool shots_is_major_index_of_out_table,
+    size_t num_meas_per_shot,
+    size_t num_dets_per_shot,
+    size_t num_obs_per_shot) 
+{
     auto reader = MeasureRecordReader::make(
         in,
         format,
-        dets_char == 'M' ? num_bits_per_shot : 0,
-        dets_char == 'D' ? num_bits_per_shot : 0,
-        dets_char == 'L' ? num_bits_per_shot : 0);
+        dets_char == 'M' ? num_bits_per_shot : num_meas_per_shot,
+        dets_char == 'D' ? num_bits_per_shot : num_dets_per_shot,
+        dets_char == 'L' ? num_bits_per_shot : num_obs_per_shot);
     if (shots_is_major_index_of_out_table) {
         return reader->read_into_table_with_major_shot_index(out_table);
     } else {

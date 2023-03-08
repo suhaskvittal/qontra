@@ -7,8 +7,6 @@
 
 namespace qrc {
 
-//#define FLEECE_DEBUG
-
 template <typename T>
 using PTR = stim::ConstPointerRange<T>;
 
@@ -87,7 +85,10 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
     while (shots) {
         sim->reset_all();
         sim->leakage_enabled = true;
-        //
+
+#ifdef FLEECE_DEBUG
+        op_buffer = "";
+#endif
         // Do first round -- special.
         //
         // Reset all qubits.
@@ -99,11 +100,11 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
         std::map<fleece::LatticeGraph::Vertex*, uint32_t> stab_meas_time;
             
         for (auto v : data_qubits) {
-            apply_reset(v->qubit, false);
+            apply_reset(v->qubit);
             apply_round_start_error(v->qubit);
         }
         for (auto v : parity_qubits) {
-            apply_reset(v->qubit, false);
+            apply_reset(v->qubit);
         }
         // Perform stabilizer measurements.
         for (auto v : parity_qubits) {
@@ -139,11 +140,11 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
                 sim->toggle_leakage();
             }
             std::set<fleece::LatticeGraph::Vertex*> infected;   // Set of vertices with potential leakages.
+#ifndef FLEECE_DEBUG2
             // Check for problems in the prior round.
             for (uint32_t i = 0; i < parity_qubits.size(); i++) {
                 if (leakages[i]) {
                     auto v = acting_parity_qubits[i];
-                    std::cout << "leak detected on qubit " << v->qubit << "\n";
                     // If v is a data qubit, then only the adjacent stabilizers were affected.
                     // So, clear the measurements.
                     //
@@ -186,6 +187,7 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
                     }
                 }
             }
+#endif
             // Using infected set, identify SWAP LRCs.
             std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_targets;
             for (auto v : infected) {
@@ -241,7 +243,7 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
         }
         // Perform tail measurements.
         for (auto v : data_qubits) {
-            apply_measure(v->qubit, false);
+            apply_measure(v->qubit);
         }
         // Everything is done, extract the syndrome.
         size_t num_results = base_circuit.count_detectors() + base_circuit.count_observables() + 1;
@@ -291,13 +293,17 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
 }
 
 void
-Fleece::apply_reset(int32_t qubit, bool add_error) {
+Fleece::apply_reset(uint32_t qubit, bool add_error) {
+    fp_t p = 0.0;
     stim::GateTarget q{qubit};
-    stim::OperationData reset_data{PTR<double>(), PTR<stim::GateTarget>(&q)};
+    stim::OperationData reset_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
     sim->reset_z(reset_data);
 
+#ifdef FLEECE_DEBUG
+    op_buffer += "R\t" + std::to_string(qubit) + "\n";
+#endif
+
     if (add_error) {
-        fp_t p;
         // Apply reset error.
         if (postresflip_table.count(qubit)) {
             p = postresflip_table[qubit];
@@ -308,6 +314,9 @@ Fleece::apply_reset(int32_t qubit, bool add_error) {
 
         stim::OperationData xerror_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
         sim->X_ERROR(xerror_data);
+#ifdef FLEECE_DEBUG
+        op_buffer += "X_ERROR(" + std::to_string(p) + ")\t" + std::to_string(qubit) + "\n";
+#endif
         // Now apply leakage error.
         if (postresleak_table.count(qubit)) {
             p = postresleak_table[qubit];
@@ -318,11 +327,14 @@ Fleece::apply_reset(int32_t qubit, bool add_error) {
 
         stim::OperationData lerror_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
         sim->LEAKAGE_ERROR(lerror_data);
+#ifdef FLEECE_DEBUG
+        op_buffer += "L_ERROR(" + std::to_string(p) + ")\t" + std::to_string(qubit) + "\n";
+#endif
     }
 }
 
 void
-Fleece::apply_round_start_error(int32_t qubit) {
+Fleece::apply_round_start_error(uint32_t qubit) {
     stim::GateTarget q{qubit};
 
     fp_t p;
@@ -334,7 +346,9 @@ Fleece::apply_round_start_error(int32_t qubit) {
     }
     stim::OperationData dp_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
     sim->DEPOLARIZE1(dp_data);
-
+#ifdef FLEECE_DEBUG
+    op_buffer += "DEPOLARIZE1(" + std::to_string(p) + ")\t" + std::to_string(qubit) + "\n";
+#endif
     if (roundleak_table.count(qubit)) {
         p = roundleak_table[qubit];
     } else {
@@ -344,15 +358,21 @@ Fleece::apply_round_start_error(int32_t qubit) {
 
     stim::OperationData lerror_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
     sim->LEAKAGE_ERROR(lerror_data);
+#ifdef FLEECE_DEBUG
+    op_buffer += "L_ERROR(" + std::to_string(p) + ")\t" + std::to_string(qubit) + "\n";
+#endif
 }
 
 void
-Fleece::apply_H(int32_t qubit) {
+Fleece::apply_H(uint32_t qubit) {
+    fp_t p = 0;
     stim::GateTarget q{qubit};
-    stim::OperationData h_data{PTR<double>(), PTR<stim::GateTarget>(&q)};
+    stim::OperationData h_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
     sim->H_XZ(h_data);
+#ifdef FLEECE_DEBUG
+    op_buffer += "H\t" + std::to_string(qubit) + "\n";
+#endif
 
-    fp_t p;
     if (clifforddp1_table.count(qubit)) {
         p = clifforddp1_table[qubit];
     } else {
@@ -361,18 +381,24 @@ Fleece::apply_H(int32_t qubit) {
     }
     stim::OperationData dp_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
     sim->DEPOLARIZE1(dp_data);
+#ifdef FLEECE_DEBUG
+    op_buffer += "DEPOLARIZE1(" + std::to_string(p) + ")\t" + std::to_string(qubit) + "\n";
+#endif
 }
 
 void
-Fleece::apply_CX(int32_t qubit1, int32_t qubit2) {
+Fleece::apply_CX(uint32_t qubit1, uint32_t qubit2) {
+    fp_t p = 0.0;
     stim::GateTarget q1{qubit1};
     stim::GateTarget q2{qubit2};
     std::vector<stim::GateTarget> gate_targets{q1, q2};
-    stim::OperationData cx_data{PTR<double>(), PTR<stim::GateTarget>(gate_targets)};
+    stim::OperationData cx_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
     sim->ZCX(cx_data);
+#ifdef FLEECE_DEBUG
+    op_buffer += "CX\t" + std::to_string(qubit1) + " " + std::to_string(qubit2) + "\n";
+#endif
 
-    fp_t p;
-    std::vector<int32_t> q1_q2{qubit1, qubit2};
+    std::vector<uint32_t> q1_q2{qubit1, qubit2};
     if (clifforddp2_table.count(q1_q2)) {
         p = clifforddp2_table[q1_q2];
     } else {
@@ -381,6 +407,10 @@ Fleece::apply_CX(int32_t qubit1, int32_t qubit2) {
     }
     stim::OperationData dp2_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
     sim->DEPOLARIZE2(dp2_data);
+#ifdef FLEECE_DEBUG
+    op_buffer += "DEPOLARIZE2(" + std::to_string(p) + ")\t" 
+                + std::to_string(qubit1) + " " + std::to_string(qubit2) + "\n";
+#endif
 
     if (cliffordleak_table.count(q1_q2)) {
         p = cliffordleak_table[q1_q2];
@@ -389,13 +419,17 @@ Fleece::apply_CX(int32_t qubit1, int32_t qubit2) {
     }
     stim::OperationData leak_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
     sim->LEAKAGE_ERROR(leak_data);
+#ifdef FLEECE_DEBUG
+    op_buffer += "L_ERROR(" + std::to_string(p) + ")\t" + std::to_string(qubit1) + "\n";
+    op_buffer += "L_ERROR(" + std::to_string(p) + ")\t" + std::to_string(qubit2) + "\n";
+#endif
 }
 
 void
-Fleece::apply_measure(int32_t qubit, bool add_error) {
+Fleece::apply_measure(uint32_t qubit, bool add_error) {
     stim::GateTarget q{qubit};
+    fp_t p;
     if (add_error) {
-        fp_t p;
         if (premeasflip_table.count(qubit)) {
             p = premeasflip_table[qubit];
         } else {
@@ -404,23 +438,33 @@ Fleece::apply_measure(int32_t qubit, bool add_error) {
         }
         stim::OperationData flip_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
         sim->X_ERROR(flip_data);
+#ifdef FLEECE_DEBUG
+        op_buffer += "X_ERROR(" + std::to_string(p) + ")\t" + std::to_string(qubit) + "\n";
+#endif
     }
 
-    stim::OperationData meas_data{PTR<double>(), PTR<stim::GateTarget>(&q)};
+    p = 0.0;
+    stim::OperationData meas_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
     sim->measure_z(meas_data);
+#ifdef FLEECE_DEBUG
+    op_buffer += "M\t" + std::to_string(qubit) + "\n";
+#endif
 }
 
 void
-Fleece::apply_SWAP(int32_t qubit1, int32_t qubit2, bool add_error) {
+Fleece::apply_SWAP(uint32_t qubit1, uint32_t qubit2, bool add_error) {
+    fp_t p = 0.0;
     stim::GateTarget q1{qubit1};
     stim::GateTarget q2{qubit2};
     std::vector<stim::GateTarget> gate_targets{q1, q2};
-    stim::OperationData swap_data{PTR<double>(), PTR<stim::GateTarget>(gate_targets)};
+    stim::OperationData swap_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
     sim->SWAP(swap_data);
+#ifdef FLEECE_DEBUG
+    op_buffer += "SWAP\t" + std::to_string(qubit1) + " " + std::to_string(qubit2) + "\n";
+#endif
 
     if (add_error) {
-        fp_t p;
-        std::vector<int32_t> q1_q2{qubit1, qubit2};
+        std::vector<uint32_t> q1_q2{qubit1, qubit2};
         if (clifforddp2_table.count(q1_q2)) {
             p = clifforddp2_table[q1_q2];
         } else {
@@ -429,6 +473,10 @@ Fleece::apply_SWAP(int32_t qubit1, int32_t qubit2, bool add_error) {
         }
         stim::OperationData dp2_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
         sim->DEPOLARIZE2(dp2_data);
+#ifdef FLEECE_DEBUG
+        op_buffer += "DEPOLARIZE2(" + std::to_string(p) + ")\t" 
+                    + std::to_string(qubit1) + " " + std::to_string(qubit2) + "\n";
+#endif
 
         if (cliffordleak_table.count(q1_q2)) {
             p = cliffordleak_table[q1_q2];
@@ -437,6 +485,10 @@ Fleece::apply_SWAP(int32_t qubit1, int32_t qubit2, bool add_error) {
         }
         stim::OperationData leak_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
         sim->LEAKAGE_ERROR(leak_data);
+#ifdef FLEECE_DEBUG
+        op_buffer += "L_ERROR(" + std::to_string(p) + ")\t" + std::to_string(qubit1) + "\n";
+        op_buffer += "L_ERROR(" + std::to_string(p) + ")\t" + std::to_string(qubit2) + "\n";
+#endif
     }
 }
 
