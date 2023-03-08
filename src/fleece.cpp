@@ -134,10 +134,23 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
             measurement_time++;
         }
         // Now, we need to simulate the circuit operation by operation, round by round.
+        std::array<std::vector<uint8_t>, 2> prev_syndrome;
+        std::array<std::vector<uint8_t>, 2> prev_leakages;
+
+        prev_syndrome.fill(std::vector<uint8_t>(parity_qubits.size(), 0));
+        prev_leakages.fill(std::vector<uint8_t>(parity_qubits.size(), 0));
+
         uint32_t meas_t_offset = 0;
         for (uint r = 1; r < circuit_params.rounds; r++) {
             if (r == disable_leakage_at_round) {
                 sim->toggle_leakage();
+            }
+            std::vector<uint8_t> comb_syndrome(parity_qubits.size(), 0);
+            for (uint i = 0; i < comb_syndrome.size(); i++) {
+                comb_syndrome[i] ^= syndrome[i];
+                for (uint j = 0; j < prev_syndrome.size(); j++) {
+                    comb_syndrome[i] ^= prev_syndrome[j][i];
+                }
             }
             std::set<fleece::LatticeGraph::Vertex*> infected;   // Set of vertices with potential leakages.
 #ifndef FLEECE_DEBUG2
@@ -152,21 +165,18 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
                     // this leaked stabilizer measurement.
                     //
                     // TODO: account for measurement/CNOT errors on flipped stabilizers.
+                    const uint n = parity_qubits.size();
+//                  uint offset = v->is_data ? 0 : n;  // We only correct parity leaks the round after.
+                    const uint offset = 0;
+                    std::set<fleece::LatticeGraph::Vertex*> faulty_parity_checks;
                     if (v->is_data) {
                         for (auto w : lattice_graph.adjacency_list(v)) {
-                            if (meas_t_offset == 0) {
-                                if (!w->is_x_parity) {
-                                    sim->m_record.storage[stab_meas_time[w]][0] = 0;
-                                }
-                            } else {
-                                sim->m_record.storage[meas_t_offset + stab_meas_time[w]][0] =
-                                    sim->m_record.storage[meas_t_offset + stab_meas_time[w] - parity_qubits.size()][0];
-                            }
+                            faulty_parity_checks.insert(w);
                         }
-                    } else {
+                    } else if (!v->is_data) {
                         for (auto w : parity_qubits) {
                             uint32_t mt = stab_meas_time[w];
-                            if (!syndrome[mt]) {
+                            if (v == w || !comb_syndrome[mt]) {
                                 continue;
                             }
                             auto common = lattice_graph.get_common_neighbors(v, w);
@@ -177,6 +187,31 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
                                     sim->x_table[u->qubit][0] ^= 1;
                                 }
                             }
+
+                            if (!common.empty()) {
+                                faulty_parity_checks.insert(w);
+                            }
+                        }
+                    }
+
+                    if (offset > meas_t_offset) {
+                        continue;
+                    }
+
+                    for (auto w : faulty_parity_checks) {
+                        if (meas_t_offset - offset == 0) {
+                            if (!w->is_x_parity) {
+                                sim->m_record.storage[stab_meas_time[w]][0] = 0;
+                            }
+                        } else if (meas_t_offset - offset == n) {
+                            // Fix only last round.
+                            sim->m_record.storage[n + stab_meas_time[w]][0] = sim->m_record.storage[stab_meas_time[w]][0];
+                        } else {
+                            // Fix last two rounds.
+                            sim->m_record.storage[meas_t_offset + stab_meas_time[w] - offset][0] =
+                                sim->m_record.storage[meas_t_offset + stab_meas_time[w] - 2*n - offset][0];
+                            sim->m_record.storage[meas_t_offset + stab_meas_time[w] - n - offset][0] =
+                                sim->m_record.storage[meas_t_offset + stab_meas_time[w] - 2*n - offset][0];
                         }
                     }
                 } else if (syndrome[i]) {
@@ -233,6 +268,14 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round) {
                     acting_parity_qubits[i] = v;
                 }
                 uint32_t pmt = measurement_time - parity_qubits.size();
+                // Update previous syndromes and leakages
+                for (uint j = prev_syndrome.size() - 1; j >= 1; j--) {
+                    prev_syndrome[j] = prev_syndrome[j-1];
+                    prev_leakages[j] = prev_leakages[j-1];
+                }
+                prev_syndrome[0] = syndrome;
+                prev_leakages[0] = leakages;
+                // Update syndromes.
                 syndrome[i] = (sim->m_record.storage[measurement_time][0] ^ sim->m_record.storage[pmt][0])
                                 & ~sim->leak_record.storage[measurement_time][0];
                 leakages[i] = sim->leak_record.storage[measurement_time][0];
