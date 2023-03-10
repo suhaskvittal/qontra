@@ -44,7 +44,7 @@ public:
     double before_measure_flip_probability_stddev = 0;
     double after_reset_flip_probability_stddev = 0;
 
-    double after_clifford_sq_depolarization_stddev = -1;
+    double after_clifford_sq_depolarization_stddev = 0;
 
     double before_round_leakage_probability_stddev = 0;
     double after_reset_leakage_probability_stddev = 0;

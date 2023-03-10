@@ -103,6 +103,11 @@ LatticeGraph::adjacency_list(Vertex * v) {
     return adjacency_matrix[v];
 }
 
+LatticeGraph::Vertex*
+LatticeGraph::get_cx_mate(Vertex * v, uint8_t n) {
+    return cx_order[v][n];
+}
+
 std::vector<LatticeGraph::Vertex*>
 LatticeGraph::get_common_neighbors(Vertex * v1, Vertex * v2) {
     std::vector<Vertex*> adj1 = adjacency_list(v1);
@@ -133,6 +138,8 @@ to_lattice_graph(const stim::Circuit& circuit) {
     LatticeGraph graph;
     stim::Circuit flat_circ = circuit.flattened();
 
+    uint32_t cx_op_num = 0;
+
     for (const stim::Operation& op : flat_circ.operations) {
         std::string opname(op.gate->name);  
         if (opname == "QUBIT_COORDS") {
@@ -161,8 +168,27 @@ to_lattice_graph(const stim::Circuit& circuit) {
                     }
                     neighbor_count[q1]++;
                     neighbor_count[q2]++;
+
+                    auto v1 = graph.get_vertex_by_qubit(q1);
+                    auto v2 = graph.get_vertex_by_qubit(q2);
+                    if (v1->is_data) {
+                        if (!graph.cx_order.count(v2)) {
+                            std::array<LatticeGraph::Vertex*, 4> mates;
+                            mates.fill(nullptr);
+                            graph.cx_order[v2] = mates;
+                        }
+                        graph.cx_order[v2][cx_op_num] = v1;
+                    } else {
+                        if (!graph.cx_order.count(v1)) {
+                            std::array<LatticeGraph::Vertex*, 4> mates;
+                            mates.fill(nullptr);
+                            graph.cx_order[v1] = mates;
+                        }
+                        graph.cx_order[v1][cx_op_num] = v2;
+                    }
                 }
             }
+            cx_op_num++;
         } else if (opname == "M" || opname == "MX" 
                 || opname == "MZ" || opname == "MR") 
         {

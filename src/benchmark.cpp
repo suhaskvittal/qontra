@@ -384,7 +384,7 @@ build_circuit(
 
     params.before_round_data_depolarization_stddev = __CHS(error_stddev, clevel_error_stddev, round_dp_stddev);
     params.after_clifford_depolarization_stddev = __CHS(error_stddev, clevel_error_stddev, cx_dp_stddev);
-    params.after_clifford_sq_depolarization_stddev = __CHS(error_mean, clevel_error_mean, sq_dp_stddev);
+    params.after_clifford_sq_depolarization_stddev = __CHS(error_stddev, clevel_error_stddev, sq_dp_stddev);
     params.after_reset_flip_probability_stddev = __CHS(error_stddev, clevel_error_stddev, reset_flip_stddev);
     params.before_measure_flip_probability_stddev = __CHS(error_stddev, clevel_error_stddev, meas_flip_stddev);
 

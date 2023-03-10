@@ -41,7 +41,8 @@ public:
     Fleece(const stim::CircuitGenParameters&,
             std::mt19937_64& rng,
             char reset_basis='Z',
-            char output_basis='Z');
+            char output_basis='Z',
+            bool perform_swaps=true);
     ~Fleece();
 
     stim::simd_bit_table create_syndromes(uint64_t shots, uint disable_leakage_at_round);
@@ -58,6 +59,7 @@ private:
     const stim::CircuitGenParameters circuit_params;
     const char reset_basis;
     const char output_basis;
+    const bool perform_swaps;
 
     stim::Circuit base_circuit;
     stim::FrameSimulator * sim;

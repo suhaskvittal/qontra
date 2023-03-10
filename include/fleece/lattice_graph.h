@@ -12,6 +12,7 @@
 #include "defs.h"
 #include "graph/dijkstra.h"
 
+#include <array>
 #include <deque>
 #include <map>
 #include <string>
@@ -83,12 +84,15 @@ public:
     std::vector<Vertex*> adjacency_list(int32_t);
     std::vector<Vertex*> adjacency_list(Vertex*);
 
+    Vertex * get_cx_mate(Vertex*, uint8_t);
+
     std::vector<Vertex*> get_common_neighbors(Vertex*, Vertex*);
 private:
     std::vector<Vertex*> vertex_list;
     std::map<int32_t, Vertex*> qubit_to_vertex;
     std::map<int32_t, Vertex*> detector_to_vertex;
     std::map<Vertex*, std::vector<Vertex*>> adjacency_matrix;
+    std::map<Vertex*, std::array<Vertex*, 4>> cx_order;
 
     friend LatticeGraph to_lattice_graph(const stim::Circuit&);
 };

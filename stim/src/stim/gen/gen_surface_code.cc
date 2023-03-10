@@ -50,8 +50,6 @@ GeneratedCircuit _finish_surface_code_circuit(
     const auto &chosen_basis_observable = is_memory_x ? x_observable : z_observable;
     const auto &chosen_basis_measure_coords = is_memory_x ? x_measure_coords : z_measure_coords;
 
-    const uint64_t last_leakage_round = (uint64_t) (2.0*params.rounds/3.0);
-
     // Index the measurement qubits and data qubits.
     std::map<surface_coord, uint32_t> p2q;
     for (auto q : data_coords) {
@@ -241,9 +239,6 @@ GeneratedCircuit _finish_surface_code_circuit(
         std::vector<uint32_t> swap_targets;
         std::map<uint32_t, uint32_t> swap_table;
         for (uint32_t r = 1; r < params.rounds; r++) {
-            if (r == last_leakage_round) {
-                params.set_leakage_on(false);
-            }
             const uint32_t cycle = r % lru_cycles;
             // Add initial operations.
             std::vector<uint32_t> adjusted_data_qubits(data_qubits);
