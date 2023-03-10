@@ -31,24 +31,36 @@
  *  Z basis operations at the moment.
  * */
 
-//#define FLEECE_DEBUG
-//#define FLEECE_DEBUG2
+#define EN_STATE_DRAIN  0x1
+#define EN_TMP_STAB_EXT 0x3 // enables EN_STATE_DRAIN by default.
+#define EN_DRIP_TEST    0x4
 
 namespace qrc {
 
 class Fleece {
 public:
     Fleece(const stim::CircuitGenParameters&,
+            uint8_t flags,
             std::mt19937_64& rng,
             char reset_basis='Z',
             char output_basis='Z',
             bool perform_swaps=true);
     ~Fleece();
 
-    stim::simd_bit_table create_syndromes(uint64_t shots, uint disable_leakage_at_round);
+    stim::simd_bit_table create_syndromes(
+            uint64_t shots, 
+            uint disable_leakage_at_round, 
+            bool maintain_failure_log=false);
 
-    bool fake_run;
+    std::string failure_log;
 private:
+    void compute_optimal_swap_set(void);
+
+    void write_leakage_condition_to_log(std::string&);
+    void write_aliases_to_log(std::string&, 
+            const std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*>&);
+    void write_syndrome_to_log(std::string&, const std::vector<uint8_t>&, const std::vector<uint8_t>&);
+
     void apply_reset(uint32_t qubit, bool add_error=true);
     void apply_round_start_error(uint32_t qubit);
     void apply_H(uint32_t qubit);
@@ -57,6 +69,7 @@ private:
     void apply_SWAP(uint32_t, uint32_t, bool add_error=true);
 
     const stim::CircuitGenParameters circuit_params;
+    const uint8_t flags;
     const char reset_basis;
     const char output_basis;
     const bool perform_swaps;
@@ -64,13 +77,12 @@ private:
     stim::Circuit base_circuit;
     stim::FrameSimulator * sim;
 
-#ifdef FLEECE_DEBUG
-    std::string op_buffer;
-#endif
-
     fleece::LatticeGraph lattice_graph;
     std::vector<fleece::LatticeGraph::Vertex*> data_qubits;
     std::vector<fleece::LatticeGraph::Vertex*> parity_qubits;
+
+    std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_set;
+    fleece::LatticeGraph::Vertex * unlucky_data_qubit;
 
     std::map<uint32_t, fp_t> rounddp_table;
     std::map<uint32_t, fp_t> clifforddp1_table;

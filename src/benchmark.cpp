@@ -98,7 +98,8 @@ b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
             if (hw > 0) {
                 DecoderShotResult res = decoder_p->decode_error(syndrome);
                 // Update statistics.
-                n_logical_errors += (res.is_logical_error || leakage_buffer[i][n_detectors]);
+//                n_logical_errors += (res.is_logical_error || leakage_buffer[i][n_detectors]);
+                n_logical_errors += res.is_logical_error;
                 mean_execution_time += res.execution_time / ((fp_t)total_shots);
                 if (res.execution_time > max_execution_time) {
                     max_execution_time = res.execution_time;

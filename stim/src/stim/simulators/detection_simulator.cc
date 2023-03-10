@@ -21,7 +21,9 @@ using namespace stim;
 
 template <typename T>
 void xor_measurement_set_into_result(
-    const T &measurement_set, simd_bit_table &frame_samples, simd_bit_table &output, size_t output_index_ticker) {
+    const T &measurement_set, simd_bit_table &frame_samples, simd_bit_table &output, size_t output_index_ticker,
+    simd_bit_table &leak_samples, bool use_leak_samples=false) 
+{
     simd_bits_range_ref dst = output[output_index_ticker];
     for (auto i : measurement_set) {
         dst ^= frame_samples[i];
@@ -58,7 +60,7 @@ void stim::read_from_sim(
     size_t offset = 0;
     if (prepend_observables) {
         for (const auto &obs : det_obs.observables) {
-            xor_measurement_set_into_result(obs, frame_samples, result_table, offset);
+            xor_measurement_set_into_result(obs, frame_samples, result_table, offset, leakage_samples, true);
             if (get_leakage_data) {
                 or_measurement_set_into_result(obs, leakage_samples,
                         leakage_table, offset);
@@ -67,7 +69,7 @@ void stim::read_from_sim(
         }
     }
     for (const auto &det : det_obs.detectors) {
-        xor_measurement_set_into_result(det, frame_samples, result_table, offset);
+        xor_measurement_set_into_result(det, frame_samples, result_table, offset, leakage_samples, false);
         if (get_leakage_data) {
             or_measurement_set_into_result(det, leakage_samples,
                     leakage_table, offset);
@@ -79,7 +81,7 @@ void stim::read_from_sim(
     }
     if (append_observables) {
         for (const auto &obs : det_obs.observables) {
-            xor_measurement_set_into_result(obs, frame_samples, result_table, offset);
+            xor_measurement_set_into_result(obs, frame_samples, result_table, offset, leakage_samples, true);
             if (get_leakage_data) {
                 or_measurement_set_into_result(obs, leakage_samples,
                         leakage_table, offset);
