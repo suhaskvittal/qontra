@@ -19,6 +19,8 @@
 
 using namespace stim;
 
+static std::mt19937_64 RNG(0);
+
 template <typename T>
 void xor_measurement_set_into_result(
     const T &measurement_set, simd_bit_table &frame_samples, simd_bit_table &output, size_t output_index_ticker,
@@ -26,7 +28,17 @@ void xor_measurement_set_into_result(
 {
     simd_bits_range_ref dst = output[output_index_ticker];
     for (auto i : measurement_set) {
-        dst ^= frame_samples[i];
+        if (use_leak_samples) {
+            dst.for_each_word(
+                    frame_samples[i], 
+                    leak_samples[i], 
+                    [&](simd_word& d, simd_word& f, simd_word& l) {
+                        const simd_word rand(RNG(), RNG());
+                        d ^= l.andnot(f) | (rand & l);
+                    });
+        } else {
+            dst ^= frame_samples[i];
+        }
     }
 }
 

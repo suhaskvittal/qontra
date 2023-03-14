@@ -61,13 +61,11 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       // New variables
       leakage_table(num_qubits, batch_size),
       leak_record(batch_size, max_lookback),
-      n_errors(batch_size, 0),
-      n_x_errors(batch_size, 0),
-      n_y_errors(batch_size, 0),
-      n_z_errors(batch_size, 0),
-      n_dp1_errors(batch_size, 0),
-      n_dp2_errors(batch_size, 0),
+      log_prob_table_baseline(batch_size, 0.0),
+      log_prob_table_reference(batch_size, 0.0),
+      reference_error_rate(0.0),
       sim_checkpoint(0),
+      maintain_log_probabilities(false),
       leakage_enabled(true)
 {}
 
@@ -493,7 +491,8 @@ void FrameSimulator::YCZ(const OperationData &target_data) {
 
 void FrameSimulator::DEPOLARIZE1(const OperationData &target_data) {
     const auto &targets = target_data.targets;
-    RareErrorIterator::for_samples(target_data.args[0], targets.size() * batch_size, rng, [&](size_t s) {
+    const auto prob = target_data.args[0];
+    RareErrorIterator::for_samples(prob, targets.size() * batch_size, rng, [&](size_t s) {
         auto p = 1 + (rng() % 3);
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
@@ -501,19 +500,20 @@ void FrameSimulator::DEPOLARIZE1(const OperationData &target_data) {
         x_table[t.data][sample_index] ^= p & 1;
         z_table[t.data][sample_index] ^= p & 2;
 
-        // Update error counts.
-        n_errors[sample_index]++;
-        n_x_errors[sample_index] += p & 1;
-        n_z_errors[sample_index] += (p & 2) >> 1;
-        n_dp1_errors[sample_index]++;
+        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
     });
+
+    for (auto& lp : log_prob_table_baseline) {
+        lp += log(1-prob);
+    }
 }
 
 void FrameSimulator::DEPOLARIZE2(const OperationData &target_data) {
     const auto &targets = target_data.targets;
+    const auto prob = target_data.args[0];
     assert(!(targets.size() & 1));
     auto n = (targets.size() * batch_size) >> 1;
-    RareErrorIterator::for_samples(target_data.args[0], n, rng, [&](size_t s) {
+    RareErrorIterator::for_samples(prob, n, rng, [&](size_t s) {
         auto p = 1 + (rng() % 15);
         auto target_index = (s / batch_size) << 1;
         auto sample_index = s % batch_size;
@@ -524,53 +524,64 @@ void FrameSimulator::DEPOLARIZE2(const OperationData &target_data) {
         x_table[t2][sample_index] ^= (bool)(p & 4);
         z_table[t2][sample_index] ^= (bool)(p & 8);
 
-        n_errors[sample_index] += 1 + ((p & 12) ? 1 : 0);
-        n_x_errors[sample_index] += (p & 1) + ((p & 4 >> 2));
-        n_z_errors[sample_index] += ((p & 2) >> 1) + ((p & 8) >> 3);
-        n_dp2_errors[sample_index]++;
+        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
     });
+
+    for (auto& lp : log_prob_table_baseline) {
+        lp += log(1-prob);
+    }
 }
 
 void FrameSimulator::X_ERROR(const OperationData &target_data) {
     const auto &targets = target_data.targets;
-    RareErrorIterator::for_samples(target_data.args[0], targets.size() * batch_size, rng, [&](size_t s) {
+    const auto prob = target_data.args[0];
+    RareErrorIterator::for_samples(prob, targets.size() * batch_size, rng, [&](size_t s) {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
         x_table[t.data][sample_index] ^= true;
-        
-        n_errors[sample_index]++;
-        n_x_errors[sample_index]++;
+
+        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
     });
+
+    for (auto& lp : log_prob_table_baseline) {
+        lp += log(1-prob);
+    }
 }
 
 void FrameSimulator::Y_ERROR(const OperationData &target_data) {
     const auto &targets = target_data.targets;
-    RareErrorIterator::for_samples(target_data.args[0], targets.size() * batch_size, rng, [&](size_t s) {
+    const auto prob = target_data.args[0];
+    RareErrorIterator::for_samples(prob, targets.size() * batch_size, rng, [&](size_t s) {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
         x_table[t.data][sample_index] ^= true;
         z_table[t.data][sample_index] ^= true;
 
-        n_errors[sample_index]++;
-        n_x_errors[sample_index]++;
-        n_z_errors[sample_index]++;
-        n_y_errors[sample_index]++;
+        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
     });
+
+    for (auto& lp : log_prob_table_baseline) {
+        lp += log(1-prob);
+    }
 }
 
 void FrameSimulator::Z_ERROR(const OperationData &target_data) {
     const auto &targets = target_data.targets;
-    RareErrorIterator::for_samples(target_data.args[0], targets.size() * batch_size, rng, [&](size_t s) {
+    const auto prob = target_data.args[0];
+    RareErrorIterator::for_samples(prob, targets.size() * batch_size, rng, [&](size_t s) {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
         z_table[t.data][sample_index] ^= true;
 
-        n_errors[sample_index]++;
-        n_z_errors[sample_index]++;
+        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
     });
+
+    for (auto& lp : log_prob_table_baseline) {
+        lp += log(1-prob);
+    }
 }
 
 void FrameSimulator::MPP(const OperationData &target_data) {
@@ -671,8 +682,14 @@ void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
-        leakage_table[t.data][sample_index] |= true;  
+        leakage_table[t.data][sample_index] ^= true;  
+
+        log_prob_table_baseline[sample_index] += log(p) - log(1-p);
     };
+
+    for (auto& lp : log_prob_table_baseline) {
+        lp += log(1-p);
+    }
 
     RareErrorIterator::for_samples(p, targets.size() * batch_size, rng, call_f);
 }

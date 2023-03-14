@@ -58,6 +58,10 @@ b_statistical_ler(
     fp_t use_bootstrap_model_until_p=1
 );
 
+#define BC_FLAG_SWAP_LRU_V1     0x1
+#define BC_FLAG_SWAP_LRU_V2     0x2
+#define BC_FLAG_INVERT_STATE    0x4
+
 stim::Circuit
 build_circuit(
     // Required
@@ -68,7 +72,7 @@ build_circuit(
     bool is_memory_z=true,
     bool is_rotated=true,
     bool both_stabilizers=false,
-    uint8_t swap_lru=0b00,
+    uint8_t other_flags=0,
     // Level 1 Specificity
     uint rounds=0,
     fp_t clevel_error_mean=-1,

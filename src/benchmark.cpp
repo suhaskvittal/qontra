@@ -345,7 +345,7 @@ build_circuit(
     bool is_memory_z,
     bool is_rotated,
     bool both_stabilizers,
-    uint8_t swap_lru,
+    uint8_t other_flags,
     uint rounds,
     fp_t clevel_error_mean,
     fp_t clevel_error_stddev,
@@ -398,8 +398,9 @@ build_circuit(
     params.after_reset_leakage_probability_stddev = __CHS(error_stddev, pauliplus_error_stddev, reset_leak_stddev);
 
     params.both_stabilizers = both_stabilizers;
-    params.swap_lru = swap_lru & 0b01;
-    params.swap_lru_with_no_swap = swap_lru & 0b10;
+    params.swap_lru = other_flags & BC_FLAG_SWAP_LRU_V1;
+    params.swap_lru_with_no_swap = other_flags & BC_FLAG_SWAP_LRU_V2;
+    params.initial_state_is_basis_1 = other_flags & BC_FLAG_INVERT_STATE;
 
     stim::Circuit circ = generate_surface_code_circuit(params).circuit;
     return circ;

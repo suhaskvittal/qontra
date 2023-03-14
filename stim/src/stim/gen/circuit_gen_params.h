@@ -56,6 +56,8 @@ public:
     bool swap_lru = false;
     bool swap_lru_with_no_swap = false;
 
+    bool initial_state_is_basis_1 = false;
+
     void validate_params() const;
 
     CircuitGenParameters(uint64_t rounds, uint32_t distance, std::string task);

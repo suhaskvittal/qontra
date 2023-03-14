@@ -11,11 +11,13 @@ template <typename T>
 using PTR = stim::ConstPointerRange<T>;
 
 Fleece::Fleece(const stim::CircuitGenParameters& params,
+                uint8_t flags,
                 std::mt19937_64& rng,
                 char reset_basis,
                 char output_basis,
                 bool perform_swaps)
     :circuit_params(params),
+    flags(flags),
     reset_basis(reset_basis),
     output_basis(output_basis),
     perform_swaps(perform_swaps),
@@ -87,6 +89,8 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
     stim::simd_bit_table syndromes(2*shots, num_results);
     syndromes.clear();
 
+    const uint32_t rng_mod = (uint32_t) (1.0/circuit_params.before_measure_flip_probability);
+
     uint64_t syndrome_table_index = 0;
     while (shots) {
         std::string shot_log;
@@ -133,14 +137,14 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
             }
             apply_measure(v->qubit);
             apply_reset(v->qubit);
+
+            leakages[measurement_time] = sim->leak_record.storage[measurement_time][0] ^ ((rng() % rng_mod) == 0);
             if (v->is_x_parity) {
                 syndrome[measurement_time] = 0;
             } else {
                 // Only record as error if parity qubit isn't leaked.
-                syndrome[measurement_time] = sim->m_record.storage[measurement_time][0]
-                                                & ~sim->leak_record.storage[measurement_time][0];
+                syndrome[measurement_time] = sim->m_record.storage[measurement_time][0] & ~leakages[measurement_time];
             }
-            leakages[measurement_time] = sim->leak_record.storage[measurement_time][0];
             acting_parity_qubits[measurement_time] = v;
             stab_meas_time[v] = measurement_time;
             measurement_time++;
@@ -249,7 +253,7 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
             // Using infected set, identify SWAP LRCs.
             std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_targets;
             if (perform_swaps) {
-                if (r == circuit_params.rounds - 1) {
+                if ((r == circuit_params.rounds - 1) && (flags & EN_STATE_DRAIN)) {
                     // Perform last minute swap LRUs to kill any remaining leakage errors.
                     for (auto pair : swap_set) {
                         swap_targets[pair.first] = pair.second;
@@ -324,13 +328,14 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
                 }
                 uint32_t pmt = measurement_time - parity_qubits.size();
                 // Update syndromes.
+                // Model measurement error rate on leakage.
+                leakages[i] = sim->leak_record.storage[measurement_time][0] ^ ((rng() % rng_mod) == 0);
                 syndrome[i] = (sim->m_record.storage[measurement_time][0] ^ sim->m_record.storage[pmt][0])
-                                & ~sim->leak_record.storage[measurement_time][0];
-                leakages[i] = sim->leak_record.storage[measurement_time][0];
+                                & ~leakages[i];
 
                 measurement_time++;
             }
-            if ((flags & EN_STATE_DRAIN) && r == circuit_params.rounds-1) {
+            if ((flags & EN_TMP_STAB_EXT) && r == circuit_params.rounds-1) {
                 // Simulate "Temporary Stabilizer Extension"
                 // We apply the same errors as we would at the beginning of a round (depolarizing + leakage)
                 if (sim->leakage_table[unlucky_data_qubit->qubit][0]) {

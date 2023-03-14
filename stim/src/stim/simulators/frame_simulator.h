@@ -49,15 +49,14 @@ struct FrameSimulator {
     /* ADDED VARIABLES */
     simd_bit_table leakage_table; // leakage_table[q][k] is whether or not qubit q has leaked in instance k.
     MeasureRecordBatch leak_record;
-    std::vector<uint32_t>    n_errors;
-    std::vector<uint32_t>    n_x_errors;
-    std::vector<uint32_t>    n_y_errors;
-    std::vector<uint32_t>    n_z_errors;
-    std::vector<uint32_t>    n_dp1_errors;
-    std::vector<uint32_t>    n_dp2_errors;
+
+    std::vector<double> log_prob_table_baseline;
+    std::vector<double> log_prob_table_reference;
+    double reference_error_rate;
 
     uint64_t sim_checkpoint;
 
+    bool maintain_log_probabilities;
     bool leakage_enabled;
 
     // Determines whether e.g. 50% Z errors are multiplied into the frame when measuring in the Z basis.

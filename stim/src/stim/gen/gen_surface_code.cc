@@ -224,6 +224,13 @@ GeneratedCircuit _finish_surface_code_circuit(
     }
     params.append_reset(head, data_qubits, "ZX"[is_memory_x]);
     params.append_reset(head, measurement_qubits);
+    if (params.initial_state_is_basis_1) {
+        if (is_memory_x) {
+            head.append_op("Z", data_qubits);
+        } else {
+            head.append_op("X", data_qubits);
+        }
+    }
     head += head_cycle;
     for (auto m_index : chosen_basis_measurement_qubits) {
         auto measure = q2p[m_index];
@@ -291,16 +298,12 @@ GeneratedCircuit _finish_surface_code_circuit(
             }
             params.append_unitary_1(main_body, "H", x_measurement_qubits);
             for (const auto &targets : cnot_targets) {
-//              main_body.append_op("TICK", {});
                 params.append_unitary_2(main_body, "CNOT", targets);
             }
-//          main_body.append_op("TICK", {});
             params.append_unitary_1(main_body, "H", x_measurement_qubits);
             if (!swap_targets.empty()) {
-//              main_body.append_op("TICK", {});
                 params.append_unitary_2(main_body, "SWAP", swap_targets);
             }
-//          main_body.append_op("TICK", {});
             std::vector<uint32_t> local_measurement_qubits;
             for (uint32_t m : measurement_qubits) {
                 local_measurement_qubits.push_back(swap_order[m][cycle]);
@@ -343,7 +346,6 @@ GeneratedCircuit _finish_surface_code_circuit(
     // Also, the tail is responsible for identifying the logical observable.
     Circuit tail;
     tail.append_op("TAILSTART", {});
-
     params.append_measure(tail, data_qubits, "ZX"[is_memory_x]);
     // Detectors.
     for (auto m_index : chosen_basis_measurement_qubits) {
