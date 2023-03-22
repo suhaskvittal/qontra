@@ -32,9 +32,10 @@
  *  Z basis operations at the moment.
  * */
 
-#define EN_STATE_DRAIN  0x1
-#define EN_TMP_STAB_EXT 0x2 // enables EN_STATE_DRAIN by default.
-#define EN_SWAP_LRU     0x4
+#define EN_SQUASH_AND_FIX   0x1
+#define EN_STATE_DRAIN      0x2
+#define EN_TMP_STAB_EXT     0x4 // enables EN_STATE_DRAIN by default.
+#define EN_SWAP_LRU         0x8
 
 namespace qrc {
 
