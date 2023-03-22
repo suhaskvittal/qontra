@@ -11,12 +11,15 @@ template <typename T>
 using PTR = stim::ConstPointerRange<T>;
 
 Fleece::Fleece(const stim::CircuitGenParameters& params,
-                uint8_t flags,
+                uint16_t flags,
                 std::mt19937_64& rng,
                 char reset_basis,
                 char output_basis,
                 bool perform_swaps)
-    :circuit_params(params),
+    :failure_log(),
+    rtanalyzer(nullptr),
+    n_restarts(0),
+    circuit_params(params),
     flags(flags),
     reset_basis(reset_basis),
     output_basis(output_basis),
@@ -38,6 +41,8 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
     postresleak_table(),
     rng(rng)
 {
+    rtanalyzer = new fleece::RealTimeAnalyzer(base_circuit, rng);
+
     sim = new stim::FrameSimulator(base_circuit.count_qubits(), 1, SIZE_MAX, rng);
     lattice_graph = fleece::to_lattice_graph(base_circuit);
     
@@ -80,21 +85,25 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
 }
 
 Fleece::~Fleece() {
+    delete rtanalyzer;
     delete sim;
 }
 
 stim::simd_bit_table
-Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool maintain_failure_log) {
+Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool maintain_failure_log, 
+        bool record_in_rtanalyzer) 
+{
     const size_t num_results = base_circuit.count_detectors() + base_circuit.count_observables();
     stim::simd_bit_table syndromes(2*shots, num_results);
     syndromes.clear();
 
-    const uint32_t rng_mod = (uint32_t) (1.0/circuit_params.before_measure_flip_probability);
+    const uint64_t rng_mod = (uint32_t) (1.0/circuit_params.before_measure_flip_probability);
 
     uint64_t syndrome_table_index = 0;
+    bool restart_shot = false;
     while (shots) {
         std::string shot_log;
-        sim->reset_all();
+        sim->reset_all(restart_shot);
         // Do first round -- special.
         //
         // Reset all qubits.
@@ -138,7 +147,8 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
             apply_measure(v->qubit);
             apply_reset(v->qubit);
 
-            leakages[measurement_time] = sim->leak_record.storage[measurement_time][0] ^ ((rng() % rng_mod) == 0);
+            sim->leak_record.storage[measurement_time][0] ^= (rng() % rng_mod) == 0;
+            leakages[measurement_time] = sim->leak_record.storage[measurement_time][0];
             if (v->is_x_parity) {
                 syndrome[measurement_time] = 0;
             } else {
@@ -160,94 +170,93 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
             shot_log += "\n";
             write_syndrome_to_log(shot_log, syndrome, leakages);
         }
-        // Now, we need to simulate the circuit operation by operation, round by round.
-        std::array<std::vector<uint8_t>, 1> prev_syndrome;
-        std::array<std::vector<uint8_t>, 1> prev_leakages;
+        
+        if (record_in_rtanalyzer) {
+            for (auto v : lattice_graph.vertices()) {
+                if (v->qubit < 0) {
+                    continue;
+                }
 
-        prev_syndrome.fill(std::vector<uint8_t>(parity_qubits.size(), 0));
+                if (sim->leakage_table[v->qubit][0]) {
+                    rtanalyzer->increment(v, syndrome_table_index>>1);
+                } else {
+                    rtanalyzer->read_and_flush(v, syndrome_table_index>>1);
+                }
+            }
+        }
+        // Now, we need to simulate the circuit operation by operation, round by round.
+        std::set<fleece::LatticeGraph::Vertex*> already_swapped;
+
+        std::array<std::vector<uint8_t>, 2> prev_syndromes;
+        std::array<std::vector<uint8_t>, 2> prev_leakages;
+
+        prev_syndromes.fill(std::vector<uint8_t>(parity_qubits.size(), 0));
         prev_leakages.fill(std::vector<uint8_t>(parity_qubits.size(), 0));
 
         uint32_t meas_t_offset = 0;
+        restart_shot = false;
         for (uint r = 1; r < circuit_params.rounds; r++) {
             std::vector<uint8_t> comb_syndrome(parity_qubits.size(), 0);
             for (uint i = 0; i < comb_syndrome.size(); i++) {
-                comb_syndrome[i] |= syndrome[i];
-                for (uint j = 0; j < prev_syndrome.size(); j++) {
-                    comb_syndrome[i] |= prev_syndrome[j][i];
+                comb_syndrome[i] = syndrome[i];
+                for (uint j = 0; j < prev_syndromes.size(); j++) {
+                    comb_syndrome[i] ^= prev_syndromes[j][i];
                 }
             }
             std::set<fleece::LatticeGraph::Vertex*> infected;   // Set of vertices with potential leakages.
             // Check for problems in the prior round.
-            std::set<fleece::LatticeGraph::Vertex*> faulty_data_qubits_on_x;
-            std::set<fleece::LatticeGraph::Vertex*> faulty_data_qubits_on_z;
             std::set<fleece::LatticeGraph::Vertex*> faulty_parity_checks;
+            std::set<fleece::LatticeGraph::Vertex*> faulty_data_qubits_on_z;
+            std::set<fleece::LatticeGraph::Vertex*> faulty_data_qubits_on_x;
             const uint n = parity_qubits.size();
             for (uint32_t i = 0; i < parity_qubits.size(); i++) {
-                if (leakages[i]) {
-                    auto v = acting_parity_qubits[i];
-                    // If v is a data qubit, then only the adjacent stabilizers were affected.
-                    // So, clear the measurements.
-                    //
-                    // If v is a parity qubit, then we must also match flipped stabilizers to
-                    // this leaked stabilizer measurement.
-                    //
-                    // TODO: account for measurement/CNOT errors on flipped stabilizers.
-                    if (v->is_data) {
-                        for (auto w : lattice_graph.adjacency_list(v)) {
-                            faulty_parity_checks.insert(w);
-                        }
-                    } else if (!v->is_data) {
-                        for (auto w : parity_qubits) {
-                            uint32_t mt = stab_meas_time[w];
-                            if (v == w || !comb_syndrome[mt]) {
-                                continue;
-                            }
-                            auto common = lattice_graph.get_common_neighbors(v, w);
-                            for (auto u : common) {
-                                if (w->is_x_parity) {
-                                    faulty_data_qubits_on_z.insert(u);
-                                } else {
-                                    faulty_data_qubits_on_x.insert(u);
-                                }
-                            }
-
-                            if (!common.empty()) {
-                                faulty_parity_checks.insert(w);
-                            }
-                        }
-                    }
-
-                } else if (syndrome[i]) {
-                    // Add all data qubits involved in stabilizer measurement.
-                    auto v = parity_qubits[i];
+                if (!leakages[i]) {
+                    continue;
+                }
+                auto v = acting_parity_qubits[i];
+                // If v is a data qubit, then only the adjacent stabilizers were affected.
+                // So, clear the measurements.
+                if (v->is_data) {
                     for (auto w : lattice_graph.adjacency_list(v)) {
-                        infected.insert(w);
+                        faulty_parity_checks.insert(w);
+                    }
+                } else {
+                    for (auto w : parity_qubits) {
+                        uint32_t mt = stab_meas_time[w];
+                        if (v == w || !comb_syndrome[mt]) {
+                            continue;
+                        }
+                        auto common = lattice_graph.get_common_neighbors(v, w);
+                        for (auto u : common) {
+                            if (w->is_x_parity) {
+                                faulty_data_qubits_on_z.insert(u);
+                            } else {
+                                faulty_data_qubits_on_x.insert(u);
+                            }
+                        }
                     }
                 }
-            }
-
-            for (auto w : faulty_data_qubits_on_x) {
-                sim->x_table[w->qubit][0] ^= 1;
-            }
-            
-            for (auto w : faulty_data_qubits_on_z) {
-                sim->z_table[w->qubit][0] ^= 1;
             }
 
             for (auto w : faulty_parity_checks) {
                 if (meas_t_offset == 0) {
                     if (!w->is_x_parity) {
                         sim->m_record.storage[stab_meas_time[w]][0] = 0;
+                        syndrome[stab_meas_time[w]] = 0;
                     }
                 } else if (meas_t_offset == n) {
                     // Fix only last round.
                     sim->m_record.storage[n + stab_meas_time[w]][0] = sim->m_record.storage[stab_meas_time[w]][0];
+                    syndrome[stab_meas_time[w]] = prev_syndromes[0][stab_meas_time[w]];
                 } else {
                     // Fix last two rounds.
                     sim->m_record.storage[meas_t_offset + stab_meas_time[w]][0] =
                         sim->m_record.storage[meas_t_offset + stab_meas_time[w] - 2*n][0];
                     sim->m_record.storage[meas_t_offset + stab_meas_time[w] - n][0] =
                         sim->m_record.storage[meas_t_offset + stab_meas_time[w] - 2*n][0];
+
+                    syndrome[stab_meas_time[w]] = prev_syndromes[0][stab_meas_time[w]];
+                    prev_syndromes[1][stab_meas_time[w]] = prev_syndromes[0][stab_meas_time[w]];
                 }
             }
             // Using infected set, identify SWAP LRCs.
@@ -259,13 +268,21 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
                         swap_targets[pair.first] = pair.second;
                     }
                     // We will simulate "Temporary Stabilizer Extension" on the unlucky data qubit.
-                } else {
-                    for (auto v : infected) {
-                        for (auto w : lattice_graph.adjacency_list(v)) {
-                            if (!swap_targets.count(w)) {
-                                swap_targets[w] = v;
-                                break;
+                } else if (flags & EN_SWAP_LRU) {
+                    if (r % 3 == 1) {
+                        already_swapped.clear();
+                    }
+                    
+                    for (auto w : parity_qubits) {
+                        if (swap_targets.count(w)) {
+                            continue;
+                        }
+                        for (auto v : lattice_graph.adjacency_list(w)) {
+                            if (already_swapped.count(v)) {
+                                continue;
                             }
+                            swap_targets[w] = v;
+                            already_swapped.insert(v);
                         }
                     }
                 }
@@ -276,11 +293,11 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
             }
 
             // Update previous syndromes and leakages
-            for (uint j = prev_syndrome.size() - 1; j >= 1; j--) {
-                prev_syndrome[j] = prev_syndrome[j-1];
+            for (uint j = prev_syndromes.size() - 1; j >= 1; j--) {
+                prev_syndromes[j] = prev_syndromes[j-1];
                 prev_leakages[j] = prev_leakages[j-1];
             }
-            prev_syndrome[0] = syndrome;
+            prev_syndromes[0] = syndrome;
             prev_leakages[0] = leakages;
 
             for (auto v : parity_qubits) {
@@ -303,6 +320,7 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
                     }
                 }
             }
+
             for (uint32_t i = 0; i < parity_qubits.size(); i++) {
                 auto v = parity_qubits[i];
                 if (v->is_x_parity) {
@@ -329,43 +347,30 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
                 uint32_t pmt = measurement_time - parity_qubits.size();
                 // Update syndromes.
                 // Model measurement error rate on leakage.
-                leakages[i] = sim->leak_record.storage[measurement_time][0] ^ ((rng() % rng_mod) == 0);
+                sim->leak_record.storage[measurement_time][0] ^= (rng() % rng_mod) == 0;
+                leakages[i] = sim->leak_record.storage[measurement_time][0];
+                if (leakages[i] && swap_targets.count(v)) {
+                    apply_reset(v->qubit);
+                    if (r == circuit_params.rounds-1) {
+                        restart_shot = true;
+                    }
+                }
                 syndrome[i] = (sim->m_record.storage[measurement_time][0] ^ sim->m_record.storage[pmt][0])
                                 & ~leakages[i];
 
                 measurement_time++;
             }
+
             if ((flags & EN_TMP_STAB_EXT) && r == circuit_params.rounds-1) {
                 // Simulate "Temporary Stabilizer Extension"
                 // We apply the same errors as we would at the beginning of a round (depolarizing + leakage)
+                apply_round_start_error(unlucky_data_qubit->qubit);
+                if (sim->leakage_table[unlucky_data_qubit->qubit][0] ^ ((rng() % rng_mod) == 0)) {
+                    restart_shot = true;
+                }
                 if (sim->leakage_table[unlucky_data_qubit->qubit][0]) {
                     // Only situation where the SWAP fails.
                     apply_reset(unlucky_data_qubit->qubit);
-                } else {
-                    apply_round_start_error(unlucky_data_qubit->qubit);
-                }
-                // Finally, perform "Drip Testing".
-                if (flags & EN_DRIP_TEST) {
-                    for (auto v : data_qubits) {
-                        auto w = lattice_graph.adjacency_list(v)[0];
-                        // It doesn't really matter what happens. We are just simulating the operations.
-                        // First, excite v into |2> (or try to).
-                        bool orig_x_state = sim->x_table[v->qubit][0];
-                        if (sim->x_table[v->qubit][0]) {
-                            sim->leakage_table[v->qubit][0] ^= 1;
-                        }
-                        apply_CX(v->qubit, w->qubit);
-                        apply_CX(v->qubit, w->qubit);
-                        apply_CX(v->qubit, w->qubit);
-                        if (sim->x_table[v->qubit][0]) {
-                            sim->leakage_table[v->qubit][0] ^= 1;
-                        }
-                        // We don't want to measure these qubits directly 
-                        // because this will screw up our simulation tables
-                        if (sim->leakage_table[v->qubit][0] || (!(rng() & 0x7) && orig_x_state)) {
-                            apply_reset(v->qubit);
-                        }
-                    }
                 }
             }
 
@@ -376,9 +381,27 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
                 write_syndrome_to_log(shot_log, syndrome, leakages);
             }
 
+            if (record_in_rtanalyzer) {
+                for (auto v : lattice_graph.vertices()) {
+                    if (v->qubit < 0) {
+                        continue;
+                    }
+
+                    if (sim->leakage_table[v->qubit][0]) {
+                        rtanalyzer->increment(v, syndrome_table_index>>1);
+                    } else {
+                        rtanalyzer->read_and_flush(v, syndrome_table_index>>1);
+                    }
+                }
+            }
+
             meas_t_offset += parity_qubits.size();
         }
         // Perform tail measurements.
+        if (restart_shot) {
+            n_restarts++;
+            continue;
+        }
         for (auto v : data_qubits) {
             apply_measure(v->qubit);
         }
@@ -390,6 +413,16 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
                                 measure_results, leakage_results);
         measure_results = measure_results.transposed();
         leakage_results = leakage_results.transposed();
+        // Go set observable in leakage results to all ones if any data qubits are leaked.
+        bool any_leaked = false;
+        for (auto v : data_qubits) {
+            any_leaked |= sim->leakage_table[v->qubit][0];
+        }
+        for (uint obs = base_circuit.count_detectors(); 
+                obs < base_circuit.count_detectors() + base_circuit.count_observables(); obs++) 
+        {
+            leakage_results[0][obs] = any_leaked;
+        }
         syndromes[syndrome_table_index++] |= measure_results[0];
         syndromes[syndrome_table_index++] |= leakage_results[0];
         shots--;
@@ -397,6 +430,10 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
         if (leakage_results[0][base_circuit.count_detectors()] && maintain_failure_log) {
             failure_log += "===============================\n" + shot_log;
         }
+    }
+
+    if (record_in_rtanalyzer) {
+        rtanalyzer->flush_table();
     }
     return syndromes;
 }
@@ -519,7 +556,7 @@ Fleece::apply_reset(uint32_t qubit, bool add_error) {
 }
 
 void
-Fleece::apply_round_start_error(uint32_t qubit) {
+Fleece::apply_round_start_error(uint32_t qubit, fp_t dp_error_mult) {
     stim::GateTarget q{qubit};
 
     fp_t p;
@@ -529,6 +566,7 @@ Fleece::apply_round_start_error(uint32_t qubit) {
         p = circuit_params.get_before_round_data_depolarization();
         rounddp_table[qubit] = p;
     }
+    p *= dp_error_mult;
     stim::OperationData dp_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
     sim->DEPOLARIZE1(dp_data);
     if (roundleak_table.count(qubit)) {

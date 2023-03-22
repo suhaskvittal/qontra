@@ -128,6 +128,20 @@ GeneratedCircuit _finish_surface_code_circuit(
     const uint32_t lru_cycles = params.swap_lru_with_no_swap ? 3 : 2;
     const uint32_t offset = params.swap_lru_with_no_swap;
     std::map<uint32_t, std::array<uint32_t, 3>> swap_order;
+    /*
+    std::vector<surface_coord> z_order{
+        {1, 1},
+        {1, -1},
+        {-1, 1},
+        {-1, -1},
+    };
+    std::vector<surface_coord> x_order{
+        {1, 1},
+        {-1, 1},
+        {1, -1},
+        {-1, -1},
+    };
+     */
     if (params.swap_lru) {
         // Build swap order.
         std::set<uint32_t> swapped_last_round;
@@ -140,7 +154,7 @@ GeneratedCircuit _finish_surface_code_circuit(
                 }
 
                 bool found = true;
-                size_t i = cycle;
+                size_t i = cycle+1;
 
                 surface_coord data;
                 if (z_measure_coords.count(measure)) {
@@ -160,7 +174,7 @@ GeneratedCircuit _finish_surface_code_circuit(
                         data = measure + x_order[i];
                     } 
                     i = (i + 1) & 0x3;
-                    if (i == cycle) {
+                    if (i == cycle+1) {
                         // Then we have been unable to find a proper
                         // swap candidate. This ancilla will not be
                         // swapping for this cycle.
@@ -246,8 +260,12 @@ GeneratedCircuit _finish_surface_code_circuit(
         std::vector<uint32_t> swap_targets;
         std::map<uint32_t, uint32_t> swap_table;
         for (uint32_t r = 1; r < params.rounds; r++) {
-            const uint32_t cycle = r % lru_cycles;
-            // Add initial operations.
+            // Add initial operations. Sets up the SWAP LRU just that maximum number of data qubits are swapped
+            // in the last round.
+            // 1 2 0 1          5 % 3 = 2
+            // 2 0 1 2 0 1      7 % 3 = 1
+            // 0 1 2 0 1 2 0 1
+            const uint32_t cycle = (r + lru_cycles - 1 - (params.distance % lru_cycles)) % lru_cycles;
             std::vector<uint32_t> adjusted_data_qubits(data_qubits);
             for (uint32_t i = 0; i < adjusted_data_qubits.size(); i++) {
                 uint32_t d = adjusted_data_qubits[i];
@@ -322,7 +340,11 @@ GeneratedCircuit _finish_surface_code_circuit(
             }
             // Unswap all previously swapped qubits.
             if (!swap_targets.empty()) {
-                params.append_unitary_2(main_body, "SWAP", swap_targets);
+                if (r == params.rounds-1) {
+                    main_body.append_op("SWAP", swap_targets);
+                } else {
+                    params.append_unitary_2(main_body, "SWAP", swap_targets);
+                }
             }
             main_body.append_op("SIMHALT", {});
         }

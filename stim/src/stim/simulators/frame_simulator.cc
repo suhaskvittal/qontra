@@ -60,6 +60,7 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       rng(rng),
       // New variables
       leakage_table(num_qubits, batch_size),
+      meas_table(num_qubits, batch_size),
       leak_record(batch_size, max_lookback),
       log_prob_table_baseline(batch_size, 0.0),
       log_prob_table_reference(batch_size, 0.0),
@@ -95,12 +96,15 @@ void FrameSimulator::xor_control_bit_into(uint32_t control, simd_bits_range_ref 
     }
 }
 
-void FrameSimulator::reset_all() {
-    x_table.clear();
-    if (guarantee_anticommutation_via_frame_randomization) {
-        z_table.data.randomize(z_table.data.num_bits_padded(), rng);
+void FrameSimulator::reset_all(bool partial) {
+    if (!partial) {
+        x_table.clear();
+        if (guarantee_anticommutation_via_frame_randomization) {
+            z_table.data.randomize(z_table.data.num_bits_padded(), rng);
+        }
+        leakage_table.clear();
+        meas_table.clear();
     }
-    leakage_table.clear();
     m_record.clear();
     leak_record.clear();
     sim_checkpoint = 0;
@@ -119,8 +123,10 @@ void FrameSimulator::measure_x(const OperationData &target_data) {
     for (auto t : target_data.targets) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         leak_record.record_result(leakage_table[q]);
-        leakage_table[q] |= z_table[q];  // Measurement results.
-        m_record.xor_record_reserved_result(leakage_table[q]);
+        meas_table[q].clear();
+        meas_table[q] ^= z_table[q];
+        meas_table[q] |= leakage_table[q];
+        m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             x_table[q].randomize(x_table[q].num_bits_padded(), rng);
         }
@@ -133,8 +139,10 @@ void FrameSimulator::measure_y(const OperationData &target_data) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         x_table[q] ^= z_table[q];
         leak_record.record_result(leakage_table[q]);
-        leakage_table[q] |= x_table[q];  // Measurement results.
-        m_record.xor_record_reserved_result(leakage_table[q]);
+        meas_table[q].clear();
+        meas_table[q] ^= x_table[q];
+        meas_table[q] |= leakage_table[q];
+        m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);
         }
@@ -147,8 +155,10 @@ void FrameSimulator::measure_z(const OperationData &target_data) {
     for (auto t : target_data.targets) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         leak_record.record_result(leakage_table[q]);
-        leakage_table[q] |= x_table[q];  // Measurement results.
-        m_record.xor_record_reserved_result(leakage_table[q]);
+        meas_table[q].clear();
+        meas_table[q] ^= x_table[q];
+        meas_table[q] |= leakage_table[q];
+        m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);
         }
@@ -237,6 +247,28 @@ void FrameSimulator::measure_reset_z(const OperationData &target_data) {
 }
 
 void FrameSimulator::I(const OperationData &target_data) {
+}
+
+void FrameSimulator::X(const OperationData &target_data) {
+    for (auto t : target_data.targets) {
+        auto q = t.qubit_value();
+        x_table[q].invert_bits();
+    }
+}
+
+void FrameSimulator::Y(const OperationData &target_data) {
+    for (auto t : target_data.targets) {
+        auto q = t.qubit_value();
+        x_table[q].invert_bits();
+        z_table[q].invert_bits();
+    }
+}
+
+void FrameSimulator::Z(const OperationData &target_data) {
+    for (auto t : target_data.targets) {
+        auto q = t.qubit_value();
+        z_table[q].invert_bits();
+    }
 }
 
 PauliString FrameSimulator::get_frame(size_t sample_index) const {

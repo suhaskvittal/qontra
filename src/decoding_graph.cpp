@@ -310,7 +310,11 @@ compute_path_table(DecodingGraph& graph) {
     graph::ewf_t<G, V> w = [] (G& g, V * v1, V * v2)
     {
         auto e = g.get_edge(v1, v2);
-        return e->edge_weight;
+        if (e == nullptr) {
+            return 10000000.0;
+        } else {
+            return e->edge_weight;
+        }
     };
 
     return graph::compute_path_table(graph, w);

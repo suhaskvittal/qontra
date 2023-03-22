@@ -63,7 +63,7 @@ Targets:
             "X",
             0,
             &TableauSimulator::X,
-            &FrameSimulator::I,
+            &FrameSimulator::X,
             &ErrorAnalyzer::I,
             GATE_IS_UNITARY,
             []() -> ExtraGateData {
@@ -99,7 +99,7 @@ H 0
             "Y",
             0,
             &TableauSimulator::Y,
-            &FrameSimulator::I,
+            &FrameSimulator::Y,
             &ErrorAnalyzer::I,
             GATE_IS_UNITARY,
             []() -> ExtraGateData {
@@ -136,7 +136,7 @@ H 0
             "Z",
             0,
             &TableauSimulator::Z,
-            &FrameSimulator::I,
+            &FrameSimulator::Z,
             &ErrorAnalyzer::I,
             GATE_IS_UNITARY,
             []() -> ExtraGateData {

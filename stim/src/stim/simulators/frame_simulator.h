@@ -48,6 +48,7 @@ struct FrameSimulator {
 
     /* ADDED VARIABLES */
     simd_bit_table leakage_table; // leakage_table[q][k] is whether or not qubit q has leaked in instance k.
+    simd_bit_table meas_table;  // meas_table[q][k] = *_table[q][k] | leakage_table[q][k].
     MeasureRecordBatch leak_record;
 
     std::vector<double> log_prob_table_baseline;
@@ -105,7 +106,7 @@ struct FrameSimulator {
     void set_frame(size_t sample_index, const PauliStringRef &new_frame);
 
     void reset_all_and_run(const Circuit &circuit);
-    void reset_all();
+    void reset_all(bool partial=false);
 
     void measure_x(const OperationData &target_data);
     void measure_y(const OperationData &target_data);
@@ -118,6 +119,9 @@ struct FrameSimulator {
     void measure_reset_z(const OperationData &target_data);
 
     void I(const OperationData &target_data);
+    void X(const OperationData &target_data);
+    void Y(const OperationData &target_data);
+    void Z(const OperationData &target_data);
     void H_XZ(const OperationData &target_data);
     void H_XY(const OperationData &target_data);
     void H_YZ(const OperationData &target_data);

@@ -13,6 +13,7 @@
 #include "decoder.h"
 #include "defs.h"
 #include "fleece/lattice_graph.h"
+#include "fleece/rtanalysis.h"
 #include "graph/dijkstra.h"
 
 #include <fstream>
@@ -32,15 +33,15 @@
  * */
 
 #define EN_STATE_DRAIN  0x1
-#define EN_TMP_STAB_EXT 0x3 // enables EN_STATE_DRAIN by default.
-#define EN_DRIP_TEST    0x4
+#define EN_TMP_STAB_EXT 0x2 // enables EN_STATE_DRAIN by default.
+#define EN_SWAP_LRU     0x4
 
 namespace qrc {
 
 class Fleece {
 public:
     Fleece(const stim::CircuitGenParameters&,
-            uint8_t flags,
+            uint16_t flags,
             std::mt19937_64& rng,
             char reset_basis='Z',
             char output_basis='Z',
@@ -50,9 +51,14 @@ public:
     stim::simd_bit_table create_syndromes(
             uint64_t shots, 
             uint disable_leakage_at_round, 
-            bool maintain_failure_log=false);
+            bool maintain_failure_log=false,
+            bool record_in_rtanalyzer=false);
 
     std::string failure_log;
+
+    fleece::RealTimeAnalyzer * rtanalyzer;
+
+    uint64_t n_restarts;
 private:
     void compute_optimal_swap_set(void);
 
@@ -62,14 +68,14 @@ private:
     void write_syndrome_to_log(std::string&, const std::vector<uint8_t>&, const std::vector<uint8_t>&);
 
     void apply_reset(uint32_t qubit, bool add_error=true);
-    void apply_round_start_error(uint32_t qubit);
+    void apply_round_start_error(uint32_t qubit, fp_t dp_error_mult=1.0);
     void apply_H(uint32_t qubit);
     void apply_CX(uint32_t, uint32_t);
     void apply_measure(uint32_t qubit, bool add_error=true);
     void apply_SWAP(uint32_t, uint32_t, bool add_error=true);
 
     const stim::CircuitGenParameters circuit_params;
-    const uint8_t flags;
+    const uint16_t flags;
     const char reset_basis;
     const char output_basis;
     const bool perform_swaps;

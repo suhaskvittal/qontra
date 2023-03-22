@@ -35,6 +35,7 @@ public:
         bool is_x_parity;
         std::vector<int32_t> detectors;
         std::vector<uint32_t> measurement_times;
+        std::vector<uint32_t> leakage_severity;
 
         Vertex()
             :qubit(-1),
@@ -85,6 +86,9 @@ public:
     std::vector<Vertex*> adjacency_list(Vertex*);
 
     Vertex * get_cx_mate(Vertex*, uint8_t);
+
+    uint32_t get_leakage_severity_by_detector(int32_t);
+    uint32_t get_leakage_severity_by_vertex(Vertex*);
 
     std::vector<Vertex*> get_common_neighbors(Vertex*, Vertex*);
 private:

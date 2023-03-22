@@ -108,6 +108,22 @@ LatticeGraph::get_cx_mate(Vertex * v, uint8_t n) {
     return cx_order[v][n];
 }
 
+uint32_t
+LatticeGraph::get_leakage_severity_by_detector(int32_t detector) {
+    auto v = get_vertex_by_detector(detector);
+    if (v == nullptr) {
+        return -1;
+    }
+
+    for (uint i = 0; i < v->detectors.size(); i++) {
+        if (v->detectors[i] == detector) {
+            return v->leakage_severity[i];
+        }
+    }
+
+    return -1;
+}
+
 std::vector<LatticeGraph::Vertex*>
 LatticeGraph::get_common_neighbors(Vertex * v1, Vertex * v2) {
     std::vector<Vertex*> adj1 = adjacency_list(v1);
@@ -128,15 +144,17 @@ LatticeGraph::get_common_neighbors(Vertex * v1, Vertex * v2) {
 
 LatticeGraph
 to_lattice_graph(const stim::Circuit& circuit) {
+    LatticeGraph graph;
+    stim::Circuit flat_circ = circuit.flattened();
+
+    // Data structures for tracking program information
     std::deque<int32_t> measurement_order;
     std::map<int32_t, uint8_t> neighbor_count;
+    std::map<int32_t, uint32_t> leakage_severity;
 
     bool first_round = true;
     uint32_t detector_counter = 0;
     uint32_t measurement_time = 0;
-
-    LatticeGraph graph;
-    stim::Circuit flat_circ = circuit.flattened();
 
     uint32_t cx_op_num = 0;
 
@@ -146,6 +164,7 @@ to_lattice_graph(const stim::Circuit& circuit) {
             // This is a declaration of a qubit. Create a vertex.
             int32_t qubit = (int32_t)op.target_data.targets[0].data;
             graph.add_qubit(qubit, true, -1);
+            leakage_severity[qubit] = 0;
         } else if (opname == "H" && first_round) {
             const auto& targets = op.target_data.targets;
             for (uint32_t i = 0; i < targets.size(); i++) {
@@ -209,6 +228,15 @@ to_lattice_graph(const stim::Circuit& circuit) {
                 int32_t q = measurement_order[index];
                 uint8_t is_data = (!first_round << 1);
                 graph.add_qubit(q, is_data, detector_counter++);
+                
+                auto v = graph.get_vertex_by_qubit(q);
+                v->leakage_severity.push_back(leakage_severity[q]);
+                leakage_severity[q] = 0;
+            }
+        } else if (opname == "L_ERROR") {
+            const auto& targets = op.target_data.targets;
+            for (auto target : targets) {
+                leakage_severity[target.data]++;
             }
         } else if (opname == "SIMHALT") {
             first_round = false;
@@ -217,16 +245,6 @@ to_lattice_graph(const stim::Circuit& circuit) {
             break;
         }
     }
-    /*
-    // Now, identify any data qubits connected to less than 4 parity qubits.
-    // Connect these to the boundary.
-    graph.add_qubit(LATTICE_BOUNDARY, false, LATTICE_BOUNDARY_DETECTOR, -1, true);
-    for (auto pair : neighbor_count) {
-        if (pair.second < 4) {
-            graph.add_coupling(LATTICE_BOUNDARY, pair.first);
-        }
-    }
-    */
 
     return graph;
 }
