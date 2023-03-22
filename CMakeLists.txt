@@ -23,6 +23,8 @@ set(QUARCH_PROGRAM_FILES
     src/fleece/lattice_graph.cpp
     src/fleece/rtanalysis.cpp
     src/fleece/hldecoder.cpp
+    # WINDOW
+    src/window/wrapper.cpp
     # STATBENCH
     src/benchmark/statbench/analytical_dist.cpp
     src/benchmark/statbench/numerical_dist.cpp)

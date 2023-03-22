@@ -7,47 +7,6 @@
 
 namespace qrc {
 
-//#define TRY_FILTER
-#ifdef TRY_FILTER
-static bool did_get_search_space_size = false;
-static std::set<std::map<uint, uint>> search_set;
-uint64_t _gsss_helper(
-        const std::map<uint, std::vector<uint>>& mate_list,
-        const std::map<uint, uint>& curr_matching)
-{
-    if (curr_matching.size() == mate_list.size()) {
-        if (search_set.count(curr_matching)) {
-            return 0;
-        }
-        search_set.insert(curr_matching);
-        return 1;
-    }
-    uint64_t n_matchings = 0;
-    for (auto pair : mate_list) {
-        uint vi = pair.first;
-        auto vj_list = pair.second;
-        if (curr_matching.count(vi)) {
-            continue;
-        }
-        for (uint vj : vj_list) {
-            if (curr_matching.count(vj) || vj <= vi) {
-                continue;
-            }
-            std::map<uint, uint> new_matching(curr_matching);
-            new_matching[vi] = vj;
-            new_matching[vj] = vi;
-            n_matchings += _gsss_helper(mate_list, new_matching);
-        }
-    }
-    return n_matchings;
-}
-
-uint64_t get_search_space_size(const std::map<uint, std::vector<uint>>& mate_list) {
-    std::map<uint, uint> init;
-    return _gsss_helper(mate_list, init); 
-}
-#endif
-
 MWPMDecoder::MWPMDecoder(const stim::Circuit& circ, uint max_detector) 
     :Decoder(circ),
     longest_error_chain(0),
@@ -124,12 +83,6 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     uint n_edges = n_vertices * (n_vertices + 1) / 2;  // Graph is complete.
     PerfectMatching pm(n_vertices, n_edges);
     pm.options.verbose = false;
-#ifdef TRY_FILTER
-    PerfectMatching pmfilt(n_vertices, n_edges);
-    pmfilt.options.verbose = false;
-    uint32_t n_filtedges = 0;
-    std::map<uint, std::vector<uint>> possible_mates;
-#endif
     // Add edges.
     for (uint vi = 0; vi < n_vertices; vi++) {
         uint di = detector_list[vi];
@@ -146,28 +99,10 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
             // Note that we have already typedef'd qfp_t as wgt_t.
             wgt_t edge_weight = (wgt_t) (MWPM_INTEGER_SCALE * raw_weight);
             pm.AddEdge(vi, vj, edge_weight);
-#ifdef TRY_FILTER
-            if (edge_weight <= 9000) {
-                pmfilt.AddEdge(vi, vj, edge_weight); 
-                n_filtedges++;
-                if (!possible_mates.count(di)) {
-                    possible_mates[di] = std::vector<uint>();
-                }
-                possible_mates[di].push_back(dj);
-                if (!possible_mates.count(dj)) {
-                    possible_mates[dj] = std::vector<uint>();
-                }
-                possible_mates[dj].push_back(di);
-
-            }
-#endif
         }
     }
     // Solve instance.
     pm.Solve();
-#ifdef TRY_FILTER
-    fp_t weight = 0.0;
-#endif
     std::map<uint, uint> matching;
     for (uint vi = 0; vi < n_vertices; vi++) {
         uint vj = pm.GetMatch(vi);
@@ -176,73 +111,11 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         // Update matching data structure.
         matching[di] = dj;
         matching[dj] = di;
-#ifdef TRY_FILTER
-        weight += path_table[std::make_pair(di, dj)].distance;
-#endif
     }
     // Compute logical correction.
     std::vector<uint8_t> correction = get_correction_from_matching(matching);
     bool is_error = 
         is_logical_error(correction, syndrome, n_detectors, n_observables);
-#ifdef TRY_FILTER
-    uint hw = std::accumulate(syndrome.begin(),
-                                syndrome.begin()+n_detectors,
-                                0);
-    if (hw > 10) {
-        pmfilt.Solve();
-        std::map<uint, uint> filtmatching;
-        std::cout << "Syndrome (HW = " << hw << "): ";
-        for (uint i = 0; i < n_detectors; i++) {
-            if (syndrome[i]) {
-                std::cout << possible_mates[i].size();
-            } else {
-                std::cout << ".";
-            }
-        }
-        std::cout << "\n";
-        fp_t filt_weight = 0.0;
-        for (uint vi = 0; vi < n_vertices; vi++) {
-            uint vj = pmfilt.GetMatch(vi);
-            uint di = detector_list[vi];
-            uint dj = detector_list[vj];
-            // Update matching data structure.
-            filtmatching[di] = dj;
-            filtmatching[dj] = di;
-            fp_t w = path_table[std::make_pair(di, dj)].distance;
-            filt_weight += w;
-            std::cout << "\tUsed weight: " << w << "\n";
-        }
-        auto filt_correction = get_correction_from_matching(filtmatching);
-        bool filt_is_error =
-            is_logical_error(filt_correction, syndrome, n_detectors, n_observables);
-        std::cout << "\tOriginal error: " << is_error 
-            << ", Filtered error: " << filt_is_error << "\n";
-        std::cout << "\tFiltered edges: " << n_filtedges << " of " << n_edges << "\n";
-        std::cout << "\tWeights: " << weight << ", " << filt_weight << "\n";
-        std::cout << "\tWeights are equal: " << (weight == filt_weight) << "\n";
-        if (!did_get_search_space_size && hw >= 16) {
-            did_get_search_space_size = true;
-            uint64_t n_matchings = get_search_space_size(possible_mates);
-            for (auto pair : possible_mates) {
-                std::cout << pair.first << ":";
-                uint di = detector_list[pair.first];
-                for (uint vj : pair.second) {
-                    uint dj = detector_list[vj];
-                    fp_t w = path_table[std::make_pair(di, dj)].distance;
-                    std::cout << " " << vj << "(";
-                    if (w <= 7) {
-                        std::cout << "L";
-                    } else {
-                        std::cout << "M";
-                    }
-                    std::cout << ")";
-                }
-                std::cout << "\n";
-            }
-            std::cout << "\tSEARCH SPACE SIZE = " << n_matchings << "\n";
-        }
-    }
-#endif
     // Stop time here.
 #ifdef __APPLE__
     auto end_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
