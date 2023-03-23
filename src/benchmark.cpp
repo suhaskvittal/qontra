@@ -95,27 +95,19 @@ b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
             if (save_per_shot_data) {
                 syndromes[sn] = syndrome;
             }
-            if (hw > 0) {
-                DecoderShotResult res = decoder_p->decode_error(syndrome);
-                // Update statistics.
-//                n_logical_errors += (res.is_logical_error || leakage_buffer[i][n_detectors]);
-                n_logical_errors += res.is_logical_error;
-                mean_execution_time += res.execution_time / ((fp_t)total_shots);
-                if (res.execution_time > max_execution_time) {
-                    max_execution_time = res.execution_time;
-                    if (!res.is_logical_error) {
-                        max_execution_time_for_correctable = res.execution_time;    
-                    }
+            DecoderShotResult res = decoder_p->decode_error(syndrome);
+            // Update statistics.
+            n_logical_errors += res.is_logical_error;
+            mean_execution_time += res.execution_time / ((fp_t)total_shots);
+            if (res.execution_time > max_execution_time) {
+                max_execution_time = res.execution_time;
+                if (!res.is_logical_error) {
+                    max_execution_time_for_correctable = res.execution_time;    
                 }
-                if (save_per_shot_data) {
-                    execution_times[sn] = res.execution_time;
-                    memory_overheads[sn] = res.memory_overhead;
-                }
-            } else {
-                if (save_per_shot_data) {
-                    execution_times[sn] = 0;
-                    memory_overheads[sn] = 0;
-                }
+            }
+            if (save_per_shot_data) {
+                execution_times[sn] = res.execution_time;
+                memory_overheads[sn] = res.memory_overhead;
             }
             sn++;
         }

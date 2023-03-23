@@ -25,6 +25,7 @@ set(QUARCH_PROGRAM_FILES
     src/fleece/hldecoder.cpp
     # WINDOW
     src/window/wrapper.cpp
+    src/window/adaptive.cpp
     # STATBENCH
     src/benchmark/statbench/analytical_dist.cpp
     src/benchmark/statbench/numerical_dist.cpp)
