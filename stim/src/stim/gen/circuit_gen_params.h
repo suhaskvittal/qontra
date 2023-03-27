@@ -36,8 +36,10 @@ public:
     double after_clifford_sq_depolarization = -1;  // If negative, then will use after_clifford_depolarization.
     
     double before_round_leakage_probability = 0;
-    double after_reset_leakage_probability = 0;
     double after_clifford_leakage_probability = 0;
+
+    double after_clifford_leakage_transport = 0;
+
     // These will be the standard deviation.
     double after_clifford_depolarization_stddev = 0;
     double before_round_data_depolarization_stddev = 0;
@@ -47,8 +49,9 @@ public:
     double after_clifford_sq_depolarization_stddev = 0;
 
     double before_round_leakage_probability_stddev = 0;
-    double after_reset_leakage_probability_stddev = 0;
     double after_clifford_leakage_probability_stddev = 0;
+
+    double after_clifford_leakage_transport_stddev = 0;
 
     Distribution dist = Distribution::lognormal;
     
@@ -79,15 +82,14 @@ public:
             Circuit &circuit, const std::vector<uint32_t> targets,
             char basis = 'Z') const;
     void reset_data(void) const;
-    void set_leakage_on(bool) const;
 
     double get_after_clifford_depolarization(bool single_qubit_gate=false) const;
     double get_before_round_data_depolarization(void) const;
     double get_before_measure_flip_probability(void) const;
     double get_after_reset_flip_probability(void) const;
     double get_before_round_leakage_probability(void) const;
-    double get_after_reset_leakage_probability(void) const;
     double get_after_clifford_leakage_probability(void) const;
+    double get_after_clifford_leakage_transport(void) const;
 private:
     double get_error(double mean, double stddev) const;
 

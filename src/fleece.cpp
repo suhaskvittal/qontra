@@ -38,7 +38,7 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
     postresflip_table(),
     roundleak_table(),
     cliffordleak_table(),
-    postresleak_table(),
+    leaktransport_table(),
     rng(rng)
 {
     rtanalyzer = new fleece::RealTimeAnalyzer(base_circuit, rng);
@@ -210,80 +210,98 @@ Fleece::create_syndromes(uint64_t shots, uint disable_leakage_at_round, bool mai
             std::set<fleece::LatticeGraph::Vertex*> faulty_data_qubits_on_x;
             const uint n = parity_qubits.size();
             for (uint32_t i = 0; i < parity_qubits.size(); i++) {
-                if (!leakages[i]) {
-                    continue;
-                }
-                auto v = acting_parity_qubits[i];
                 // If v is a data qubit, then only the adjacent stabilizers were affected.
                 // So, clear the measurements.
-                if (v->is_data) {
-                    for (auto w : lattice_graph.adjacency_list(v)) {
-                        faulty_parity_checks.insert(w);
-                    }
-                } else {
-                    for (auto w : parity_qubits) {
-                        uint32_t mt = stab_meas_time[w];
-                        if (v == w || !comb_syndrome[mt]) {
-                            continue;
+                if (leakages[i]) {
+                    auto v = acting_parity_qubits[i];
+                    if (v->is_data) {
+                        for (auto w : lattice_graph.adjacency_list(v)) {
+                            faulty_parity_checks.insert(w);
                         }
-                        auto common = lattice_graph.get_common_neighbors(v, w);
-                        for (auto u : common) {
-                            if (w->is_x_parity) {
-                                faulty_data_qubits_on_z.insert(u);
-                            } else {
-                                faulty_data_qubits_on_x.insert(u);
+                    } else {
+                        for (auto w : parity_qubits) {
+                            uint32_t mt = stab_meas_time[w];
+                            if (v == w || !comb_syndrome[mt]) {
+                                continue;
+                            }
+                            auto common = lattice_graph.get_common_neighbors(v, w);
+                            for (auto u : common) {
+                                if (w->is_x_parity) {
+                                    faulty_data_qubits_on_z.insert(u);
+                                } else {
+                                    faulty_data_qubits_on_x.insert(u);
+                                }
+//                              sim->m_record.storage[meas_t_offset + mt][0] ^= 1;
                             }
                         }
+                    }
+                } else if (syndrome[i]) {
+                    auto v = parity_qubits[i];
+                    for (auto w : lattice_graph.adjacency_list(v)) {
+                        infected.insert(w);
                     }
                 }
             }
 
-            for (auto w : faulty_parity_checks) {
-                if (meas_t_offset == 0) {
-                    if (!w->is_x_parity) {
-                        sim->m_record.storage[stab_meas_time[w]][0] = 0;
-                        syndrome[stab_meas_time[w]] = 0;
-                    }
-                } else if (meas_t_offset == n) {
-                    // Fix only last round.
-                    sim->m_record.storage[n + stab_meas_time[w]][0] = sim->m_record.storage[stab_meas_time[w]][0];
-                    syndrome[stab_meas_time[w]] = prev_syndromes[0][stab_meas_time[w]];
-                } else {
-                    // Fix last two rounds.
-                    sim->m_record.storage[meas_t_offset + stab_meas_time[w]][0] =
-                        sim->m_record.storage[meas_t_offset + stab_meas_time[w] - 2*n][0];
-                    sim->m_record.storage[meas_t_offset + stab_meas_time[w] - n][0] =
-                        sim->m_record.storage[meas_t_offset + stab_meas_time[w] - 2*n][0];
+            if (!(flags & EN_SWAP_LRU)) {
+                for (auto w : faulty_data_qubits_on_z) {
+                    sim->z_table[w->qubit][0] ^= 1;
+                }
 
-                    syndrome[stab_meas_time[w]] = prev_syndromes[0][stab_meas_time[w]];
-                    prev_syndromes[1][stab_meas_time[w]] = prev_syndromes[0][stab_meas_time[w]];
+                for (auto w : faulty_data_qubits_on_x) {
+                    sim->x_table[w->qubit][0] ^= 1;
+                }
+
+                for (auto w : faulty_parity_checks) {
+                    if (meas_t_offset == 0) {
+                        if (!w->is_x_parity) {
+                            sim->m_record.storage[stab_meas_time[w]][0] = 0;
+                        }
+                    } else if (meas_t_offset == n) {
+                        // Fix only last round.
+                        sim->m_record.storage[n + stab_meas_time[w]][0] = sim->m_record.storage[stab_meas_time[w]][0];
+                    } else {
+                        // Fix last two rounds.
+                        sim->m_record.storage[meas_t_offset + stab_meas_time[w]][0] =
+                            sim->m_record.storage[meas_t_offset + stab_meas_time[w] - 2*n][0];
+                        sim->m_record.storage[meas_t_offset + stab_meas_time[w] - n][0] =
+                            sim->m_record.storage[meas_t_offset + stab_meas_time[w] - 2*n][0];
+                    }
                 }
             }
             // Using infected set, identify SWAP LRCs.
             std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_targets;
-            if (perform_swaps) {
-                if ((r == circuit_params.rounds - 1) && (flags & EN_STATE_DRAIN)) {
-                    // Perform last minute swap LRUs to kill any remaining leakage errors.
-                    for (auto pair : swap_set) {
-                        swap_targets[pair.first] = pair.second;
+            if ((r == circuit_params.rounds - 1) && (flags & EN_STATE_DRAIN)) {
+                // Perform last minute swap LRUs to kill any remaining leakage errors.
+                for (auto pair : swap_set) {
+                    swap_targets[pair.first] = pair.second;
+                }
+                // We will simulate "Temporary Stabilizer Extension" on the unlucky data qubit.
+            } else if (flags & EN_SWAP_LRU) {
+                if (r % 3 == 1) {
+                    already_swapped.clear();
+                }
+                
+                for (auto w : parity_qubits) {
+                    if (swap_targets.count(w)) {
+                        continue;
                     }
-                    // We will simulate "Temporary Stabilizer Extension" on the unlucky data qubit.
-                } else if (flags & EN_SWAP_LRU) {
-                    if (r % 3 == 1) {
-                        already_swapped.clear();
+                    for (auto v : lattice_graph.adjacency_list(w)) {
+                        if (already_swapped.count(v)) {
+                            continue;
+                        }
+                        swap_targets[w] = v;
+                        already_swapped.insert(v);
                     }
-                    
-                    for (auto w : parity_qubits) {
+                }
+            } else {
+                for (auto v : infected) {
+                    for (auto w : lattice_graph.adjacency_list(v)) {
                         if (swap_targets.count(w)) {
                             continue;
                         }
-                        for (auto v : lattice_graph.adjacency_list(w)) {
-                            if (already_swapped.count(v)) {
-                                continue;
-                            }
-                            swap_targets[w] = v;
-                            already_swapped.insert(v);
-                        }
+                        swap_targets[w] = v;
+                        break;
                     }
                 }
             }
@@ -542,16 +560,6 @@ Fleece::apply_reset(uint32_t qubit, bool add_error) {
 
         stim::OperationData xerror_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
         sim->X_ERROR(xerror_data);
-        // Now apply leakage error.
-        if (postresleak_table.count(qubit)) {
-            p = postresleak_table[qubit];
-        } else {
-            p = circuit_params.get_after_reset_leakage_probability();
-            postresleak_table[qubit] = p;
-        }
-
-        stim::OperationData lerror_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
-        sim->LEAKAGE_ERROR(lerror_data);
     }
 }
 
@@ -624,6 +632,14 @@ Fleece::apply_CX(uint32_t qubit1, uint32_t qubit2) {
     }
     stim::OperationData leak_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
     sim->LEAKAGE_ERROR(leak_data);
+
+    if (leaktransport_table.count(q1_q2)) {
+        p = leaktransport_table[q1_q2];
+    } else {
+        p = circuit_params.get_after_clifford_leakage_transport();
+    }
+    stim::OperationData transport_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
+    sim->LEAKAGE_TRANSPORT(transport_data);
 }
 
 void
@@ -673,6 +689,14 @@ Fleece::apply_SWAP(uint32_t qubit1, uint32_t qubit2, bool add_error) {
         }
         stim::OperationData leak_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
         sim->LEAKAGE_ERROR(leak_data);
+
+        if (leaktransport_table.count(q1_q2)) {
+            p = leaktransport_table[q1_q2];
+        } else {
+            p = circuit_params.get_after_clifford_leakage_transport();
+        }
+        stim::OperationData transport_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
+        sim->LEAKAGE_TRANSPORT(transport_data);
     }
 }
 

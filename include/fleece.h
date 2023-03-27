@@ -48,8 +48,7 @@ public:
             bool perform_swaps=true);
     ~Fleece();
 
-    stim::simd_bit_table create_syndromes(
-            uint64_t shots, 
+    stim::simd_bit_table create_syndromes(uint64_t shots, 
             uint disable_leakage_at_round, 
             bool maintain_failure_log=false,
             bool record_in_rtanalyzer=false);
@@ -98,7 +97,7 @@ private:
 
     std::map<uint32_t, fp_t> roundleak_table;
     std::map<std::vector<uint32_t>, fp_t> cliffordleak_table;
-    std::map<uint32_t, fp_t> postresleak_table;
+    std::map<std::vector<uint32_t>, fp_t> leaktransport_table;
 
     std::mt19937_64 rng;
 };

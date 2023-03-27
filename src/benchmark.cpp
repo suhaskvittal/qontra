@@ -363,10 +363,10 @@ build_circuit(
     fp_t meas_flip_stddev,
     fp_t round_leak_mean,
     fp_t clifford_leak_mean,
-    fp_t reset_leak_mean,
+    fp_t leak_transport_mean,
     fp_t round_leak_stddev,
     fp_t clifford_leak_stddev,
-    fp_t reset_leak_stddev)
+    fp_t leak_transport_stddev)
 {
     if (rounds == 0) {
         rounds = code_dist;
@@ -391,11 +391,11 @@ build_circuit(
 
     params.before_round_leakage_probability = __CHS(error_mean, pauliplus_error_mean, round_leak_mean);
     params.after_clifford_leakage_probability = __CHS(error_mean, pauliplus_error_mean, clifford_leak_mean);
-    params.after_reset_leakage_probability = __CHS(error_mean, pauliplus_error_mean, reset_leak_mean);
+    params.after_clifford_leakage_transport = __CHS(error_mean, pauliplus_error_mean, leak_transport_mean);
     
     params.before_round_leakage_probability_stddev = __CHS(error_stddev, pauliplus_error_stddev, round_leak_stddev);
     params.after_clifford_leakage_probability_stddev = __CHS(error_stddev, pauliplus_error_stddev, clifford_leak_stddev);
-    params.after_reset_leakage_probability_stddev = __CHS(error_stddev, pauliplus_error_stddev, reset_leak_stddev);
+    params.after_clifford_leakage_transport_stddev = __CHS(error_stddev, pauliplus_error_stddev, leak_transport_stddev);
 
     params.both_stabilizers = both_stabilizers;
     params.swap_lru = other_flags & BC_FLAG_SWAP_LRU_V1;

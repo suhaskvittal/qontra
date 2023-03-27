@@ -58,7 +58,6 @@ struct FrameSimulator {
     uint64_t sim_checkpoint;
 
     bool maintain_log_probabilities;
-    bool leakage_enabled;
 
     // Determines whether e.g. 50% Z errors are multiplied into the frame when measuring in the Z basis.
     // This is necessary for correct sampling.
@@ -155,9 +154,9 @@ struct FrameSimulator {
     void ELSE_CORRELATED_ERROR(const OperationData &target_data);
 
     void LEAKAGE_ERROR(const OperationData& target_data);
+    void LEAKAGE_TRANSPORT(const OperationData& target_data);
 
     bool cycle_level_simulation(const Circuit&);
-    void toggle_leakage(void);
    private:
     void xor_control_bit_into(uint32_t control, simd_bits_range_ref target);
     void single_cx(uint32_t c, uint32_t t);
