@@ -92,10 +92,10 @@ build_circuit(
     fp_t meas_flip_stddev=-1,
     fp_t round_leak_mean=-1,
     fp_t clifford_leak_mean=-1,
-    fp_t reset_leak_mean=-1,
+    fp_t leak_transport_mean=-1,
     fp_t round_leak_stddev=-1,
     fp_t clifford_leak_stddev=-1,
-    fp_t reset_leak_stddev=-1);
+    fp_t leak_transport_stddev=-1);
 
 }  // qrc
 

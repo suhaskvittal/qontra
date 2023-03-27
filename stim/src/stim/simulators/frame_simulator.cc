@@ -66,8 +66,7 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       log_prob_table_reference(batch_size, 0.0),
       reference_error_rate(0.0),
       sim_checkpoint(0),
-      maintain_log_probabilities(false),
-      leakage_enabled(true)
+      maintain_log_probabilities(false)
 {}
 
 void FrameSimulator::xor_control_bit_into(uint32_t control, simd_bits_range_ref target)
@@ -108,7 +107,6 @@ void FrameSimulator::reset_all(bool partial) {
     m_record.clear();
     leak_record.clear();
     sim_checkpoint = 0;
-    leakage_enabled = true;
 }
 
 void FrameSimulator::reset_all_and_run(const Circuit &circuit) {
@@ -703,9 +701,6 @@ void FrameSimulator::ELSE_CORRELATED_ERROR(const OperationData &target_data) {
 }
 
 void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
-    if (!leakage_enabled) {
-        return;
-    }
     const double p = target_data.args[0];
     const auto& targets = target_data.targets;
 
@@ -726,6 +721,26 @@ void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
     RareErrorIterator::for_samples(p, targets.size() * batch_size, rng, call_f);
 }
 
+void FrameSimulator::LEAKAGE_TRANSPORT(const OperationData& target_data) {
+    const double p = target_data.args[0];
+    const auto& targets = target_data.targets;
+    assert(!(targets.size() & 1));
+    
+    auto call_f = [&](size_t s)
+    {
+        auto target_index = (s / batch_size) << 1;
+        auto sample_index = s % batch_size;
+        auto t1 = targets[target_index];
+        auto t2 = targets[target_index+1];
+
+        leakage_table[t1.data][sample_index] |= leakage_table[t2.data][sample_index];
+        leakage_table[t2.data][sample_index] |= leakage_table[t1.data][sample_index];
+    };
+
+    auto n = (targets.size() * batch_size) >> 1;
+    RareErrorIterator::for_samples(p, n, rng, call_f);
+}
+
 bool
 FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
     Circuit flat_circ = circuit.flattened();
@@ -741,11 +756,6 @@ FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
         (this->*op.gate->frame_simulator_function)(op.target_data);
     }
     return true;
-}
-
-void
-FrameSimulator::toggle_leakage() {
-    leakage_enabled = !leakage_enabled;
 }
 
 void sample_out_helper(
