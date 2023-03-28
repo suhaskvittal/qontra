@@ -154,7 +154,7 @@ void FrameSimulator::measure_z(const OperationData &target_data) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         leak_record.record_result(leakage_table[q]);
         meas_table[q].clear();
-        meas_table[q] ^= x_table[q];
+        meas_table[q] |= x_table[q];
         meas_table[q] |= leakage_table[q];
         m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
@@ -336,10 +336,10 @@ void FrameSimulator::single_cx(uint32_t c, uint32_t t) {
                 const simd_word randx(rng(), rng());
                 const simd_word randz(rng(), rng());
 
-                x2 ^= l2.andnot(x1) | (randx & l1);
-                z1 ^= l2.andnot(z2) | (randz & l2);
-                x1 ^= randx & l2;
-                z2 ^= randz & l1;
+                x2 ^= l2.andnot(x1) | (randx & l1) | (randx | randz).andnot(l1);
+                z1 ^= l2.andnot(z2) | (randz & l2) | (randx | randz).andnot(l2);
+                x1 ^= (randx & l2) | (randx | randz).andnot(l2);
+                z2 ^= (randz & l1) | (randx | randz).andnot(l1);
 //                z1 ^= z2;
 //                x2 ^= x1;
             });
@@ -710,6 +710,8 @@ void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
         leakage_table[t.data][sample_index] ^= true;  
+        x_table[t.data][sample_index] = rng() & 0x1;
+        z_table[t.data][sample_index] = rng() & 0x1;
 
         log_prob_table_baseline[sample_index] += log(p) - log(1-p);
     };
@@ -733,8 +735,9 @@ void FrameSimulator::LEAKAGE_TRANSPORT(const OperationData& target_data) {
         auto t1 = targets[target_index];
         auto t2 = targets[target_index+1];
 
+        auto tmp = leakage_table[t1.data][sample_index];
         leakage_table[t1.data][sample_index] |= leakage_table[t2.data][sample_index];
-        leakage_table[t2.data][sample_index] |= leakage_table[t1.data][sample_index];
+        leakage_table[t2.data][sample_index] |= tmp;
     };
 
     auto n = (targets.size() * batch_size) >> 1;

@@ -15,12 +15,14 @@
 #include "fleece/lattice_graph.h"
 #include "fleece/rtanalysis.h"
 #include "graph/dijkstra.h"
+#include "mwpm_decoder.h"
 
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <random>
-#include <set>
+#include <set> 
 #include <string>
 #include <vector>
 #include <utility>
@@ -32,10 +34,10 @@
  *  Z basis operations at the moment.
  * */
 
-#define EN_SQUASH_AND_FIX   0x1
-#define EN_STATE_DRAIN      0x2
-#define EN_TMP_STAB_EXT     0x4 // enables EN_STATE_DRAIN by default.
-#define EN_SWAP_LRU         0x8
+#define EN_STATE_DRAIN      0x01
+#define EN_TMP_STAB_EXT     0x02 // enables EN_STATE_DRAIN by default.
+#define EN_SWAP_LRU         0x04
+#define NO_MITIGATION       0x08
 
 namespace qrc {
 
@@ -45,12 +47,10 @@ public:
             uint16_t flags,
             std::mt19937_64& rng,
             char reset_basis='Z',
-            char output_basis='Z',
-            bool perform_swaps=true);
+            char output_basis='Z');
     ~Fleece();
 
     stim::simd_bit_table create_syndromes(uint64_t shots, 
-            uint disable_leakage_at_round, 
             bool maintain_failure_log=false,
             bool record_in_rtanalyzer=false);
 
@@ -59,7 +59,13 @@ public:
     fleece::RealTimeAnalyzer * rtanalyzer;
 
     uint64_t n_restarts;
+    std::vector<uint64_t> parity_leakage_population;
+    std::vector<uint64_t> data_leakage_population;
 private:
+    DecoderShotResult decode_error(
+            const std::vector<uint8_t>&, const std::vector<fleece::LatticeGraph::Vertex*>& faults);
+    bool path_contains_faults(uint, uint, const std::vector<fleece::LatticeGraph::Vertex*>& faults);
+
     void compute_optimal_swap_set(void);
 
     void write_leakage_condition_to_log(std::string&);
@@ -69,7 +75,7 @@ private:
 
     void apply_reset(uint32_t qubit, bool add_error=true);
     void apply_round_start_error(uint32_t qubit, fp_t dp_error_mult=1.0);
-    void apply_H(uint32_t qubit);
+    void apply_H(uint32_t qubit, bool add_error=true);
     void apply_CX(uint32_t, uint32_t);
     void apply_measure(uint32_t qubit, bool add_error=true);
     void apply_SWAP(uint32_t, uint32_t, bool add_error=true);
@@ -78,10 +84,12 @@ private:
     const uint16_t flags;
     const char reset_basis;
     const char output_basis;
-    const bool perform_swaps;
 
     stim::Circuit base_circuit;
     stim::FrameSimulator * sim;
+
+    DecodingGraph decoding_graph;
+    graph::PathTable<DecodingGraph::Vertex> path_table;
 
     fleece::LatticeGraph lattice_graph;
     std::vector<fleece::LatticeGraph::Vertex*> data_qubits;
@@ -102,15 +110,6 @@ private:
 
     std::mt19937_64 rng;
 };
-
-stim::simd_bit_table
-double_stabilizer_to_single_stabilizer(
-        stim::simd_bit_table,
-        uint code_dist,
-        uint num_detectors,
-        uint num_observables,
-        uint num_shots,
-        bool is_memory_z=true);
 
 } // qrc
 
