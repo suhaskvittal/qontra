@@ -18,8 +18,8 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
     :failure_log(),
     rtanalyzer(nullptr),
     n_restarts(0),
-    parity_leakage_population(params.rounds/params.distance, 0),
-    data_leakage_population(params.rounds/params.distance, 0),
+    parity_leakage_population(params.rounds, 0),
+    data_leakage_population(params.rounds, 0),
     circuit_params(params),
     flags(flags),
     reset_basis(reset_basis),
@@ -202,6 +202,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         prev_leakages.fill(std::vector<uint8_t>(parity_qubits.size(), 0));
 
         std::set<fleece::LatticeGraph::Vertex*> already_swapped;
+        std::set<fleece::LatticeGraph::Vertex*> recently_used;
 
         std::deque<fleece::LatticeGraph::Vertex*> decoding_queue;
 
@@ -213,14 +214,12 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             std::set<fleece::LatticeGraph::Vertex*> faulty_parity_checks;
             const uint n = parity_qubits.size();
 
-            if (r % circuit_params.distance == 0) {
-                uint index = r / circuit_params.distance - 1;
-                for (auto v : data_qubits) {
-                    dlp[index] += sim->leakage_table[v->qubit][0];
-                }
-                for (auto v : parity_qubits) {
-                    plp[index] += sim->leakage_table[v->qubit][0];
-                }
+            uint index = r - 1;
+            for (auto v : data_qubits) {
+                dlp[index] += sim->leakage_table[v->qubit][0];
+            }
+            for (auto v : parity_qubits) {
+                plp[index] += sim->leakage_table[v->qubit][0];
             }
 
             // Dump decoding queue.
@@ -304,7 +303,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             }
             // Using infected set, identify SWAP LRCs.
             std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_targets;
-            if ((r == circuit_params.rounds - 1) && (flags & EN_STATE_DRAIN)) {
+            if ((r % circuit_params.distance == circuit_params.distance - 1) && (flags & EN_STATE_DRAIN)) {
                 // Perform last minute swap LRUs to kill any remaining leakage errors.
                 for (auto pair : swap_set) {
                     swap_targets[pair.first] = pair.second;
@@ -328,15 +327,24 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     }
                 }
             } else if (!(flags & NO_MITIGATION)) {
+                std::set<fleece::LatticeGraph::Vertex*> used;
+                std::set<fleece::LatticeGraph::Vertex*> swapped;
                 for (auto v : infected) {
+                    if (already_swapped.count(v)) {
+                        continue;
+                    }
                     for (auto w : lattice_graph.adjacency_list(v)) {
-                        if (swap_targets.count(w)) {
+                        if (swap_targets.count(w) || recently_used.count(w)) {
                             continue;
                         }
                         swap_targets[w] = v;
+                        used.insert(w);
+                        swapped.insert(v);
                         break;
                     }
                 }
+                recently_used = used;
+                already_swapped = swapped;
             }
 
             // Update previous syndromes and leakages
@@ -411,12 +419,12 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 measurement_time++;
             }
 
-            if ((flags & EN_TMP_STAB_EXT) && r == circuit_params.rounds-1) {
+            if ((flags & EN_TMP_STAB_EXT)) {
                 // Simulate "Temporary Stabilizer Extension"
                 // We apply the same errors as we would at the beginning of a round (depolarizing + leakage)
                 apply_round_start_error(unlucky_data_qubit->qubit);
                 if (sim->leakage_table[unlucky_data_qubit->qubit][0] ^ ((rng() % rng_mod) == 0)) {
-                    restart_shot = true;
+                    restart_shot = (r == circuit_params.rounds - 1);
                 }
                 if (sim->leakage_table[unlucky_data_qubit->qubit][0]) {
                     // Only situation where the SWAP fails.
@@ -448,7 +456,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             meas_t_offset += parity_qubits.size();
         }
         // Perform tail measurements.
-        if (restart_shot && !(flags & NO_MITIGATION)) {
+        if (restart_shot && !(flags & (NO_MITIGATION | NO_RESTART))) {
             n_restarts++;
             continue;
         }

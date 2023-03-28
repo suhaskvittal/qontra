@@ -336,10 +336,10 @@ void FrameSimulator::single_cx(uint32_t c, uint32_t t) {
                 const simd_word randx(rng(), rng());
                 const simd_word randz(rng(), rng());
 
-                x2 ^= l2.andnot(x1) | (randx & l1) | (randx | randz).andnot(l1);
-                z1 ^= l2.andnot(z2) | (randz & l2) | (randx | randz).andnot(l2);
-                x1 ^= (randx & l2) | (randx | randz).andnot(l2);
-                z2 ^= (randz & l1) | (randx | randz).andnot(l1);
+                x2 ^= l2.andnot(x1) | (randx & l1);
+                z1 ^= l2.andnot(z2) | (randz & l2);
+                x1 ^= randx & l2;
+                z2 ^= randz & l1;
 //                z1 ^= z2;
 //                x2 ^= x1;
             });

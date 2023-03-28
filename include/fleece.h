@@ -38,6 +38,7 @@
 #define EN_TMP_STAB_EXT     0x02 // enables EN_STATE_DRAIN by default.
 #define EN_SWAP_LRU         0x04
 #define NO_MITIGATION       0x08
+#define NO_RESTART          0x10
 
 namespace qrc {
 
