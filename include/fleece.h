@@ -90,9 +90,10 @@ private:
     stim::FrameSimulator * sim;
 
     DecodingGraph decoding_graph;
-    graph::PathTable<DecodingGraph::Vertex> path_table;
+    graph::PathTable<DecodingGraph::Vertex> decoder_path_table;
 
     fleece::LatticeGraph lattice_graph;
+    graph::PathTable<fleece::LatticeGraph::Vertex> lattice_path_table;
     std::vector<fleece::LatticeGraph::Vertex*> data_qubits;
     std::vector<fleece::LatticeGraph::Vertex*> parity_qubits;
 

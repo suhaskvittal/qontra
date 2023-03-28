@@ -27,7 +27,7 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
     base_circuit(stim::generate_surface_code_circuit(params).circuit),
     sim(nullptr),
     decoding_graph(),
-    path_table(),
+    decoder_path_table(),
     lattice_graph(),
     data_qubits(),
     swap_set(),
@@ -44,11 +44,12 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
     rng(rng)
 {   
     decoding_graph = to_decoding_graph(base_circuit);
-    path_table = compute_path_table(decoding_graph); 
+    decoder_path_table = compute_path_table(decoding_graph); 
     rtanalyzer = new fleece::RealTimeAnalyzer(base_circuit, rng);
 
     sim = new stim::FrameSimulator(base_circuit.count_qubits(), 1, SIZE_MAX, rng);
     lattice_graph = fleece::to_lattice_graph(base_circuit);
+    lattice_path_table = fleece::compute_path_table(lattice_graph);
     
     std::vector<fleece::LatticeGraph::Vertex*> x_parity_qubits;
     std::vector<fleece::LatticeGraph::Vertex*> z_parity_qubits;
@@ -160,7 +161,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 syndrome[measurement_time] = 0;
             } else {
                 // Only record as error if parity qubit isn't leaked.
-                syndrome[measurement_time] = sim->m_record.storage[measurement_time][0] & ~leakages[measurement_time];
+                syndrome[measurement_time] = sim->m_record.storage[measurement_time][0];
             }
             acting_parity_qubits[measurement_time] = v;
             stab_meas_time[v] = measurement_time;
@@ -202,7 +203,14 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         prev_leakages.fill(std::vector<uint8_t>(parity_qubits.size(), 0));
 
         std::set<fleece::LatticeGraph::Vertex*> already_swapped;
-        std::set<fleece::LatticeGraph::Vertex*> recently_used;
+
+        std::deque<fleece::LatticeGraph::Vertex*> usage_queue;
+        for (auto v : data_qubits) {
+            usage_queue.push_back(v);
+        }
+        for (auto v : parity_qubits) {
+            usage_queue.push_back(v);
+        }
 
         std::deque<fleece::LatticeGraph::Vertex*> decoding_queue;
 
@@ -251,13 +259,14 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
 
                 for (uint syn_index = 0; syn_index < r - min_r; syn_index++) { 
                     auto syn = prev_syndromes[prev_syndromes.size() - syn_index - 1];
+                    auto lk = prev_leakages[prev_leakages.size() - syn_index - 1];
                     for (uint i = 0; i < n; i++) {
                         if ((parity_qubits[i]->is_x_parity && output_basis == 'Z')
                             || (!parity_qubits[i]->is_x_parity && output_basis == 'X')) 
                         {
                             continue;
                         }
-                        micro_syndrome[k++] ^= syn[i];
+                        micro_syndrome[k++] ^= syn[i] & ~lk[i];
                     }
                 }
 
@@ -267,7 +276,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     {
                         continue;
                     }
-                    micro_syndrome[k++] ^= syndrome[i];
+                    micro_syndrome[k++] ^= syndrome[i] & ~leakages[i];
                 }
 
                 auto mdres = decode_error(micro_syndrome, major_faults);
@@ -296,8 +305,15 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     decoding_queue.push_back(v);
                 } else if (syndrome[i]) {
                     auto v = parity_qubits[i];
-                    for (auto w : lattice_graph.adjacency_list(v)) {
-                        infected.insert(w);
+                    for (uint32_t j = i+1; j < parity_qubits.size(); j++) {
+                        if (syndrome[j]) {
+                            auto w = parity_qubits[j];
+                            auto path = lattice_path_table[std::make_pair(v, w)].path;
+                            uint chain_length = path.size() >> 1;
+                            if (chain_length < ((circuit_params.distance-1) >> 1)) {
+                                for (auto u : path) infected.insert(u);
+                            }
+                        }
                     }
                 }
             }
@@ -327,23 +343,54 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     }
                 }
             } else if (!(flags & NO_MITIGATION)) {
-                std::set<fleece::LatticeGraph::Vertex*> used;
+                std::map<fleece::LatticeGraph::Vertex*, uint> priority_table;
+                for (uint i = 0; i < usage_queue.size(); i++) {
+                    priority_table[usage_queue[i]] = i;
+                }
                 std::set<fleece::LatticeGraph::Vertex*> swapped;
                 for (auto v : infected) {
                     if (already_swapped.count(v)) {
                         continue;
                     }
+                    int max_priority = -1;
+                    fleece::LatticeGraph::Vertex * victim;
                     for (auto w : lattice_graph.adjacency_list(v)) {
-                        if (swap_targets.count(w) || recently_used.count(w)) {
+                        if (swap_targets.count(w)) {
                             continue;
                         }
-                        swap_targets[w] = v;
-                        used.insert(w);
-                        swapped.insert(v);
+                        uint prio = priority_table[w];
+                        if (prio > max_priority) {
+                            max_priority = prio;
+                            victim = w;
+                        }
+                    }
+                    swap_targets[victim] = v;
+                    swapped.insert(v);
+                }
+
+                for (auto v : usage_queue) {
+                    if (swap_targets.count(v) || swapped.count(v)) {
+                        continue;
+                    }
+                    swapped.insert(v);
+                    if (swapped.size() == parity_qubits.size()) {
                         break;
                     }
                 }
-                recently_used = used;
+
+                std::deque<fleece::LatticeGraph::Vertex*> new_queue_entries;
+                for (auto it = usage_queue.begin(); it != usage_queue.end(); ) {
+                    if (swapped.count(*it)) {
+                        it = usage_queue.erase(it);
+                        new_queue_entries.push_back(*it);
+                    } else {
+                        it++;
+                    }
+                }
+
+                for (auto v : new_queue_entries) {
+                    usage_queue.push_back(v);
+                }
                 already_swapped = swapped;
             }
 
@@ -413,8 +460,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                         restart_shot = true;
                     }
                 }
-                syndrome[i] = (sim->m_record.storage[measurement_time][0] ^ sim->m_record.storage[pmt][0])
-                                & ~leakages[i];
+                syndrome[i] = sim->m_record.storage[measurement_time][0] ^ sim->m_record.storage[pmt][0];
 
                 measurement_time++;
             }
@@ -527,7 +573,7 @@ Fleece::decode_error(const std::vector<uint8_t>& syndrome, const std::vector<fle
             uint dj = detector_list[j];
             auto vj = decoding_graph.get_vertex(dj);
 
-            auto w = path_table[std::make_pair(vi, vj)].distance;
+            auto w = decoder_path_table[std::make_pair(vi, vj)].distance;
             if (path_contains_faults(di, dj, faults)) {
                 w -= log10(circuit_params.before_round_data_depolarization) / log10(0.5);
                 if (w < 1) { 
@@ -555,7 +601,7 @@ Fleece::decode_error(const std::vector<uint8_t>& syndrome, const std::vector<fle
                 auto vi = decoding_graph.get_vertex(detector_list[i]);
                 auto vj = decoding_graph.get_vertex(detector_list[j]);
 
-                auto path = path_table[std::make_pair(vi, vj)].path;
+                auto path = decoder_path_table[std::make_pair(vi, vj)].path;
                 for (uint i = 1; i < path.size(); i++) {
                     auto wi = path[i-1];
                     auto wj = path[i];
@@ -577,7 +623,7 @@ bool
 Fleece::path_contains_faults(uint d1, uint d2, const std::vector<fleece::LatticeGraph::Vertex*>& faults) {
     auto vd1 = decoding_graph.get_vertex(d1);
     auto vd2 = decoding_graph.get_vertex(d2);
-    auto path = path_table[std::make_pair(vd1, vd2)].path;
+    auto path = decoder_path_table[std::make_pair(vd1, vd2)].path;
 
     const uint dist = circuit_params.distance;
     const uint detectors_per_round = (dist*dist-1) >> 1;
