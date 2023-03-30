@@ -63,10 +63,6 @@ public:
     std::vector<uint64_t> parity_leakage_population;
     std::vector<uint64_t> data_leakage_population;
 private:
-    DecoderShotResult decode_error(
-            const std::vector<uint8_t>&, const std::vector<fleece::LatticeGraph::Vertex*>& faults);
-    bool path_contains_faults(uint, uint, const std::vector<fleece::LatticeGraph::Vertex*>& faults);
-
     void compute_optimal_swap_set(void);
 
     void write_leakage_condition_to_log(std::string&);
@@ -88,9 +84,6 @@ private:
 
     stim::Circuit base_circuit;
     stim::FrameSimulator * sim;
-
-    DecodingGraph decoding_graph;
-    graph::PathTable<DecodingGraph::Vertex> decoder_path_table;
 
     fleece::LatticeGraph lattice_graph;
     graph::PathTable<fleece::LatticeGraph::Vertex> lattice_path_table;
