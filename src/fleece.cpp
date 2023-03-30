@@ -109,7 +109,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         std::vector<uint64_t> plp(parity_leakage_population.size(), 0);
 
         std::string shot_log;
-        sim->reset_all();
+        sim->reset_all(restart_shot);
         // Do first round -- special.
         //
         // Reset all qubits.
@@ -217,7 +217,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         uint32_t meas_t_offset = 0;
         restart_shot = false;
         for (uint r = 1; r <= circuit_params.rounds; r++) {
-            std::set<fleece::LatticeGraph::Vertex*> decoder_path_table;   // Set of vertices with potential leakages.
+            std::set<fleece::LatticeGraph::Vertex*> infected;   // Set of vertices with potential leakages.
             // Check for problems in the prior round.
             std::set<fleece::LatticeGraph::Vertex*> faulty_parity_checks;
             const uint n = parity_qubits.size();
@@ -308,7 +308,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 if (flags & NO_MITIGATION) continue;
                 if (leakages[i]) {
                     auto v = acting_parity_qubits[i];
-                    decoding_queue.push_back(v);
                 } else if (syndrome[i]) {
                     auto v = parity_qubits[i];
                     for (uint32_t j = i+1; j < parity_qubits.size(); j++) {
@@ -317,13 +316,13 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                             auto path = lattice_path_table[std::make_pair(v, w)].path;
                             uint chain_length = path.size() >> 1;
                             if (chain_length < ((circuit_params.distance-1) >> 1)) {
-                                for (auto u : path) decoder_path_table.insert(u);
+                                for (auto u : path) infected.insert(u);
                             }
                         }
                     }
                 }
             }
-            // Using decoder_path_table set, identify SWAP LRCs.
+            // Using infected set, identify SWAP LRCs.
             std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_targets;
             if ((r % circuit_params.distance == circuit_params.distance - 1) && (flags & EN_STATE_DRAIN)) {
                 // Perform last minute swap LRUs to kill any remaining leakage errors.
@@ -348,18 +347,16 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                         already_swapped.insert(v);
                     }
                 }
-            } else if (!(flags & NO_MITIGATION)) {
+            } else if (!(flags & NO_MITIGATION) && r < circuit_params.rounds - 2) {
                 std::map<fleece::LatticeGraph::Vertex*, uint> priority_table;
                 for (uint i = 0; i < usage_queue.size(); i++) {
                     priority_table[usage_queue[i]] = i;
                 }
+
                 std::set<fleece::LatticeGraph::Vertex*> swapped;
-                for (auto v : decoder_path_table) {
-                    if (already_swapped.count(v)) {
-                        continue;
-                    }
+                for (auto v : infected) {
                     int max_priority = -1;
-                    fleece::LatticeGraph::Vertex * victim;
+                    fleece::LatticeGraph::Vertex * victim = nullptr;
                     for (auto w : lattice_graph.adjacency_list(v)) {
                         if (swap_targets.count(w)) {
                             continue;
@@ -370,36 +367,55 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                             victim = w;
                         }
                     }
-                    swap_targets[victim] = v;
-                    swapped.insert(v);
+                    if (victim != nullptr) {
+                        swap_targets[victim] = v;
+                        swapped.insert(v);
+                    }
                 }
 
                 for (auto v : usage_queue) {
                     if (swap_targets.count(v) || swapped.count(v)) {
                         continue;
                     }
-                    swapped.insert(v);
+                    if (v->is_data) {
+                        int max_priority = priority_table[v];
+                        fleece::LatticeGraph::Vertex * victim = nullptr;
+                        for (auto w : lattice_graph.adjacency_list(v)) {
+                            if (swap_targets.count(w)) {
+                                continue;
+                            }
+                            uint prio = priority_table[w];
+                            if (prio > max_priority) {
+                                max_priority = prio;
+                                victim = w;
+                            }
+                        }
+
+                        if (victim != nullptr) {
+                            swap_targets[victim] = v;
+                            swapped.insert(v);
+                        }
+                    } else {
+                        swapped.insert(v);
+                    }
                     if (swapped.size() == parity_qubits.size()) {
                         break;
                     }
                 }
 
-                std::deque<fleece::LatticeGraph::Vertex*> new_queue_entries;
                 for (auto it = usage_queue.begin(); it != usage_queue.end(); ) {
                     if (swapped.count(*it)) {
                         it = usage_queue.erase(it);
-                        new_queue_entries.push_back(*it);
                     } else {
                         it++;
                     }
                 }
 
-                for (auto v : new_queue_entries) {
+                for (auto v : swapped) {
                     usage_queue.push_back(v);
                 }
                 already_swapped = swapped;
             }
-
             // Update previous syndromes and leakages
             for (uint j = prev_syndromes.size() - 1; j >= 1; j--) {
                 prev_syndromes[j] = prev_syndromes[j-1];
