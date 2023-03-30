@@ -88,6 +88,7 @@ private:
 
     stim::Circuit base_circuit;
     stim::FrameSimulator * sim;
+    MWPMDecoder * decoder;
 
     DecodingGraph decoding_graph;
     graph::PathTable<DecodingGraph::Vertex> decoder_path_table;
