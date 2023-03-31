@@ -26,8 +26,6 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
     output_basis(output_basis),
     base_circuit(stim::generate_surface_code_circuit(params).circuit),
     sim(nullptr),
-    decoding_graph(),
-    decoder_path_table(),
     lattice_graph(),
     data_qubits(),
     swap_set(),
@@ -43,8 +41,6 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
     leaktransport_table(),
     rng(rng)
 {   
-    decoding_graph = to_decoding_graph(base_circuit);
-    decoder_path_table = compute_path_table(decoding_graph); 
     rtanalyzer = new fleece::RealTimeAnalyzer(base_circuit, rng);
 
     sim = new stim::FrameSimulator(base_circuit.count_qubits(), 1, SIZE_MAX, rng);
@@ -225,8 +221,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             usage_queue.push_back(v);
         }
 
-        std::deque<fleece::LatticeGraph::Vertex*> decoding_queue;
-
         uint32_t meas_t_offset = 0;
         restart_shot = false;
         for (uint r = 1; r <= circuit_params.rounds; r++) {
@@ -243,75 +237,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 plp[index] += sim->leakage_table[v->qubit][0];
             }
             
-            // Dump decoding queue.
-            while (!decoding_queue.empty()) {
-                auto v = decoding_queue.front();
-                decoding_queue.pop_front();
-
-                std::vector<fleece::LatticeGraph::Vertex*> major_faults;
-                if (v->is_data) {
-                    major_faults.push_back(v);
-                } else if (v->is_x_parity == (output_basis == 'X')) {
-                    major_faults = lattice_graph.adjacency_list(v);
-                } else {
-                    continue;
-                }
-
-
-                const uint syndrome_size = base_circuit.count_detectors() + base_circuit.count_observables();
-                std::vector<uint8_t> micro_syndrome(syndrome_size, 0);
-
-                uint min_r = r > prev_syndromes.size() ? r - prev_syndromes.size() : 0;
-                uint k = min_r * detectors_per_round;
-    
-                for (uint d : matched_detectors) {
-                    if (d >= k) {
-                        micro_syndrome[d] ^= 1;
-                    }
-                }
-
-                for (uint syn_index = 0; syn_index < r - min_r; syn_index++) { 
-                    auto syn = prev_syndromes[prev_syndromes.size() - syn_index - 1];
-                    auto lk = prev_leakages[prev_leakages.size() - syn_index - 1];
-                    for (uint i = 0; i < n; i++) {
-                        if ((parity_qubits[i]->is_x_parity && output_basis == 'Z')
-                            || (!parity_qubits[i]->is_x_parity && output_basis == 'X')) 
-                        {
-                            continue;
-                        }
-                        micro_syndrome[k++] ^= syn[i] & ~lk[i];
-                    }
-                }
-
-                for (uint i = 0; i < n; i++) {
-                    if ((parity_qubits[i]->is_x_parity && output_basis == 'Z')
-                        || (!parity_qubits[i]->is_x_parity && output_basis == 'X')) 
-                    {
-                        continue;
-                    }
-                    micro_syndrome[k++] ^= syndrome[i] & ~leakages[i];
-                }
-
-                auto mdres = decode_error(micro_syndrome, major_faults);
-                for (auto pair : mdres.matching) {
-                    if (pair.first > pair.second) {
-                        continue;
-                    }
-                    matched_detectors.push_back(pair.first);
-                    if (pair.second != BOUNDARY_INDEX) {
-                        matched_detectors.push_back(pair.second);
-                    }
-
-                    auto vli = lattice_graph.get_vertex_by_detector(pair.first % detectors_per_round);
-                    auto vlj = lattice_graph.get_vertex_by_detector(pair.first % detectors_per_round);
-                    auto path = lattice_path_table[std::make_pair(vli, vlj)].path;
-                }
-
-                for (uint i = 0; i < base_circuit.count_observables(); i++) {
-                    result_obs[i] ^= mdres.correction[i];
-                }
-            }
-
             if (r == circuit_params.rounds) break;
 
             if (r == circuit_params.rounds - 1) {
@@ -536,114 +461,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         rtanalyzer->flush_table();
     }
     return syndromes;
-}
-
-DecoderShotResult
-Fleece::decode_error(const std::vector<uint8_t>& syndrome, const std::vector<fleece::LatticeGraph::Vertex*>& faults) {
-    std::vector<uint> detector_list;
-    for (uint d = 0; d < base_circuit.count_detectors(); d++) {
-        if (syndrome[d]) {
-            detector_list.push_back(d);
-        }
-    }
-
-    if (detector_list.size() & 0x1) {
-        detector_list.push_back(BOUNDARY_INDEX);
-    }
-
-    const uint number_of_nodes = detector_list.size();
-    const uint number_of_edges = (number_of_nodes*(number_of_nodes-1)) >> 1;
-        
-    PerfectMatching pm(number_of_nodes, number_of_edges);
-    pm.options.verbose = false;
-    std::set<std::pair<uint, uint>> faulting_edges;
-    for (uint i = 0; i < detector_list.size(); i++) {
-        uint di = detector_list[i];
-        auto vi = decoding_graph.get_vertex(di);
-        for (uint j = i+1; j < detector_list.size(); j++) {
-            uint dj = detector_list[j];
-            auto vj = decoding_graph.get_vertex(dj);
-
-            auto w = decoder_path_table[std::make_pair(vi, vj)].distance;
-            if (path_contains_faults(di, dj, faults)) {
-                w -= log10(circuit_params.before_round_data_depolarization) / log10(0.5);
-                if (w < 1) { 
-                    w = 1.0;
-                }
-                faulting_edges.insert(std::make_pair(i, j));
-                faulting_edges.insert(std::make_pair(j, i));
-            }
-            uint32_t m_weight = (uint32_t) (w * MWPM_INTEGER_SCALE);
-            pm.AddEdge(i, j, m_weight);
-        }
-    }
-
-    pm.Solve();
-
-    std::map<uint, uint> matching;
-    std::vector<uint8_t> correction(base_circuit.count_observables());
-    for (uint i = 0; i < number_of_nodes; i++) {
-        uint j = pm.GetMatch(i);
-        auto i_j = std::make_pair(i, j);
-        auto vi = decoding_graph.get_vertex(detector_list[i]);
-        auto vj = decoding_graph.get_vertex(detector_list[j]);
-        if (faulting_edges.count(i_j)) {
-            matching[detector_list[i]] = detector_list[j];
-
-            if (i < j) {
-                auto vi = decoding_graph.get_vertex(detector_list[i]);
-                auto vj = decoding_graph.get_vertex(detector_list[j]);
-
-                auto path = decoder_path_table[std::make_pair(vi, vj)].path;
-                for (uint i = 1; i < path.size(); i++) {
-                    auto wi = path[i-1];
-                    auto wj = path[i];
-                    auto edge = decoding_graph.get_edge(wi, wj);
-                    for (auto obs : edge->frames) {
-                        if (obs >= 0) {
-                            correction[obs] ^= 1;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    DecoderShotResult res = {0, 0, 0, correction, matching};
-    return res;
-}
-
-bool
-Fleece::path_contains_faults(uint d1, uint d2, const std::vector<fleece::LatticeGraph::Vertex*>& faults) {
-    auto vd1 = decoding_graph.get_vertex(d1);
-    auto vd2 = decoding_graph.get_vertex(d2);
-    auto path = decoder_path_table[std::make_pair(vd1, vd2)].path;
-
-    const uint dist = circuit_params.distance;
-    const uint detectors_per_round = (dist*dist-1) >> 1;
-
-    std::set<fleece::LatticeGraph::Vertex*> data_qubits_in_path;
-
-    for (uint i = 1; i < path.size() - 1; i++) {
-        auto wdi = path[i-1];
-        auto wdj = path[i];
-
-        if (wdi->detector == BOUNDARY_INDEX || wdj->detector == BOUNDARY_INDEX) {
-            continue;
-        }
-
-        auto wli = lattice_graph.get_vertex_by_detector(wdi->detector % detectors_per_round);
-        auto wlj = lattice_graph.get_vertex_by_detector(wdj->detector % detectors_per_round);
-        auto common = lattice_graph.get_common_neighbors(wli, wlj);
-        for (auto u : common) {
-            data_qubits_in_path.insert(u);
-        }
-    } 
-
-    bool has_fault = true;
-    for (auto v : faults) {
-        has_fault &= data_qubits_in_path.count(v);
-    }
-    return has_fault;
 }
 
 void
