@@ -6,7 +6,7 @@
 #ifndef ASTREA_h
 #define ASTREA_h
 
-#include "mwpm_decoder.h"
+#include "astrea/mld_decoder.h"
 #include "benchmark.h"
 #include "astrea/simulator.h"
 
@@ -34,10 +34,12 @@ struct AstreaParams {
     // Memory Parameters
     uint n_registers;
 
+    bool use_mld;
+    
     fp_t main_clock_frequency;   // in Hz
 };
 
-class Astrea : public MWPMDecoder {
+class Astrea : public astrea::MLDDecoder {
 public:
     Astrea(const stim::Circuit, 
             uint n_detectors_per_round, 
@@ -70,6 +72,7 @@ private:
     uint n_rounds;
     fp_t main_clock_frequency;
     fp_t time_limit;
+    bool use_mld;
     
     MWPMDecoder baseline;
 };

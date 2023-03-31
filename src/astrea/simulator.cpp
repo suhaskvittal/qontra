@@ -12,7 +12,7 @@ namespace astrea {
 static const uint BFU_SORT_STAGES = 4;
 static const uint RADIX_WIDTH = 16 / (BFU_SORT_STAGES);
 
-AstreaSimulator::AstreaSimulator(DecodingGraph& graph, MWPMDecoder& hw6decoder, const AstreaSimulatorParams& params)
+AstreaSimulator::AstreaSimulator(DecodingGraph& graph, const stim::Circuit& circ, const AstreaSimulatorParams& params)
     :
     /* Statistics */
     prefetch_cycles(0),
@@ -33,6 +33,8 @@ AstreaSimulator::AstreaSimulator(DecodingGraph& graph, MWPMDecoder& hw6decoder, 
                 BFU_SORT_STAGES+params.bfu_compute_stages)),
     replacement_queue(),
     best_matching_register(),
+    mld_bm_register(),
+    mld_prob_register(),
     state(AstreaSimulator::State::prefetch),
     bfu_idle(false),
     /* Data */
@@ -47,10 +49,20 @@ AstreaSimulator::AstreaSimulator(DecodingGraph& graph, MWPMDecoder& hw6decoder, 
     bfu_compute_stages(params.bfu_compute_stages),
     curr_qubit(0),
     has_boundary(false),
+    use_mld(params.use_mld),
     cycles_after_last_converge(0),
-    hw6decoder(hw6decoder)
+    hw6decoder(nullptr)
 {
     clear();
+    if (use_mld) {
+        hw6decoder = new MLDDecoder(circ);
+    } else {
+        hw6decoder = new MWPMDecoder(circ);
+    }
+}
+
+AstreaSimulator::~AstreaSimulator() {
+    delete hw6decoder;
 }
 
 void
@@ -150,7 +162,15 @@ AstreaSimulator::force_idle() {
 
 std::map<uint, uint>
 AstreaSimulator::get_matching() {
-    return best_matching_register.running_matching;
+    if (use_mld) {
+        if (mld_prob_register[0] > mld_prob_register[1]) {
+            return mld_bm_register[0].running_matching;
+        } else {
+            return mld_bm_register[1].running_matching;
+        }
+    } else {
+        return best_matching_register.running_matching;
+    }
 }
 
 void
@@ -324,23 +344,46 @@ AstreaSimulator::tick_bfu_compute(uint stage) {
                         subsyndrome[d] = 1;
                     }
                 }
-                auto hw6res = hw6decoder.decode_error(subsyndrome);
-                // Combine hw6 matching with existing matching.
-                for (auto pair : hw6res.matching) {
-                    if (matching.count(pair.first) || matching.count(pair.second)) {
-                        continue;
+                fp_t base_prob = pow(10, -((fp_t)matching_weight) / ((fp_t)MWPM_INTEGER_SCALE));
+                DecoderShotResult hw6res = hw6decoder->decode_error(subsyndrome);
+                if (use_mld) {
+                    for (uint8_t obs = 0; obs <= 1; obs++) {
+                        std::map<uint, uint> obs_matching(matching);
+                        auto rep = ((MLDDecoder*)hw6decoder)->get_representative(obs);
+                        for (auto pair : rep) {
+                            if (obs_matching.count(pair.first) || obs_matching.count(pair.second)) {
+                                continue;
+                            }
+                            obs_matching[pair.first] = pair.second;
+                            obs_matching[pair.second] = pair.first;
+                        }
+                        uint8_t true_obs = hw6decoder->get_correction_from_matching(obs_matching)[0];
+
+                        if (mld_prob_register[true_obs] == 0.0) {
+                            mld_bm_register[true_obs] = {obs_matching, 0, detector_vector_register.size()};
+                        }
+                        fp_t p = base_prob * ((MLDDecoder*)hw6decoder)->get_obs_prob(obs);
+                        mld_prob_register[true_obs] += p;
                     }
-                    matching[pair.first] = pair.second;
-                    matching[pair.second] = pair.first;
-                    auto vdi = graph.get_vertex(pair.first);
-                    auto vdj = graph.get_vertex(pair.second);
-                    matching_weight += (uint32_t) (path_table[std::make_pair(vdi, vdj)].distance * MWPM_INTEGER_SCALE);
-                }
-                // Update the output register.
-                if (matching_weight < best_matching_register.matching_weight) {
-                    best_matching_register = {matching, matching_weight, detector_vector_register.size()};
-                    // Update stats.
-                    cycles_to_converge = cycles_after_last_converge;
+                } else {
+                    auto submatching = hw6res.matching;
+                    // Combine hw6 matching with existing matching.
+                    for (auto pair : submatching) {
+                        if (matching.count(pair.first) || matching.count(pair.second)) {
+                            continue;
+                        }
+                        matching[pair.first] = pair.second;
+                        matching[pair.second] = pair.first;
+                        auto vdi = graph.get_vertex(pair.first);
+                        auto vdj = graph.get_vertex(pair.second);
+                        matching_weight += (uint32_t) (path_table[std::make_pair(vdi, vdj)].distance * MWPM_INTEGER_SCALE);
+                    }
+                    // Update the output register for MWPM.
+                    if (matching_weight < best_matching_register.matching_weight) {
+                        best_matching_register = {matching, matching_weight, detector_vector_register.size()};
+                        // Update stats.
+                        cycles_to_converge = cycles_after_last_converge;
+                    } 
                 }
             }
             latch.proposed_matches.pop_front();
@@ -599,6 +642,10 @@ AstreaSimulator::clear() {
         std::numeric_limits<uint32_t>::max(),
         0 
     };
+
+    mld_bm_register.fill({std::map<uint, uint>(), std::numeric_limits<uint32_t>::max(), 0});
+    mld_prob_register.fill(0.0);
+
     replacement_queue.clear();
     state = State::prefetch;
 #ifdef ASTREA_DEBUG

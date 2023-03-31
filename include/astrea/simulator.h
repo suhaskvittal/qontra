@@ -6,6 +6,7 @@
 #ifndef ASTREA_SIMULATOR_h
 #define ASTREA_SIMULATOR_h
 
+#include "astrea/mld_decoder.h"
 #include "defs.h"
 #include "decoding_graph.h"
 #include "graph/dijkstra.h"
@@ -34,6 +35,8 @@ struct AstreaSimulatorParams {
     uint bfu_priority_queue_size;
 
     uint32_t weight_filter_cutoff;
+
+    bool use_mld;
 };
 
 typedef std::pair<uint, uint> addr_t;
@@ -42,7 +45,8 @@ class AstreaDeque;
 
 class AstreaSimulator {
 public:
-    AstreaSimulator(DecodingGraph&, MWPMDecoder&, const AstreaSimulatorParams&);
+    AstreaSimulator(DecodingGraph&, const stim::Circuit&, const AstreaSimulatorParams&);
+    ~AstreaSimulator();
 
     void load_detectors(const std::vector<uint>&);
     void load_graph(DecodingGraph&, 
@@ -127,7 +131,11 @@ protected:
     
     std::deque<addr_t> replacement_queue;
 
+    // MWPM variant
     DequeEntry best_matching_register;
+    // MLD variant
+    std::array<DequeEntry, 2> mld_bm_register;
+    std::array<fp_t, 2> mld_prob_register;
     // Global state machine
     State state; 
     bool bfu_idle;
@@ -147,9 +155,11 @@ private:
     uint curr_qubit;
     bool has_boundary;
 
+    bool use_mld;
+
     uint32_t cycles_after_last_converge;
 
-    MWPMDecoder hw6decoder;  // Only used once HW <= 6.
+    MWPMDecoder * hw6decoder;
 
     friend class AstreaDeque;
 };

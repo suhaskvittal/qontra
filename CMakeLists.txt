@@ -16,6 +16,7 @@ set(QUARCH_PROGRAM_FILES
     # ASTREA
     src/astrea.cpp
     src/astrea/simulator.cpp
+    src/astrea/mld_decoder.cpp
     # TMR
     src/tmr_decoder.cpp
     # FLEECE
