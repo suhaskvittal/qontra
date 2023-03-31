@@ -28,19 +28,17 @@ void xor_measurement_set_into_result(
 {
     simd_bits_range_ref dst = output[output_index_ticker];
     for (auto i : measurement_set) {
-        if (use_leak_samples) {
-            dst.for_each_word(
-                    frame_samples[i], 
-                    leak_samples[i], 
-                    [&](simd_word& d, simd_word& f, simd_word& l) {
-                        const simd_word rand(RNG(), RNG());
+        dst.for_each_word(
+                frame_samples[i], 
+                leak_samples[i], 
+                [&](simd_word& d, simd_word& f, simd_word& l) {
+                    const simd_word rand(RNG(), RNG());
+                    if (use_leak_samples) {
                         d ^= l.andnot(f) | (rand & l);  // Leakage is always random.
-//                      d ^= l | f;     // Leakage is always 1.
-//                      d ^= l.andnot(f);    // Leakage is always 0.
-                    });
-        } else {
-            dst ^= frame_samples[i];
-        }
+                    } else {
+                        d ^= l | f;
+                    }
+                });
     }
 }
 
