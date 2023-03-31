@@ -26,8 +26,6 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
     output_basis(output_basis),
     base_circuit(stim::generate_surface_code_circuit(params).circuit),
     sim(nullptr),
-    decoding_graph(),
-    decoder_path_table(),
     lattice_graph(),
     data_qubits(),
     swap_set(),
@@ -43,8 +41,6 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
     leaktransport_table(),
     rng(rng)
 {   
-    decoding_graph = to_decoding_graph(base_circuit);
-    decoder_path_table = compute_path_table(decoding_graph); 
     rtanalyzer = new fleece::RealTimeAnalyzer(base_circuit, rng);
 
     sim = new stim::FrameSimulator(base_circuit.count_qubits(), 1, SIZE_MAX, rng);
@@ -104,23 +100,12 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
 
     uint64_t syndrome_table_index = 0;
     bool restart_shot = false;
-
-    const uint dist = circuit_params.distance;
-    const uint detectors_per_round = (dist*dist - 1) >> 1;
-
-    std::vector<uint8_t> result_obs(base_circuit.count_observables(), 0);  // Observable resulting from matchings.
     while (shots) {
-        leakage_enabled = true;
-        if (!restart_shot) {
-            for (uint i = 0; i < base_circuit.count_observables(); i++) {
-                result_obs[i] = 0;
-            }
-        }
         std::vector<uint64_t> dlp(data_leakage_population.size(), 0);
         std::vector<uint64_t> plp(parity_leakage_population.size(), 0);
 
         std::string shot_log;
-        sim->reset_all(restart_shot);
+        sim->reset_all();
         // Do first round -- special.
         //
         // Reset all qubits.
@@ -132,11 +117,9 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         std::map<fleece::LatticeGraph::Vertex*, uint32_t> stab_meas_time;
             
         for (auto v : data_qubits) {
-            if (!restart_shot) {
-                apply_reset(v->qubit);
-                if (output_basis == 'X') {
-                    apply_H(v->qubit, false);
-                }
+            apply_reset(v->qubit);
+            if (output_basis == 'X') {
+                apply_H(v->qubit, false);
             }
             apply_round_start_error(v->qubit);
         }
@@ -206,19 +189,17 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             }
         }
         // Now, we need to simulate the circuit operation by operation, round by round.
-        uint mem_depth = (dist - 1) >> 1;
+        uint mem_depth = (circuit_params.distance - 1) >> 1;
         std::vector<std::vector<uint8_t>> prev_syndromes(mem_depth, std::vector<uint8_t>(parity_qubits.size(), 0));
         std::vector<std::vector<uint8_t>> prev_leakages(mem_depth, std::vector<uint8_t>(parity_qubits.size(), 0));
 
         std::vector<uint> matched_detectors;  // Already matched and fixed -- update syndrome at the end.
+        std::vector<uint> result_obs(base_circuit.count_observables(), 0);  // Observable resulting from matchings.
 
         std::set<fleece::LatticeGraph::Vertex*> already_swapped;
 
         std::deque<fleece::LatticeGraph::Vertex*> usage_queue;
         for (auto v : data_qubits) {
-            usage_queue.push_back(v);
-        }
-        for (auto v : parity_qubits) {
             usage_queue.push_back(v);
         }
         for (auto v : parity_qubits) {
@@ -230,17 +211,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         uint32_t meas_t_offset = 0;
         restart_shot = false;
         for (uint r = 1; r <= circuit_params.rounds; r++) {
-            if (r == circuit_params.rounds - 1) {
-                leakage_enabled = false;
-                for (uint q = 0; q < base_circuit.count_qubits(); q++) {
-                    if (sim->leakage_table[q][0]) {
-                        sim->leakage_table[q][0] = 0;
-                        sim->x_table[q][0] = rng() & 0x1;
-                        sim->z_table[q][0] = rng() & 0x1;
-                    }
-                }
-            }
-            std::set<fleece::LatticeGraph::Vertex*> infected;   // Set of vertices with potential leakages.
+            std::set<fleece::LatticeGraph::Vertex*> decoder_path_table;   // Set of vertices with potential leakages.
             // Check for problems in the prior round.
             std::set<fleece::LatticeGraph::Vertex*> faulty_parity_checks;
             const uint n = parity_qubits.size();
@@ -252,75 +223,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             for (auto v : parity_qubits) {
                 plp[index] += sim->leakage_table[v->qubit][0];
             }
-            
-            // Dump decoding queue.
-            while (!decoding_queue.empty()) {
-                auto v = decoding_queue.front();
-                decoding_queue.pop_front();
-
-                std::vector<fleece::LatticeGraph::Vertex*> major_faults;
-                if (v->is_data) {
-                    major_faults.push_back(v);
-                } else if (v->is_x_parity == (output_basis == 'X')) {
-                    major_faults = lattice_graph.adjacency_list(v);
-                } else {
-                    continue;
-                }
-
-
-                const uint syndrome_size = base_circuit.count_detectors() + base_circuit.count_observables();
-                std::vector<uint8_t> micro_syndrome(syndrome_size, 0);
-
-                uint min_r = r > prev_syndromes.size() ? r - prev_syndromes.size() : 0;
-                uint k = min_r * detectors_per_round;
-    
-                for (uint d : matched_detectors) {
-                    if (d >= k) {
-                        micro_syndrome[d] ^= 1;
-                    }
-                }
-
-                for (uint syn_index = 0; syn_index < r - min_r; syn_index++) { 
-                    auto syn = prev_syndromes[prev_syndromes.size() - syn_index - 1];
-                    auto lk = prev_leakages[prev_leakages.size() - syn_index - 1];
-                    for (uint i = 0; i < n; i++) {
-                        if ((parity_qubits[i]->is_x_parity && output_basis == 'Z')
-                            || (!parity_qubits[i]->is_x_parity && output_basis == 'X')) 
-                        {
-                            continue;
-                        }
-                        micro_syndrome[k++] ^= syn[i] & ~lk[i];
-                    }
-                }
-
-                for (uint i = 0; i < n; i++) {
-                    if ((parity_qubits[i]->is_x_parity && output_basis == 'Z')
-                        || (!parity_qubits[i]->is_x_parity && output_basis == 'X')) 
-                    {
-                        continue;
-                    }
-                    micro_syndrome[k++] ^= syndrome[i] & ~leakages[i];
-                }
-
-                auto mdres = decode_error(micro_syndrome, major_faults);
-                for (auto pair : mdres.matching) {
-                    if (pair.first > pair.second) {
-                        continue;
-                    }
-                    matched_detectors.push_back(pair.first);
-                    if (pair.second != BOUNDARY_INDEX) {
-                        matched_detectors.push_back(pair.second);
-                    }
-
-                    auto vli = lattice_graph.get_vertex_by_detector(pair.first % detectors_per_round);
-                    auto vlj = lattice_graph.get_vertex_by_detector(pair.first % detectors_per_round);
-                    auto path = lattice_path_table[std::make_pair(vli, vlj)].path;
-                }
-
-                for (uint i = 0; i < base_circuit.count_observables(); i++) {
-                    result_obs[i] ^= mdres.correction[i];
-                }
-            }
 
             if (r == circuit_params.rounds) break;
 
@@ -329,29 +231,24 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 if (flags & NO_MITIGATION) continue;
                 if (leakages[i]) {
                     auto v = acting_parity_qubits[i];
-                    if (!v->is_data) {
-                        decoding_queue.push_back(v);
-                    }
+                    decoding_queue.push_back(v);
                 } else if (syndrome[i]) {
                     auto v = parity_qubits[i];
                     for (uint32_t j = i+1; j < parity_qubits.size(); j++) {
-                        if (!syndrome[j]) {
-                            continue;
-                        }
-                        auto w = parity_qubits[j];
-                        auto path = lattice_path_table[std::make_pair(v, w)].path;
-                        uint chain_length = path.size() >> 1;
-                        if (chain_length < ((dist-1) >> 1)) {
-                            for (auto u : path) {
-                                infected.insert(u);
+                        if (syndrome[j]) {
+                            auto w = parity_qubits[j];
+                            auto path = lattice_path_table[std::make_pair(v, w)].path;
+                            uint chain_length = path.size() >> 1;
+                            if (chain_length < ((circuit_params.distance-1) >> 1)) {
+                                for (auto u : path) decoder_path_table.insert(u);
                             }
                         }
                     }
                 }
             }
-            // Using infected set, identify SWAP LRCs.
+            // Using decoder_path_table set, identify SWAP LRCs.
             std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_targets;
-            if ((r % dist == dist-1) && (flags & EN_STATE_DRAIN)) {
+            if ((r % circuit_params.distance == circuit_params.distance - 1) && (flags & EN_STATE_DRAIN)) {
                 // Perform last minute swap LRUs to kill any remaining leakage errors.
                 for (auto pair : swap_set) {
                     swap_targets[pair.first] = pair.second;
@@ -374,20 +271,58 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                         already_swapped.insert(v);
                     }
                 }
-            } 
-
-            if (!(flags & NO_MITIGATION)) {
-                for (auto v : infected) {
+            } else if (!(flags & NO_MITIGATION)) {
+                std::map<fleece::LatticeGraph::Vertex*, uint> priority_table;
+                for (uint i = 0; i < usage_queue.size(); i++) {
+                    priority_table[usage_queue[i]] = i;
+                }
+                std::set<fleece::LatticeGraph::Vertex*> swapped;
+                for (auto v : decoder_path_table) {
+                    if (already_swapped.count(v)) {
+                        continue;
+                    }
+                    int max_priority = -1;
+                    fleece::LatticeGraph::Vertex * victim;
                     for (auto w : lattice_graph.adjacency_list(v)) {
                         if (swap_targets.count(w)) {
                             continue;
                         }
-                        swap_targets[w] = v;
-                        already_swapped.insert(v);
+                        uint prio = priority_table[w];
+                        if (prio > max_priority) {
+                            max_priority = prio;
+                            victim = w;
+                        }
+                    }
+                    swap_targets[victim] = v;
+                    swapped.insert(v);
+                }
+
+                for (auto v : usage_queue) {
+                    if (swap_targets.count(v) || swapped.count(v)) {
+                        continue;
+                    }
+                    swapped.insert(v);
+                    if (swapped.size() == parity_qubits.size()) {
                         break;
                     }
                 }
+
+                std::deque<fleece::LatticeGraph::Vertex*> new_queue_entries;
+                for (auto it = usage_queue.begin(); it != usage_queue.end(); ) {
+                    if (swapped.count(*it)) {
+                        it = usage_queue.erase(it);
+                        new_queue_entries.push_back(*it);
+                    } else {
+                        it++;
+                    }
+                }
+
+                for (auto v : new_queue_entries) {
+                    usage_queue.push_back(v);
+                }
+                already_swapped = swapped;
             }
+
             // Update previous syndromes and leakages
             for (uint j = prev_syndromes.size() - 1; j >= 1; j--) {
                 prev_syndromes[j] = prev_syndromes[j-1];
@@ -499,25 +434,25 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         if (restart_shot && !(flags & (NO_MITIGATION | NO_RESTART))) {
             n_restarts++;
             continue;
-        } else {
-            restart_shot = false;
-            for (uint i = 0; i < data_leakage_population.size(); i++) {
-                data_leakage_population[i] += dlp[i];
-                parity_leakage_population[i] += plp[i];
-            }
+        }
 
-            for (auto v : data_qubits) {
-                if (output_basis == 'X') {
-                    apply_H(v->qubit, false);
-                }
-                apply_measure(v->qubit);
+        for (uint i = 0; i < data_leakage_population.size(); i++) {
+            data_leakage_population[i] += dlp[i];
+            parity_leakage_population[i] += plp[i];
+        }
+
+        for (auto v : data_qubits) {
+            if (output_basis == 'X') {
+                apply_H(v->qubit, false);
             }
+            apply_measure(v->qubit);
         }
         // Everything is done, extract the syndrome.
         stim::simd_bit_table measure_results(num_results, 1);
         stim::simd_bit_table leakage_results(num_results, 1);
         auto det_obs = stim::DetectorsAndObservables(base_circuit);
-        stim::read_from_sim(*sim, det_obs, false, true, true, measure_results, leakage_results);
+        stim::read_from_sim(*sim, det_obs, false, true, true,
+                                measure_results, leakage_results);
         measure_results = measure_results.transposed();
         leakage_results = leakage_results.transposed();
         for (uint d : matched_detectors) {
@@ -526,7 +461,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         for (uint i = 0; i < result_obs.size(); i++) {
             measure_results[0][i+base_circuit.count_detectors()] ^= result_obs[i];
         }
-
         syndromes[syndrome_table_index++] |= measure_results[0];
         syndromes[syndrome_table_index++] |= leakage_results[0];
         shots--;
@@ -540,114 +474,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         rtanalyzer->flush_table();
     }
     return syndromes;
-}
-
-DecoderShotResult
-Fleece::decode_error(const std::vector<uint8_t>& syndrome, const std::vector<fleece::LatticeGraph::Vertex*>& faults) {
-    std::vector<uint> detector_list;
-    for (uint d = 0; d < base_circuit.count_detectors(); d++) {
-        if (syndrome[d]) {
-            detector_list.push_back(d);
-        }
-    }
-
-    if (detector_list.size() & 0x1) {
-        detector_list.push_back(BOUNDARY_INDEX);
-    }
-
-    const uint number_of_nodes = detector_list.size();
-    const uint number_of_edges = (number_of_nodes*(number_of_nodes-1)) >> 1;
-        
-    PerfectMatching pm(number_of_nodes, number_of_edges);
-    pm.options.verbose = false;
-    std::set<std::pair<uint, uint>> faulting_edges;
-    for (uint i = 0; i < detector_list.size(); i++) {
-        uint di = detector_list[i];
-        auto vi = decoding_graph.get_vertex(di);
-        for (uint j = i+1; j < detector_list.size(); j++) {
-            uint dj = detector_list[j];
-            auto vj = decoding_graph.get_vertex(dj);
-
-            auto w = decoder_path_table[std::make_pair(vi, vj)].distance;
-            if (path_contains_faults(di, dj, faults)) {
-                w -= log10(circuit_params.before_round_data_depolarization) / log10(0.5);
-                if (w < 1) { 
-                    w = 1.0;
-                }
-                faulting_edges.insert(std::make_pair(i, j));
-                faulting_edges.insert(std::make_pair(j, i));
-            }
-            uint32_t m_weight = (uint32_t) (w * MWPM_INTEGER_SCALE);
-            pm.AddEdge(i, j, m_weight);
-        }
-    }
-
-    pm.Solve();
-
-    std::map<uint, uint> matching;
-    std::vector<uint8_t> correction(base_circuit.count_observables());
-    for (uint i = 0; i < number_of_nodes; i++) {
-        uint j = pm.GetMatch(i);
-        auto i_j = std::make_pair(i, j);
-        auto vi = decoding_graph.get_vertex(detector_list[i]);
-        auto vj = decoding_graph.get_vertex(detector_list[j]);
-        if (faulting_edges.count(i_j) && decoder_path_table[std::make_pair(vi, vj)].path.size() == 2) {
-            matching[detector_list[i]] = detector_list[j];
-
-            if (i < j) {
-                auto vi = decoding_graph.get_vertex(detector_list[i]);
-                auto vj = decoding_graph.get_vertex(detector_list[j]);
-
-                auto path = decoder_path_table[std::make_pair(vi, vj)].path;
-                for (uint i = 1; i < path.size(); i++) {
-                    auto wi = path[i-1];
-                    auto wj = path[i];
-                    auto edge = decoding_graph.get_edge(wi, wj);
-                    for (auto obs : edge->frames) {
-                        if (obs >= 0) {
-                            correction[obs] ^= 1;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    DecoderShotResult res = {0, 0, 0, correction, matching};
-    return res;
-}
-
-bool
-Fleece::path_contains_faults(uint d1, uint d2, const std::vector<fleece::LatticeGraph::Vertex*>& faults) {
-    auto vd1 = decoding_graph.get_vertex(d1);
-    auto vd2 = decoding_graph.get_vertex(d2);
-    auto path = decoder_path_table[std::make_pair(vd1, vd2)].path;
-
-    const uint dist = circuit_params.distance;
-    const uint detectors_per_round = (dist*dist-1) >> 1;
-
-    std::set<fleece::LatticeGraph::Vertex*> data_qubits_in_path;
-
-    for (uint i = 1; i < path.size() - 1; i++) {
-        auto wdi = path[i-1];
-        auto wdj = path[i];
-
-        if (wdi->detector == BOUNDARY_INDEX || wdj->detector == BOUNDARY_INDEX) {
-            continue;
-        }
-
-        auto wli = lattice_graph.get_vertex_by_detector(wdi->detector % detectors_per_round);
-        auto wlj = lattice_graph.get_vertex_by_detector(wdj->detector % detectors_per_round);
-        auto common = lattice_graph.get_common_neighbors(wli, wlj);
-        for (auto u : common) {
-            data_qubits_in_path.insert(u);
-        }
-    } 
-
-    bool has_fault = true;
-    for (auto v : faults) {
-        has_fault &= data_qubits_in_path.count(v);
-    }
-    return has_fault;
 }
 
 void
@@ -771,17 +597,15 @@ Fleece::apply_round_start_error(uint32_t qubit, fp_t dp_error_mult) {
     p *= dp_error_mult;
     stim::OperationData dp_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
     sim->DEPOLARIZE1(dp_data);
-    if (leakage_enabled) {
-        if (roundleak_table.count(qubit)) {
-            p = roundleak_table[qubit];
-        } else {
-            p = circuit_params.get_before_round_leakage_probability();
-            roundleak_table[qubit] = p;
-        }
-
-        stim::OperationData lerror_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
-        sim->LEAKAGE_ERROR(lerror_data);
+    if (roundleak_table.count(qubit)) {
+        p = roundleak_table[qubit];
+    } else {
+        p = circuit_params.get_before_round_leakage_probability();
+        roundleak_table[qubit] = p;
     }
+
+    stim::OperationData lerror_data{PTR<double>(&p), PTR<stim::GateTarget>(&q)};
+    sim->LEAKAGE_ERROR(lerror_data);
 }
 
 void
@@ -822,16 +646,14 @@ Fleece::apply_CX(uint32_t qubit1, uint32_t qubit2) {
     stim::OperationData dp2_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
     sim->DEPOLARIZE2(dp2_data);
 
-    if (leakage_enabled) {
-        if (cliffordleak_table.count(q1_q2)) {
-            p = cliffordleak_table[q1_q2];
-        } else {
-            p = circuit_params.get_after_clifford_leakage_probability();
-            cliffordleak_table[q1_q2] = p;
-        }
-        stim::OperationData leak_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
-        sim->LEAKAGE_ERROR(leak_data);
+    if (cliffordleak_table.count(q1_q2)) {
+        p = cliffordleak_table[q1_q2];
+    } else {
+        p = circuit_params.get_after_clifford_leakage_probability();
+        cliffordleak_table[q1_q2] = p;
     }
+    stim::OperationData leak_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
+    sim->LEAKAGE_ERROR(leak_data);
 
     if (leaktransport_table.count(q1_q2)) {
         p = leaktransport_table[q1_q2];
@@ -882,23 +704,21 @@ Fleece::apply_SWAP(uint32_t qubit1, uint32_t qubit2, bool add_error) {
         stim::OperationData dp2_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
         sim->DEPOLARIZE2(dp2_data);
 
-        if (leakage_enabled) {
-            if (cliffordleak_table.count(q1_q2)) {
-                p = cliffordleak_table[q1_q2];
-            } else {
-                p = circuit_params.get_after_clifford_leakage_probability();
-            }
-            stim::OperationData leak_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
-            sim->LEAKAGE_ERROR(leak_data);
-
-            if (leaktransport_table.count(q1_q2)) {
-                p = leaktransport_table[q1_q2];
-            } else {
-                p = circuit_params.get_after_clifford_leakage_transport();
-            }
-            stim::OperationData transport_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
-            sim->LEAKAGE_TRANSPORT(transport_data);
+        if (cliffordleak_table.count(q1_q2)) {
+            p = cliffordleak_table[q1_q2];
+        } else {
+            p = circuit_params.get_after_clifford_leakage_probability();
         }
+        stim::OperationData leak_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
+        sim->LEAKAGE_ERROR(leak_data);
+
+        if (leaktransport_table.count(q1_q2)) {
+            p = leaktransport_table[q1_q2];
+        } else {
+            p = circuit_params.get_after_clifford_leakage_transport();
+        }
+        stim::OperationData transport_data{PTR<double>(&p), PTR<stim::GateTarget>(gate_targets)};
+        sim->LEAKAGE_TRANSPORT(transport_data);
     }
 }
 
