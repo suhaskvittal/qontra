@@ -230,16 +230,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         uint32_t meas_t_offset = 0;
         restart_shot = false;
         for (uint r = 1; r <= circuit_params.rounds; r++) {
-            if (r == circuit_params.rounds - 1) {
-                leakage_enabled = false;
-                for (uint q = 0; q < base_circuit.count_qubits(); q++) {
-                    if (sim->leakage_table[q][0]) {
-                        sim->leakage_table[q][0] = 0;
-                        sim->x_table[q][0] = rng() & 0x1;
-                        sim->z_table[q][0] = rng() & 0x1;
-                    }
-                }
-            }
             std::set<fleece::LatticeGraph::Vertex*> infected;   // Set of vertices with potential leakages.
             // Check for problems in the prior round.
             std::set<fleece::LatticeGraph::Vertex*> faulty_parity_checks;
@@ -324,15 +314,21 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
 
             if (r == circuit_params.rounds) break;
 
+            if (r == circuit_params.rounds - 1) {
+                leakage_enabled = false;
+                for (uint q = 0; q < base_circuit.count_qubits(); q++) {
+                    if (sim->leakage_table[q][0]) {
+                        sim->leakage_table[q][0] = 0;
+                        sim->x_table[q][0] = rng() & 0x1;
+                        sim->z_table[q][0] = rng() & 0x1;
+                    }
+                }
+            }
+
             // Check for infections or leakages in the current round.
             for (uint32_t i = 0; i < parity_qubits.size(); i++) {
                 if (flags & NO_MITIGATION) continue;
-                if (leakages[i]) {
-                    auto v = acting_parity_qubits[i];
-                    if (!v->is_data) {
-                        decoding_queue.push_back(v);
-                    }
-                } else if (syndrome[i]) {
+                if (syndrome[i]) {
                     auto v = parity_qubits[i];
                     for (uint32_t j = i+1; j < parity_qubits.size(); j++) {
                         if (!syndrome[j]) {
@@ -341,7 +337,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                         auto w = parity_qubits[j];
                         auto path = lattice_path_table[std::make_pair(v, w)].path;
                         uint chain_length = path.size() >> 1;
-                        if (chain_length < ((dist-1) >> 1)) {
+                        if (chain_length <= ((dist-1) >> 1)) {
                             for (auto u : path) {
                                 infected.insert(u);
                             }
@@ -591,7 +587,7 @@ Fleece::decode_error(const std::vector<uint8_t>& syndrome, const std::vector<fle
         auto i_j = std::make_pair(i, j);
         auto vi = decoding_graph.get_vertex(detector_list[i]);
         auto vj = decoding_graph.get_vertex(detector_list[j]);
-        if (faulting_edges.count(i_j) && decoder_path_table[std::make_pair(vi, vj)].path.size() == 2) {
+        if (faulting_edges.count(i_j)) {
             matching[detector_list[i]] = detector_list[j];
 
             if (i < j) {
