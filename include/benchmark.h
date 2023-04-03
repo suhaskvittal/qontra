@@ -47,15 +47,10 @@ benchmark::StatisticalResult
 b_statistical_ler(
     dgf_t&,
     uint code_dist,
-    fp_t start_p,
-    fp_t final_p, 
-    uint64_t shots,
-    uint64_t update_rate,
+    fp_t p_ref,
+    uint64_t shots_per_call,
     std::mt19937_64&, 
-    bool use_mpi=false,
-    bool bootstrap_model=false, 
-    std::map<uint, uint64_t> bootstrap_data=std::map<uint, uint64_t>(),
-    fp_t use_bootstrap_model_until_p=1
+    bool use_mpi=false
 );
 
 #define BC_FLAG_SWAP_LRU_V1     0x1

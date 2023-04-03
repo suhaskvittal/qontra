@@ -62,7 +62,7 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       leakage_table(num_qubits, batch_size),
       meas_table(num_qubits, batch_size),
       leak_record(batch_size, max_lookback),
-      log_prob_baseline(0.0),
+      log_prob_sim(0.0),
       log_prob_reference(0.0),
       reference_error_rate(0.0),
       sim_checkpoint(0),
@@ -757,11 +757,9 @@ FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
 
 void
 FrameSimulator::update_log_probs(fp_t p, uint64_t s, uint64_t total) {
-    if (maintain_log_probabilities) {
-        log_prob_baseline += s*log(p) * (total-s)*log(1-p);
-        log_prob_reference += s*log(reference_error_rate) 
-                                * (total-s)*log(1-reference_error_rate);
-    }
+    log_prob_sim += s*log10(p) * (total-s)*log10(1-p);
+    log_prob_reference += s*log10(reference_error_rate) 
+                            * (total-s)*log10(1-reference_error_rate);
 }
 
 void sample_out_helper(

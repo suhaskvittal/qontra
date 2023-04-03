@@ -51,13 +51,11 @@ struct FrameSimulator {
     simd_bit_table meas_table;  // meas_table[q][k] = *_table[q][k] | leakage_table[q][k].
     MeasureRecordBatch leak_record;
 
-    double log_prob_baseline;
+    double log_prob_sim;
     double log_prob_reference;
     double reference_error_rate;
 
     uint64_t sim_checkpoint;
-
-    bool maintain_log_probabilities;
 
     // Determines whether e.g. 50% Z errors are multiplied into the frame when measuring in the Z basis.
     // This is necessary for correct sampling.
