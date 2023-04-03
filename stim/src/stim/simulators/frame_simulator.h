@@ -155,7 +155,7 @@ struct FrameSimulator {
     void LEAKAGE_TRANSPORT(const OperationData& target_data);
 
     bool cycle_level_simulation(const Circuit&);
-    void update_log_probs(fp_t p, uint64_t s, uint64_t total);
+    void update_log_probs(double p, uint64_t s, uint64_t total);
    private:
     void xor_control_bit_into(uint32_t control, simd_bits_range_ref target);
     void single_cx(uint32_t c, uint32_t t);

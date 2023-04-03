@@ -65,8 +65,7 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       log_prob_sim(0.0),
       log_prob_reference(0.0),
       reference_error_rate(0.0),
-      sim_checkpoint(0),
-      maintain_log_probabilities(false)
+      sim_checkpoint(0)
 {}
 
 void FrameSimulator::xor_control_bit_into(uint32_t control, simd_bits_range_ref target)
@@ -532,7 +531,7 @@ void FrameSimulator::DEPOLARIZE1(const OperationData &target_data) {
         x_table[t.data][sample_index] ^= p & 1;
         z_table[t.data][sample_index] ^= p & 2;
 
-        s++;
+        ss++;
     });
 
     update_log_probs(prob, ss, targets.size()*batch_size);
@@ -756,10 +755,9 @@ FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
 }
 
 void
-FrameSimulator::update_log_probs(fp_t p, uint64_t s, uint64_t total) {
-    log_prob_sim += s*log10(p) * (total-s)*log10(1-p);
-    log_prob_reference += s*log10(reference_error_rate) 
-                            * (total-s)*log10(1-reference_error_rate);
+FrameSimulator::update_log_probs(double p, uint64_t s, uint64_t total) {
+    log_prob_sim += s*log10(p) + (total-s)*log10(1-p);
+    log_prob_reference += s*log10(reference_error_rate) + (total-s)*log10(1-reference_error_rate);
 }
 
 void sample_out_helper(

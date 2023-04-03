@@ -9,8 +9,6 @@
 #include <stim.h>
 
 #include "benchmark/statbench.h"
-#include "benchmark/statbench/analytical_dist.h"
-#include "benchmark/statbench/numerical_dist.h"
 #include "defs.h"
 #include "decoder.h"
 
