@@ -153,11 +153,13 @@ b_statistical_ler(
         MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     }
 
-    Decoder * curr_decoder = mkdec(p_ref);
 
     benchmark::StatisticalResult statres;
-    fp_t p_curr = p_ref + p_ref*0.1;
+    fp_t p_curr = p_ref;
     fp_t p_prev = p_ref;
+    fp_t prev_stat_shots;
+
+    Decoder * curr_decoder = mkdec(p_ref);
     while (statres.n_logical_errors < 100) {
         uint64_t shots = shots_per_call;
         uint64_t local_shots = shots / world_size;
@@ -166,8 +168,7 @@ b_statistical_ler(
         }
 
         uint64_t local_errors = 0;
-        fp_t local_log_prob_sim = 0.0;
-        fp_t local_log_prob_ref = 0.0;
+        fp_t local_stat_shots = 0;
 
         while (local_shots) {
             const stim::Circuit circ(curr_decoder->circuit);
@@ -197,49 +198,38 @@ b_statistical_ler(
                 if (decoder_res.is_logical_error) {
                     local_errors++;
                 }
+                local_stat_shots += pow(10, sim.log_prob_sim[s] - sim.log_prob_ref[s]);
             }
             
             local_shots -= shots_this_round;
-            local_log_prob_sim += sim.log_prob_sim;
-            local_log_prob_ref += sim.log_prob_reference;
         }
-
-        fp_t total_log_prob_sim, total_log_prob_ref;
-        if (use_mpi) {
-            MPI_Allreduce(&local_log_prob_sim, &total_log_prob_sim, 1, MPI_DOUBLE,
-                            MPI_SUM, MPI_COMM_WORLD);
-            MPI_Allreduce(&local_log_prob_ref, &total_log_prob_ref, 1, MPI_DOUBLE,
-                            MPI_SUM, MPI_COMM_WORLD);
-        } else {
-            total_log_prob_sim = local_log_prob_sim;
-            total_log_prob_ref = local_log_prob_ref;
-        }
-        total_log_prob_sim /= shots;
-        total_log_prob_ref /= shots;
-
-        if (world_rank == 0) {
-            std::cout << "log probs @ " << p_curr << ": " 
-                        << total_log_prob_sim << "," << total_log_prob_ref << "\n";
-        }
-
-        fp_t stat_shots = shots * pow(10, total_log_prob_sim - total_log_prob_ref);
 
         uint64_t n_logical_errors;
-        MPI_Allreduce(&local_errors, &n_logical_errors, 1, MPI_UNSIGNED_LONG,
-                            MPI_SUM, MPI_COMM_WORLD);
-        statres.n_logical_errors += n_logical_errors;
+        fp_t stat_shots;
+        MPI_Allreduce(&local_errors, &n_logical_errors, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(&local_stat_shots, &stat_shots, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+        fp_t mul = statres.statistical_shots > 0 ? stat_shots / prev_stat_shots : 1.0;
+
+        statres.n_logical_errors = n_logical_errors + mul*statres.n_logical_errors;
+//      statres.n_logical_errors += n_logical_errors;
         statres.true_shots += shots;
-        statres.statistical_shots += stat_shots;
+        statres.statistical_shots = stat_shots + mul*statres.statistical_shots;
 
         if (world_rank == 0) {
             fp_t ler = statres.n_logical_errors / statres.statistical_shots;
-            std::cout << "\t ler = " << ler << "\n";
+            std::cout << "\tler @ p = " << p_curr << " is " << ler << "\n";
+            std::cout << "\t\tlogical errors = " << statres.n_logical_errors << ", shots = " << statres.statistical_shots << "\n";
+            std::cout << "\t\tmultiplier = " << mul << "\n";
         }
+        prev_stat_shots = stat_shots;
 
-        p_curr += p_ref*0.1;
+        p_prev = p_curr;
+        p_curr = p_curr + p_ref*0.1;
+
+        delete curr_decoder;
         curr_decoder = mkdec(p_curr);
     }
-    delete curr_decoder;
 
     return statres;
 }

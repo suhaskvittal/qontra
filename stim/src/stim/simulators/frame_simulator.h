@@ -51,8 +51,8 @@ struct FrameSimulator {
     simd_bit_table meas_table;  // meas_table[q][k] = *_table[q][k] | leakage_table[q][k].
     MeasureRecordBatch leak_record;
 
-    double log_prob_sim;
-    double log_prob_reference;
+    std::vector<double> log_prob_sim;
+    std::vector<double> log_prob_ref;
     double reference_error_rate;
 
     uint64_t sim_checkpoint;
@@ -155,7 +155,7 @@ struct FrameSimulator {
     void LEAKAGE_TRANSPORT(const OperationData& target_data);
 
     bool cycle_level_simulation(const Circuit&);
-    void update_log_probs(double p, uint64_t s, uint64_t total);
+    void update_log_probs(double p, const std::vector<uint64_t>& errors, uint64_t total);
    private:
     void xor_control_bit_into(uint32_t control, simd_bits_range_ref target);
     void single_cx(uint32_t c, uint32_t t);
