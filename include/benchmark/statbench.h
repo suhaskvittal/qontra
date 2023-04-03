@@ -31,25 +31,6 @@ struct StatisticalResult {
     std::map<uint, fp_t> hamming_weight_dist;
 };
 
-class ErrorDistribution {
-public:
-    ErrorDistribution(fp_t mean, fp_t variance, bool is_cdf_supported)
-        :mean(mean), variance(variance), is_cdf_supported(is_cdf_supported) {}
-
-    virtual fp_t pmf(fp_t hw, bool logscale) =0;
-    virtual fp_t cdf(fp_t hw, bool logscale) =0;
-
-    fp_t get_mean(void) const { return mean; }
-    fp_t get_variance(void) const { return variance; }
-
-    bool cdf_supported(void) { return is_cdf_supported; }
-protected:
-    fp_t mean;
-    fp_t variance;
-
-    bool is_cdf_supported;
-};
-
 }   // benchmark
 }   // qrc
 

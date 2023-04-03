@@ -82,6 +82,8 @@ private:
     const char reset_basis;
     const char output_basis;
 
+    bool leakage_enabled;
+
     stim::Circuit base_circuit;
     stim::FrameSimulator * sim;
 
