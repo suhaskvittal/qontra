@@ -156,27 +156,72 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
     stim::simd_bit_table result_table(local_shots, n_results);
     std::vector<fp_t> error_prob(shots_per_batch, 0);
 
+#define DELTA(a, b) ((a)-(b))/(a)
+#define B_STAT_LER_USE_POLY
+
+#ifdef B_STAT_LER_USE_POLY
+    std::array<fp_t, 100'000> log_poly;
+    log_poly.fill(1);
+
+    uint eventno = 0;
+#else
     fp_t mean_flip_prob = 0.0;
+#endif
+    std::vector<fp_t> edge_probs;
     std::vector<DecodingGraph::Edge*> edge_list;
     for (uint d = 0; d < n_detectors; d++) {
         auto v = decoding_graph.get_vertex(d);
         for (auto w : decoding_graph.adjacency_list(v)) {
             auto edge = decoding_graph.get_edge(v, w);
             edge_list.push_back(edge);
+            edge_probs.push_back(edge->error_probability);
+#ifdef B_STAT_LER_USE_POLY
+            fp_t ep = edge->error_probability;
+            if (eventno == 0) {
+                log_poly[0] = log(1-ep);
+                log_poly[1] = log(ep);
+            } else {
+                std::array<fp_t, 100'000> log_pa, log_pb;
+                log_pa.fill(1);
+                log_pb.fill(1);
+                for (uint i = 0; i <= eventno; i++) {
+                    log_pa[i] = log_poly[i] + log(1-ep);
+                    log_pb[i+1] = log_poly[i] + log(ep);
+                }
+                for (uint i = 0; i < log_poly.size(); i++) {
+                    if (log_pa[i] == 1 && log_pb[i] == 1) {
+                        log_poly[i] = 1;
+                    } else if (log_pa[i] == 1) {
+                        log_poly[i] = log_pb[i];
+                    } else if (log_pb[i] == 1) {
+                        log_poly[i] = log_pa[i];
+                    } else {
+                        log_poly[i] = log(pow(M_E, log_pa[i]) + pow(M_E, log_pb[i]));
+                    }
+                }
+            }
+            eventno++;
+#else
             mean_flip_prob += 1.0/edge->error_probability;
+#endif
         }
     }
+
+#ifndef B_STAT_LER_USE_POLY
     mean_flip_prob = edge_list.size() / mean_flip_prob;
+#endif
+    std::discrete_distribution<> edge_dist(edge_probs.begin(), edge_probs.end());
 
     uint n_faults = 1;
 
+    fp_t prev_logical_error_rate = 0.0;
     benchmark::StatisticalResult statres;
-    while (statres.n_logical_errors < 1000) {
+    while (statres.n_logical_errors < 10 || DELTA(statres.logical_error_rate, prev_logical_error_rate) > 0.1) {
         uint64_t local_errors = 0;
 
         for (uint64_t s = 0; s < local_shots; s++) {
             // Add a random error.
-            auto edge = edge_list[rng() % edge_list.size()];
+            auto edge = edge_list[edge_dist(rng)];
             uint d1 = edge->detectors.first;
             uint d2 = edge->detectors.second;
             if (d1 != BOUNDARY_INDEX) {
@@ -200,26 +245,31 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
         uint64_t fault_errors;
         MPI_Allreduce(&local_errors, &fault_errors, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
 
+#ifdef B_STAT_LER_USE_POLY
+        fp_t log_fault_rate = log_poly[n_faults];
+#else
         fp_t log_possible_faults = lgamma(edge_list.size()+1) 
                                     - lgamma(n_faults+1) - lgamma(edge_list.size()-n_faults+1);
         fp_t log_fault_rate = log_possible_faults
                                 + n_faults*log(mean_flip_prob)
                                 + (edge_list.size() - n_faults)*log(1-mean_flip_prob);
+#endif
         if (world_rank == 0) {
             std::cout << "n_faults = " << n_faults << "\n"
-                    << "\tlog possible faults = " << log_possible_faults << " (" << pow(M_E, log_possible_faults) << ")\n"
                     << "\tlog fault rate = " << log_fault_rate << " (" << pow(M_E, log_fault_rate) << ")\n";
         }
 
         if (fault_errors > 0) {
             fp_t log_failure_rate = log(fault_errors) - log(shots_per_batch);
         
+            prev_logical_error_rate = statres.logical_error_rate;
             statres.logical_error_rate += pow(M_E, log_failure_rate+log_fault_rate);
             statres.n_logical_errors += fault_errors;
 
             if (world_rank == 0) {
                 std::cout << "\tlog failure rate = " << log_failure_rate << " (" << pow(M_E, log_failure_rate) << ")\n"
                         << "\tnumber of errors = " << statres.n_logical_errors << "\n";
+                std::cout << "\tlogical error rate = " << statres.logical_error_rate << "\n";
             }
         }
 
