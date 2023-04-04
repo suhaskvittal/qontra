@@ -42,7 +42,7 @@ b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool save_per_shot_dat
  *  Pre-condition: MPI is initialized before call and exited after call.
  * */
 benchmark::StatisticalResult
-b_statistical_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool use_mpi=true);
+b_statistical_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool use_mpi=true, uint n_faults=1);
 /*
  *  Save syndromes above some given Hamming weight.
  * */

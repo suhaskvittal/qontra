@@ -135,7 +135,7 @@ b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
 }
 
 benchmark::StatisticalResult
-b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& rng, bool use_mpi) {
+b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& rng, bool use_mpi, uint n_faults) {
     int world_rank = 0, world_size = 1;
     if (use_mpi) {
         MPI_Comm_size(MPI_COMM_WORLD, &world_size);
@@ -154,7 +154,6 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
         local_shots += shots_per_batch % world_size;
     }
     stim::simd_bit_table result_table(local_shots, n_results);
-    std::vector<fp_t> error_prob(shots_per_batch, 0);
 
 #define DELTA(a, b) ((a)-(b))/(a)
 #define B_STAT_LER_USE_POLY
@@ -212,8 +211,6 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
 #endif
     std::discrete_distribution<> edge_dist(edge_probs.begin(), edge_probs.end());
 
-    uint n_faults = 1;
-
     fp_t prev_logical_error_rate = 0.0;
     benchmark::StatisticalResult statres;
     while (statres.n_logical_errors < 10 || DELTA(statres.logical_error_rate, prev_logical_error_rate) > 0.1) {
@@ -235,7 +232,6 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
                     result_table[s][n_detectors+obs] ^= 1;
                 }
             }
-            error_prob[s] += edge->error_probability;
 
             auto syndrome = _to_vector(result_table[s], n_detectors, n_observables);
             auto res = decoder->decode_error(syndrome);
