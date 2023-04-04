@@ -7,9 +7,6 @@
 
 namespace qrc {
 
-#define STATBENCH_DEBUG
-//#define STATBENCH_DEBUG2
-
 /* Helper Functions */
 inline fp_t __CHS(fp_t x, fp_t y, fp_t z) {
     return z >= 0 ? z : (y >=0 ? y : x);
@@ -230,6 +227,83 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
     }
 
     return statres;
+}
+
+void
+generate_traces(std::string output_folder, const stim::Circuit& circuit, uint64_t shots, uint64_t shots_per_batch,
+        uint64_t hw_cutoff, uint64_t base, uint64_t offset, std::mt19937_64& rng) 
+{
+    uint64_t fileno = base;
+    const uint64_t n_results = circuit.count_detectors() + circuit.count_observables();
+    const stim::simd_bits ref(n_results);
+
+    uint64_t t = 0;
+    stim::simd_bit_table filtered_samples(shots_per_batch, n_results);
+    while (shots) {
+        const uint64_t shots_this_round = shots < shots_per_batch ? shots : shots_per_batch;
+
+        stim::simd_bit_table samples = stim::detector_samples(circuit, shots_this_round, false, true, rng);
+        stim::simd_bit_table filtered_samples(shots_this_round, n_results);
+
+        samples = samples.transposed();
+        for (uint64_t s = 0; s < shots_this_round; s++) {
+            if (samples[s].popcnt() > hw_cutoff) {
+                filtered_samples[t++] |= samples[s];
+            }
+            if (t == shots_per_batch) {
+                filtered_samples = filtered_samples.transposed();
+                std::string filename = output_folder + "/shots_" + std::to_string(fileno) + ".dets";
+                FILE * shots_out = fopen(filename.c_str(), "w");
+                stim::write_table_data(shots_out, t, n_results, ref, filtered_samples, 
+                                        stim::SampleFormat::SAMPLE_FORMAT_DETS, 'D', 'L', circuit.count_detectors());
+
+                fclose(shots_out);
+                fileno += offset;
+
+                filtered_samples.clear();
+            }
+        }
+
+        shots -= shots_this_round;
+    }
+}
+
+void
+read_traces(std::string input_folder, Decoder * decoder, uint64_t max_shots_per_file, uint64_t base, uint64_t offset) {
+    uint64_t fileno = base;
+
+    const uint64_t n_detectors = decoder->circuit.count_detectors();
+    const uint64_t n_observables = decoder->circuit.count_observables();
+
+    while (true) {
+        std::string filename = input_folder + "/shots_" + std::to_string(fileno) + ".dets";
+        if (base == 0) {
+            std::cout << "reading " << filename << "\n";
+        }
+        FILE * shots_in = fopen(filename.c_str(), "r");
+        if (!shots_in) {
+            break;
+        }
+
+        stim::simd_bit_table samples(max_shots_per_file, n_detectors+n_observables);
+        uint64_t true_shots = stim::read_file_data_into_shot_table(shots_in, max_shots_per_file, n_detectors,
+                                    stim::SampleFormat::SAMPLE_FORMAT_DETS, 'D', samples, true, 0, n_detectors,
+                                    n_observables);
+        if (base == 0) {
+            std::cout << "\tshots in file = " << true_shots << "\n";
+        }
+        for (uint64_t s = 0; s < true_shots; s++) {
+            if (base == 0 && s % 100000 == 0) {
+                std::cout << "\tshot " << s << "\n";
+            }
+            auto syndrome = _to_vector(samples[s], n_detectors, n_observables);
+            auto res = decoder->decode_error(syndrome);
+            decoder->n_logical_errors += res.is_logical_error;
+        }
+
+        fileno += offset;
+        fclose(shots_in);
+    }
 }
 
 stim::Circuit

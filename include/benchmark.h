@@ -43,6 +43,14 @@ b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool save_per_shot_dat
  * */
 benchmark::StatisticalResult
 b_statistical_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool use_mpi=true);
+/*
+ *  Save syndromes above some given Hamming weight.
+ * */
+void
+generate_traces(std::string output_folder, const stim::Circuit&, uint64_t shots, uint64_t shots_per_batch,
+                uint64_t hw_cutoff, uint64_t base, uint64_t offset, std::mt19937_64&, uint64_t shots_per_shot=1);
+void
+read_traces(std::string input_folder, Decoder*, uint64_t max_shots_per_file, uint64_t base, uint64_t offset);
 
 #define BC_FLAG_SWAP_LRU_V1     0x1
 #define BC_FLAG_SWAP_LRU_V2     0x2
