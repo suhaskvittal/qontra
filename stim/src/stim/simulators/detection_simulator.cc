@@ -81,7 +81,7 @@ void stim::read_from_sim(
         }
     }
     for (const auto &det : det_obs.detectors) {
-        xor_measurement_set_into_result(det, frame_samples, result_table, offset, leakage_samples, false);
+        xor_measurement_set_into_result(det, frame_samples, result_table, offset, leakage_samples, true);
         if (get_leakage_data) {
             or_measurement_set_into_result(det, leakage_samples,
                     leakage_table, offset);
