@@ -211,6 +211,26 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
 #endif
     std::discrete_distribution<> edge_dist(edge_probs.begin(), edge_probs.end());
 
+    for (uint64_t s = 0; s < local_shots; s++) {
+        for (uint i = 0; i < n_faults-1; i++) {
+            // Add a random error.
+            auto edge = edge_list[edge_dist(rng)];
+            uint d1 = edge->detectors.first;
+            uint d2 = edge->detectors.second;
+            if (d1 != BOUNDARY_INDEX) {
+                result_table[s][d1] ^= 1;
+            }
+            if (d2 != BOUNDARY_INDEX) {
+                result_table[s][d2] ^= 1;
+            }
+            for (uint obs : edge->frames) {
+                if (obs >= 0) {
+                    result_table[s][n_detectors+obs] ^= 1;
+                }
+            }
+        }
+    }
+
     fp_t prev_logical_error_rate = 0.0;
     benchmark::StatisticalResult statres;
     while (statres.n_logical_errors < 10 || DELTA(statres.logical_error_rate, prev_logical_error_rate) > 0.1) {
