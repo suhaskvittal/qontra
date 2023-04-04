@@ -163,10 +163,10 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
         for (auto w : decoding_graph.adjacency_list(v)) {
             auto edge = decoding_graph.get_edge(v, w);
             edge_list.push_back(edge);
-            mean_flip_prob += edge->error_probability;
+            mean_flip_prob += 1.0/edge->error_probability;
         }
     }
-    mean_flip_prob /= edge_list.size();
+    mean_flip_prob = edge_list.size() / mean_flip_prob;
 
     uint n_faults = 1;
 
@@ -243,7 +243,6 @@ generate_traces(std::string output_folder, const stim::Circuit& circuit, uint64_
         const uint64_t shots_this_round = shots < shots_per_batch ? shots : shots_per_batch;
 
         stim::simd_bit_table samples = stim::detector_samples(circuit, shots_this_round, false, true, rng);
-        stim::simd_bit_table filtered_samples(shots_this_round, n_results);
 
         samples = samples.transposed();
         for (uint64_t s = 0; s < shots_this_round; s++) {
@@ -261,11 +260,19 @@ generate_traces(std::string output_folder, const stim::Circuit& circuit, uint64_
                 fileno += offset;
 
                 filtered_samples.clear();
+                t = 0;
             }
         }
 
         shots -= shots_this_round;
     }
+    filtered_samples = filtered_samples.transposed();
+    std::string filename = output_folder + "/shots_" + std::to_string(fileno) + ".dets";
+    FILE * shots_out = fopen(filename.c_str(), "w");
+    stim::write_table_data(shots_out, t, n_results, ref, filtered_samples, 
+                            stim::SampleFormat::SAMPLE_FORMAT_DETS, 'D', 'L', circuit.count_detectors());
+
+    fclose(shots_out);
 }
 
 void

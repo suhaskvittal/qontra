@@ -48,7 +48,7 @@ b_statistical_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool use_mpi=true)
  * */
 void
 generate_traces(std::string output_folder, const stim::Circuit&, uint64_t shots, uint64_t shots_per_batch,
-                uint64_t hw_cutoff, uint64_t base, uint64_t offset, std::mt19937_64&, uint64_t shots_per_shot=1);
+                uint64_t hw_cutoff, uint64_t base, uint64_t offset, std::mt19937_64&);
 void
 read_traces(std::string input_folder, Decoder*, uint64_t max_shots_per_file, uint64_t base, uint64_t offset);
 
