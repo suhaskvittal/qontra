@@ -42,14 +42,7 @@ b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool save_per_shot_dat
  *  Pre-condition: MPI is initialized before call and exited after call.
  * */
 benchmark::StatisticalResult
-b_statistical_ler(
-    dgf_t&,
-    uint code_dist,
-    fp_t p_ref,
-    uint64_t shots_per_call,
-    std::mt19937_64&, 
-    bool use_mpi=false
-);
+b_statistical_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool use_mpi=true);
 
 #define BC_FLAG_SWAP_LRU_V1     0x1
 #define BC_FLAG_SWAP_LRU_V2     0x2

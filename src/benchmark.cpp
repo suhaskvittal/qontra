@@ -138,97 +138,95 @@ b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
 }
 
 benchmark::StatisticalResult
-b_statistical_ler(
-    dgf_t& mkdec, 
-    uint code_dist,
-    fp_t p_ref,
-    uint64_t shots_per_call, 
-    std::mt19937_64& rng, 
-    bool use_mpi)
-{
-    int world_rank = 0;
-    int world_size = 1;
+b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& rng, bool use_mpi) {
+    int world_rank = 0, world_size = 1;
     if (use_mpi) {
-        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
         MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     }
 
+    stim::Circuit circuit(decoder->circuit);
+    DecodingGraph decoding_graph = to_decoding_graph(circuit);
+
+    const uint n_detectors = circuit.count_detectors();
+    const uint n_observables = circuit.count_observables();
+    const uint n_results = n_detectors + n_observables;
+
+    uint64_t local_shots = shots_per_batch / world_size;
+    if (world_rank == 0) {
+        local_shots += shots_per_batch % world_size;
+    }
+    stim::simd_bit_table result_table(local_shots, n_results);
+    std::vector<fp_t> error_prob(shots_per_batch, 0);
+
+    fp_t mean_flip_prob = 0.0;
+    std::vector<DecodingGraph::Edge*> edge_list;
+    for (uint d = 0; d < n_detectors; d++) {
+        auto v = decoding_graph.get_vertex(d);
+        for (auto w : decoding_graph.adjacency_list(v)) {
+            auto edge = decoding_graph.get_edge(v, w);
+            edge_list.push_back(edge);
+            mean_flip_prob += edge->error_probability;
+        }
+    }
+    mean_flip_prob /= edge_list.size();
+
+    uint n_faults = 1;
 
     benchmark::StatisticalResult statres;
-    fp_t p_curr = p_ref;
-    fp_t p_prev = p_ref;
-    fp_t prev_stat_shots;
-
-    Decoder * curr_decoder = mkdec(p_ref);
-    while (statres.n_logical_errors < 100) {
-        uint64_t shots = shots_per_call;
-        uint64_t local_shots = shots / world_size;
-        if (world_rank == 0) {
-            local_shots += shots % world_size;
-        }
-
+    while (statres.n_logical_errors < 1000) {
         uint64_t local_errors = 0;
-        fp_t local_stat_shots = 0;
 
-        while (local_shots) {
-            const stim::Circuit circ(curr_decoder->circuit);
-            const uint64_t shots_this_round = local_shots < MAX_SHOTS ? local_shots : MAX_SHOTS;
-
-            stim::FrameSimulator sim(circ.count_qubits(), shots_this_round, SIZE_MAX, rng);
-            sim.reference_error_rate = p_ref;
-            sim.reset_all_and_run(circ);
-            
-            const uint64_t n_results = circ.count_detectors() + circ.count_observables();
-            stim::simd_bit_table result_table(n_results, shots_this_round);
-            stim::simd_bit_table leakage_table(1, 1);  // Unused.
-            stim::read_from_sim(
-                    sim,
-                    stim::DetectorsAndObservables(circ),
-                    false,
-                    true,
-                    false,
-                    result_table,
-                    leakage_table);
-            result_table = result_table.transposed();
-            for (uint64_t s = 0; s < shots_this_round; s++) {
-                auto syndrome = _to_vector(result_table[s],
-                                            circ.count_detectors(),
-                                            circ.count_observables());
-                auto decoder_res = curr_decoder->decode_error(syndrome);
-                if (decoder_res.is_logical_error) {
-                    local_errors++;
-                }
-                local_stat_shots += pow(10, sim.log_prob_sim[s] - sim.log_prob_ref[s]);
+        for (uint64_t s = 0; s < local_shots; s++) {
+            // Add a random error.
+            auto edge = edge_list[rng() % edge_list.size()];
+            uint d1 = edge->detectors.first;
+            uint d2 = edge->detectors.second;
+            if (d1 != BOUNDARY_INDEX) {
+                result_table[s][d1] ^= 1;
             }
-            
-            local_shots -= shots_this_round;
+            if (d2 != BOUNDARY_INDEX) {
+                result_table[s][d2] ^= 1;
+            }
+            for (uint obs : edge->frames) {
+                if (obs >= 0) {
+                    result_table[s][n_detectors+obs] ^= 1;
+                }
+            }
+            error_prob[s] += edge->error_probability;
+
+            auto syndrome = _to_vector(result_table[s], n_detectors, n_observables);
+            auto res = decoder->decode_error(syndrome);
+            local_errors += res.is_logical_error;
         }
 
-        uint64_t n_logical_errors;
-        fp_t stat_shots;
-        MPI_Allreduce(&local_errors, &n_logical_errors, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
-        MPI_Allreduce(&local_stat_shots, &stat_shots, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        uint64_t fault_errors;
+        MPI_Allreduce(&local_errors, &fault_errors, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
 
-        fp_t mul = statres.statistical_shots > 0 ? stat_shots / prev_stat_shots : 1.0;
-
-        statres.n_logical_errors = n_logical_errors + mul*statres.n_logical_errors;
-//      statres.n_logical_errors += n_logical_errors;
-        statres.true_shots += shots;
-        statres.statistical_shots = stat_shots + mul*statres.statistical_shots;
-
+        fp_t log_possible_faults = lgamma(edge_list.size()+1) 
+                                    - lgamma(n_faults+1) - lgamma(edge_list.size()-n_faults+1);
+        fp_t log_fault_rate = log_possible_faults
+                                + n_faults*log(mean_flip_prob)
+                                + (edge_list.size() - n_faults)*log(1-mean_flip_prob);
         if (world_rank == 0) {
-            fp_t ler = statres.n_logical_errors / statres.statistical_shots;
-            std::cout << "\tler @ p = " << p_curr << " is " << ler << "\n";
-            std::cout << "\t\tlogical errors = " << statres.n_logical_errors << ", shots = " << statres.statistical_shots << "\n";
-            std::cout << "\t\tmultiplier = " << mul << "\n";
+            std::cout << "n_faults = " << n_faults << "\n"
+                    << "\tlog possible faults = " << log_possible_faults << " (" << pow(M_E, log_possible_faults) << ")\n"
+                    << "\tlog fault rate = " << log_fault_rate << " (" << pow(M_E, log_fault_rate) << ")\n";
         }
-        prev_stat_shots = stat_shots;
 
-        p_prev = p_curr;
-        p_curr = p_curr + p_ref*0.1;
+        if (fault_errors > 0) {
+            fp_t log_failure_rate = log(fault_errors) - log(shots_per_batch);
+        
+            statres.logical_error_rate += pow(M_E, log_failure_rate+log_fault_rate);
+            statres.n_logical_errors += fault_errors;
 
-        delete curr_decoder;
-        curr_decoder = mkdec(p_curr);
+            if (world_rank == 0) {
+                std::cout << "\tlog failure rate = " << log_failure_rate << " (" << pow(M_E, log_failure_rate) << ")\n"
+                        << "\tnumber of errors = " << statres.n_logical_errors << "\n";
+            }
+        }
+
+        n_faults++;
     }
 
     return statres;
