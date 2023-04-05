@@ -96,7 +96,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
     stim::simd_bit_table syndromes(2*shots, num_results);
     syndromes.clear();
 
-    const uint64_t rng_mod = (uint32_t) (1.0/(10*circuit_params.before_measure_flip_probability));
+    const uint64_t rng_mod = (uint32_t) (1.0/(circuit_params.before_measure_flip_probability));
 
     uint64_t syndrome_table_index = 0;
     bool restart_shot = false;
@@ -270,28 +270,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             } else {
                 std::set<fleece::LatticeGraph::Vertex*> used;
 
-                if (!(flags & NO_MITIGATION)) {
-                    if (r % 3 == 1) {
-                        for (auto pair : swap_set) {
-                            swap_targets[pair.first] = pair.second;
-                        }
-                    } else if (r % 3 == 2) {
-                        for (auto v : infected) {
-                            if (v != unlucky_data_qubit) {
-                                swap_targets[swap_set[v]] = v;
-                            }
-                        }
-
-                        if (infected.count(unlucky_data_qubit)) {
-                            for (auto w : lattice_graph.adjacency_list(unlucky_data_qubit)) {
-                                if (!swap_targets.count(w)) {
-                                    swap_targets[w] = unlucky_data_qubit;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                } else if (flags & EN_SWAP_LRU) {
+                if (flags & EN_SWAP_LRU) {
                     for (auto v : usage_queue) {
                         if (used.count(v)) {
                             continue;
@@ -412,7 +391,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 measurement_time++;
             }
             // Adjust measurements based on whether a leakage occurred.
-//          if (!(flags & NO_MITIGATION)) {
+            if (!(flags & NO_MITIGATION)) {
                 for (auto v : parity_qubits) {
                     uint i = stab_meas_time[v];
                     uint32_t mt = meas_t_offset + i;
@@ -422,19 +401,10 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     }
 
                     uint8_t b = 1;
-                    /*
-                    for (auto w : parity_qubits) {
-                        if (v->is_x_parity == w->is_x_parity) {
-                            continue;
-                        }
-                        auto common = lattice_graph.get_common_neighbors(v, w);
-                        b ^= (!common.empty() && syndrome[stab_meas_time[w]]);
-                    }
-                    */
                     syndrome[i] = b ^ sim->m_record.storage[pmt][0];
                     sim->m_record.storage[mt][0] = b;
                 }
-//          }
+            }
 
             if ((flags & EN_TMP_STAB_EXT)) {
                 // Simulate "Temporary Stabilizer Extension"
