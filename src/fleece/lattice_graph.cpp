@@ -103,6 +103,27 @@ LatticeGraph::adjacency_list(Vertex * v) {
     return adjacency_matrix[v];
 }
 
+std::vector<LatticeGraph::Vertex*>
+LatticeGraph::get_orderk_neighbors(Vertex * v, uint k) {
+
+    if (k == 1) {
+        return adjacency_list(v);
+    } else {
+        std::set<LatticeGraph::Vertex*> neighbors;
+
+        for (auto w : adjacency_list(v)) {
+            if (neighbors.count(w)) continue;
+            neighbors.insert(w);
+            for (auto u : get_orderk_neighbors(w, k-1)) {
+                neighbors.insert(u);
+            }
+        }
+
+        std::vector<LatticeGraph::Vertex*> nlist(neighbors.begin(), neighbors.end());
+        return nlist;
+    }
+}
+
 LatticeGraph::Vertex*
 LatticeGraph::get_cx_mate(Vertex * v, uint8_t n) {
     return cx_order[v][n];

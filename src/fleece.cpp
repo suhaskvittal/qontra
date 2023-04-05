@@ -218,11 +218,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         for (auto v : parity_qubits) {
             usage_queue.push_back(v);
         }
-        if (!(flags & NO_MITIGATION)) {
-            for (auto v : parity_qubits) {
-                usage_queue.push_back(v);
-            }
-        }
 
         uint32_t meas_t_offset = parity_qubits.size();
         restart_shot = false;
@@ -258,18 +253,9 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 if (flags & NO_MITIGATION) continue;
                 if (syndrome[i]) {
                     auto v = parity_qubits[i];
-                    for (uint32_t j = i+1; j < parity_qubits.size(); j++) {
-                        if (!syndrome[j]) {
-                            continue;
-                        }
-                        auto w = parity_qubits[j];
-                        auto path = lattice_path_table[std::make_pair(v, w)].path;
-                        uint chain_length = path.size() >> 1;
-                        if (chain_length <= ((dist-1) >> 1)) {
-                            for (auto u : path) {
-                                infected.insert(u);
-                            }
-                        }
+                    auto neighborhood = lattice_graph.get_orderk_neighbors(v, 3);
+                    for (auto w : neighborhood) {
+                        if (w->is_data) infected.insert(w);
                     }
                 }
             }
@@ -285,35 +271,27 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 std::set<fleece::LatticeGraph::Vertex*> used;
 
                 if (!(flags & NO_MITIGATION)) {
-                    std::map<fleece::LatticeGraph::Vertex*, uint> priority_table;
-                    for (uint i = 0; i < usage_queue.size(); i++) {
-                        if (!priority_table.count(usage_queue[i])) {
-                            priority_table[usage_queue[i]] = i;
+                    if (r % 3 == 1) {
+                        for (auto pair : swap_set) {
+                            swap_targets[pair.first] = pair.second;
                         }
-                    }
-                    
-                    for (auto v : infected) {
-                        int32_t max_priority = -1;
-                        fleece::LatticeGraph::Vertex * victim = nullptr;
-                        for (auto w : lattice_graph.adjacency_list(v)) {
-                            if (swap_targets.count(w)) {
-                                continue;
-                            }
-                            int32_t prio = priority_table[w];
-                            if (prio > max_priority) {
-                                max_priority = prio;
-                                victim = w;
+                    } else if (r % 3 == 2) {
+                        for (auto v : infected) {
+                            if (v != unlucky_data_qubit) {
+                                swap_targets[swap_set[v]] = v;
                             }
                         }
 
-                        if (max_priority >= 0) {
-                            used.insert(v);
-                            swap_targets[victim] = v;
+                        if (infected.count(unlucky_data_qubit)) {
+                            for (auto w : lattice_graph.adjacency_list(unlucky_data_qubit)) {
+                                if (!swap_targets.count(w)) {
+                                    swap_targets[w] = unlucky_data_qubit;
+                                    break;
+                                }
+                            }
                         }
                     }
-                }
-
-                if (flags & EN_SWAP_LRU) {
+                } else if (flags & EN_SWAP_LRU) {
                     for (auto v : usage_queue) {
                         if (used.count(v)) {
                             continue;
@@ -434,25 +412,29 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 measurement_time++;
             }
             // Adjust measurements based on whether a leakage occurred.
-            for (auto v : parity_qubits) {
-                uint i = stab_meas_time[v];
-                uint32_t mt = meas_t_offset + i;
-                uint32_t pmt = mt - parity_qubits.size();
-                if (!leakages[i]) {
-                    continue;
-                }
-
-                uint8_t b = 0;
-                for (auto w : parity_qubits) {
-                    if (w->is_x_parity != (output_basis == 'X')) {
+//          if (!(flags & NO_MITIGATION)) {
+                for (auto v : parity_qubits) {
+                    uint i = stab_meas_time[v];
+                    uint32_t mt = meas_t_offset + i;
+                    uint32_t pmt = mt - parity_qubits.size();
+                    if (!leakages[i]) {
                         continue;
                     }
-                    auto common = lattice_graph.get_common_neighbors(v, w);
-                    b ^= (!common.empty() && syndrome[stab_meas_time[w]]);
+
+                    uint8_t b = 1;
+                    /*
+                    for (auto w : parity_qubits) {
+                        if (v->is_x_parity == w->is_x_parity) {
+                            continue;
+                        }
+                        auto common = lattice_graph.get_common_neighbors(v, w);
+                        b ^= (!common.empty() && syndrome[stab_meas_time[w]]);
+                    }
+                    */
+                    syndrome[i] = b ^ sim->m_record.storage[pmt][0];
+                    sim->m_record.storage[mt][0] = b;
                 }
-                syndrome[i] = b ^ sim->m_record.storage[pmt][0];
-                sim->m_record.storage[mt][0] = b;
-            }
+//          }
 
             if ((flags & EN_TMP_STAB_EXT)) {
                 // Simulate "Temporary Stabilizer Extension"
