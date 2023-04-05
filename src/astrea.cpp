@@ -12,7 +12,7 @@ Astrea::Astrea(const stim::Circuit circuit,
         uint32_t weight_filter_cutoff,
         const AstreaParams& params,
         fp_t time_limit)
-    :MWPMDecoder(circuit), 
+    :astrea::MLDDecoder(circuit), 
     // Statistics
     n_nonzero_syndromes(0),
     n_hhw_syndromes(0), total_bfu_cycles(0),
@@ -29,6 +29,7 @@ Astrea::Astrea(const stim::Circuit circuit,
     // Properties
     n_rounds(circuit.count_detectors()/n_detectors_per_round),
     main_clock_frequency(params.main_clock_frequency),
+    use_mld(params.use_mld),
     time_limit(time_limit),
     baseline(circuit)
 {
@@ -42,9 +43,10 @@ Astrea::Astrea(const stim::Circuit circuit,
         params.bfu_fetch_width,
         params.bfu_compute_stages,
         params.bfu_priority_queue_size,
-        weight_filter_cutoff
+        weight_filter_cutoff,
+        params.use_mld
     };
-    simulator = new astrea::AstreaSimulator(graph, baseline, sim_params);
+    simulator = new astrea::AstreaSimulator(graph, circuit, sim_params);
 }
 
 Astrea::~Astrea() {
@@ -98,7 +100,8 @@ Astrea::decode_error(const std::vector<uint8_t>& syndrome) {
             cycles = 3*hw*(hw-1) + 73;
         }
         fp_t time_taken = cycles / main_clock_frequency * 1e9;
-        DecoderShotResult res = MWPMDecoder::decode_error(syndrome);
+        DecoderShotResult res;
+        res = MWPMDecoder::decode_error(syndrome);
         res.execution_time = time_taken;
         return res;
     }

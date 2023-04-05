@@ -16,6 +16,7 @@ set(QUARCH_PROGRAM_FILES
     # ASTREA
     src/astrea.cpp
     src/astrea/simulator.cpp
+    src/astrea/mld_decoder.cpp
     # TMR
     src/tmr_decoder.cpp
     # FLEECE
@@ -25,10 +26,7 @@ set(QUARCH_PROGRAM_FILES
     src/fleece/hldecoder.cpp
     # WINDOW
     src/window/wrapper.cpp
-    src/window/adaptive.cpp
-    # STATBENCH
-    src/benchmark/statbench/analytical_dist.cpp
-    src/benchmark/statbench/numerical_dist.cpp)
+    src/window/adaptive.cpp)
 add_library(quarch ${QUARCH_PROGRAM_FILES})
 # Add compile options
 if(CMAKE_BUILD_TYPE MATCHES Release)

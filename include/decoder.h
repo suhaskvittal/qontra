@@ -8,7 +8,6 @@
 
 #include <stim.h>
 
-#include "benchmark/statbench/analytical_dist.h"
 #include "defs.h"
 #include "decoding_graph.h"
 

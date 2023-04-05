@@ -62,12 +62,10 @@ FrameSimulator::FrameSimulator(size_t num_qubits, size_t batch_size, size_t max_
       leakage_table(num_qubits, batch_size),
       meas_table(num_qubits, batch_size),
       leak_record(batch_size, max_lookback),
-      log_prob_table_baseline(batch_size, 0.0),
-      log_prob_table_reference(batch_size, 0.0),
+      log_prob_sim(batch_size, 0),
+      log_prob_ref(batch_size, 0),
       reference_error_rate(0.0),
-      sim_checkpoint(0),
-      maintain_log_probabilities(false),
-      leakage_enabled(true)
+      sim_checkpoint(0)
 {}
 
 void FrameSimulator::xor_control_bit_into(uint32_t control, simd_bits_range_ref target)
@@ -108,7 +106,6 @@ void FrameSimulator::reset_all(bool partial) {
     m_record.clear();
     leak_record.clear();
     sim_checkpoint = 0;
-    leakage_enabled = true;
 }
 
 void FrameSimulator::reset_all_and_run(const Circuit &circuit) {
@@ -156,7 +153,7 @@ void FrameSimulator::measure_z(const OperationData &target_data) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         leak_record.record_result(leakage_table[q]);
         meas_table[q].clear();
-        meas_table[q] ^= x_table[q];
+        meas_table[q] |= x_table[q];
         meas_table[q] |= leakage_table[q];
         m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
@@ -524,6 +521,8 @@ void FrameSimulator::YCZ(const OperationData &target_data) {
 void FrameSimulator::DEPOLARIZE1(const OperationData &target_data) {
     const auto &targets = target_data.targets;
     const auto prob = target_data.args[0];
+
+    std::vector<uint64_t> errors(batch_size, 0);
     RareErrorIterator::for_samples(prob, targets.size() * batch_size, rng, [&](size_t s) {
         auto p = 1 + (rng() % 3);
         auto target_index = s / batch_size;
@@ -532,12 +531,10 @@ void FrameSimulator::DEPOLARIZE1(const OperationData &target_data) {
         x_table[t.data][sample_index] ^= p & 1;
         z_table[t.data][sample_index] ^= p & 2;
 
-        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
+        errors[sample_index]++;
     });
 
-    for (auto& lp : log_prob_table_baseline) {
-        lp += log(1-prob);
-    }
+    update_log_probs(prob, errors, targets.size());
 }
 
 void FrameSimulator::DEPOLARIZE2(const OperationData &target_data) {
@@ -545,6 +542,8 @@ void FrameSimulator::DEPOLARIZE2(const OperationData &target_data) {
     const auto prob = target_data.args[0];
     assert(!(targets.size() & 1));
     auto n = (targets.size() * batch_size) >> 1;
+
+    std::vector<uint64_t> errors(batch_size, 0);
     RareErrorIterator::for_samples(prob, n, rng, [&](size_t s) {
         auto p = 1 + (rng() % 15);
         auto target_index = (s / batch_size) << 1;
@@ -556,34 +555,34 @@ void FrameSimulator::DEPOLARIZE2(const OperationData &target_data) {
         x_table[t2][sample_index] ^= (bool)(p & 4);
         z_table[t2][sample_index] ^= (bool)(p & 8);
 
-        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
+        errors[sample_index]++;
     });
 
-    for (auto& lp : log_prob_table_baseline) {
-        lp += log(1-prob);
-    }
+    update_log_probs(prob, errors, (targets.size()) >> 1);
 }
 
 void FrameSimulator::X_ERROR(const OperationData &target_data) {
     const auto &targets = target_data.targets;
     const auto prob = target_data.args[0];
+
+    std::vector<uint64_t> errors(batch_size, 0);
     RareErrorIterator::for_samples(prob, targets.size() * batch_size, rng, [&](size_t s) {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
         x_table[t.data][sample_index] ^= true;
 
-        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
+        errors[sample_index]++;
     });
 
-    for (auto& lp : log_prob_table_baseline) {
-        lp += log(1-prob);
-    }
+    update_log_probs(prob, errors, targets.size());
 }
 
 void FrameSimulator::Y_ERROR(const OperationData &target_data) {
     const auto &targets = target_data.targets;
     const auto prob = target_data.args[0];
+
+    std::vector<uint64_t> errors(batch_size, 0);
     RareErrorIterator::for_samples(prob, targets.size() * batch_size, rng, [&](size_t s) {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
@@ -591,29 +590,27 @@ void FrameSimulator::Y_ERROR(const OperationData &target_data) {
         x_table[t.data][sample_index] ^= true;
         z_table[t.data][sample_index] ^= true;
 
-        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
+        errors[sample_index]++;
     });
 
-    for (auto& lp : log_prob_table_baseline) {
-        lp += log(1-prob);
-    }
+    update_log_probs(prob, errors, targets.size());
 }
 
 void FrameSimulator::Z_ERROR(const OperationData &target_data) {
     const auto &targets = target_data.targets;
     const auto prob = target_data.args[0];
+
+    std::vector<uint64_t> errors(batch_size, 0);
     RareErrorIterator::for_samples(prob, targets.size() * batch_size, rng, [&](size_t s) {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
         z_table[t.data][sample_index] ^= true;
 
-        log_prob_table_baseline[sample_index] += log(prob) - log(1-prob);
+        errors[sample_index]++;
     });
 
-    for (auto& lp : log_prob_table_baseline) {
-        lp += log(1-prob);
-    }
+    update_log_probs(prob, errors, targets.size());
 }
 
 void FrameSimulator::MPP(const OperationData &target_data) {
@@ -703,27 +700,46 @@ void FrameSimulator::ELSE_CORRELATED_ERROR(const OperationData &target_data) {
 }
 
 void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
-    if (!leakage_enabled) {
-        return;
-    }
     const double p = target_data.args[0];
     const auto& targets = target_data.targets;
 
+    std::vector<uint64_t> errors(batch_size, 0);
     auto call_f = [&](size_t s) 
     {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
         leakage_table[t.data][sample_index] ^= true;  
+        x_table[t.data][sample_index] = rng() & 0x1;
+        z_table[t.data][sample_index] = rng() & 0x1;
 
-        log_prob_table_baseline[sample_index] += log(p) - log(1-p);
+        errors[sample_index]++;
     };
 
-    for (auto& lp : log_prob_table_baseline) {
-        lp += log(1-p);
-    }
-
     RareErrorIterator::for_samples(p, targets.size() * batch_size, rng, call_f);
+
+    update_log_probs(p, errors, targets.size());
+}
+
+void FrameSimulator::LEAKAGE_TRANSPORT(const OperationData& target_data) {
+    const double p = target_data.args[0];
+    const auto& targets = target_data.targets;
+    assert(!(targets.size() & 1));
+    
+    auto call_f = [&](size_t s)
+    {
+        auto target_index = (s / batch_size) << 1;
+        auto sample_index = s % batch_size;
+        auto t1 = targets[target_index];
+        auto t2 = targets[target_index+1];
+
+        auto tmp = leakage_table[t1.data][sample_index];
+        leakage_table[t1.data][sample_index] |= leakage_table[t2.data][sample_index];
+        leakage_table[t2.data][sample_index] |= tmp;
+    };
+
+    auto n = (targets.size() * batch_size) >> 1;
+    RareErrorIterator::for_samples(p, n, rng, call_f);
 }
 
 bool
@@ -744,8 +760,11 @@ FrameSimulator::cycle_level_simulation(const Circuit& circuit) {
 }
 
 void
-FrameSimulator::toggle_leakage() {
-    leakage_enabled = !leakage_enabled;
+FrameSimulator::update_log_probs(double p, const std::vector<uint64_t>& errors, uint64_t total) {
+    for (uint64_t s = 0; s < errors.size(); s++) {
+        log_prob_sim[s] += errors[s]*log10(p) + (total-errors[s])*log10(p);
+        log_prob_ref[s] += errors[s]*log10(reference_error_rate) + (total-errors[s])*log10(p);
+    }
 }
 
 void sample_out_helper(

@@ -84,6 +84,7 @@ public:
 
     std::vector<Vertex*> adjacency_list(int32_t);
     std::vector<Vertex*> adjacency_list(Vertex*);
+    std::vector<Vertex*> get_orderk_neighbors(Vertex*, uint k);
 
     Vertex * get_cx_mate(Vertex*, uint8_t);
 

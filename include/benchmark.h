@@ -9,8 +9,6 @@
 #include <stim.h>
 
 #include "benchmark/statbench.h"
-#include "benchmark/statbench/analytical_dist.h"
-#include "benchmark/statbench/numerical_dist.h"
 #include "defs.h"
 #include "decoder.h"
 
@@ -44,19 +42,15 @@ b_decoder_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool save_per_shot_dat
  *  Pre-condition: MPI is initialized before call and exited after call.
  * */
 benchmark::StatisticalResult
-b_statistical_ler(
-    dgf_t&,
-    uint code_dist,
-    fp_t start_p,
-    fp_t final_p, 
-    uint64_t shots,
-    uint64_t update_rate,
-    std::mt19937_64&, 
-    bool use_mpi=false,
-    bool bootstrap_model=false, 
-    std::map<uint, uint64_t> bootstrap_data=std::map<uint, uint64_t>(),
-    fp_t use_bootstrap_model_until_p=1
-);
+b_statistical_ler(Decoder*, uint64_t shots, std::mt19937_64&, bool use_mpi=true, uint n_faults=1);
+/*
+ *  Save syndromes above some given Hamming weight.
+ * */
+void
+generate_traces(std::string output_folder, const stim::Circuit&, uint64_t shots, uint64_t shots_per_batch,
+                uint64_t hw_cutoff, uint64_t base, uint64_t offset, std::mt19937_64&);
+void
+read_traces(std::string input_folder, Decoder*, uint64_t max_shots_per_file, uint64_t base, uint64_t offset);
 
 #define BC_FLAG_SWAP_LRU_V1     0x1
 #define BC_FLAG_SWAP_LRU_V2     0x2
@@ -92,10 +86,10 @@ build_circuit(
     fp_t meas_flip_stddev=-1,
     fp_t round_leak_mean=-1,
     fp_t clifford_leak_mean=-1,
-    fp_t reset_leak_mean=-1,
+    fp_t leak_transport_mean=-1,
     fp_t round_leak_stddev=-1,
     fp_t clifford_leak_stddev=-1,
-    fp_t reset_leak_stddev=-1);
+    fp_t leak_transport_stddev=-1);
 
 }  // qrc
 

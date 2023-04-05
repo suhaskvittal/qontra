@@ -7,9 +7,6 @@
 
 namespace qrc {
 
-#define STATBENCH_DEBUG
-//#define STATBENCH_DEBUG2
-
 /* Helper Functions */
 inline fp_t __CHS(fp_t x, fp_t y, fp_t z) {
     return z >= 0 ? z : (y >=0 ? y : x);
@@ -130,203 +127,248 @@ b_decoder_ler(Decoder * decoder_p, uint64_t shots, std::mt19937_64& rng,
 }
 
 benchmark::StatisticalResult
-b_statistical_ler(
-    dgf_t& mkdec, 
-    uint code_dist,
-    fp_t start_p, 
-    fp_t final_p,
-    uint64_t shots, 
-    uint64_t update_rate,
-    std::mt19937_64& rng, 
-    bool use_mpi,
-    bool bootstrap_model,
-    std::map<uint, uint64_t> bootstrap_data,
-    fp_t use_bootstrap_model_until_p)
-{
-    int world_rank = 0;
-    int world_size = 1;
+b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& rng, bool use_mpi, uint n_faults) {
+    int world_rank = 0, world_size = 1;
     if (use_mpi) {
-        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
         MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     }
 
-    Decoder * curr_decoder = mkdec(start_p);
-    benchmark::ErrorDistribution * error_dist;
-    benchmark::ErrorDistribution * alt_dist;
-    if (bootstrap_model) {
-        auto numerical_dist = benchmark::statbench::build_numerical_distribution(
-                                    bootstrap_data,
-                                    benchmark::statbench::NumericalModel::normal);
-        auto analytical_dist = benchmark::statbench::bootstrap_from_normal_approximation(
-                                    curr_decoder->circuit, 
-                                    benchmark::statbench::AnalyticalModel::poisson,
-                                    numerical_dist);
-        error_dist = &numerical_dist;
-        alt_dist = &analytical_dist;
-    } else {
-        auto analytical_dist = benchmark::statbench::build_analytical_distribution(
-                                    curr_decoder->circuit, benchmark::statbench::AnalyticalModel::binomial);
-        error_dist = &analytical_dist;
-        alt_dist = &analytical_dist;
-    }
+    stim::Circuit circuit(decoder->circuit);
+    DecodingGraph decoding_graph = to_decoding_graph(circuit);
 
-    const fp_t log_p_update = ((fp_t)update_rate) * (log(final_p) - log(start_p)) / ((fp_t) shots);
-    const fp_t log_mean_prob = error_dist->pmf(2*error_dist->get_mean(), true);
+    const uint n_detectors = circuit.count_detectors();
+    const uint n_observables = circuit.count_observables();
+    const uint n_results = n_detectors + n_observables;
 
-#ifdef STATBENCH_DEBUG
+    uint64_t local_shots = shots_per_batch / world_size;
     if (world_rank == 0) {
-        std::cout << "expected hamming weight: " << error_dist->get_mean() 
-                    << "\tvariance: " << error_dist->get_variance()
-                    << "\tlog(prob) = " << log_mean_prob << "\n";
-        std::cout << "log_p_update = " << log_p_update << "\n";
+        local_shots += shots_per_batch % world_size;
     }
-#endif
+    stim::simd_bit_table result_table(local_shots, n_results);
 
+#define DELTA(a, b) ((a)-(b))/(a)
+#define B_STAT_LER_USE_POLY
+
+#ifdef B_STAT_LER_USE_POLY
+    std::array<fp_t, 100'000> log_poly;
+    log_poly.fill(1);
+
+    uint eventno = 0;
+#else
+    fp_t mean_flip_prob = 0.0;
+#endif
+    std::vector<fp_t> edge_probs;
+    std::vector<DecodingGraph::Edge*> edge_list;
+    for (uint d = 0; d < n_detectors; d++) {
+        auto v = decoding_graph.get_vertex(d);
+        for (auto w : decoding_graph.adjacency_list(v)) {
+            auto edge = decoding_graph.get_edge(v, w);
+            edge_list.push_back(edge);
+            edge_probs.push_back(edge->error_probability);
+#ifdef B_STAT_LER_USE_POLY
+            fp_t ep = edge->error_probability;
+            if (eventno == 0) {
+                log_poly[0] = log(1-ep);
+                log_poly[1] = log(ep);
+            } else {
+                std::array<fp_t, 100'000> log_pa, log_pb;
+                log_pa.fill(1);
+                log_pb.fill(1);
+                for (uint i = 0; i <= eventno; i++) {
+                    log_pa[i] = log_poly[i] + log(1-ep);
+                    log_pb[i+1] = log_poly[i] + log(ep);
+                }
+                for (uint i = 0; i < log_poly.size(); i++) {
+                    if (log_pa[i] == 1 && log_pb[i] == 1) {
+                        log_poly[i] = 1;
+                    } else if (log_pa[i] == 1) {
+                        log_poly[i] = log_pb[i];
+                    } else if (log_pb[i] == 1) {
+                        log_poly[i] = log_pa[i];
+                    } else {
+                        log_poly[i] = log(pow(M_E, log_pa[i]) + pow(M_E, log_pb[i]));
+                    }
+                }
+            }
+            eventno++;
+#else
+            mean_flip_prob += 1.0/edge->error_probability;
+#endif
+        }
+    }
+
+#ifndef B_STAT_LER_USE_POLY
+    mean_flip_prob = edge_list.size() / mean_flip_prob;
+#endif
+    std::discrete_distribution<> edge_dist(edge_probs.begin(), edge_probs.end());
+
+    for (uint64_t s = 0; s < local_shots; s++) {
+        for (uint i = 0; i < n_faults-1; i++) {
+            // Add a random error.
+            auto edge = edge_list[edge_dist(rng)];
+            uint d1 = edge->detectors.first;
+            uint d2 = edge->detectors.second;
+            if (d1 != BOUNDARY_INDEX) {
+                result_table[s][d1] ^= 1;
+            }
+            if (d2 != BOUNDARY_INDEX) {
+                result_table[s][d2] ^= 1;
+            }
+            for (uint obs : edge->frames) {
+                if (obs >= 0) {
+                    result_table[s][n_detectors+obs] ^= 1;
+                }
+            }
+        }
+    }
+
+    fp_t prev_logical_error_rate = 0.0;
     benchmark::StatisticalResult statres;
-    statres.true_shots = shots;
-
-    std::map<uint, fp_t> hamming_weight_freq;
-
-    fp_t pc = start_p;    // Current physical error rate
-    fp_t prev_sample_ss = shots < update_rate ? shots : update_rate;
-
-    bool first_iter = true;  // We need to adjust any inaccuracies in our model in the first iteration only.
-    while (shots > 0) {
-#ifdef STATBENCH_DEBUG
-        if (world_rank == 0) {
-            std::cout << "shots left: " << shots << "\n";
-        }
-#endif
-        const uint64_t shots_this_round = shots < update_rate ? shots : update_rate;
-        // Benchmark decoder
-        uint64_t shots_this_sample = shots_this_round / world_size;
-        if (world_rank == world_size - 1) {
-            shots_this_sample += shots_this_round % world_size;
-        }
-
-        std::map<uint, fp_t> sample_hw_freq;
-        uint64_t sample_errors;
-        fp_t sample_statistical_shots;
-        fp_t sample_mean;
-
-        std::map<uint, fp_t> local_freq;
+    while (statres.n_logical_errors < 10 || DELTA(statres.logical_error_rate, prev_logical_error_rate) > 0.1) {
         uint64_t local_errors = 0;
-        fp_t local_statistical_shots = 0.0;
-        fp_t hwsum = 0;
-        while (shots_this_sample > 0) {
-            uint64_t shots_this_batch = shots_this_sample < 100'000 ? shots_this_sample : 100'000;
-            stim::simd_bit_table sample_buffer = 
-                stim::detector_samples(curr_decoder->circuit, shots_this_batch,
-                        false, true, rng);
-            sample_buffer = sample_buffer.transposed();
-            for (uint64_t i = 0; i < shots_this_batch; i++) {
-                std::vector<uint8_t> syndrome = _to_vector(sample_buffer[i], 
-                                                        curr_decoder->circuit.count_detectors(),
-                                                        curr_decoder->circuit.count_observables());
-                uint hw = std::accumulate(syndrome.begin(),
-                                        syndrome.begin() + curr_decoder->circuit.count_detectors(),
-                                        0);
-                if (hw & 0x1) {
-                    hw++;
-                }
-                hwsum += hw;
-                if (!local_freq.count(hw)) {
-                    local_freq[hw] = 0;
-                }
-                local_freq[hw]++;
-                if (hw) {
-                    auto res = curr_decoder->decode_error(syndrome);
-                    local_errors += res.is_logical_error;
-                }
-                // Compute statistical shots for this batch.
-                fp_t log_ss;
-                fp_t log_hw_prob = error_dist->pmf(hw, true);
-                if (-log_hw_prob > 2.5+log(statres.statistical_shots)) {
-                    log_hw_prob = alt_dist->pmf(hw, true);
-                }
-                log_ss = log_mean_prob - log_hw_prob;
-                local_statistical_shots += pow(M_E, log_ss);
+
+        for (uint64_t s = 0; s < local_shots; s++) {
+            // Add a random error.
+            auto edge = edge_list[edge_dist(rng)];
+            uint d1 = edge->detectors.first;
+            uint d2 = edge->detectors.second;
+            if (d1 != BOUNDARY_INDEX) {
+                result_table[s][d1] ^= 1;
             }
-            
-            shots_this_sample -= shots_this_batch;
-        }
-        // Collect results.
-        for (uint i = 0; i < curr_decoder->circuit.count_detectors(); i++) {
-            fp_t f = 0.0;
-            if (local_freq.count(i)) {
-                f = local_freq[i];
+            if (d2 != BOUNDARY_INDEX) {
+                result_table[s][d2] ^= 1;
             }
-            fp_t fsum = 0.0;
-            MPI_Allreduce(&f, &fsum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-            sample_hw_freq[i] = fsum;
+            for (uint obs : edge->frames) {
+                if (obs >= 0) {
+                    result_table[s][n_detectors+obs] ^= 1;
+                }
+            }
+
+            auto syndrome = _to_vector(result_table[s], n_detectors, n_observables);
+            auto res = decoder->decode_error(syndrome);
+            local_errors += res.is_logical_error;
         }
-        MPI_Allreduce(&local_errors, &sample_errors, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        MPI_Allreduce(&local_statistical_shots, &sample_statistical_shots, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        MPI_Allreduce(&hwsum, &sample_mean, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        sample_mean /= shots_this_round;
-        if (first_iter) {
-            sample_statistical_shots = shots_this_round;
-        }
-#ifdef STATBENCH_DEBUG
-        if (sample_statistical_shots < prev_sample_ss && world_rank == 0) {
-            std::cout << "ss < prev_ss: " << sample_statistical_shots << " < " << prev_sample_ss << "\n";
-        }
+
+        uint64_t fault_errors;
+        MPI_Allreduce(&local_errors, &fault_errors, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+
+#ifdef B_STAT_LER_USE_POLY
+        fp_t log_fault_rate = log_poly[n_faults];
+#else
+        fp_t log_possible_faults = lgamma(edge_list.size()+1) 
+                                    - lgamma(n_faults+1) - lgamma(edge_list.size()-n_faults+1);
+        fp_t log_fault_rate = log_possible_faults
+                                + n_faults*log(mean_flip_prob)
+                                + (edge_list.size() - n_faults)*log(1-mean_flip_prob);
 #endif
-        // Update hamming_weight_freq table
-        for (auto pair : hamming_weight_freq) {
-            // Apply prior probabilities to "fill up" other shots (the ss - shots_per_round shots).
-            hamming_weight_freq[pair.first] *= sample_statistical_shots/prev_sample_ss;
-        }
-        fp_t true_sample_ss = 0.0;  // To account for floating point error.
-        for (auto pair : sample_hw_freq) {
-            if (pair.second == 0) {
-                continue;
-            }
-            if (!hamming_weight_freq.count(pair.first)) {
-                hamming_weight_freq[pair.first] = 0;
-            }
-            hamming_weight_freq[pair.first] += pair.second;
-            true_sample_ss += hamming_weight_freq[pair.first];
-        }
-        // Record statistics and delete current decoder afterward.
-        statres.n_logical_errors = 
-            statres.n_logical_errors * sample_statistical_shots/prev_sample_ss + local_errors;
-        statres.statistical_shots = true_sample_ss;
-        delete curr_decoder;
-        // Update noise and create a new decoder.
-        prev_sample_ss = sample_statistical_shots;
-#ifdef STATBENCH_DEBUG
         if (world_rank == 0) {
-            std::cout << "\tphysical error rate: " << pc << "\n";
-            std::cout << "\tmean hamming weight: " << sample_mean << "\n";
-            std::cout << "\tstatistical shots: " << sample_statistical_shots << "\n";
-            std::cout << "\tdistribution:\n";
-            fp_t psum = 0.0;
-            fp_t shotsum = 0.0;
-            for (auto pair : hamming_weight_freq) {
-                if (pair.second) {
-                    std::cout << "\t\t" << pair.first << "\t" 
-                        << (pair.second / statres.statistical_shots) 
-                        << "(" << pair.second << " of " << statres.statistical_shots << ")\n";
-                    psum += pair.second / statres.statistical_shots;
-                    shotsum += pair.second;
-                }
-            }
-            std::cout << "\tprob sum: " << psum << "\n";
-            std::cout << "\tshot sum: " << shotsum << " (should be " << statres.statistical_shots << ")\n";
+            std::cout << "n_faults = " << n_faults << "\n"
+                    << "\tlog fault rate = " << log_fault_rate << " (" << pow(M_E, log_fault_rate) << ")\n";
         }
-#endif
-        pc = pow(M_E, log(pc) + log_p_update);
-        curr_decoder = mkdec(pc);
-        shots -= shots_this_round;
-        first_iter = false;
-    }
-    delete curr_decoder;
-    for (auto pair : hamming_weight_freq) {
-        statres.hamming_weight_dist[pair.first] = pair.second / statres.statistical_shots;
+
+        if (fault_errors > 0) {
+            fp_t log_failure_rate = log(fault_errors) - log(shots_per_batch);
+        
+            prev_logical_error_rate = statres.logical_error_rate;
+            statres.logical_error_rate += pow(M_E, log_failure_rate+log_fault_rate);
+            statres.n_logical_errors += fault_errors;
+
+            if (world_rank == 0) {
+                std::cout << "\tlog failure rate = " << log_failure_rate << " (" << pow(M_E, log_failure_rate) << ")\n"
+                        << "\tnumber of errors = " << statres.n_logical_errors << "\n";
+                std::cout << "\tlogical error rate = " << statres.logical_error_rate << "\n";
+            }
+        }
+
+        n_faults++;
     }
 
     return statres;
+}
+
+void
+generate_traces(std::string output_folder, const stim::Circuit& circuit, uint64_t shots, uint64_t shots_per_batch,
+        uint64_t hw_cutoff, uint64_t base, uint64_t offset, std::mt19937_64& rng) 
+{
+    uint64_t fileno = base;
+    const uint64_t n_results = circuit.count_detectors() + circuit.count_observables();
+    const stim::simd_bits ref(n_results);
+
+    uint64_t t = 0;
+    stim::simd_bit_table filtered_samples(shots_per_batch, n_results);
+    while (shots) {
+        const uint64_t shots_this_round = shots < shots_per_batch ? shots : shots_per_batch;
+
+        stim::simd_bit_table samples = stim::detector_samples(circuit, shots_this_round, false, true, rng);
+
+        samples = samples.transposed();
+        for (uint64_t s = 0; s < shots_this_round; s++) {
+            if (samples[s].popcnt() > hw_cutoff) {
+                filtered_samples[t++] |= samples[s];
+            }
+            if (t == shots_per_batch) {
+                filtered_samples = filtered_samples.transposed();
+                std::string filename = output_folder + "/shots_" + std::to_string(fileno) + ".dets";
+                FILE * shots_out = fopen(filename.c_str(), "w");
+                stim::write_table_data(shots_out, t, n_results, ref, filtered_samples, 
+                                        stim::SampleFormat::SAMPLE_FORMAT_DETS, 'D', 'L', circuit.count_detectors());
+
+                fclose(shots_out);
+                fileno += offset;
+
+                filtered_samples.clear();
+                t = 0;
+            }
+        }
+
+        shots -= shots_this_round;
+    }
+    filtered_samples = filtered_samples.transposed();
+    std::string filename = output_folder + "/shots_" + std::to_string(fileno) + ".dets";
+    FILE * shots_out = fopen(filename.c_str(), "w");
+    stim::write_table_data(shots_out, t, n_results, ref, filtered_samples, 
+                            stim::SampleFormat::SAMPLE_FORMAT_DETS, 'D', 'L', circuit.count_detectors());
+
+    fclose(shots_out);
+}
+
+void
+read_traces(std::string input_folder, Decoder * decoder, uint64_t max_shots_per_file, uint64_t base, uint64_t offset) {
+    uint64_t fileno = base;
+
+    const uint64_t n_detectors = decoder->circuit.count_detectors();
+    const uint64_t n_observables = decoder->circuit.count_observables();
+
+    while (true) {
+        std::string filename = input_folder + "/shots_" + std::to_string(fileno) + ".dets";
+        if (base == 0) {
+            std::cout << "reading " << filename << "\n";
+        }
+        FILE * shots_in = fopen(filename.c_str(), "r");
+        if (!shots_in) {
+            break;
+        }
+
+        stim::simd_bit_table samples(max_shots_per_file, n_detectors+n_observables);
+        uint64_t true_shots = stim::read_file_data_into_shot_table(shots_in, max_shots_per_file, n_detectors,
+                                    stim::SampleFormat::SAMPLE_FORMAT_DETS, 'D', samples, true, 0, n_detectors,
+                                    n_observables);
+        if (base == 0) {
+            std::cout << "\tshots in file = " << true_shots << "\n";
+        }
+        for (uint64_t s = 0; s < true_shots; s++) {
+            if (base == 0 && s % 100000 == 0) {
+                std::cout << "\tshot " << s << "\n";
+            }
+            auto syndrome = _to_vector(samples[s], n_detectors, n_observables);
+            auto res = decoder->decode_error(syndrome);
+            decoder->n_logical_errors += res.is_logical_error;
+        }
+
+        fileno += offset;
+        fclose(shots_in);
+    }
 }
 
 stim::Circuit
@@ -355,10 +397,10 @@ build_circuit(
     fp_t meas_flip_stddev,
     fp_t round_leak_mean,
     fp_t clifford_leak_mean,
-    fp_t reset_leak_mean,
+    fp_t leak_transport_mean,
     fp_t round_leak_stddev,
     fp_t clifford_leak_stddev,
-    fp_t reset_leak_stddev)
+    fp_t leak_transport_stddev)
 {
     if (rounds == 0) {
         rounds = code_dist;
@@ -383,11 +425,11 @@ build_circuit(
 
     params.before_round_leakage_probability = __CHS(error_mean, pauliplus_error_mean, round_leak_mean);
     params.after_clifford_leakage_probability = __CHS(error_mean, pauliplus_error_mean, clifford_leak_mean);
-    params.after_reset_leakage_probability = __CHS(error_mean, pauliplus_error_mean, reset_leak_mean);
+    params.after_clifford_leakage_transport = __CHS(error_mean, pauliplus_error_mean, leak_transport_mean);
     
     params.before_round_leakage_probability_stddev = __CHS(error_stddev, pauliplus_error_stddev, round_leak_stddev);
     params.after_clifford_leakage_probability_stddev = __CHS(error_stddev, pauliplus_error_stddev, clifford_leak_stddev);
-    params.after_reset_leakage_probability_stddev = __CHS(error_stddev, pauliplus_error_stddev, reset_leak_stddev);
+    params.after_clifford_leakage_transport_stddev = __CHS(error_stddev, pauliplus_error_stddev, leak_transport_stddev);
 
     params.both_stabilizers = both_stabilizers;
     params.swap_lru = other_flags & BC_FLAG_SWAP_LRU_V1;
