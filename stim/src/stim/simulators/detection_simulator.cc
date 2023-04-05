@@ -36,7 +36,7 @@ void xor_measurement_set_into_result(
                     if (use_leak_samples) {
                         d ^= l.andnot(f) | (rand & l);  // Leakage is always random.
                     } else {
-                        d ^= l | f;
+                        d ^= f;
                     }
                 });
     }
@@ -81,7 +81,7 @@ void stim::read_from_sim(
         }
     }
     for (const auto &det : det_obs.detectors) {
-        xor_measurement_set_into_result(det, frame_samples, result_table, offset, leakage_samples, true);
+        xor_measurement_set_into_result(det, frame_samples, result_table, offset, leakage_samples, false);
         if (get_leakage_data) {
             or_measurement_set_into_result(det, leakage_samples,
                     leakage_table, offset);
