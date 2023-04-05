@@ -91,29 +91,6 @@ Wrapper::decode_error(const std::vector<uint8_t>& syndrome) {
     auto correction = get_correction_from_matching(running_matching);
     bool is_error = is_logical_error(correction, syndrome, circuit.count_detectors(), circuit.count_observables());
 
-    if (is_error) {
-        auto mwpm_res = MWPMDecoder::decode_error(syndrome);
-        if (!mwpm_res.is_logical_error) {
-            std::cout << "=================================\n";
-            // Compare matchings
-            std::cout << "window matching:\n";
-            for (auto pair : running_matching) {
-                int r1 = pair.first == BOUNDARY_INDEX ? -1 : pair.first/detectors_per_round;
-                int r2 = pair.second == BOUNDARY_INDEX ? -1 : pair.second/detectors_per_round;
-                std::cout << "\t" << pair.first << "(" << r1 << ")"
-                            << " --> " << pair.second << "(" << r2 << ")" << "\n";
-            }
-
-            std::cout << "mwpm matching:\n";
-            for (auto pair : mwpm_res.matching) {
-                int r1 = pair.first == BOUNDARY_INDEX ? -1 : pair.first/detectors_per_round;
-                int r2 = pair.second == BOUNDARY_INDEX ? -1 : pair.second/detectors_per_round;
-                std::cout << "\t" << pair.first << "(" << r1 << ")"
-                            << " --> " << pair.second << "(" << r2 << ")" << "\n";
-            }
-        }
-    }
-
     DecoderShotResult final_result = {
         0.0, // Todo
         0.0, // Todo

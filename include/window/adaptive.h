@@ -19,7 +19,7 @@ namespace window {
 
 class AdaptiveDecoder : public Wrapper {
 public:
-    AdaptiveDecoder(const stim::Circuit&, Decoder*, uint total_rounds, uint detectors_per_round, 
+    AdaptiveDecoder(const stim::Circuit&, Decoder*, uint total_rounds, uint window_size, uint detectors_per_round, 
             uint max_correction_depth);
 
     std::string name(void) override;
@@ -35,7 +35,7 @@ protected:
     void record_window_data(uint window_size, uint hw);
 
     uint64_t shot_ws_sum;
-    uint64_t window_size;
+    uint64_t curr_window_size;
 
     std::vector<uint8_t> running_correction;
 };

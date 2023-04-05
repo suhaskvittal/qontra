@@ -9,13 +9,13 @@ namespace qrc {
 namespace window {
 
 AdaptiveDecoder::AdaptiveDecoder(const stim::Circuit& circuit, Decoder * backing_decoder, uint total_rounds,
-                                uint detectors_per_round, uint max_correction_depth)
-    :Wrapper(circuit, backing_decoder, total_rounds, total_rounds, detectors_per_round, max_correction_depth),
+                                uint window_size, uint detectors_per_round, uint max_correction_depth)
+    :Wrapper(circuit, backing_decoder, total_rounds, window_size, detectors_per_round, max_correction_depth),
     recording(false),
     sum_window_size(0),
     largest_window_size(0),
     shot_ws_sum(0),
-    window_size(0),
+    curr_window_size(0),
     running_correction(circuit.count_observables())
 {}
 
@@ -40,7 +40,7 @@ AdaptiveDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     bool sig_seeking = false;
     uint rounds_since_hit = 0;
 
-    window_size = 0;
+    curr_window_size = 0;
 
     shot_ws_sum = 0;
     shot_hw_sum = 0;
@@ -63,7 +63,7 @@ AdaptiveDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
                 acc_syndrome.clear();
                 lower_d += detectors_per_round;
                 upper_d += detectors_per_round;
-                window_size = 0;
+                curr_window_size = 0;
                 total_downtime++;
                 continue;
             }
@@ -71,7 +71,7 @@ AdaptiveDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
             sig_seeking = true;
             rounds_since_hit = 0;
         }
-        window_size++;
+        curr_window_size++;
         
         if (rounds_since_hit == max_correction_depth) {
             // Fit the decoder into the decoder parameters.
@@ -80,7 +80,7 @@ AdaptiveDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
             sig_seeking = false;
 
             rounds_since_hit = 0;
-            window_size = 0;
+            curr_window_size = 0;
             lower_d = upper_d;
         } else {
             total_downtime++;
@@ -89,7 +89,7 @@ AdaptiveDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     }
     // Decode final round.
     // Push the remaining bits onto acc_syndrome.
-    window_size++;
+    curr_window_size++;
     uint k = upper_d - detectors_per_round;
     for (uint i = k; i < circuit.count_detectors(); i++) {
         acc_syndrome.push_back(running_syndrome[i]);
@@ -103,6 +103,7 @@ AdaptiveDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
     auto correction = get_correction_from_matching(running_matching);
     bool is_error = is_logical_error(correction, syndrome, 
                         circuit.count_detectors(), circuit.count_observables());
+    /*
     if (is_error) {
         auto mwpm_res = MWPMDecoder::decode_error(syndrome);
         if (!mwpm_res.is_logical_error) {
@@ -125,6 +126,7 @@ AdaptiveDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
             }
         }
     }
+    */
 
     if (n_merge_calls) {
         sum_hamming_weight_in_window += ((fp_t)shot_hw_sum) / ((fp_t) n_merge_calls);
@@ -145,13 +147,13 @@ void
 AdaptiveDecoder::decode_syndrome(const std::vector<uint8_t>& acc_syndrome, uint offset, bool last_round) {
     uint64_t hw = std::accumulate(acc_syndrome.begin(), acc_syndrome.end(), 0);
     shot_hw_sum += hw;
-    shot_ws_sum += window_size;
+    shot_ws_sum += curr_window_size;
 
-    if (window_size > largest_window_size) {
-        largest_window_size = window_size;
+    if (curr_window_size > largest_window_size) {
+        largest_window_size = curr_window_size;
     }
 
-    record_window_data(window_size, hw);
+    record_window_data(curr_window_size, hw);
 
     if (hw == 0) {
         return;
