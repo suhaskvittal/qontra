@@ -36,7 +36,7 @@ void xor_measurement_set_into_result(
                     if (use_leak_samples) {
                         d ^= l.andnot(f) | (rand & l);  // Leakage is always random.
                     } else {
-                        d ^= f;
+                        d ^= f | l;
                     }
                 });
     }
