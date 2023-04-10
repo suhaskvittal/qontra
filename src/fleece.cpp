@@ -99,7 +99,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
     const uint64_t rng_mod = (uint32_t) (1.0/(circuit_params.before_measure_flip_probability));
 
     uint64_t syndrome_table_index = 0;
-    bool restart_shot = false;
 
     const uint dist = circuit_params.distance;
     const uint detectors_per_round = (dist*dist - 1) >> 1;
@@ -110,7 +109,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         std::vector<uint64_t> plp(parity_leakage_population.size(), 0);
 
         std::string shot_log;
-        sim->reset_all(restart_shot);
+        sim->reset_all();
         // Do first round -- special.
         //
         // Reset all qubits.
@@ -122,11 +121,9 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         std::map<fleece::LatticeGraph::Vertex*, uint32_t> stab_meas_time;
             
         for (auto v : data_qubits) {
-            if (!restart_shot) {
-                apply_reset(v->qubit);
-                if (output_basis == 'X') {
-                    apply_H(v->qubit, false);
-                }
+            apply_reset(v->qubit);
+            if (output_basis == 'X') {
+                apply_H(v->qubit, false);
             }
             apply_round_start_error(v->qubit);
         }
@@ -212,7 +209,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         }
 
         uint32_t meas_t_offset = parity_qubits.size();
-        restart_shot = false;
         for (uint r = 1; r <= circuit_params.rounds; r++) {
             std::set<fleece::LatticeGraph::Vertex*> infected;   // Set of vertices with potential leakages.
             // Check for problems in the prior round.
@@ -411,11 +407,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 // Update syndromes.
                 // Model measurement error rate on leakage.
                 leakages[i] = sim->leak_record.storage[measurement_time][0] ^ ((rng() % rng_mod) == 0);
-                if (leakages[i] && leakage_enabled) {
-                    if (swap_targets.count(v) && r == circuit_params.rounds - 1) {
-                        restart_shot = true;
-                    }
-                }
                 syndrome[i] = sim->m_record.storage[measurement_time][0] ^ sim->m_record.storage[pmt][0];
                 if (swap_targets.count(v) && leakage_enabled) {
                     auto _v = swap_targets[v];
@@ -482,22 +473,16 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             meas_t_offset += parity_qubits.size();
         }
         // Perform tail measurements.
-        if (restart_shot && !(flags & (NO_MITIGATION | NO_RESTART))) {
-            n_restarts++;
-            continue;
-        } else {
-            restart_shot = false;
-            for (uint i = 0; i < data_leakage_population.size(); i++) {
-                data_leakage_population[i] += dlp[i];
-                parity_leakage_population[i] += plp[i];
-            }
+        for (uint i = 0; i < data_leakage_population.size(); i++) {
+            data_leakage_population[i] += dlp[i];
+            parity_leakage_population[i] += plp[i];
+        }
 
-            for (auto v : data_qubits) {
-                if (output_basis == 'X') {
-                    apply_H(v->qubit, false);
-                }
-                apply_measure(v->qubit);
+        for (auto v : data_qubits) {
+            if (output_basis == 'X') {
+                apply_H(v->qubit, false);
             }
+            apply_measure(v->qubit);
         }
         // Everything is done, extract the syndrome.
         stim::simd_bit_table measure_results(num_results, 1);

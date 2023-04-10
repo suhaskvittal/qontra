@@ -37,7 +37,6 @@
 #define LAST_R_NO_LEAKAGE   0x01
 #define EN_SWAP_LRU         0x04
 #define NO_MITIGATION       0x08
-#define NO_RESTART          0x10
 
 namespace qrc {
 
