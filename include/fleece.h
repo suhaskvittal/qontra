@@ -34,8 +34,7 @@
  *  Z basis operations at the moment.
  * */
 
-#define EN_STATE_DRAIN      0x01
-#define EN_TMP_STAB_EXT     0x02 // enables EN_STATE_DRAIN by default.
+#define LAST_R_NO_LEAKAGE   0x01
 #define EN_SWAP_LRU         0x04
 #define NO_MITIGATION       0x08
 #define NO_RESTART          0x10

@@ -52,9 +52,9 @@ generate_traces(std::string output_folder, const stim::Circuit&, uint64_t shots,
 void
 read_traces(std::string input_folder, Decoder*, uint64_t max_shots_per_file, uint64_t base, uint64_t offset);
 
-#define BC_FLAG_SWAP_LRU_V1     0x1
-#define BC_FLAG_SWAP_LRU_V2     0x2
-#define BC_FLAG_INVERT_STATE    0x4
+#define BC_FLAG_SWAP_LRU        0x1
+#define BC_FLAG_INVERT_STATE    0x2
+#define BC_FLAG_MULTI_OBS       0x4
 
 stim::Circuit
 build_circuit(

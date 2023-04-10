@@ -225,6 +225,8 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
 
     fp_t prev_logical_error_rate = 0.0;
     benchmark::StatisticalResult statres;
+    statres.hw_stats.fill({0, 0});
+
     while (statres.n_logical_errors < 10 || DELTA(statres.logical_error_rate, prev_logical_error_rate) > 0.1) {
         uint64_t local_errors = 0;
 
@@ -245,14 +247,18 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
                 }
             }
 
+            const uint hw = result_table[s].popcnt();
+
             auto syndrome = _to_vector(result_table[s], n_detectors, n_observables);
             auto res = decoder->decode_error(syndrome);
             local_errors += res.is_logical_error;
+
+            statres.hw_stats[hw].n_errors += res.is_logical_error;
+            statres.hw_stats[hw].n_occurrences++;
         }
 
         uint64_t fault_errors;
         MPI_Allreduce(&local_errors, &fault_errors, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
-
 #ifdef B_STAT_LER_USE_POLY
         fp_t log_fault_rate = log_poly[n_faults];
 #else
@@ -282,6 +288,14 @@ b_statistical_ler(Decoder * decoder, uint64_t shots_per_batch, std::mt19937_64& 
         }
 
         n_faults++;
+    }
+    // Combine all HW stats.
+    for (uint i = 0; i < 100; i++) {
+        uint64_t errors, occs;
+        MPI_Allreduce(&statres.hw_stats[i].n_errors, &errors, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(&statres.hw_stats[i].n_occurrences, &occs, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+
+        statres.hw_stats[i] = {errors, occs};
     }
 
     return statres;
@@ -432,9 +446,9 @@ build_circuit(
     params.after_clifford_leakage_transport_stddev = __CHS(error_stddev, pauliplus_error_stddev, leak_transport_stddev);
 
     params.both_stabilizers = both_stabilizers;
-    params.swap_lru = other_flags & BC_FLAG_SWAP_LRU_V1;
-    params.swap_lru_with_no_swap = other_flags & BC_FLAG_SWAP_LRU_V2;
+    params.swap_lru = other_flags & BC_FLAG_SWAP_LRU;
     params.initial_state_is_basis_1 = other_flags & BC_FLAG_INVERT_STATE;
+    params.multiple_observables = other_flags & BC_FLAG_MULTI_OBS;
 
     stim::Circuit circ = generate_surface_code_circuit(params).circuit;
     return circ;

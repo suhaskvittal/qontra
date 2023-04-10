@@ -27,6 +27,13 @@ struct StatisticalResult {
     uint64_t n_logical_errors = 0;
     fp_t mean_execution_time = 0;
     fp_t max_execution_time = 0;
+
+    struct HWStat {
+        uint64_t n_errors = 0;
+        uint64_t n_occurrences = 0;
+    };
+    
+    std::array<HWStat, 100> hw_stats;
 };
 
 }   // benchmark

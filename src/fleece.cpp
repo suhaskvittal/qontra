@@ -104,14 +104,8 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
     const uint dist = circuit_params.distance;
     const uint detectors_per_round = (dist*dist - 1) >> 1;
 
-    std::vector<uint8_t> result_obs(base_circuit.count_observables(), 0);  // Observable resulting from matchings.
     while (shots) {
         leakage_enabled = true;
-        if (!restart_shot) {
-            for (uint i = 0; i < base_circuit.count_observables(); i++) {
-                result_obs[i] = 0;
-            }
-        }
         std::vector<uint64_t> dlp(data_leakage_population.size(), 0);
         std::vector<uint64_t> plp(parity_leakage_population.size(), 0);
 
@@ -206,8 +200,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         std::vector<std::vector<uint8_t>> prev_syndromes(mem_depth, std::vector<uint8_t>(parity_qubits.size(), 0));
         std::vector<std::vector<uint8_t>> prev_leakages(mem_depth, std::vector<uint8_t>(parity_qubits.size(), 0));
 
-        std::vector<uint> matched_detectors;  // Already matched and fixed -- update syndrome at the end.
-
         std::set<fleece::LatticeGraph::Vertex*> already_swapped;
 
         std::deque<fleece::LatticeGraph::Vertex*> usage_queue;
@@ -237,7 +229,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             
             if (r == circuit_params.rounds) break;
 
-            if (r == circuit_params.rounds - 1) {
+            if (r == circuit_params.rounds - 1 && flags & LAST_R_NO_LEAKAGE) {
                 leakage_enabled = false;
                 for (uint q = 0; q < base_circuit.count_qubits(); q++) {
                     if (sim->leakage_table[q][0]) {
@@ -277,93 +269,85 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     }
                 }
             }
-            // Using infected set, identify SWAP LRCs.
+
+            // Perform mitigative action (SWAP LRCs, clearing infected qubits, etc.)
             std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_targets;
-            if ((r % dist == dist-1) && (flags & EN_STATE_DRAIN)) {
-                // Perform last minute swap LRUs to kill any remaining leakage errors.
-                for (auto pair : swap_set) {
-                    swap_targets[pair.first] = pair.second;
-                }
-                // We will simulate "Temporary Stabilizer Extension" on the unlucky data qubit.
-            } else {
-                std::set<fleece::LatticeGraph::Vertex*> used;
-
-                const uint mod = circuit_params.distance - 1;
-                if (!(flags & NO_MITIGATION) && (r % mod > 0)) {
-                    if (r % mod == mod - 1) {
-                        // Use SWAP LRCs on unswapped qubits.
-                        for (auto v : data_qubits) {
-                            if (!already_swapped.count(v) && swap_set.count(v)) {
-                                swap_targets[swap_set[v]] = v;
-                            }
-                        }
-                    }
-                    for (auto v : infected) {
-                        if (swap_set.count(v) && !swap_targets.count(swap_set[v])) {
+            std::set<fleece::LatticeGraph::Vertex*> used;
+            const uint mod = circuit_params.distance - 1;
+            if (!(flags & NO_MITIGATION) && (r % mod > 0)) {
+                if (r % mod == mod - 1) {
+                    // Use SWAP LRCs on unswapped qubits.
+                    for (auto v : data_qubits) {
+                        if (!already_swapped.count(v) && swap_set.count(v)) {
                             swap_targets[swap_set[v]] = v;
-                            already_swapped.insert(v);
                         }
                     }
-
-                    if (infected.count(unlucky_data_qubit)) {
-                        for (auto w : lattice_graph.adjacency_list(unlucky_data_qubit)) {
-                            if (!swap_targets.count(w)) {
-                                swap_targets[w] = unlucky_data_qubit;
-                                already_swapped.insert(w);
-                                break;
-                            }
-                        }
-                    }
-
-                    if (r % mod == mod - 1) {
-                        already_swapped.clear();
+                }
+                for (auto v : infected) {
+                    if (swap_set.count(v) && !swap_targets.count(swap_set[v])) {
+                        swap_targets[swap_set[v]] = v;
+                        already_swapped.insert(v);
                     }
                 }
 
-                if (flags & EN_SWAP_LRU) {
-                    for (auto v : usage_queue) {
-                        if (used.count(v)) {
-                            continue;
-                        }
-
-                        if (v->is_data) {
-                            fleece::LatticeGraph::Vertex * w;
-                            if (v == unlucky_data_qubit) {
-                                w = lattice_graph.adjacency_list(v)[0];
-                            } else {
-                                w = swap_set[v];
-                            }
-                            if (swap_targets.count(w)) {
-                                continue;
-                            }
-                            swap_targets[w] = v;
-                        } else {
-                            if (swap_targets.count(v)) {
-                                continue;
-                            }
-                        }
-                        used.insert(v);
-                        if (used.size() == parity_qubits.size()) {
+                if (infected.count(unlucky_data_qubit)) {
+                    for (auto w : lattice_graph.adjacency_list(unlucky_data_qubit)) {
+                        if (!swap_targets.count(w)) {
+                            swap_targets[w] = unlucky_data_qubit;
+                            already_swapped.insert(w);
                             break;
                         }
                     }
                 }
-                
-                std::deque<fleece::LatticeGraph::Vertex*> new_entries;
-                for (auto it = usage_queue.begin(); it != usage_queue.end(); ) {
-                    if (used.count(*it)) {
-                        new_entries.push_back(*it);
-                        used.erase(*it);
-                        it = usage_queue.erase(it);
+
+                if (r % mod == mod - 1) {
+                    already_swapped.clear();
+                }
+            }
+
+            if (flags & EN_SWAP_LRU) {
+                for (auto v : usage_queue) {
+                    if (used.count(v)) {
+                        continue;
+                    }
+
+                    if (v->is_data) {
+                        fleece::LatticeGraph::Vertex * w;
+                        if (v == unlucky_data_qubit) {
+                            w = lattice_graph.adjacency_list(v)[0];
+                        } else {
+                            w = swap_set[v];
+                        }
+                        if (swap_targets.count(w)) {
+                            continue;
+                        }
+                        swap_targets[w] = v;
                     } else {
-                        it++;
+                        if (swap_targets.count(v)) {
+                            continue;
+                        }
+                    }
+                    used.insert(v);
+                    if (used.size() == parity_qubits.size()) {
+                        break;
                     }
                 }
-
-                for (auto v : new_entries) {
-                    usage_queue.push_back(v);
+            }
+            
+            std::deque<fleece::LatticeGraph::Vertex*> new_entries;
+            for (auto it = usage_queue.begin(); it != usage_queue.end(); ) {
+                if (used.count(*it)) {
+                    new_entries.push_back(*it);
+                    used.erase(*it);
+                    it = usage_queue.erase(it);
+                } else {
+                    it++;
                 }
-            } 
+            }
+
+            for (auto v : new_entries) {
+                usage_queue.push_back(v);
+            }
 
             // Update previous syndromes and leakages
             for (uint j = prev_syndromes.size() - 1; j >= 1; j--) {
@@ -474,19 +458,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 }
             }
 
-            if ((flags & EN_TMP_STAB_EXT)) {
-                // Simulate "Temporary Stabilizer Extension"
-                // We apply the same errors as we would at the beginning of a round (depolarizing + leakage)
-                apply_round_start_error(unlucky_data_qubit->qubit);
-                if (sim->leakage_table[unlucky_data_qubit->qubit][0] ^ ((rng() % rng_mod) == 0)) {
-                    restart_shot = (r == circuit_params.rounds - 1);
-                }
-                if (sim->leakage_table[unlucky_data_qubit->qubit][0]) {
-                    // Only situation where the SWAP fails.
-                    apply_reset(unlucky_data_qubit->qubit);
-                }
-            }
-
             if (maintain_failure_log) {
                 shot_log += "R" + std::to_string(r) + "------------------------\n";
                 write_leakage_condition_to_log(shot_log);
@@ -535,13 +506,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
         stim::read_from_sim(*sim, det_obs, false, true, true, measure_results, leakage_results);
         measure_results = measure_results.transposed();
         leakage_results = leakage_results.transposed();
-        for (uint d : matched_detectors) {
-            measure_results[0][d] ^= 1;
-        }
-        for (uint i = 0; i < result_obs.size(); i++) {
-            measure_results[0][i+base_circuit.count_detectors()] ^= result_obs[i];
-        }
-
         syndromes[syndrome_table_index++] |= measure_results[0];
         syndromes[syndrome_table_index++] |= leakage_results[0];
         shots--;

@@ -125,8 +125,8 @@ GeneratedCircuit _finish_surface_code_circuit(
     // If we are using SWAP LRU, then every 4 rounds of syndrome
     // extraction are different. Furthermore, the first round is
     // different from the remaining rounds.
-    const uint32_t lru_cycles = params.swap_lru_with_no_swap ? 3 : 2;
-    const uint32_t offset = params.swap_lru_with_no_swap;
+    const uint32_t lru_cycles = 3;
+    const uint32_t offset = 1;
     std::map<uint32_t, std::array<uint32_t, 3>> swap_order;
     /*
     std::vector<surface_coord> z_order{
@@ -193,11 +193,9 @@ GeneratedCircuit _finish_surface_code_circuit(
             swapped_last_round = already_swapped;
         }
 
-        if (params.swap_lru_with_no_swap) {
-            for (auto measure : all_measure_coords) {
-                auto pm = p2q[measure];
-                swap_order[pm][0] = pm;
-            }
+        for (auto measure : all_measure_coords) {
+            auto pm = p2q[measure];
+            swap_order[pm][0] = pm;
         }
     }
 
@@ -385,12 +383,25 @@ GeneratedCircuit _finish_surface_code_circuit(
         tail.append_op("DETECTOR", detectors, {measure.x, measure.y, 1});
     }
     // Logical observable.
-    std::vector<uint32_t> obs_inc;
-    for (auto q : chosen_basis_observable) {
-        obs_inc.push_back((data_qubits.size() - data_coord_to_order[q]) | TARGET_RECORD_BIT);
+    if (params.multiple_observables) {
+        uint obsno = 0;
+        for (uint32_t offset = 0; offset < chosen_basis_observable.size(); offset += params.distance) {
+            std::vector<uint32_t> obs_inc;
+            for (uint i = offset; i < offset + params.distance; i++) {
+                auto q = chosen_basis_observable[i];
+                obs_inc.push_back((i+1) | TARGET_RECORD_BIT);
+            }
+            std::sort(obs_inc.begin(), obs_inc.end());
+            tail.append_op("OBSERVABLE_INCLUDE", obs_inc, obsno++);
+        }
+    } else {
+        std::vector<uint32_t> obs_inc;
+        for (auto q : chosen_basis_observable) {
+            obs_inc.push_back((data_qubits.size() - data_coord_to_order[q]) | TARGET_RECORD_BIT);
+        }
+        std::sort(obs_inc.begin(), obs_inc.end());
+        tail.append_op("OBSERVABLE_INCLUDE", obs_inc, 0);
     }
-    std::sort(obs_inc.begin(), obs_inc.end());
-    tail.append_op("OBSERVABLE_INCLUDE", obs_inc, 0);
 
     // Combine to form final circuit.
     Circuit full_circuit = head + main_body + tail;

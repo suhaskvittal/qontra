@@ -56,8 +56,8 @@ public:
     Distribution dist = Distribution::lognormal;
     
     bool both_stabilizers = false;
+    bool multiple_observables = false;
     bool swap_lru = false;
-    bool swap_lru_with_no_swap = false;
 
     bool initial_state_is_basis_1 = false;
 
