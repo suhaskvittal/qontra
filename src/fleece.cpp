@@ -91,7 +91,7 @@ Fleece::~Fleece() {
 }
 
 stim::simd_bit_table
-Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_in_rtanalyzer) {
+Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_in_rtanalyzer, uint periodicity) {
     const size_t num_results = base_circuit.count_detectors() + base_circuit.count_observables();
     stim::simd_bit_table syndromes(2*shots, num_results);
     syndromes.clear();
@@ -103,6 +103,9 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
     const uint dist = circuit_params.distance;
     const uint detectors_per_round = (dist*dist - 1) >> 1;
 
+    if (periodicity < 2) {
+        periodicity = dist;
+    }
     while (shots) {
         leakage_enabled = true;
         std::vector<uint64_t> dlp(data_leakage_population.size(), 0);
@@ -225,7 +228,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             
             if (r == circuit_params.rounds) break;
 
-            if (r == circuit_params.rounds - 1 && flags & LAST_R_NO_LEAKAGE) {
+            if (r == circuit_params.rounds - 1 && (flags & LAST_R_NO_LEAKAGE)) {
                 leakage_enabled = false;
                 for (uint q = 0; q < base_circuit.count_qubits(); q++) {
                     if (sim->leakage_table[q][0]) {
@@ -247,7 +250,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
 
             // Check for infections or leakages in the current round.
             for (uint32_t i = 0; i < parity_qubits.size(); i++) {
-                if (flags & NO_MITIGATION) continue;
+                if (!(flags & MARS_MITIGATION) && !(flags & M_MLR_W_ALAP_CORR)) continue;
                 if (syndrome[i] || leakages[i]) {
                     auto v = parity_qubits[i];
                     uint k = circuit_params.distance >> 1;
@@ -269,9 +272,24 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             // Perform mitigative action (SWAP LRCs, clearing infected qubits, etc.)
             std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_targets;
             std::set<fleece::LatticeGraph::Vertex*> used;
-            const uint mod = circuit_params.distance - 1;
-            if (!(flags & NO_MITIGATION) && (r % mod > 0)) {
-                if (r % mod == mod - 1) {
+            if ((flags & M_MLR_W_ALAP_CORR) && !(flags & M_PERIODICITY) && (r % circuit_params.distance > 0)) {
+                for (auto v : infected) {
+                    if (swap_set.count(v)) {
+                        swap_targets[swap_set[v]] = v;
+                    }
+                }
+
+                if (infected.count(unlucky_data_qubit)) {
+                    for (auto w : lattice_graph.adjacency_list(unlucky_data_qubit)) {
+                        if (swap_targets.count(w)) {
+                            continue;
+                        }
+                        swap_targets[w] = unlucky_data_qubit;
+                        break;
+                    }
+                }
+            } else if ((flags & (MARS_MITIGATION | M_PERIODICITY)) && (r % periodicity > 0)) {
+                if (r % periodicity == periodicity - 1) {
                     // Use SWAP LRCs on unswapped qubits.
                     for (auto v : data_qubits) {
                         if (!already_swapped.count(v) && swap_set.count(v)) {
@@ -279,6 +297,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                         }
                     }
                 }
+
                 for (auto v : infected) {
                     if (swap_set.count(v) && !swap_targets.count(swap_set[v])) {
                         swap_targets[swap_set[v]] = v;
@@ -296,12 +315,10 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     }
                 }
 
-                if (r % mod == mod - 1) {
+                if (r % periodicity == periodicity - 1) {
                     already_swapped.clear();
                 }
-            }
-
-            if (flags & EN_SWAP_LRU) {
+            } else if (flags & EN_SWAP_LRU) {
                 for (auto v : usage_queue) {
                     if (used.count(v)) {
                         continue;
@@ -410,7 +427,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 syndrome[i] = sim->m_record.storage[measurement_time][0] ^ sim->m_record.storage[pmt][0];
                 if (swap_targets.count(v) && leakage_enabled) {
                     auto _v = swap_targets[v];
-                    if (leakages[i] && !(flags & NO_MITIGATION)) {
+                    if (leakages[i] && (flags & (MARS_MITIGATION | M_LRC_L_RESET_3WAY))) {
                         // Adaptively perform a second reset when detecting a leakage error.
                         apply_reset(v->qubit);
                     } else {
@@ -424,7 +441,8 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 measurement_time++;
             }
             // Adjust measurements based on whether a leakage occurred.
-            if (!(flags & NO_MITIGATION) && leakage_enabled) {
+            /*
+            if ((flags & (MARS_MITIGATION | M_ENABLE_M_FIX)) && leakage_enabled) {
                 for (auto v : parity_qubits) {
                     uint i = stab_meas_time[v];
                     uint32_t mt = meas_t_offset + i;
@@ -440,14 +458,15 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                         }
 
                         auto common = lattice_graph.get_common_neighbors(v, w);
-                        errors += (!common.empty() && syndrome[stab_meas_time[w]]);
+                        errors += (!common.empty() && (syndrome[stab_meas_time[w]]));
                     }
                     if (errors == 2) {
-                        syndrome[i] = ~sim->m_record.storage[pmt][0];
-                        sim->m_record.storage[mt][0] = 1;
+                        syndrome[i] = 1;
+                        sim->m_record.storage[mt][0] = ~sim->m_record.storage[pmt][0];
                     }
                 }
             }
+            */
 
             if (maintain_failure_log) {
                 shot_log += "R" + std::to_string(r) + "------------------------\n";

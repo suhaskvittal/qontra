@@ -36,7 +36,17 @@
 
 #define LAST_R_NO_LEAKAGE   0x01
 #define EN_SWAP_LRU         0x04
-#define NO_MITIGATION       0x08
+#define MARS_MITIGATION     0x08
+
+// MLR = 0x01
+// LRC = 0x05
+// MARS = 0x09 and 0x08
+
+// Motivational Flags
+#define M_MLR_W_ALAP_CORR   0x100
+#define M_LRC_L_RESET_3WAY  0x200
+#define M_ENABLE_M_FIX      0x400 
+#define M_PERIODICITY       0x800
 
 namespace qrc {
 
@@ -51,7 +61,8 @@ public:
 
     stim::simd_bit_table create_syndromes(uint64_t shots, 
             bool maintain_failure_log=false,
-            bool record_in_rtanalyzer=false);
+            bool record_in_rtanalyzer=false,
+            uint periodicity=0);
 
     std::string failure_log;
 

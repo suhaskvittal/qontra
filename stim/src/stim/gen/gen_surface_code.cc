@@ -443,12 +443,12 @@ GeneratedCircuit _generate_rotated_surface_code_circuit(const CircuitGenParamete
         for (float y = 0.5; y <= d; y++) {
             surface_coord q{x * 2, y * 2};
             data_coords.insert(q);
-//          if (y == 0.5) {
+            if (y == 0.5 || params.multiple_observables) {
                 z_observable.push_back(q);
-//          }
-//          if (x == 0.5) {
+            }
+            if (x == 0.5 || params.multiple_observables) {
                 x_observable.push_back(q);
-//          }
+            }
         }
     }
 
