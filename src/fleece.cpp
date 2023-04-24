@@ -17,7 +17,9 @@ Fleece::Fleece(const stim::CircuitGenParameters& params,
                 char output_basis)
     :failure_log(),
     rtanalyzer(nullptr),
-    n_restarts(0),
+    n_lrus_used(0),
+    n_leaks_removed_by_lru(0),
+    n_leaks_removed_were_visible(0),
     parity_leakage_population(params.rounds, 0),
     data_leakage_population(params.rounds, 0),
     circuit_params(params),
@@ -208,6 +210,8 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             usage_queue.push_back(v);
         }
 
+        std::set<fleece::LatticeGraph::Vertex*> involved_in_lrc;
+
         uint32_t meas_t_offset = parity_qubits.size();
         for (uint r = 1; r <= circuit_params.rounds; r++) {
             std::set<fleece::LatticeGraph::Vertex*> infected;   // Set of vertices with potential leakages.
@@ -375,7 +379,11 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
 
             // Perform operations.
             for (auto v : data_qubits) {
-                apply_round_start_error(v->qubit);
+                if (involved_in_lrc.count(v)) {
+                    apply_round_start_error(v->qubit, 2);
+                } else {
+                    apply_round_start_error(v->qubit);
+                }
             }
 
             for (auto v : parity_qubits) {
@@ -399,6 +407,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 }
             }
 
+            involved_in_lrc.clear();
             for (uint32_t i = 0; i < parity_qubits.size(); i++) {
                 auto v = parity_qubits[i];
                 if (v->is_x_parity) {
@@ -406,12 +415,17 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 }
                 
                 if (swap_targets.count(v) && leakage_enabled) {
-                    auto _v = swap_targets[v];
-                    apply_SWAP(v->qubit, _v->qubit);
-                    apply_measure(_v->qubit);
-                    apply_reset(_v->qubit);
+                    auto w = swap_targets[v];
+                    apply_SWAP(v->qubit, w->qubit);
+                    apply_measure(w->qubit);
+                    apply_reset(w->qubit);
 
-                    acting_parity_qubits[i] = _v;
+                    acting_parity_qubits[i] = w;
+
+                    involved_in_lrc.insert(v);
+                    involved_in_lrc.insert(w);
+
+                    n_lrus_used++;
                 } else {
                     apply_measure(v->qubit);
                     apply_reset(v->qubit);
@@ -422,6 +436,22 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 // Model measurement error rate on leakage.
                 leakages[i] = sim->leak_record.storage[measurement_time][0]; //^ ((rng() % rng_mod) == 0);
                 syndrome[i] = sim->m_record.storage[measurement_time][0] ^ sim->m_record.storage[pmt][0];
+
+                if (swap_targets.count(v) && leakages[i]) {
+                    n_leaks_removed_by_lru++;
+                    auto w = swap_targets[v];
+                    for (auto u : lattice_graph.adjacency_list(w)) {
+                        if (prev_syndromes[0][stab_meas_time[u]]) {
+                            n_leaks_removed_were_visible++;
+                            break;
+                        }
+                    }
+                }
+
+                // Apply error to 3 way measurement
+                if (flags & M_LRC_L_RESET_3WAY) {
+                    leakages[i] ^= ((rng() % rng_mod) == 0);
+                }
 
                 /*
                 if (swap_targets.count(v) && leakage_enabled) {
@@ -464,11 +494,18 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                         }
                         data_flips += syndrome[stab_meas_time[u]] + prev_syndromes[0][stab_meas_time[u]];
                     }
-                    if (parity_flips >= 4 && data_flips >= adj_list.size()-1) {
+                    if ((!(flags & M_LRC_L_RESET_3WAY) && parity_flips >= 4 && data_flips >= adj_list.size()-1)
+                        || ((flags & M_LRC_L_RESET_3WAY) && leakages[stab_meas_time[v]])) 
+                    {
                         apply_reset(v->qubit);
+                    } else {
+                        // Do not apply error if last round (because we could just measure the parity qubits).
+                        apply_SWAP(v->qubit, w->qubit, 2, r != circuit_params.rounds-1);
                     }
+                } else {
+                    // Do not apply error if last round (because we could just measure the parity qubits).
+                    apply_SWAP(v->qubit, w->qubit, 2, r != circuit_params.rounds-1);
                 }
-                apply_SWAP(v->qubit, w->qubit, false);
             }
 
             // Determine if a parity qubit has leaked during an LRC.
@@ -743,8 +780,8 @@ Fleece::apply_measure(uint32_t qubit, bool add_error) {
 }
 
 void
-Fleece::apply_SWAP(uint32_t qubit1, uint32_t qubit2, bool add_error) {
-    for (uint i = 0; i < 3; i++) {
+Fleece::apply_SWAP(uint32_t qubit1, uint32_t qubit2, uint cnots, bool add_error) {
+    for (uint i = 0; i < cnots; i++) {
         fp_t p = 0.0;
         stim::GateTarget q1{qubit1};
         stim::GateTarget q2{qubit2};

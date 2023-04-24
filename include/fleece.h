@@ -63,7 +63,10 @@ public:
 
     fleece::RealTimeAnalyzer * rtanalyzer;
 
-    uint64_t n_restarts;
+    uint64_t n_lrus_used;
+    uint64_t n_leaks_removed_by_lru;
+    uint64_t n_leaks_removed_were_visible;
+
     std::vector<uint64_t> parity_leakage_population;
     std::vector<uint64_t> data_leakage_population;
 private:
@@ -79,7 +82,7 @@ private:
     void apply_H(uint32_t qubit, bool add_error=true);
     void apply_CX(uint32_t, uint32_t);
     void apply_measure(uint32_t qubit, bool add_error=true);
-    void apply_SWAP(uint32_t, uint32_t, bool add_error=true);
+    void apply_SWAP(uint32_t, uint32_t, uint cnots=3, bool add_error=true);
 
     const stim::CircuitGenParameters circuit_params;
     const uint16_t flags;
