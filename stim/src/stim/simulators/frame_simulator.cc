@@ -121,8 +121,11 @@ void FrameSimulator::measure_x(const OperationData &target_data) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         leak_record.record_result(leakage_table[q]);
         meas_table[q].clear();
-        meas_table[q] ^= z_table[q];
-        meas_table[q] |= leakage_table[q];
+        meas_table[q] |= z_table[q];
+        meas_table[q].for_each_word(leakage_table[q], [&] (simd_word& m, simd_word& l) {
+            const simd_word rand(rng(), rng());
+            m = l.andnot(m) | (l & rand);
+        });
         m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             x_table[q].randomize(x_table[q].num_bits_padded(), rng);
@@ -137,8 +140,11 @@ void FrameSimulator::measure_y(const OperationData &target_data) {
         x_table[q] ^= z_table[q];
         leak_record.record_result(leakage_table[q]);
         meas_table[q].clear();
-        meas_table[q] ^= x_table[q];
-        meas_table[q] |= leakage_table[q];
+        meas_table[q] |= x_table[q];
+        meas_table[q].for_each_word(leakage_table[q], [&] (simd_word& m, simd_word& l) {
+            const simd_word rand(rng(), rng());
+            m = l.andnot(m) | (l & rand);
+        });
         m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);
@@ -154,7 +160,10 @@ void FrameSimulator::measure_z(const OperationData &target_data) {
         leak_record.record_result(leakage_table[q]);
         meas_table[q].clear();
         meas_table[q] |= x_table[q];
-        meas_table[q] |= leakage_table[q];
+        meas_table[q].for_each_word(leakage_table[q], [&] (simd_word& m, simd_word& l) {
+            const simd_word rand(rng(), rng());
+            m = l.andnot(m) | (l & rand);
+        });
         m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);
@@ -200,9 +209,13 @@ void FrameSimulator::measure_reset_x(const OperationData &target_data) {
     for (auto t : target_data.targets) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         leak_record.record_result(leakage_table[q]);
-        leakage_table[q] |= z_table[q];
-        m_record.xor_record_reserved_result(leakage_table[q]);
-        z_table[q].clear();
+        meas_table[q].clear();
+        meas_table[q] |= z_table[q];
+        meas_table[q].for_each_word(leakage_table[q], [&] (simd_word& m, simd_word& l) {
+            const simd_word rand(rng(), rng());
+            m = l.andnot(m) | (l & rand);
+        });
+        m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             x_table[q].randomize(x_table[q].num_bits_padded(), rng);
         }
@@ -217,8 +230,13 @@ void FrameSimulator::measure_reset_y(const OperationData &target_data) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         x_table[q] ^= z_table[q];
         leak_record.record_result(leakage_table[q]);
-        leakage_table[q] |= x_table[q];
-        m_record.xor_record_reserved_result(leakage_table[q]);
+        meas_table[q].clear();
+        meas_table[q] |= x_table[q];
+        meas_table[q].for_each_word(leakage_table[q], [&] (simd_word& m, simd_word& l) {
+            const simd_word rand(rng(), rng());
+            m = l.andnot(m) | (l & rand);
+        });
+        m_record.xor_record_reserved_result(meas_table[q]);
         if (guarantee_anticommutation_via_frame_randomization) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);
         }
@@ -233,8 +251,14 @@ void FrameSimulator::measure_reset_z(const OperationData &target_data) {
     for (auto t : target_data.targets) {
         auto q = t.qubit_value();  // Flipping is ignored because it is accounted for in the reference sample.
         leak_record.record_result(leakage_table[q]);
+        meas_table[q].clear();
+        meas_table[q] |= x_table[q];
+        meas_table[q].for_each_word(leakage_table[q], [&] (simd_word& m, simd_word& l) {
+            const simd_word rand(rng(), rng());
+            m = l.andnot(m) | (l & rand);
+        });
         leakage_table[q] |= x_table[q];
-        m_record.xor_record_reserved_result(leakage_table[q]);
+        m_record.xor_record_reserved_result(meas_table[q]);
         x_table[q].clear();
         if (guarantee_anticommutation_via_frame_randomization) {
             z_table[q].randomize(z_table[q].num_bits_padded(), rng);

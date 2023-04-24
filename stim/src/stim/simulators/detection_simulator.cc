@@ -28,17 +28,7 @@ void xor_measurement_set_into_result(
 {
     simd_bits_range_ref dst = output[output_index_ticker];
     for (auto i : measurement_set) {
-        dst.for_each_word(
-                frame_samples[i], 
-                leak_samples[i], 
-                [&](simd_word& d, simd_word& f, simd_word& l) {
-                    const simd_word rand(RNG(), RNG());
-                    if (use_leak_samples) {
-                        d ^= l.andnot(f) | (rand & l);  // Leakage is always random.
-                    } else {
-                        d ^= f | l;
-                    }
-                });
+        dst ^= frame_samples[i];
     }
 }
 
@@ -81,7 +71,7 @@ void stim::read_from_sim(
         }
     }
     for (const auto &det : det_obs.detectors) {
-        xor_measurement_set_into_result(det, frame_samples, result_table, offset, leakage_samples, false);
+        xor_measurement_set_into_result(det, frame_samples, result_table, offset, leakage_samples, true);
         if (get_leakage_data) {
             or_measurement_set_into_result(det, leakage_samples,
                     leakage_table, offset);

@@ -38,15 +38,10 @@
 #define EN_SWAP_LRU         0x04
 #define MARS_MITIGATION     0x08
 
-// MLR = 0x01
-// LRC = 0x05
-// MARS = 0x09 and 0x08
-
 // Motivational Flags
-#define M_MLR_W_ALAP_CORR   0x100
-#define M_LRC_L_RESET_3WAY  0x200
-#define M_ENABLE_M_FIX      0x400 
-#define M_PERIODICITY       0x800
+#define M_MLR_W_ALAP_CORR   0x10
+#define M_LRC_L_RESET_3WAY  0x20
+#define M_PERIODICITY       0x40
 
 namespace qrc {
 

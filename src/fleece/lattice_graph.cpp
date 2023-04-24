@@ -211,21 +211,18 @@ to_lattice_graph(const stim::Circuit& circuit) {
 
                     auto v1 = graph.get_vertex_by_qubit(q1);
                     auto v2 = graph.get_vertex_by_qubit(q2);
-                    if (v1->is_data) {
-                        if (!graph.cx_order.count(v2)) {
-                            std::array<LatticeGraph::Vertex*, 4> mates;
-                            mates.fill(nullptr);
-                            graph.cx_order[v2] = mates;
-                        }
-                        graph.cx_order[v2][cx_op_num] = v1;
-                    } else {
-                        if (!graph.cx_order.count(v1)) {
-                            std::array<LatticeGraph::Vertex*, 4> mates;
-                            mates.fill(nullptr);
-                            graph.cx_order[v1] = mates;
-                        }
-                        graph.cx_order[v1][cx_op_num] = v2;
+                    if (!graph.cx_order.count(v2)) {
+                        std::array<LatticeGraph::Vertex*, 4> mates;
+                        mates.fill(nullptr);
+                        graph.cx_order[v2] = mates;
                     }
+                    graph.cx_order[v2][cx_op_num] = v1;
+                    if (!graph.cx_order.count(v1)) {
+                        std::array<LatticeGraph::Vertex*, 4> mates;
+                        mates.fill(nullptr);
+                        graph.cx_order[v1] = mates;
+                    }
+                    graph.cx_order[v1][cx_op_num] = v2;
                 }
             }
             cx_op_num++;
