@@ -98,7 +98,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
     stim::simd_bit_table syndromes(2*shots, num_results);
     syndromes.clear();
 
-    const uint64_t rng_mod = (uint32_t) (10.0/(circuit_params.before_measure_flip_probability));
+    const uint64_t rng_mod = (uint32_t) (1.0/(circuit_params.before_measure_flip_probability));
 
     uint64_t syndrome_table_index = 0;
 
@@ -245,9 +245,9 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 auto pl = prev_leakages[i];
                 for (uint i = 0; i < comb_syndrome.size(); i++) {
                     if (M_LRC_L_RESET_3WAY) {
-                        comb_syndrome[i] ^= ps[i] & ~pl[i];
+                        comb_syndrome[i] |= ps[i] & ~pl[i];
                     } else {
-                        comb_syndrome[i] ^= ps[i];
+                        comb_syndrome[i] |= ps[i];
                     }
                 }
             }
@@ -264,9 +264,27 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 uint k = circuit_params.distance >> 1;
                 for (auto w : lattice_graph.adjacency_list(v)) {
                     if (w == acting_parity_qubits[stab_meas_time[v]]) {
-                        infected.insert(v);
+                        uint adj_flips = 0;
+                        for (auto u : lattice_graph.get_orderk_neighbors(v, 2)) {
+                            if (!u->is_data && comb_syndrome[stab_meas_time[u]]) {
+                                adj_flips++;
+                            }
+                        }
+                        if (adj_flips > 2 || (adj_flips & 0x1)) {
+                            infected.insert(v);
+                        }
                     } else {
-                        infected.insert(w);
+                        uint adj_flips = 0;
+                        for (auto u : lattice_graph.adjacency_list(w)) {
+                            if (u != v && comb_syndrome[stab_meas_time[u]]) {
+                                adj_flips++;
+                            }
+                        }
+                        if (adj_flips) {
+                            infected.insert(w);
+                        } else if (leakages[stab_meas_time[v]] && (flags & M_LRC_L_RESET_3WAY)) {
+                            infected.insert(w);
+                        }
                     }
                 }
             }
@@ -420,12 +438,8 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     apply_measure(w->qubit);
                     apply_reset(w->qubit);
 
-                    acting_parity_qubits[i] = w;
-
-                    involved_in_lrc.insert(v);
-                    involved_in_lrc.insert(w);
-
                     n_lrus_used++;
+                    acting_parity_qubits[i] = w;
                 } else {
                     apply_measure(v->qubit);
                     apply_reset(v->qubit);
@@ -453,22 +467,50 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     leakages[i] ^= ((rng() % rng_mod) == 0);
                 }
 
-                /*
-                if (swap_targets.count(v) && leakage_enabled) {
-                    auto _v = swap_targets[v];
+                if (swap_targets.count(v)) {
+                    auto w = swap_targets[v];
                     if (leakages[i] && (flags & M_LRC_L_RESET_3WAY)) {
                         // Adaptively perform a second reset when detecting a leakage error.
                         apply_reset(v->qubit);
                     } else {
                         // No need to apply error on "swap back" -- we can modify the next syndrome extraction
                         // round, but this is easier to model.
-                        apply_SWAP(v->qubit, _v->qubit, false);
+                        apply_SWAP(v->qubit, w->qubit, 2);
+                        involved_in_lrc.insert(v);
+                        involved_in_lrc.insert(w);
                     }
                 }
-                */
                 measurement_time++;
             }
 
+            if (flags & M_LRC_L_RESET_3WAY) {
+                for (auto v : parity_qubits) {
+                    uint mt = stab_meas_time[v] + meas_t_offset;
+                    uint pmt = mt - parity_qubits.size();
+                    if (!leakages[stab_meas_time[v]]) {
+                        continue;
+                    }
+
+                    auto neighborhood = lattice_graph.get_orderk_neighbors(v, 2);
+                    uint flips = 0;
+                    for (auto u : neighborhood) {
+                        if (u->is_data) {
+                            continue;
+                        }
+                        flips += (syndrome[stab_meas_time[u]] && ~leakages[stab_meas_time[u]]);
+                    }
+
+                    if (flips) {
+                        syndrome[stab_meas_time[v]] = 1;
+                        sim->m_record.storage[mt][0] = ~sim->m_record.storage[pmt][0];
+                    } else {
+                        syndrome[stab_meas_time[v]] = 0;
+                        sim->m_record.storage[mt][0] = sim->m_record.storage[pmt][0];
+                    }
+                }
+            }
+
+            /*
             for (auto v : parity_qubits) {
                 if (!swap_targets.count(v)) {
                     continue;
@@ -507,6 +549,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     apply_SWAP(v->qubit, w->qubit, 2, r != circuit_params.rounds-1);
                 }
             }
+            */
 
             // Determine if a parity qubit has leaked during an LRC.
             if (maintain_failure_log) {
