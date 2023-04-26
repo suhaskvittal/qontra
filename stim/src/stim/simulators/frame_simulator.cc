@@ -733,7 +733,7 @@ void FrameSimulator::LEAKAGE_ERROR(const OperationData& target_data) {
         auto target_index = s / batch_size;
         auto sample_index = s % batch_size;
         auto t = targets[target_index];
-        leakage_table[t.data][sample_index] ^= true;  
+        leakage_table[t.data][sample_index] |= true;  
         x_table[t.data][sample_index] = rng() & 0x1;
         z_table[t.data][sample_index] = rng() & 0x1;
 

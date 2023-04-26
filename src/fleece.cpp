@@ -239,25 +239,12 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 }
             }
 
-            std::vector<uint8_t> comb_syndrome(syndrome);
-            for (uint i = 0; i < prev_syndromes.size(); i++) {
-                auto ps = prev_syndromes[i];
-                auto pl = prev_leakages[i];
-                for (uint i = 0; i < comb_syndrome.size(); i++) {
-                    if (M_LRC_L_RESET_3WAY) {
-                        comb_syndrome[i] |= ps[i] & ~pl[i];
-                    } else {
-                        comb_syndrome[i] |= ps[i];
-                    }
-                }
-            }
-
             // Check for infections or leakages in the current round.
             for (uint32_t i = 0; i < parity_qubits.size(); i++) {
                 if (!(flags & (MARS_MITIGATION | M_MLR_W_ALAP_CORR))) {
                     continue;
                 }
-                if (!syndrome[i]) {
+                if (!syndrome[i] && !(leakages[i] && (flags & M_LRC_L_RESET_3WAY))) {
                     continue;
                 }
                 auto v = parity_qubits[i];
@@ -265,25 +252,34 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 for (auto w : lattice_graph.adjacency_list(v)) {
                     if (w == acting_parity_qubits[stab_meas_time[v]]) {
                         uint adj_flips = 0;
+                        uint neighborhood_size = 0;
                         for (auto u : lattice_graph.get_orderk_neighbors(v, 2)) {
-                            if (!u->is_data && comb_syndrome[stab_meas_time[u]]) {
-                                adj_flips++;
+                            if (!u->is_data && u != v) {
+                                adj_flips += syndrome[stab_meas_time[u]];
+                                neighborhood_size++;
                             }
                         }
-                        if (adj_flips > 2 || (adj_flips & 0x1)) {
+                        if ((adj_flips > 1 && neighborhood_size >= 5)
+                            || (adj_flips && neighborhood_size < 5)) 
+                        {
                             infected.insert(v);
                         }
                     } else {
-                        uint adj_flips = 0;
-                        for (auto u : lattice_graph.adjacency_list(w)) {
-                            if (u != v && comb_syndrome[stab_meas_time[u]]) {
-                                adj_flips++;
+                        auto adj_list = lattice_graph.adjacency_list(w);
+                        if (adj_list.size() <= 3) {
+                            infected.insert(w);
+                        } else {
+                            uint adj_flips = 0;
+                            for (auto u : lattice_graph.adjacency_list(w)) {
+                                if (u != v && syndrome[stab_meas_time[u]]) {
+                                    adj_flips++;
+                                }
                             }
-                        }
-                        if (adj_flips) {
-                            infected.insert(w);
-                        } else if (leakages[stab_meas_time[v]] && (flags & M_LRC_L_RESET_3WAY)) {
-                            infected.insert(w);
+                            if (adj_flips > 0) {
+                                infected.insert(w);
+                            } else if (leakages[stab_meas_time[v]] && (flags & M_LRC_L_RESET_3WAY)) {
+                                infected.insert(w);
+                            }
                         }
                     }
                 }
@@ -344,67 +340,69 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 if (r % periodicity == periodicity - 1) {
                     already_swapped.clear();
                 }
-            } else if (flags & M_IDEAL_LRU) {
+            } else if (flags & M_IDEAL_LRC) {
                 std::vector<fleece::LatticeGraph::Vertex*> leaked_data_qubits;
                 std::vector<fleece::LatticeGraph::Vertex*> unleaked_parity_qubits;
                 
+                std::set<fleece::LatticeGraph::Vertex*> visited;
                 for (auto v : data_qubits) {
                     if (sim->leakage_table[v->qubit][0]) {
                         leaked_data_qubits.push_back(v);
-                    }
-                }
-
-                for (auto v : parity_qubits) {
-                    if (!sim->leakage_table[v->qubit][0]) {
-                        unleaked_parity_qubits.push_back(v);
+                        for (auto w : lattice_graph.adjacency_list(v)) {
+                            if (visited.count(w) || sim->leakage_table[w->qubit][0]) {
+                                continue;
+                            }
+                            unleaked_parity_qubits.push_back(w);
+                            visited.insert(w);
+                        }
                     }
                 }
 
                 uint nd = leaked_data_qubits.size();
                 uint np = unleaked_parity_qubits.size();
-                uint number_of_nodes = nd > np ? 2*nd : 2*np;
+                uint number_of_nodes = 2*(nd+np);
 
-                PerfectMatching pm(number_of_nodes, 4*number_of_nodes);
-                pm.options.verbose = false;
+                if (nd != 0 && np != 0) {
+                    PerfectMatching pm(number_of_nodes, (number_of_nodes*(number_of_nodes+1))/2);
+                    pm.options.verbose = false;
 
-                for (uint i = 0; leaked_data_qubits.size(); i++) {
-                    auto v = leaked_data_qubits[i];
-                    for (uint j = 0; j < unleaked_parity_qubits.size(); j++) {
-                        auto w = unleaked_parity_qubits[j];
-                        for (auto u : lattice_graph.adjacency_list(v)) {
-                            if (u == w) {
-                                pm.AddEdge(i, nd + j, 1);
-                                break;
+                    for (uint i = 0; i < leaked_data_qubits.size(); i++) {
+                        auto v = leaked_data_qubits[i];
+                        for (uint j = 0; j < unleaked_parity_qubits.size(); j++) {
+                            auto w = unleaked_parity_qubits[j];
+                            for (auto u : lattice_graph.adjacency_list(v)) {
+                                if (u == w) {
+                                    pm.AddEdge(i, nd + j, 1);
+                                    break;
+                                }
                             }
                         }
                     }
-                }
 
-                for (uint k = nd+np; k < number_of_nodes; k++) {
-                    if (nd > np) {
+                    for (uint k = nd+np; k < number_of_nodes; k++) {
                         for (uint i = 0; i < leaked_data_qubits.size(); i++) {
-                            pm.AddEdge(nd+i, k, 1);
+                            pm.AddEdge(i, k, 100000);
                         }
-                    } else {
                         for (uint i = 0; i < unleaked_parity_qubits.size(); i++) {
-                            pm.AddEdge(i, k, 1);
+                            pm.AddEdge(k, nd+i, 100000);
+                        }
+                        for (uint h = k+1; h < number_of_nodes; h++) {
+                            pm.AddEdge(k, h, 100000);
                         }
                     }
-                }
-
-                pm.Solve();
-                for (uint i = 0; i < leaked_data_qubits.size(); i++) {
-                    uint jj = pm.GetMatch(i);
-                    if (jj >= nd+np) {
-                        // This is a dummy node.
-                        i++;
-                        continue;
+                    pm.Solve();
+                    for (uint i = 0; i < leaked_data_qubits.size(); i++) {
+                        uint jj = pm.GetMatch(i);
+                        if (jj >= nd+np) {
+                            // This is a dummy node.
+                            continue;
+                        }
+                        uint j = jj - nd;
+                        auto v = leaked_data_qubits[i];
+                        auto w = unleaked_parity_qubits[j];
+                        
+                        swap_targets[w] = v;
                     }
-                    auto v = leaked_data_qubits[i];
-                    uint j = jj - nd;
-                    auto w = unleaked_parity_qubits[j];
-                    
-                    swap_targets[w] = v;
                 }
             } else if (flags & EN_SWAP_LRU) {
                 for (auto v : usage_queue) {
@@ -496,12 +494,26 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 
                 if (swap_targets.count(v) && leakage_enabled) {
                     auto w = swap_targets[v];
+
                     apply_SWAP(v->qubit, w->qubit);
+
+                    n_lrus_used++;
+                    if (sim->leakage_table[w->qubit][0]) {
+                        n_leaks_removed_by_lru++;
+                        for (auto u : lattice_graph.adjacency_list(w)) {
+                            if (prev_syndromes[0][stab_meas_time[u]]) {
+                                n_leaks_removed_were_visible++;
+                                break;
+                            }
+                        }
+                    }
+
                     apply_measure(w->qubit);
                     apply_reset(w->qubit);
 
-                    n_lrus_used++;
                     acting_parity_qubits[i] = w;
+                    involved_in_lrc.insert(v);
+                    involved_in_lrc.insert(w);
                 } else {
                     apply_measure(v->qubit);
                     apply_reset(v->qubit);
@@ -510,19 +522,8 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 }
                 uint32_t pmt = measurement_time - parity_qubits.size();
                 // Model measurement error rate on leakage.
-                leakages[i] = sim->leak_record.storage[measurement_time][0]; //^ ((rng() % rng_mod) == 0);
+                leakages[i] = sim->leak_record.storage[measurement_time][0] ^ ((rng() % rng_mod) == 0);
                 syndrome[i] = sim->m_record.storage[measurement_time][0] ^ sim->m_record.storage[pmt][0];
-
-                if (swap_targets.count(v) && leakages[i]) {
-                    n_leaks_removed_by_lru++;
-                    auto w = swap_targets[v];
-                    for (auto u : lattice_graph.adjacency_list(w)) {
-                        if (prev_syndromes[0][stab_meas_time[u]]) {
-                            n_leaks_removed_were_visible++;
-                            break;
-                        }
-                    }
-                }
 
                 // Apply error to 3 way measurement
                 if (flags & M_LRC_L_RESET_3WAY) {
@@ -538,8 +539,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                         // No need to apply error on "swap back" -- we can modify the next syndrome extraction
                         // round, but this is easier to model.
                         apply_SWAP(v->qubit, w->qubit, 2);
-                        involved_in_lrc.insert(v);
-                        involved_in_lrc.insert(w);
                     }
                 }
                 measurement_time++;
