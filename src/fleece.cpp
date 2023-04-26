@@ -483,7 +483,47 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 measurement_time++;
             }
 
-            if (flags & M_LRC_L_RESET_3WAY) {
+            /*
+            if ((flags & MARS_MITIGATION) && !(flags & M_LRC_L_RESET_3WAY)) {
+                for (auto v : parity_qubits) {
+                    if (!swap_targets.count(v)) {
+                        leakages[stab_meas_time[v]] = 0;
+                        continue;
+                    }
+                    auto w = swap_targets[v];
+                    auto neighborhood = lattice_graph.get_orderk_neighbors(v, 2);
+                    uint parity_flips = 0;
+                    uint neighborhood_size = 0;
+                    for (auto u : neighborhood) {
+                        if (u->is_data || v == u) {
+                            continue;
+                        }
+                        neighborhood_size++;
+                        parity_flips += syndrome[stab_meas_time[u]];
+                    }
+
+                    auto adj_list = lattice_graph.adjacency_list(w);
+                    uint data_flips = 0;
+                    for (auto u : adj_list) {
+                        if (u == v) {
+                            continue;
+                        }
+                        data_flips += syndrome[stab_meas_time[u]] + prev_syndromes[0][stab_meas_time[u]];
+                    }
+                    if (parity_flips > 4 && data_flips > adj_list.size()-1) {
+                        leakages[stab_meas_time[v]] = 1;
+                        apply_reset(v->qubit);
+                    } else {
+                        leakages[stab_meas_time[v]] = 0;
+                        apply_SWAP(v->qubit, w->qubit, 2);
+                        involved_in_lrc.insert(v);
+                        involved_in_lrc.insert(w);
+                    }
+                }
+            }
+            */
+
+            if (flags & M_LRC_L_RESET_3WAY)  {
                 for (auto v : parity_qubits) {
                     uint mt = stab_meas_time[v] + meas_t_offset;
                     uint pmt = mt - parity_qubits.size();
@@ -509,47 +549,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                     }
                 }
             }
-
-            /*
-            for (auto v : parity_qubits) {
-                if (!swap_targets.count(v)) {
-                    continue;
-                }
-                auto w = swap_targets[v];
-                if (flags & MARS_MITIGATION) {
-                    auto neighborhood = lattice_graph.get_orderk_neighbors(v, 2);
-                    uint parity_flips = 0;
-                    uint neighborhood_size = 0;
-                    for (auto u : neighborhood) {
-                        if (u->is_data || v == u) {
-                            continue;
-                        }
-                        neighborhood_size++;
-                        parity_flips += syndrome[stab_meas_time[u]];
-                    }
-
-                    auto adj_list = lattice_graph.adjacency_list(w);
-                    uint data_flips = 0;
-                    for (auto u : adj_list) {
-                        if (u == v) {
-                            continue;
-                        }
-                        data_flips += syndrome[stab_meas_time[u]] + prev_syndromes[0][stab_meas_time[u]];
-                    }
-                    if ((!(flags & M_LRC_L_RESET_3WAY) && parity_flips >= 4 && data_flips >= adj_list.size()-1)
-                        || ((flags & M_LRC_L_RESET_3WAY) && leakages[stab_meas_time[v]])) 
-                    {
-                        apply_reset(v->qubit);
-                    } else {
-                        // Do not apply error if last round (because we could just measure the parity qubits).
-                        apply_SWAP(v->qubit, w->qubit, 2, r != circuit_params.rounds-1);
-                    }
-                } else {
-                    // Do not apply error if last round (because we could just measure the parity qubits).
-                    apply_SWAP(v->qubit, w->qubit, 2, r != circuit_params.rounds-1);
-                }
-            }
-            */
 
             // Determine if a parity qubit has leaked during an LRC.
             if (maintain_failure_log) {
