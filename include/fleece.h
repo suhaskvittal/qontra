@@ -42,6 +42,7 @@
 #define M_MLR_W_ALAP_CORR   0x10
 #define M_LRC_L_RESET_3WAY  0x20
 #define M_PERIODICITY       0x40
+#define M_IDEAL_LRU         0x80
 
 namespace qrc {
 

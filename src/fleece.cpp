@@ -344,6 +344,68 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 if (r % periodicity == periodicity - 1) {
                     already_swapped.clear();
                 }
+            } else if (flags & M_IDEAL_LRU) {
+                std::vector<fleece::LatticeGraph::Vertex*> leaked_data_qubits;
+                std::vector<fleece::LatticeGraph::Vertex*> unleaked_parity_qubits;
+                
+                for (auto v : data_qubits) {
+                    if (sim->leakage_table[v->qubit][0]) {
+                        leaked_data_qubits.push_back(v);
+                    }
+                }
+
+                for (auto v : parity_qubits) {
+                    if (!sim->leakage_table[v->qubit][0]) {
+                        unleaked_parity_qubits.push_back(v);
+                    }
+                }
+
+                uint nd = leaked_data_qubits.size();
+                uint np = unleaked_parity_qubits.size();
+                uint number_of_nodes = nd > np ? 2*nd : 2*np;
+
+                PerfectMatching pm(number_of_nodes, 4*number_of_nodes);
+                pm.options.verbose = false;
+
+                for (uint i = 0; leaked_data_qubits.size(); i++) {
+                    auto v = leaked_data_qubits[i];
+                    for (uint j = 0; j < unleaked_parity_qubits.size(); j++) {
+                        auto w = unleaked_parity_qubits[j];
+                        for (auto u : lattice_graph.adjacency_list(v)) {
+                            if (u == w) {
+                                pm.AddEdge(i, nd + j, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                for (uint k = nd+np; k < number_of_nodes; k++) {
+                    if (nd > np) {
+                        for (uint i = 0; i < leaked_data_qubits.size(); i++) {
+                            pm.AddEdge(nd+i, k, 1);
+                        }
+                    } else {
+                        for (uint i = 0; i < unleaked_parity_qubits.size(); i++) {
+                            pm.AddEdge(i, k, 1);
+                        }
+                    }
+                }
+
+                pm.Solve();
+                for (uint i = 0; i < leaked_data_qubits.size(); i++) {
+                    uint jj = pm.GetMatch(i);
+                    if (jj >= nd+np) {
+                        // This is a dummy node.
+                        i++;
+                        continue;
+                    }
+                    auto v = leaked_data_qubits[i];
+                    uint j = jj - nd;
+                    auto w = unleaked_parity_qubits[j];
+                    
+                    swap_targets[w] = v;
+                }
             } else if (flags & EN_SWAP_LRU) {
                 for (auto v : usage_queue) {
                     if (used.count(v)) {
