@@ -251,17 +251,23 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                 uint k = circuit_params.distance >> 1;
                 for (auto w : lattice_graph.adjacency_list(v)) {
                     if (w == acting_parity_qubits[stab_meas_time[v]]) {
-                        uint adj_flips = 0;
+                        uint off_stab_flips = 0;
+                        uint on_stab_flips = 0;
                         uint neighborhood_size = 0;
                         for (auto u : lattice_graph.get_orderk_neighbors(v, 2)) {
                             if (!u->is_data && u != v) {
-                                adj_flips += syndrome[stab_meas_time[u]];
+                                if (u->is_x_parity == v->is_x_parity) {
+                                    on_stab_flips += syndrome[stab_meas_time[u]];
+                                } else {
+                                    off_stab_flips += syndrome[stab_meas_time[u]];
+                                }
                                 neighborhood_size++;
                             }
                         }
-                        if ((adj_flips > 1 && neighborhood_size >= 5)
-                            || (adj_flips && neighborhood_size < 5)) 
-                        {
+
+                        if (on_stab_flips + off_stab_flips/2 > 0 && neighborhood_size >= 5) {
+                            infected.insert(v);
+                        } else if (on_stab_flips + off_stab_flips > 0 && neighborhood_size < 5) {
                             infected.insert(v);
                         }
                     } else {
@@ -288,7 +294,7 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
             // Perform mitigative action (SWAP LRCs, clearing infected qubits, etc.)
             std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_targets;
             std::set<fleece::LatticeGraph::Vertex*> used;
-            if ((flags & (MARS_MITIGATION | M_MLR_W_ALAP_CORR)) && !(flags & M_PERIODICITY)) {
+            if (flags & (MARS_MITIGATION | M_MLR_W_ALAP_CORR)) {
                 for (auto v : infected) {
                     if (v->is_data && swap_set.count(v)) {
                         auto w = swap_set[v];
@@ -306,39 +312,6 @@ Fleece::create_syndromes(uint64_t shots, bool maintain_failure_log, bool record_
                         swap_targets[w] = unlucky_data_qubit;
                         break;
                     }
-                }
-            } else if (flags & M_PERIODICITY) {
-                if (r % periodicity == periodicity - 1) {
-                    // Use SWAP LRCs on unswapped qubits.
-                    for (auto v : data_qubits) {
-                        if (!already_swapped.count(v) && swap_set.count(v)) {
-                            swap_targets[swap_set[v]] = v;
-                        }
-                    }
-                }
-
-                for (auto v : infected) {
-                    if (v->is_data && swap_set.count(v)) {
-                        auto w = swap_set[v];
-                        if (!swap_targets.count(w) && !infected.count(w)) {
-                            swap_targets[w] = v;
-                            already_swapped.insert(v);
-                        }
-                    }
-                }
-
-                if (infected.count(unlucky_data_qubit)) {
-                    for (auto w : lattice_graph.adjacency_list(unlucky_data_qubit)) {
-                        if (!swap_targets.count(w) && !infected.count(w)) {
-                            swap_targets[w] = unlucky_data_qubit;
-                            already_swapped.insert(w);
-                            break;
-                        }
-                    }
-                }
-
-                if (r % periodicity == periodicity - 1) {
-                    already_swapped.clear();
                 }
             } else if (flags & M_IDEAL_LRC) {
                 std::vector<fleece::LatticeGraph::Vertex*> leaked_data_qubits;
