@@ -65,13 +65,16 @@ public:
     fleece::RealTimeAnalyzer * rtanalyzer;
 
     uint64_t n_lrus_used;
+    uint64_t n_leaks_in_round;
     uint64_t n_leaks_removed_by_lru;
+    uint64_t n_leaks_removed_in_round;
     uint64_t n_leaks_removed_were_visible;
+    int64_t leakage_delta;
 
     std::vector<uint64_t> parity_leakage_population;
     std::vector<uint64_t> data_leakage_population;
 private:
-    void compute_optimal_swap_set(void);
+    void compute_optimal_swap_set(bool backup=false);
 
     void write_leakage_condition_to_log(std::string&);
     void write_aliases_to_log(std::string&, 
@@ -101,6 +104,7 @@ private:
     std::vector<fleece::LatticeGraph::Vertex*> parity_qubits;
 
     std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> swap_set;
+    std::map<fleece::LatticeGraph::Vertex*, fleece::LatticeGraph::Vertex*> backup_set;
     fleece::LatticeGraph::Vertex * unlucky_data_qubit;
 
     std::map<uint32_t, fp_t> rounddp_table;
