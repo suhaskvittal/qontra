@@ -384,10 +384,10 @@ GeneratedCircuit _finish_surface_code_circuit(
     }
     // Logical observable.
     if (params.multiple_observables) {
-        uint obsno = 0;
+        uint32_t obsno = 0;
         for (uint32_t offset = 0; offset < chosen_basis_observable.size(); offset += params.distance) {
             std::vector<uint32_t> obs_inc;
-            for (uint i = offset; i < offset + params.distance; i++) {
+            for (uint32_t i = offset; i < offset + params.distance; i++) {
                 auto q = chosen_basis_observable[i];
                 obs_inc.push_back((i+1) | TARGET_RECORD_BIT);
             }
