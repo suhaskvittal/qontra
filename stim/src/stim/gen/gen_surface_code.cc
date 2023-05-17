@@ -76,17 +76,13 @@ GeneratedCircuit _finish_surface_code_circuit(
     std::vector<uint32_t> chosen_basis_measurement_qubits;
     std::vector<uint32_t> all_qubits;
 
-    std::set<surface_coord> all_measure_coords;
-
     for (auto q : data_coords) {
         data_qubits.push_back(p2q[q]);
     }
     for (auto q : x_measure_coords) {
-        all_measure_coords.insert(q);
         x_measurement_qubits.push_back(p2q[q]);
     }
     for (auto q : z_measure_coords) {
-        all_measure_coords.insert(q);
         z_measurement_qubits.push_back(p2q[q]);
     }
     all_qubits.insert(all_qubits.end(), data_qubits.begin(), data_qubits.end());
@@ -122,82 +118,6 @@ GeneratedCircuit _finish_surface_code_circuit(
 
     // List out CNOT gate targets using given interaction orders.
     std::array<std::vector<uint32_t>, 4> cnot_targets;
-    // If we are using SWAP LRU, then every 4 rounds of syndrome
-    // extraction are different. Furthermore, the first round is
-    // different from the remaining rounds.
-    const uint32_t lru_cycles = 3;
-    const uint32_t offset = 1;
-    std::map<uint32_t, std::array<uint32_t, 3>> swap_order;
-    /*
-    std::vector<surface_coord> z_order{
-        {1, 1},
-        {1, -1},
-        {-1, 1},
-        {-1, -1},
-    };
-    std::vector<surface_coord> x_order{
-        {1, 1},
-        {-1, 1},
-        {1, -1},
-        {-1, -1},
-    };
-     */
-    if (params.swap_lru) {
-        // Build swap order.
-        std::set<uint32_t> swapped_last_round;
-        for (size_t cycle = 0; cycle < 2; cycle++) {
-            std::set<uint32_t> already_swapped;
-            for (auto measure : all_measure_coords) {
-                uint32_t pm = p2q[measure];
-                if (!swap_order.count(pm)) {
-                    swap_order[pm] = std::array<uint32_t, 3>();
-                }
-
-                bool found = true;
-                size_t i = cycle+1;
-
-                surface_coord data;
-                if (z_measure_coords.count(measure)) {
-                    data = measure + z_order[i];
-                } else {
-                    data = measure + x_order[i];
-                } 
-
-                i = (i+1) & 0x3;
-                while (p2q.find(data) == p2q.end() 
-                        || already_swapped.count(p2q[data])
-                        || swapped_last_round.count(p2q[data]))
-                {
-                    if (z_measure_coords.count(measure)) {
-                        data = measure + z_order[i];
-                    } else {
-                        data = measure + x_order[i];
-                    } 
-                    i = (i + 1) & 0x3;
-                    if (i == cycle+1) {
-                        // Then we have been unable to find a proper
-                        // swap candidate. This ancilla will not be
-                        // swapping for this cycle.
-                        found = false;
-                        break;
-                    }
-                }
-
-                if (found) {
-                    swap_order[pm][cycle+offset] = p2q[data];
-                    already_swapped.insert(p2q[data]);
-                } else {
-                    swap_order[pm][cycle+offset] = pm;
-                }
-            }
-            swapped_last_round = already_swapped;
-        }
-
-        for (auto measure : all_measure_coords) {
-            auto pm = p2q[measure];
-            swap_order[pm][0] = pm;
-        }
-    }
 
     for (size_t k = 0; k < 4; k++) {
         for (auto measure : x_measure_coords) {
@@ -254,112 +174,19 @@ GeneratedCircuit _finish_surface_code_circuit(
     head.append_op("SIMHALT", {});
 
     Circuit main_body;
-    if (params.swap_lru) {
-        std::vector<uint32_t> swap_targets;
-        std::map<uint32_t, uint32_t> swap_table;
-        for (uint32_t r = 1; r < params.rounds; r++) {
-            // Add initial operations. Sets up the SWAP LRU just that maximum number of data qubits are swapped
-            // in the last round.
-            // 1 2 0 1          5 % 3 = 2
-            // 2 0 1 2 0 1      7 % 3 = 1
-            // 0 1 2 0 1 2 0 1
-            const uint32_t cycle = (r + lru_cycles - 1 - (params.distance % lru_cycles)) % lru_cycles;
-            std::vector<uint32_t> adjusted_data_qubits(data_qubits);
-            for (uint32_t i = 0; i < adjusted_data_qubits.size(); i++) {
-                uint32_t d = adjusted_data_qubits[i];
-                if (swap_table.count(d)) {
-                    adjusted_data_qubits[i] = swap_table[d];
-                }
-            }
-            params.append_begin_round_tick(main_body, adjusted_data_qubits);
-            // Clear data streuctures.
-            for (uint32_t i = 0; i < 4; i++) {
-                cnot_targets[i].clear();
-            }
-            swap_targets.clear();
-            swap_table.clear();
 
-            for (size_t k = 0; k < 4; k++) {
-                for (auto measure : x_measure_coords) {
-                    uint32_t pm = p2q[measure];
-                    auto data = measure + x_order[k];
-                    if (p2q.find(data) != p2q.end()) {
-                        uint32_t pd = p2q[data];
-                        if (pd == swap_order[pm][cycle]) {
-                            swap_targets.push_back(pm);
-                            swap_targets.push_back(swap_order[pm][cycle]);
-                            swap_table[pm] = swap_order[pm][cycle];
-                            swap_table[swap_order[pm][cycle]] = pm;
-                        }
-                        cnot_targets[k].push_back(pm);
-                        cnot_targets[k].push_back(pd);
-                    }
-                }
-
-                for (auto measure : z_measure_coords) {
-                    uint32_t pm = p2q[measure];
-                    auto data = measure + z_order[k];
-                    if (p2q.find(data) != p2q.end()) {
-                        uint32_t pd = p2q[data];
-                        if (pd == swap_order[pm][cycle]) {
-                            swap_targets.push_back(pm);
-                            swap_targets.push_back(swap_order[pm][cycle]);
-                            swap_table[pm] = swap_order[pm][cycle];
-                            swap_table[swap_order[pm][cycle]] = pm;
-                        }
-                        cnot_targets[k].push_back(pd);
-                        cnot_targets[k].push_back(pm);
-                    }
-                }
-            }
-            params.append_unitary_1(main_body, "H", x_measurement_qubits);
-            for (const auto &targets : cnot_targets) {
-                params.append_unitary_2(main_body, "CNOT", targets);
-            }
-            params.append_unitary_1(main_body, "H", x_measurement_qubits);
-            if (!swap_targets.empty()) {
-                params.append_unitary_2(main_body, "SWAP", swap_targets);
-            }
-            std::vector<uint32_t> local_measurement_qubits;
-            for (uint32_t m : measurement_qubits) {
-                local_measurement_qubits.push_back(swap_order[m][cycle]);
-            }
-            main_body.append_op("TICK", {});
-            params.append_measure_reset(main_body, local_measurement_qubits);
-            // Add detector operations
-            auto measure_list = params.both_stabilizers ? measurement_qubits : chosen_basis_measurement_qubits;
-            for (auto m_index : measure_list) {
-                auto m_coord = q2p[m_index];
-                auto m = measurement_qubits.size();
-                auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
-                main_body.append_op(
-                    "DETECTOR", 
-                    {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
-            }
-            // Unswap all previously swapped qubits.
-            if (!swap_targets.empty()) {
-                if (r == params.rounds-1) {
-                    main_body.append_op("SWAP", swap_targets);
-                } else {
-                    params.append_unitary_2(main_body, "SWAP", swap_targets);
-                }
-            }
-            main_body.append_op("SIMHALT", {});
-        }
-    } else {
-        Circuit body_cycle(head_cycle);
-        auto measure_list = params.both_stabilizers ? measurement_qubits : chosen_basis_measurement_qubits;
-        for (auto m_index : measure_list) {
-            auto m_coord = q2p[m_index];
-            auto m = measurement_qubits.size();
-            auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
-            body_cycle.append_op(
-                "DETECTOR", 
-                {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
-        }
-        body_cycle.append_op("SIMHALT", {});
-        main_body = body_cycle * (params.rounds - 1); 
+    Circuit body_cycle(head_cycle);
+    auto measure_list = params.both_stabilizers ? measurement_qubits : chosen_basis_measurement_qubits;
+    for (auto m_index : measure_list) {
+        auto m_coord = q2p[m_index];
+        auto m = measurement_qubits.size();
+        auto k = (uint32_t)measurement_qubits.size() - measure_coord_to_order[m_coord] - 1;
+        body_cycle.append_op(
+            "DETECTOR", 
+            {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
     }
+    body_cycle.append_op("SIMHALT", {});
+    main_body = body_cycle * (params.rounds - 1); 
 
     // Build the end of the circuit, getting out of the cycle state and terminating.
     // In particular, the data measurements create detectors that have to be handled special.
