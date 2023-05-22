@@ -36,7 +36,8 @@ ErrorRateTable::initialize() {
             if (i == j) continue;
             auto i_j = std::make_pair(i, j);
             put(op2q, "CX", i_j, def_2q);
-            put(op2q_leakage, "CX", i_j, 0);
+            put(op2q_leakage_injection, "CX", i_j, 0);
+            put(op2q_leakage_transport, "CX", i_j, 0);
             put(op2q_crosstalk, "CX", i_j, 0);
             put(op2q_correlated, "CX", i_j, std::vector<corr_t>());
         }

@@ -33,15 +33,16 @@ public:
     ErrorRateTable(uint n_qubits, fp_t def_1q_p, def_2q_p);  // Initializes single
                                                              // and two-qubit tables
                                                              // respectively.
-    //      Entries:    Opname      Affected pair          P(II), P(IX), ..., P(ZZ)
-    typedef std::tuple<std::string, std::pair<uint, uint>, std::array<fp_t, 16>> 
+    //      Entries:    Opname      Affected pair          P(IIII),, ..., P(ZZZZ)
+    typedef std::tuple<std::string, std::pair<uint, uint>, std::array<fp_t, 255>> 
         corr_t;
 
     map2d<std::string, uint, fp_t> op1q;
     map2d<std::string, std::pair<uint, uint>, fp_t> op2q;
 
     // Other errors: not set by default.
-    map2d<std::string, std::pair<uint, uint>, fp_t> op2q_leakage;
+    map2d<std::string, std::pair<uint, uint>, fp_t> op2q_leakage_injection;
+    map2d<std::string, std::pair<uint, uint>, fp_t> op2q_leakage_transport;
     map2d<std::string, std::pair<uint, uint>, fp_t> op2q_crosstalk;
     map2d<std::string, std::pair<uint, uint>, std::vector<corr_t>> op2q_correlated;
 private:

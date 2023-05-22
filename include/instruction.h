@@ -72,6 +72,9 @@ struct Instruction {   // Physical instruction.
                         // on the FTQC.
     std::string name;
     std::vector<uint> operands;
+    uint n_ops; // Number of operands. This is not operand.size(): recall that
+                // operands is a SIMD-style definition, so we just asking if
+                // it is a 1-qubit, 2-qubit, etc. operation.
 
     std::vector<uint64_t> exclude_trials;
 };
@@ -85,6 +88,7 @@ struct Instruction {   // Logical instruction.
                         // or lattice surgery operations.
     std::string name;
     std::vector<uint> operands;
+    uint n_ops;
 
     std::vector<uint64_t> exclude_trials; 
 };

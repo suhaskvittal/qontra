@@ -130,24 +130,24 @@ private:
     void    qc_M(const std::vector<uint>&, bool record_in_syndrome_buf=true);
     void    qc_R(const std::vector<uint>&);
     // Standard physical errors
-    void    qc_eDP1(const std::vector<uint>&, std::vector<fp_t> rates);
-    void    qc_eDP2(const std::vector<uint>&, std::vector<fp_t> rates, 
+    void    qc_eDP1(const std::vector<uint>&, const std::vector<fp_t>& rates);
+    void    qc_eDP2(const std::vector<uint>&, const std::vector<fp_t>& rates, 
                     bool flag_correlated_on_error=true);
-    void    qc_eX(const std::vector<uint>&, std::vector<fp_t> rates);
+    void    qc_eX(const std::vector<uint>&, const std::vector<fp_t>& rates);
     // Pauli+ errors
     void    qc_eLI(const std::vector<uint>&, 
-                    std::vector<fp_t> rates);   // Leakage injection
+                    const std::vector<fp_t>& rates);    // Leakage injection
     void    qc_eLT(const std::vector<uint>&, 
-                    std::vector<fp_t> rates);   // Leakage transport
+                    const std::vector<fp_t>& rates);    // Leakage transport
     void    qc_eCT(const std::vector<uint>&,
-                    std::vector<fp_t> rates);   // Crosstalk
+                    const std::vector<fp_t>& rates);    // Crosstalk
     // Helper functions
-    std::vector<fp_t>   get_error_rates(const qc::Instruction&);    // Gets error
-                                                                    // rates for each
-                                                                    // operand in
-                                                                    // instruction.
-    void    rowsum(uint h, uint i, bool use_pred, 
-                    stim::simd_range_ref& pred);    // Subroutine for tableau algo.
+    enum class ErrorType { std, leakage, crosstalk };
+
+    std::vector<fp_t>   get_error_rates(const qc::Instruction&, ErrorType);
+    void                rowsum(uint h, uint i, bool use_pred, 
+                                stim::simd_range_ref& pred);    // Subroutine for 
+                                                                // tableau algo.
 
     struct Register {
         uint64_t data = 0;
@@ -176,7 +176,7 @@ private:
     uint                    qc_x_table_rwidth;      // Row dimensions for above
     uint                    qc_z_table_rwidth;      // tables. Columns = trials.
     uint                    qc_r_table_rwidth;
-    uint                    qc_leak_table_r_width;
+    uint                    qc_leak_table_rwidth;
 
     stim::simd_bit_table    qc_syndrome_buf;        // Column-major -- transposed
                                                     // to row major when retrieving
@@ -188,9 +188,9 @@ private:
     uint                    next_buf_lookback;
     // Control Processor + Decoder structures
     stim::simd_bit_table    cp_syndrome_history;    // Row-major
-    stim::simd_bit_table    cp_pauli_frames;        // Column-major
+    stim::simd_bit_table    cp_pauli_frames;        // Row-major
 
-    stim::simd_bit_table    cp_pauli_frames_ideal;  // Column-major, if we had a
+    stim::simd_bit_table    cp_pauli_frames_ideal;  // Row-major, if we had a
                                                     // perfect decoder that never
                                                     // failed. A logical error
                                                     // occurs when the Pauli frames

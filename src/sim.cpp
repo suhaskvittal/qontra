@@ -35,73 +35,98 @@ void
 QontraSim::qc_blk_recv_cmd() {
     // Edit this region if you need to modify syndrome extraction.
     for (auto& inst : instruction_buf) {
-        stim::simd_bit_table x_cpy(qc_x_table_rwidth, 
-                inst.exclude_trials.size());
-        stim::simd_bit_table z_cpy(qc_z_table_rwidth, 
-                inst.exclude_trials.size());
-        stim::simd_bit_table r_cpy(qc_r_table_rwidth, 
-                inst.exclude_trials.size());
-        stim::simd_bit_table leak_cpy(qc_leak_table_rwidth, 
-                inst.exclude_trials.size());
+        uint n_excluded_trials = inst.exclude_trials.size();
+        stim::simd_bit_table x_cpy(n_excluded_trials, qc_x_table_rwidth);
+        stim::simd_bit_table z_cpy(n_excluded_trials, qc_z_table_rwidth); 
+        stim::simd_bit_table r_cpy(n_excluded_trials, qc_r_table_rwidth);
+        stim::simd_bit_table leak_cpy(n_excluded_trials, qc_leak_table_rwidth);
 
-        // Copy X and Z tables
-        for (uint j = 0; j < xz_size; j++) {
-            for (uint i = 0; i < inst.exclude_trials.size(); i++) {
+        for (uint j = 0; j < qc_x_table_rwidth; j++) {
+            for (uint i = 0; i < n_excluded_trials; i++) {
                 uint64_t t = inst.exclude_trials[i];
-                x_cpy[j][t] ^= qc_x_table[j][t];
-                z_cpy[j][t] ^= qc_z_table[j][t];
+                x_cpy[i][j] ^= qc_x_table[j][t];
             }
         }
-        // Copy R table
-        for (uint j = 0; j < r_size; j++) {
-            for (uint i = 0; i < inst.exclude_trials.size(); i++) {
+        for (uint j = 0; j < qc_z_table_rwidth; j++) {
+            for (uint i = 0; i < n_excluded_trials; i++) {
                 uint64_t t = inst.exclude_trials[i];
-                r_cpy[j][t] ^= qc_r_table[j][t];
+                z_cpy[i][j] ^= qc_z_table[j][t];
             }
         }
-        // Copy leakage table
-        for (uint j = 0; j < n_qubits; j++) {
-            for (uint i = 0; i < inst.exclude_trials.size(); i++) {
+        for (uint j = 0; j < qc_r_table_rwidth; j++) {
+            for (uint i = 0; i < n_excluded_trials; i++) {
                 uint64_t t = inst.exclude_trials[i];
-                leak_cpy[j][t] ^= qc_leak_table[j][t];
+                r_cpy[i][j] ^= qc_r_table[j][t];
+            }
+        }
+        for (uint j = 0; j < qc_leak_table_rwidth; j++) {
+            for (uint i = 0; i < n_excluded_trials; i++) {
+                uint64_t t = inst.exclude_trials[i];
+                leak_cpy[i][j] ^= qc_leak_table[j][t];
             }
         }
 
+        std::vector<fp_t> std_error_rates = 
+                get_error_rates(inst, ErrorType::std);
+        std::vector<fp_t> li_error_rates = 
+                get_error_rates(inst, ErrorType::linjection);
+        std::vector<fp_t> lt_error_rates = 
+                get_error_rates(inst, ErrorType::ltransport);
+        std::vector<fp_t> ct_error_rates =
+                get_error_rates(inst, ErrorType::crosstalk);
         switch (inst.name) {
         case "H":
             qc_H(inst.operands);
-            qc_eDP1(inst.operands);
+            qc_eDP1(inst.operands, std_error_rates);
             break;
         case "X":
             qc_X(inst.operands);
-            qc_eDP1(inst.operands);
+            qc_eDP1(inst.operands, std_error_rates);
             break;
         case "Z":
             qc_Z(inst.operands);
-            qc_eDP1(inst.operands);
+            qc_eDP1(inst.operands, std_error_rates);
             break;
         case "S":
             qc_S(inst.operands);
-            qc_eDP1(inst.operands);
+            qc_eDP1(inst.operands, std_error_rates);
             break;
         case "CX":
             qc_CX(inst.operands);
-            qc_eLT(inst.operands);
-            qc_eLI(inst.operands);
-            qc_eDP2(inst.operands);
+            qc_eLT(inst.operands, lt_error_rates);
+            qc_eLI(inst.operands, li_error_rates);
+            qc_eDP2(inst.operands, std_error_rates);
+            qc_eCT(inst.operands, ct_error_rates);
             break;
         case "Mnrc":
-            qc_eX(inst.operands);
+            qc_eX(inst.operands, std_error_rates);
             qc_M(inst.operands, false);
             break;
         case "Mrc":
-            qc_eX(inst.operands);
+            qc_eX(inst.operands, std_error_rates);
             qc_M(inst.operands, true);
             break;
         case "R":
             qc_R(inst.operands);
-            qc_eX(inst.operands);
+            qc_eX(inst.operands, std_error_rates);
             break;
+        }
+        // Finally, if any trials were excluded, we need to return
+        // the rows back to their original values.
+        for (uint i = 0; i < n_excluded_trials; i++) {
+            uint64_t t = inst.exclude_trials[i];
+            for (uint j = 0; i < qc_x_table_rwidth; i++) {
+                qc_x_table[j][t] = x_cpy[i][j];
+            }
+            for (uint j = 0; j < qc_z_table_rwidth; j++) {
+                qc_z_table[j][t] = z_cpy[i][j];
+            }
+            for (uint j = 0; j < qc_r_table_rwidth; j++) {
+                qc_r_table[j][t] = r_cpy[i][j];
+            }
+            for (uint j = 0; j < qc_leak_table_rwidth; j++) {
+                qc_leak_table[j][t] = leak_cpy[i][j];
+            }
         }
     }
 }
@@ -385,6 +410,41 @@ QontraSim::qc_eLT(const std::vector<uint>& operands, std::vector<fp_t> rates) {
             qc_leak_table[j2][t] |= qc_leak_table[j1][t];
         });
     }
+}
+
+std::vector<fp_t>
+get_error_rates(const qc::Instruction& inst, ErrorType et) {
+    std::vector<fp_t> rates;
+    if (inst.n_ops == 1) {
+        for (uint op : inst.operands) {
+            fp_t e = error_params.op1q[inst.name][op];
+            rates.push_back(e);
+        }
+    } else if (inst.n_ops == 2) {
+        for (uint i = 0; i < inst.operands.size(); i += 2) {
+            uint op1 = inst.operands[i];
+            uint op2 = inst.operands[i+1];
+            auto op1_2 = std::make_pair(op1, op2);
+
+            fp_t e;
+            switch (et) {
+            case ErrorType::std:    // Depolarizing errors
+                e = error_params.op2q[inst.name][op1_2];
+                break;
+            case ErrorType::linjection:
+                e = error_params.op2q_leakage_injection[inst.name][op1_2];
+                break;
+            case ErrorType::ltransport:
+                e = error_params.op2q_leakage_transport[inst.name][op1_2];
+                break;
+            case ErrorType::crosstalk:
+                e = error_params.op2_crosstalk[inst.name][op1_2];
+                break;
+            }
+            rates.push_back(e);
+        }
+    }   // Else, do nothing
+    return rates;
 }
 
 void
