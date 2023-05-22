@@ -70,6 +70,10 @@ struct simd_word_polyfill {
         return u64[0] | u64[1];
     }
 
+    inline simd_word &operator~(void) {
+        return {~u64[0], ~u64[1]};
+    }
+
     inline simd_word &operator^=(const simd_word &other) {
         u64[0] ^= other.u64[0];
         u64[1] ^= other.u64[1];

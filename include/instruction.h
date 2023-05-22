@@ -31,7 +31,8 @@ const std::vector<std::string> CP_ISA{
     "X",
     "Z",
     "S",
-    "M",
+    "Mnrc",     // Does not record measurement
+    "Mrc",      // Records measurement and places it in syndrome buffer.
     "R",
     // Logical operations
     "LH",
@@ -72,7 +73,7 @@ struct Instruction {   // Physical instruction.
     std::string name;
     std::vector<uint> operands;
 
-    std::vector<uint64_t> cond_on_trials;   // Only execute on specified trials.
+    std::vector<uint64_t> exclude_trials;
 };
 
 }   // qc
@@ -85,7 +86,7 @@ struct Instruction {   // Logical instruction.
     std::string name;
     std::vector<uint> operands;
 
-    std::vector<uint64_t> cond_on_trials;   // Only execute on specificed trials.
+    std::vector<uint64_t> exclude_trials; 
 };
 
 }   // cp

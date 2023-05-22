@@ -10,7 +10,8 @@
 #include "tables.h"
 #include "instruction.h"
 
-    
+#include <math.h>
+
 const uint64_t DMEM_SIZE = 1 << 14;     // 16 KB
 
 namespace contra {
@@ -31,9 +32,7 @@ const uint8_t CONTRASIM_EN_ERASER = 0x1;
 
 class ContraSim {
 public:
-    ContraSim(uint distance, fp_t p);
     ContraSim(uint distance, fp_t p, Code);
-
 
     stim::Circuit   get_canonical_circuit(void);    // Gets circuit to be consumed
                                                     // by decoder given *standard*
@@ -69,16 +68,22 @@ public:
     bool en_transmission_latency = false;   // If enabled, then communication between
                                             // controls and FTQC has latency according
                                             // to transmission bandwidth.
-    // Parameters
+    // Physical Parameters
+    ErrorTable error_params;
+    TimeTable time_params;
+    // System Parameters
     fp_t transmission_bandwidth = 100e6;  // Bytes per second (Bps)
     fp_t control_clk_freq = 250e6;  // in Hz
     
     bool en_mpi = false;
+
+    uint64_t sim_flags = 0;
     // Statistics
-    uint64_t n_decodes;
-    uint64_t n_logical_errors_x;
-    uint64_t n_logical_errors_z;
-    uint64_t normalized_latency;    // Normalized to depth * (round latency).
+    uint64_t n_decodes = 0;
+    uint64_t n_logical_errors_x = 0;
+    uint64_t n_logical_errors_z = 0;
+    fp_t geomean_norm_latency = 1.0;    // Normalized to depth * (round latency).
+    fp_t max_norm_latency = 1.0;
 protected:
     // Communication pattern every round:
     //  FTQC                CP
@@ -108,10 +113,25 @@ protected:
                                                 // processor.
 
     const uint distance;
-    const fp_t p;
+    const Code qec_code;
 
-    Code    qec_code;
+    uint n_qubits;
+    uint n_trials;
 private:
+    void    qc_initialize_tables(void); // Initializes tables used in 
+                                        // tableau algorithm
+    // Physical gate operations.
+    void    qc_H(const std::vector<uint>&);
+    void    qc_X(const std::vector<uint>&);
+    void    qc_Z(const std::vector<uint>&);
+    void    qc_S(const std::vector<uint>&);
+    void    qc_CX(const std::vector<uint>&);
+    void    qc_M(const std::vector<uint>&, bool record_in_syndrome_buf=true);
+    void    qc_R(const std::vector<uint>&);
+
+    void    rowsum(uint h, uint i, bool use_pred, 
+                    stim::simd_range_ref& pred);    // Subroutine for tableau algo.
+
     struct Register {
         uint64_t data = 0;
         bool valid = false;
@@ -121,8 +141,34 @@ private:
     // have the first index as the shot/index number and column
     // major tables have the second index as the shot/index number.
     //
+    // We perform the Tableau algorithm to track the quantum state.
+    //
     // FTQC structures
-    stim::simd_bit_table    qc_syndrome_buf;        // Row-major
+    stim::simd_bit_table    qc_x_table;             // Column-major, has an extra
+                                                    // row for scratch space (row
+                                                    // 2n).
+    stim::simd_bit_table    qc_z_table;             // Column-major
+    stim::simd_bit_table    qc_r_table;             // Column-major, has extra rows
+                                                    // for scratch space. Row
+                                                    // 2n is for computing
+                                                    // the measurement, row 2n+1 to
+                                                    // row 2n+3 is used for executing
+                                                    // the rowsum subroutine.
+    stim::simd_bit_table    qc_leak_table;          // Column-major
+    
+    uint                    qc_x_table_rwidth;      // Row dimensions for above
+    uint                    qc_z_table_rwidth;      // tables. Columns = trials.
+    uint                    qc_r_table_rwidth;
+    uint                    qc_leak_table_r_width;
+
+    stim::simd_bit_table    qc_syndrome_buf;        // Column-major -- transposed
+                                                    // to row major when retrieving
+                                                    // syndromes.
+    uint                    syndrome_buf_offset;    // Tracks which bit we 
+                                                    // are recording.
+    uint                    syndrome_buf_lookback;  // Tracks which bit we XOR with
+                                                    // between rounds.
+    uint                    next_buf_lookback;
     // Control Processor + Decoder structures
     stim::simd_bit_table    cp_syndrome_history;    // Row-major
     stim::simd_bit_table    cp_pauli_frames;        // Column-major
@@ -144,8 +190,6 @@ private:
     // Assume FTQCs can execute operations as if they were SIMD. For example,
     // we can specify an H gate on qubits 1, 2, 3, 5, 8, 10 in one instruction.
     std::vector<qc::Instruction> instruction_buf;
-
-    uint64_t sim_flags;
 };
 
 } // contra
