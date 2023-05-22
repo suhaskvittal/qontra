@@ -5,13 +5,13 @@
 
 #include "sim.h"
 
-namespace contra {
+namespace qontra {
 
 // Default values
 #define SIM_MAX_QUBITS  1024
 #define SIM_T(p)       (-1000.0/log(1-(p)) * 1e3)
 
-ContraSim::ContraSim(uint distance, fp_t p, Code qec_code)
+QontraSim::QontraSim(uint distance, fp_t p, Code qec_code)
     :error_params(SIM_MAX_QUBITS, p),
     time_params(SIM_MAX_QUBITS, 30, 40, SIM_T(p), SIM_T(p)),
     distance(distance),
@@ -32,7 +32,7 @@ ContraSim::ContraSim(uint distance, fp_t p, Code qec_code)
 }
 
 void
-ContraSim::qc_blk_recv_cmd() {
+QontraSim::qc_blk_recv_cmd() {
     // Edit this region if you need to modify syndrome extraction.
     for (auto& inst : instruction_buf) {
         stim::simd_bit_table x_cpy(qc_x_table_rwidth, 
@@ -70,34 +70,44 @@ ContraSim::qc_blk_recv_cmd() {
         switch (inst.name) {
         case "H":
             qc_H(inst.operands);
+            qc_eDP1(inst.operands);
             break;
         case "X":
             qc_X(inst.operands);
+            qc_eDP1(inst.operands);
             break;
         case "Z":
             qc_Z(inst.operands);
+            qc_eDP1(inst.operands);
             break;
         case "S":
             qc_S(inst.operands);
+            qc_eDP1(inst.operands);
             break;
         case "CX":
             qc_CX(inst.operands);
+            qc_eLT(inst.operands);
+            qc_eLI(inst.operands);
+            qc_eDP2(inst.operands);
             break;
         case "Mnrc":
+            qc_eX(inst.operands);
             qc_M(inst.operands, false);
             break;
         case "Mrc":
+            qc_eX(inst.operands);
             qc_M(inst.operands, true);
             break;
         case "R":
             qc_R(inst.operands);
+            qc_eX(inst.operands);
             break;
         }
     }
 }
 
 void
-ContraSim::qc_H(const std::vector<uint>& operands) {
+QontraSim::qc_H(const std::vector<uint>& operands) {
     for (uint i = 0; i < 2*n_qubits; i++) {
         for (uint j : operands) {
             uint k = i*n_qubits + j;
@@ -115,7 +125,7 @@ ContraSim::qc_H(const std::vector<uint>& operands) {
 }
 
 void
-ContraSim::qc_X(const std::vector<uint>& operands) {
+QontraSim::qc_X(const std::vector<uint>& operands) {
     for (uint i = 0; i < 2*n_qubits; i++) {
         for (uint j : operands) {
             uint k = i*n_qubits + j;
@@ -128,7 +138,7 @@ ContraSim::qc_X(const std::vector<uint>& operands) {
 }
 
 void
-ContraSim::qc_Z(const std::vector<uint>& operands) {
+QontraSim::qc_Z(const std::vector<uint>& operands) {
     for (uint i = 0; i < 2*n_qubits; i++) {
         for (uint j : operands) {
             uint k = i*n_qubits + j;
@@ -141,7 +151,7 @@ ContraSim::qc_Z(const std::vector<uint>& operands) {
 }
 
 void
-ContraSim::qc_S(const std::vector<uint>& operands) {
+QontraSim::qc_S(const std::vector<uint>& operands) {
     for (uint i = 0; i < 2*n_qubits; i++) {
         for (uint j : operands) {
             uint k = i*n_qubits + j;
@@ -157,7 +167,7 @@ ContraSim::qc_S(const std::vector<uint>& operands) {
 }
 
 void
-ContraSim::qc_CX(const std::vector<uint>& operands) {
+QontraSim::qc_CX(const std::vector<uint>& operands) {
     for (uint i = 0; i < 2*n_qubits; i++) {
         for (uint ii = 0; ii < operands.size(); ii += 2) {
             uint j1 = inst.operands[ii];
@@ -190,7 +200,7 @@ ContraSim::qc_CX(const std::vector<uint>& operands) {
 }
 
 void
-ContraSim::qc_M(const std::vector<uint>& operands, bool record_in_syndrome_buf) {
+QontraSim::qc_M(const std::vector<uint>& operands, bool record_in_syndrome_buf) {
     for (uint j : operands) {
         // Clear scratch space
         qc_x_table[2*n_qubits].clear();
@@ -275,7 +285,7 @@ ContraSim::qc_M(const std::vector<uint>& operands, bool record_in_syndrome_buf) 
 }
 
 void
-ContraSim::qc_R(const std::vector<uint>& operands) {
+QontraSim::qc_R(const std::vector<uint>& operands) {
     // We can just implement this as a "CNOT" between a qubit and itself.
     for (uint i = 0; i < 2*n_qubits; i++) {
         for (uint j : operands) {
@@ -286,10 +296,99 @@ ContraSim::qc_R(const std::vector<uint>& operands) {
             qc_z_table[k].clear();
         }
     }
+
+    for (uint j : operands) {
+        qc_leak_table[j].clear();
+    }
 }
 
 void
-ContraSim::rowsum(uint h, uint i, bool use_pred, stim::simd_bit_range_ref& pred) {
+QontraSim::qc_eDP1(const std::vector<uint>& operands, std::vector<fp_t> rates) {
+    for (uint i = 0; i < operands.size(); i++) {
+        uint j = operands[i];
+        stim::RareErrorIterator::for_samples(rates[i], n_trials_in_batch, rng,
+        [&] (size_t t) {
+            for (uint ii = 0; ii < 2*n_qubits; ii++) {
+                uint k = n_qubits*ii + j;
+                auto p = rng() & 3;
+                qc_x_table[k][t] ^= ~qc_leak_table[k][t] & (p & 1);
+                qc_z_table[k][t] ^= ~qc_leak_table[k][t] & (p & 2);
+            }
+        });
+    }
+}
+
+void
+QontraSim::qc_eDP2(const std::vector<uint>& operands, std::vector<fp_t> rates,
+                    bool flag_correlated_on_error) 
+{
+    for (uint i = 0; i < operands.size(); i += 2) {
+        uint j1 = operands[i];
+        uint j2 = operands[i+1];
+
+        stim::RareErrorIterator::for_samples(rates[i>>1], n_trials_in_batch, rng,
+        [&] (size_t t) {
+            for (uint ii = 0; ii < 2*n_qubits; ii++) {
+                uint k1 = n_qubits*ii + j1;
+                uint k2 = n_qubits*ii + j2;
+                auto p = rng() & 15;
+                qc_x_table[k1][t] ^= ~qc_leak_table[k1][t] & (p & 1);
+                qc_z_table[k1][t] ^= ~qc_leak_table[k1][t] & (p & 2);
+                qc_x_table[k2][t] ^= ~qc_leak_table[k2][t] & (p & 4);
+                qc_z_table[k2][t] ^= ~qc_leak_table[k2][t] & (p & 8);
+                // Todo: flag correlated errors
+            }
+        });
+    }
+}
+
+void
+QontraSim::qc_eX(const std::vector<uint>& operands, std::vector<fp_t> rates) {
+    for (uint i = 0; i < operands.size(); i += 2) {
+        uint j = operands[i];
+        stim::RareErrorIterator::for_samples(rates[i], n_trials_in_batch, rng,
+        [&] (size_t t) {
+            for (uint ii = 0; ii < 2*n_qubits; ii++) {
+                uint k = n_qubits*ii + j;
+                qc_x_table[k][t] ^= ~qc_leak_table[k][t];
+            }
+        });
+    }
+}
+
+void
+QontraSim::qc_eLI(const std::vector<uint>& operands, std::vector<fp_t> rates) {
+    for (uint i = 0; i < operands.size(); i += 2) {
+        uint j1 = operands[i];
+        uint j2 = operands[i+1];
+
+        stim::RareErrorIterator::for_samples(rates[i>>1], n_trials_in_batch, rng,
+        [&] (size_t t) {
+            auto p = rng() & 2;
+            // Either leak (or unleak) one or both qubits.
+            qc_leak_table[j1][t] ^= ~(p & 1);
+            qc_leak_table[j2][t] ^= (p > 0);
+        });
+    }
+}
+
+void
+QontraSim::qc_eLT(const std::vector<uint>& operands, std::vector<fp_t> rates) {
+    for (uint i = 0; i < operands.size(); i += 2) {
+        uint j1 = operands[i];
+        uint j2 = operands[i+1];
+
+        stim::RareErrorIterator::for_samples(rates[i>>1], n_trials_in_batch, rng,
+        [&] (size_t t) {
+            auto p = rng() & 2;
+            qc_leak_table[j1][t] |= qc_leak_table[j2][t];
+            qc_leak_table[j2][t] |= qc_leak_table[j1][t];
+        });
+    }
+}
+
+void
+QontraSim::rowsum(uint h, uint i, bool use_pred, stim::simd_bit_range_ref& pred) {
     // 2n + 1 and 2n + 2 correspond to the 1s and 2s place in a 
     // 2-bit number.
     //
@@ -325,7 +424,7 @@ ContraSim::rowsum(uint h, uint i, bool use_pred, stim::simd_bit_range_ref& pred)
             // | 11 | 11 |   0   |
             // |----|----|-------|
             stim::simd_word gsum_mag(0, 0);
-            stim::simd_word gsum_sgn(0, 0);jkkkkj
+            stim::simd_word gsum_sgn(0, 0);
             
             gsum_mag ^= (~x1 & z1 & x2)
                         | (x1 & ~z1 & z2) | (x1 & z1 & (x2 ^ z2));
@@ -352,5 +451,5 @@ ContraSim::rowsum(uint h, uint i, bool use_pred, stim::simd_bit_range_ref& pred)
     qc_r_table[2*n_qubits+2].clear();
 }
 
-}   // contra
+}   // qontra
 

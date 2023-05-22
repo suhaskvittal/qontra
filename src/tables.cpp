@@ -5,7 +5,7 @@
 
 #include "tables.h"
 
-namespace contra {
+namespace qontra {
 
 ErrorRateTable::ErrorRateTable(uint n_qubits)
     :ErrorRateTable(n_qubits, 0, 0)
@@ -63,8 +63,8 @@ TimeTable::initialize() {
         put(op1q, "H", i, def_1q);
         put(op1q, "X", i, def_1q);
         put(op1q, "Z", i, def_1q);
-        put(op1q, "M", i, def_ro);
         put(op1q, "R", i, def_1q);
+        put(op1q, "M", i, def_ro);
         t1[i] = def_t1;
         t2[i] = def_t2;
 
@@ -76,4 +76,4 @@ TimeTable::initialize() {
     }
 }
 
-}   // contra
+}   // qontra

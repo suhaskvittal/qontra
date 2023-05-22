@@ -14,7 +14,7 @@
 
 const uint64_t DMEM_SIZE = 1 << 14;     // 16 KB
 
-namespace contra {
+namespace qontra {
 
 enum class Code { surf, hhex };
 
@@ -30,9 +30,9 @@ const uint8_t CONTRASIM_EN_ERASER = 0x1;
 #define PR_FLAG(f)      if (this->sim_flags & (f)) {
 #define END_PR          }
 
-class ContraSim {
+class QontraSim {
 public:
-    ContraSim(uint distance, fp_t p, Code);
+    QontraSim(uint distance, fp_t p, Code);
 
     stim::Circuit   get_canonical_circuit(void);    // Gets circuit to be consumed
                                                     // by decoder given *standard*
@@ -116,7 +116,8 @@ protected:
     const Code qec_code;
 
     uint n_qubits;
-    uint n_trials;
+    uint64_t n_trials;
+    uint64_t n_trials_in_batch;
 private:
     void    qc_initialize_tables(void); // Initializes tables used in 
                                         // tableau algorithm
@@ -128,7 +129,23 @@ private:
     void    qc_CX(const std::vector<uint>&);
     void    qc_M(const std::vector<uint>&, bool record_in_syndrome_buf=true);
     void    qc_R(const std::vector<uint>&);
-
+    // Standard physical errors
+    void    qc_eDP1(const std::vector<uint>&, std::vector<fp_t> rates);
+    void    qc_eDP2(const std::vector<uint>&, std::vector<fp_t> rates, 
+                    bool flag_correlated_on_error=true);
+    void    qc_eX(const std::vector<uint>&, std::vector<fp_t> rates);
+    // Pauli+ errors
+    void    qc_eLI(const std::vector<uint>&, 
+                    std::vector<fp_t> rates);   // Leakage injection
+    void    qc_eLT(const std::vector<uint>&, 
+                    std::vector<fp_t> rates);   // Leakage transport
+    void    qc_eCT(const std::vector<uint>&,
+                    std::vector<fp_t> rates);   // Crosstalk
+    // Helper functions
+    std::vector<fp_t>   get_error_rates(const qc::Instruction&);    // Gets error
+                                                                    // rates for each
+                                                                    // operand in
+                                                                    // instruction.
     void    rowsum(uint h, uint i, bool use_pred, 
                     stim::simd_range_ref& pred);    // Subroutine for tableau algo.
 
@@ -192,6 +209,6 @@ private:
     std::vector<qc::Instruction> instruction_buf;
 };
 
-} // contra
+} // qontra
 
 #endif  // SIM_h

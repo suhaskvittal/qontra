@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace contra {
+namespace qontra {
 
 template <typename T, typename U, typename V>
 using map2d<T, U, V> = std::map<T, std::map<U, V>>;
@@ -75,6 +75,6 @@ private:
     const fp_t def_ro = 620;
 };
 
-} // contra
+} // qontra
 
 #endif // TABLES_h
