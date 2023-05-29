@@ -40,11 +40,13 @@ public:
                                                             // will perform decoding
                                                             // and return a correction.
     virtual std::string name(void) =0;  // Useful for printing out stats.
+
 protected:
     // Other helpful functions:
     //
     // clk_start: records the time it was called.
     // clk_end: records the time elapsed since the last clk_start.
+    // is_error: checks if the provided correction is a logical error.
 
     void clk_start(void) {
 #ifdef __APPLE__
@@ -60,6 +62,18 @@ protected:
         auto tmp = t_start;
         clk_start();
         return tmp - t_start;
+    }
+
+    bool is_error(
+            const std::vector<uint8_t>& correction, const vsyndrome_t& syndrome)
+    {
+        const uint n_detectors = circuit.count_detectors();
+        const uint n_observables = circuit.count_observables();
+        bool is_error = false;
+        for (uint i = 0; i < n_observables; i++) {
+            is_error |= correction[i] ^ syndrome[n_detectors+i];
+        }
+        return is_error;
     }
 
     stim::Circuit circuit;

@@ -3,175 +3,68 @@
  *  date:   5 August 2022
  * */
 
-#include "mwpm_decoder.h"
+#include "decoder/mwpm.h"
 
-namespace qrc {
+namespace qontra {
+namespace decoder {
 
-MWPMDecoder::MWPMDecoder(const stim::Circuit& circ, uint max_detector) 
-    :Decoder(circ),
-    longest_error_chain(0),
-    path_table(),
-    max_detector(max_detector)
-{
-    path_table = compute_path_table(graph);
-}
-
-std::string
-MWPMDecoder::name() {
-    return std::string(MWPM_DECODER_NAME);
-}
-
-bool
-MWPMDecoder::is_software() {
-    return true;
-}
-
-uint64_t
-MWPMDecoder::sram_cost() {
-    // We examine the size of the path_table.
-    uint64_t n_bytes_sram = 0;   
-    for (auto kv_pair : path_table) {
-        auto res = kv_pair.second;
-        // We assume that the entry is stored
-        // in a hardware matrix. We don't count the 
-        // SRAM required to store keys.
-        // 
-        // Instead, we will only consider the SRAM
-        // required to store the entry.
-        uint64_t bytes_for_path = sizeof(res.path[0]) * res.path.size();
-        uint64_t bytes_for_distance = sizeof(res.distance);
-        n_bytes_sram += bytes_for_path + bytes_for_distance;
-    }
-    return n_bytes_sram;
-}
-
-DecoderShotResult
+Decoder::result_t
 MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
-    // Build Boost graph for MWPM.
-    uint n_detectors = circuit.count_detectors();
-    uint n_observables = circuit.count_observables();
+    const uint n_detectors = circuit.count_detectors();
+    const uint n_observables = circuit.count_observables();
 
-    // Note to self: fault ids in pymatching are the frames in DecodingGraph.
-    // Log start time.
-#ifdef __APPLE__
-    auto start_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
-#else
-    struct timespec start_time_data;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start_time_data);
-    auto start_time = start_time_data.tv_nsec;
-#endif
+    clk_start();
+
     // Count number of detectors.
-    uint8_t syndrome_is_even = 0x1;
-    std::vector<uint> detector_list;
-    for (uint di = 0; di < n_detectors; di++) {
-        auto syndrome_bit = syndrome[di];
-        if (di > max_detector) {
-            syndrome_bit = 0;
-        }
-        if (syndrome_bit) {
-            syndrome_is_even ^= 0x1;
-            detector_list.push_back(di);
+    std::vector<uint> detectors;
+    for (uint i = 0; i < n_detectors; i++) {
+        if (syndrome[i]) {
+            detectors.push_back(i);
         }
     }
 
-    if (!syndrome_is_even) {
+    if (detectors.size() & 0x1) {
         // Add boundary to matching graph.
-        detector_list.push_back(BOUNDARY_INDEX);
+        detectors.push_back(BOUNDARY_INDEX);
     }
     // Build Blossom V instance.
-    uint n_vertices = detector_list.size();
+    uint n_vertices = detectors.size();
     uint n_edges = n_vertices * (n_vertices + 1) / 2;  // Graph is complete.
     PerfectMatching pm(n_vertices, n_edges);
     pm.options.verbose = false;
     // Add edges.
-    for (uint vi = 0; vi < n_vertices; vi++) {
-        uint di = detector_list[vi];
-        DecodingGraph::Vertex * vdi = graph.get_vertex(di);
-        for (uint vj = vi + 1; vj < n_vertices; vj++) {
-            uint dj = detector_list[vj];
-            DecodingGraph::Vertex * vdj = graph.get_vertex(dj);
-            auto vdi_vdj = std::make_pair(vdi, vdj);
-            if (path_table[vdi_vdj].distance >= 1000.0) 
-            {
-                continue;  // There is no path.
-            }
-            fp_t raw_weight = path_table[vdi_vdj].distance;
-            // Note that we have already typedef'd qfp_t as wgt_t.
-            wgt_t edge_weight = (wgt_t) (MWPM_INTEGER_SCALE * raw_weight);
-            pm.AddEdge(vi, vj, edge_weight);
+    for (uint i = 0; i < n_vertices; i++) {
+        uint di = detectors[i];
+        auto vi = decoding_graph.get_vertex(di);
+        for (uint j = i + 1; j < n_vertices; j++) {
+            uint dj = detectors[vj];
+            auto vj = decoding_graph.get_vertex(dj);
+            auto error_data = decoding_graph.get_error_chain_data(vi, vj);
+            wgt_t edge_weight = MWPM_TO_INT(error_data.weight);
+            pm.AddEdge(i, j, edge_weight);
         }
     }
     // Solve instance.
     pm.Solve();
-    std::map<uint, uint> matching;
-    for (uint vi = 0; vi < n_vertices; vi++) {
-        uint vj = pm.GetMatch(vi);
-        uint di = detector_list[vi];
-        uint dj = detector_list[vj];
-        // Update matching data structure.
-        matching[di] = dj;
-        matching[dj] = di;
+    std::vector<uint8_t> corr(n_observables, 0);
+    for (uint i = 0; i < n_vertices; i++) {
+        uint j = pm.GetMatch(i);
+        uint di = detectors[i];
+        uint dj = detectors[j];
+
+        auto vi = decoding_graph.get_vertex(di);
+        auto vj = decoding_graph.get_vertex(dj);
+        auto error_data = decoding_graph.get_error_chain_data(vi, vj);
+        for (auto f : error_data.frame_changes) {
+            if (f >= 0) corr[f] ^= 1;
+        }
     }
-    // Compute logical correction.
-    std::vector<uint8_t> correction = get_correction_from_matching(matching);
-    bool is_error = 
-        is_logical_error(correction, syndrome, n_detectors, n_observables);
-    // Stop time here.
-#ifdef __APPLE__
-    auto end_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
-#else
-    struct timespec end_time_data;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &end_time_data);
-    auto end_time = end_time_data.tv_nsec;
-#endif
-    auto time_taken = end_time - start_time;
-    // Build result.
-    DecoderShotResult res = {
-        time_taken,
-        0.0, // TODO
-        is_error,
-        correction,
-        matching
-    };
-    return res;
+    auto time_taken = clk_end();
+
+    bool is_error = is_error(corr, syndrome);
+
+    return (Decoder::result_t) { time_taken, corr, is_error };
 }
 
-std::vector<uint8_t>
-MWPMDecoder::get_correction_from_matching(const std::map<uint, uint>& matching) {
-    std::set<uint> visited;
-    std::vector<uint8_t> correction(circuit.count_observables(), 0);
-    for (auto di_dj : matching) {
-        uint di = di_dj.first;
-        uint dj = di_dj.second;
-        if (visited.count(di) || visited.count(dj)) {
-            continue;
-        }
-        // Check path between the two detectors.
-        // This is examining the error chain.
-        DecodingGraph::Vertex * vdi = graph.get_vertex(di);
-        DecodingGraph::Vertex * vdj = graph.get_vertex(dj);
-        auto vdi_vdj = std::make_pair(vdi, vdj);
-        std::vector<DecodingGraph::Vertex*> detector_path(path_table[vdi_vdj].path);
-        for (uint i = 1; i < detector_path.size(); i++) {
-            // Get edge from decoding graph.
-            auto wi = detector_path[i-1];
-            auto wj = detector_path[i];
-            auto edge = graph.get_edge(wi, wj);
-            // The edge should exist.
-            for (uint obs : edge->frames) {
-                // Flip the bit.
-                if (obs >= 0) {
-                    correction[obs] = !correction[obs];
-                }
-            }
-        }
-        if (detector_path.size()-1 > longest_error_chain) {
-            longest_error_chain = detector_path.size() - 1;
-        }
-        visited.insert(di);
-        visited.insert(dj);
-    }
-    return correction;
-}
-
-}  // qrc
+}   // decoder
+}   // qontra

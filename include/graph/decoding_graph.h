@@ -38,8 +38,17 @@ struct edge_t : base::edge_t {
 
 class DecodingGraph : __DecodingGraphParent {
 public:
-    DecodingGraph();
-    ~DecodingGraph();
+    DecodingGraph()
+        :Graph(), distance_matrix(), error_polynomial(), expected_errors()
+    {
+        std::array<fp_t, 3> boundary_coords;
+        boundary_coords.fill(-1);
+
+        vertex_t* boundary = new vertex_t;
+        boundary->id = BOUNDARY_INDEX;
+        boundary->coords = boundary_coords;
+        add_vertex(boundary);
+    }
 
     typedef struct {    // Each pair of vertices has this entry, and each entry
                         // corresponds to an error chain.
