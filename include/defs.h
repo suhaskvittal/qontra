@@ -6,32 +6,44 @@
 #ifndef DEFS_h
 #define DEFS_h
 
-#include <limits>
 #include <filesystem>
+#include <map>
 
 #include <stdint.h>
 
-typedef double fp_t;   // floating point type
-typedef int32_t qfp_t; // quantized floating point type
+typedef double fp_t;
 
 #ifdef __APPLE__
 typedef uint32_t uint;
 #endif
-typedef int32_t sint;
 
 typedef uint64_t addr_t;
 
-#define KB 1024.0
-#define MB (KB*1024.0)
-#define GB (MB*1024.0)
+const fp_t KB = 1024.0
+const fp_t MB = KB*1024.0
+const fp_t GB = MB*1024.0;
 
-namespace qrc {
+namespace qontra {
 
-qfp_t
-quantize(fp_t, fp_t fp_max, qfp_t qfp_max);
-void 
-safe_create_directory(const std::filesystem::path&);
+using TwoLevelMap<T, U, V> = std::map<T, std::map<U, V>>;
 
-}  // qrc
+namespace tlm {
+
+template <class T, class U, class V> void 
+put(TwoLevelMap<T, U, V>& m, T x, U y, V z) {
+    if (!m.count(x))    m[x] = std::map<U, V>();
+    m[x][y] = z;
+}
+
+}   // tlm
+
+void
+safe_create_directory(const std::filesystem::path& path) {
+    if (!std::filesystem::exists(path)) {
+        std::filesystem::create_directory(path);
+    }
+}
+
+}  // qontra
 
 #endif
