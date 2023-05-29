@@ -25,6 +25,9 @@ const fp_t GB = MB*1024.0;
 
 namespace qontra {
 
+// Useful typedefs:
+typedef std::vector<fp_t>   poly_t;
+
 using TwoLevelMap<T, U, V> = std::map<T, std::map<U, V>>;
 
 namespace tlm {

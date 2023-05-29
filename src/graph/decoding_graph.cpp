@@ -5,240 +5,116 @@
 
 #include "decoding_graph.h"
 
-namespace qrc {
+namespace qontra {
+namespace graph {
 
-static int32_t V_INDEX = 0;
-static int32_t E_INDEX = 0;
-
-DecodingGraph::DecodingGraph() 
-    :detector_to_vertex(),
-    vertices_to_edge(),
-    vertex_to_next_round(),
-    vertex_to_prev_round(),
-    boundary_coord(),
-    vertex_list(),
-    adjacency_matrix()
-{
-    boundary_coord.fill((uint)-1);
-    add_detector(BOUNDARY_INDEX, boundary_coord);
-}
-
-DecodingGraph::~DecodingGraph() {
-}
-
-uint
-DecodingGraph::count_detectors() {
-    return vertex_list.size();
-}
+typedef std::function<void(fp_t, std::vector<uint>, std::set<uint>)>
+    error_callback_t;
+typedef std::function<void(uint, std::array<fp_t, N_COORD>)>
+    detector_callback_t;
 
 void
-DecodingGraph::add_detector(uint det, std::array<fp_t, N_COORD>& coord) {
-    if (detector_to_vertex.count(det) && detector_to_vertex[det] != nullptr) {
-        // Simple update the coord data.
-        detector_to_vertex[det]->coord = coord;
-    } else {
-        Vertex * v = new Vertex(V_INDEX++, coord, det);
-        detector_to_vertex[det] = v;
-        vertex_list.push_back(v);
-        adjacency_matrix[v] = std::vector<Vertex*>();
-    }
-}
+read_detector_error_model(const stim::DetectorErrorModel&, 
+        uint n_iter, uint& det_offset, 
+        std::array<fp_t, N_COORD>& coord_offset,
+        error_callback_t, detector_callback_t);
 
-void
-DecodingGraph::add_edge(uint det1, uint det2,
-        fp_t weight, fp_t e_prob, std::set<uint>& frames) 
-{
-    Vertex * v1 = detector_to_vertex[det1];
-    Vertex * v2 = detector_to_vertex[det2];
-    
-    Edge * e = new Edge(E_INDEX++, det1, det2, weight, e_prob, frames);
-    vertices_to_edge[std::make_pair(v1,v2)] = e;
-    vertices_to_edge[std::make_pair(v2,v1)] = e;
-    adjacency_matrix[v1].push_back(v2);
-    adjacency_matrix[v2].push_back(v1);
-}
-
-void
-DecodingGraph::remove_vertex(Vertex * v) {
-    // Delete v from the vertex list
-    for (auto it = vertex_list.begin(); it != vertex_list.end(); ) {
-        if (*it == v) {
-            it = vertex_list.erase(it); 
-        } else {
-            it++; 
-        }
-    }
-    // And adjacency lists of its neighbors. Delete any
-    // edges containing v.
-    for (Vertex * w : adjacency_matrix[v]) {
-        auto adj_list = adjacency_matrix[w];
-        for (auto it = adj_list.begin(); it != adj_list.end(); ) {
-            if (*it == v) {
-                it = adj_list.erase(it); 
-                vertices_to_edge[std::make_pair(v,w)] = nullptr;
-                vertices_to_edge[std::make_pair(w,v)] = nullptr;
-            } else {
-                it++; 
-            }
-        } 
-    }
-    adjacency_matrix[v].clear();
-    detector_to_vertex[v->detector] = nullptr;
-    delete v;
-}
-
-void
-DecodingGraph::remove_edge(Edge * e) {
-    Vertex * v = get_vertex(e->detectors.first);
-    Vertex * w = get_vertex(e->detectors.second);
-    vertices_to_edge[std::make_pair(v,w)] = nullptr;
-    vertices_to_edge[std::make_pair(w,v)] = nullptr;
-    // Remove v from adjacency list of w and vice versa.
-    auto& adj_list_v = adjacency_matrix[v];
-    auto& adj_list_w = adjacency_matrix[w];
-
-    for (auto it = adj_list_v.begin(); it != adj_list_v.end(); ) {
-        if (*it == w) {
-            adj_list_v.erase(it); 
-        } else {
-            it++; 
-        }
-    }
-
-    for (auto it = adj_list_w.begin(); it != adj_list_w.end(); ) {
-        if (*it == v) {
-            adj_list_w.erase(it); 
-        } else {
-            it++; 
-        }
-    }
-
-    delete e;
-}
-
-DecodingGraph::Vertex*
-DecodingGraph::get_vertex(uint det_id) {
-    if (!detector_to_vertex.count(det_id) 
-        || detector_to_vertex[det_id] == nullptr) 
-    {
-        // Add it to the graph.
-        add_detector(det_id, boundary_coord);
-    }
-    return detector_to_vertex[det_id];
-}
-
-DecodingGraph::Vertex*
-DecodingGraph::get_next_round(uint det_id) {
-    return get_next_round(get_vertex(det_id));
-}
-
-DecodingGraph::Vertex*
-DecodingGraph::get_next_round(Vertex * v) {
-    if (vertex_to_next_round.count(v)) {
-        return vertex_to_next_round[v];
-    }
-    if (v->detector == BOUNDARY_INDEX) {
-        vertex_to_next_round[v] = v;
-        return v;
-    }
-
-    Vertex * next_round = nullptr;
-    for (Vertex * w : vertex_list) {
-        if (v->coord[0] == w->coord[0]
-            && v->coord[1] == w->coord[1]
-            && v->coord[2] + 1 == w->coord[2])
-        {
-            next_round = w;
-            break;
-        }
-    }
-    vertex_to_next_round[v] = next_round;
-    return next_round;
-}
-
-DecodingGraph::Vertex*
-DecodingGraph::get_prev_round(uint det_id) {
-    return get_prev_round(get_vertex(det_id));
-}
-
-DecodingGraph::Vertex*
-DecodingGraph::get_prev_round(Vertex * v) {
-    if (vertex_to_prev_round.count(v)) {
-        return vertex_to_prev_round[v];
-    }
-    if (v->detector == BOUNDARY_INDEX) {
-        vertex_to_prev_round[v] = v;
-        return v;
-    }
-
-    Vertex * prev_round = nullptr;
-    for (Vertex * w : vertex_list) {
-        if (v->coord[0] == w->coord[0]
-            && v->coord[1] == w->coord[1]
-            && v->coord[2] == w->coord[2] + 1)
-        {
-            prev_round = w;
-            break;
-        }
-    }
-    vertex_to_prev_round[v] = prev_round;
-    return prev_round;
-}
-
-DecodingGraph::Edge*
-DecodingGraph::get_edge(uint det1, uint det2) {
-    return get_edge(get_vertex(det1), get_vertex(det2));
-}
-
-DecodingGraph::Edge*
-DecodingGraph::get_edge(Vertex * v1, Vertex * v2) {
-    auto v1_v2 = std::make_pair(v1, v2);
-    auto v2_v1 = std::make_pair(v2, v1);
-    if (vertices_to_edge.count(v1_v2)) {
-        return vertices_to_edge[v1_v2]; 
-    } else if (vertices_to_edge.count(v2_v1)) {
-        return vertices_to_edge[v2_v1];
-    } else {
-        return nullptr; 
-    }
-}
+using namespace decoding;
 
 uint32_t
-DecodingGraph::get_chain_length(uint det1, uint det2) {
-    Vertex * src = get_vertex(det1);
-    Vertex * dst = get_vertex(det2);
-    
-    std::deque<Vertex*> bfs_queue{src};
-    std::set<Vertex*> visited;
-    std::map<Vertex*, uint32_t> distance;
-    distance[src] = 0;
+DecodingGraph::get_chain_length(vertex_t* v1, vertex_t* v2) {
+    return distance_matrix[v1][v2].chain_length;
+}
 
-    while (!bfs_queue.empty()) {
-        Vertex * v = bfs_queue.front();
-        bfs_queue.pop_front();
-        if (visited.count(v)) {
-            continue;
+fp_t
+DecodingGraph::get_error_probability(vertex_t* v1, vertex_t* v2) {
+    return distance_matrix[v1][v2].probability;
+}
+
+fp_t
+DecodingGraph::get_weight(vertex_t* v1, vertex_t* v2) {
+    return distance_matrix[v1][v2].weight;
+}
+
+std::set<uint>
+DecodingGraph::get_frame_changes(vertex_t* v1, vertex_t* v2) {
+    return distance_matrix[v1][v2].frame_changes;
+}
+
+void
+DecodingGraph::build_distance_matrix() {
+    auto w = [&] (vertex_t* v1, vertex_t* v2)
+    {
+        auto e = this->get_edge(v1, v2);
+        return e->edge_weight;
+    };
+    auto cb = [&] (vertex_t* src,
+                    vertex_t* dst,
+                    const std::vector<fp_t>& dist,
+                    const std::vector<vertex_t*> pred)
+    {
+        uint32_t length = 0;
+        fp_t weight = 0.0;
+        std::set<uint> frames;
+
+        auto curr = dst;
+        while (curr != src) {
+            auto next = pred[curr];
+            auto e = this->get_edge(next, curr);
+            std::set<uint> new_frames;
+            std::set_difference(
+                    frames.begin(), frames.end(),
+                    e->frames.begin(), e->frames.end(),
+                    std::back_inserter(new_frames));
+            // Update data
+            frames = new_frames;
+            weight += e->edge_weight;
+            length++;
+            curr = next;
         }
+        fp_t prob = pow(10, -weight);
 
-        for (Vertex * w : adjacency_list(v)) {
-            if (!distance.count(w) || distance[v] + 1 < distance[w]) {
-                distance[w] = distance[v] + 1;
+        return (matrix_entry_t) {length, prob, weight, frames};
+    };
+
+    distance_matrix = create_distance_matrix(this, w, cb);
+}
+
+void
+DecodingGraph::build_error_polynomial() {
+    auto e0 = edges[0];
+    poly_t pX{1 - e0->error_probability, e0->error_probability};
+    // Multiply the polynomials together
+    fp_t expectation = 0.0;
+    for (uint i = 1; i < edges.size(); i++) {
+        auto e = edges[i];
+        poly_t a(pX.size()+1);  // p(X) * (1-e)
+        poly_t b(pX.size()+1);  // p(X) * eX
+        
+        b[0] = 0;
+        for (uint j = 0; j < pX.size(); j++) {
+            a[j] += pX[j] * (1 - e->error_probability);
+            b[j+1] += pX[j] * e->error_probability;
+        }
+        pX.clear(); pX.push_back(0);    // Clear and increment the size of pX
+        for (uint j = 0; j < pX.size(); j++) {
+            pX[j] = a[0] + b[0];
+            if (i == edges.size()-1) {
+                expectation += j * pX[j];
             }
-            bfs_queue.push_back(w);
         }
-        visited.insert(v);
     }
-    return distance[dst];
+    error_polynomial = pX;
+    expected_errors = expectation;
 }
 
-std::vector<DecodingGraph::Vertex*>
-DecodingGraph::vertices() {
-    return vertex_list;
-}
-
-std::vector<DecodingGraph::Vertex*>
-DecodingGraph::adjacency_list(Vertex * v) {
-    return adjacency_matrix[v];
+void 
+DecodingGraph::try_update(void) {
+    if (graph_has_changed) {
+        build_distance_matrix();
+        build_error_polynomial();
+        graph_has_changed = false;
+    }
 }
 
 DecodingGraph
@@ -256,11 +132,10 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
             false
         );
     // Create callbacks.
-    error_callback_f err_f = 
-        [&graph](fp_t e_prob, std::vector<uint> dets,
-                std::set<uint> frames) 
+    error_callback_t err_f = 
+        [&graph](fp_t prob, std::vector<uint> dets, std::set<uint> frames)
         {
-            if (e_prob == 0 || dets.size() == 0 || dets.size() > 2) {
+            if (prob == 0 || dets.size() == 0 || dets.size() > 2) {
                 return;  // Zero error probability -- not an edge.
             }
             
@@ -269,62 +144,50 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
                 dets.push_back(BOUNDARY_INDEX);
             }
             // Now, we should only have two entries in det.
-            uint det1 = dets[0];
-            uint det2 = dets[1];
-            auto graph_edge = graph.get_edge(det1, det2);
-            if (graph_edge != nullptr) {
-                // Get old edge data.
-                fp_t old_e_prob = graph_edge->error_probability;
-                std::set<uint> old_frames = graph_edge->frames;
+            auto v1 = graph.get_vertex(dets[0]);
+            auto v2 = graph.get_vertex(dets[1]);
+            auto e = graph.get_edge(v1, v2);
+            if (e != nullptr) {
+                fp_t old_prob = e->error_probability;
+                std::set<uint> old_frames = e->frames;
                 if (frames == old_frames) {
-                    e_prob = 
-                        e_prob * (1-old_e_prob) + old_e_prob * (1-e_prob);
-                    // We will introduce a new edge index, so just
-                    // delete this.
-                    graph.remove_edge(graph_edge);
+                    prob = prob * (1-old_prob) + old_prob * (1-prob);
                 }
+            } else {
+                // Create new edge if it does not exist.
+                e = new edge_t;
+                e->src = v1;
+                e->dst = v2;
+                graph.add_edge(e);
             }
             fp_t edge_weight = (fp_t)log10((1-e_prob)/e_prob);
-            graph.add_edge(det1, det2, edge_weight, e_prob, frames);
+            e->edge_weight = edge_weight;
+            e->error_probability = prob;
+            e->frames = frames;
         };
-    detector_callback_f det_f =
+    detector_callback_t det_f =
         [&graph](uint det, std::array<fp_t, N_COORD> coords) 
         {
-            graph.add_detector(det, coords);
+            vertex_t* v = new vertex_t;
+            v->id = det;
+            v->coords = coords;
+            if (!graph.add_vertex(v))   delete v;
         };
     // Declare coord offset array.
     uint det_offset = 0;
     std::array<fp_t, N_COORD> coord_offset;
     coord_offset.fill(0);  // Zero initialize.
     // Use callbacks to build graph.
-    _read_detector_error_model(dem, 1, det_offset, coord_offset,
+    read_detector_error_model(dem, 1, det_offset, coord_offset,
                                 err_f, det_f);
     return graph;
 }
 
-graph::PathTable<DecodingGraph::Vertex>
-compute_path_table(DecodingGraph& graph) {
-    typedef DecodingGraph G;
-    typedef DecodingGraph::Vertex V;
-
-    graph::ewf_t<G, V> w = [] (G& g, V * v1, V * v2)
-    {
-        auto e = g.get_edge(v1, v2);
-        if (e == nullptr) {
-            return 10000000.0;
-        } else {
-            return e->edge_weight;
-        }
-    };
-
-    return graph::compute_path_table(graph, w);
-}
-
 void 
-_read_detector_error_model(
+read_detector_error_model(
         const stim::DetectorErrorModel& dem, uint n_iter,
         uint& det_offset, std::array<fp_t, N_COORD>& coord_offset,
-        error_callback_f err_f, detector_callback_f det_f) 
+        error_callback_t err_f, detector_callback_t det_f) 
 {
     while (n_iter--) {  // Need this to handle repeats.
         for (stim::DemInstruction inst : dem.instructions) {
@@ -385,5 +248,5 @@ _read_detector_error_model(
     }
 }
 
-
-}  // qrc
+}   // graph
+}   // qontra

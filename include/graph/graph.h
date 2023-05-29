@@ -26,11 +26,10 @@ namespace graph {
 namespace base {
 
 struct vertex_t {
-    int32_t id;
+    uint id;
 };
 
 struct edge_t {
-    int32_t id;
     V_t* src;
     V_t* dst;
 };
@@ -52,24 +51,42 @@ public:
     }
 
     virtual void
-    add_vertex(V_t* v) {            // O(1) operation
-        if (contains(v))    return;
-        id_to_vertex[v->id] = v;
-        vertices.push_back(v);
+    contains(E_t* e) {              // O(1) operation
+        return adjacency_list[e->src].count(e->dst) 
+                && (adjacency_list[e->src][e->dst] != nullptr);
     }
 
-    virtual void
-    add_edge(E_t* e, bool is_undirected) {  // O(1) operation
-        if (!contains(e->src) || !contains(e->dst)) return;
+    virtual bool
+    add_vertex(V_t* v) {            // O(1) operation
+        if (contains(v) || id_to_vertex.count(v->id))   return false;
+        id_to_vertex[v->id] = v;
+        vertices.push_back(v);
+        graph_has_changed = true;
+        return true;
+    }
+
+    virtual bool
+    add_edge(E_t* e, bool is_undirected=true) {     // O(1) operation
+        if (!contains(e->src) || !contains(e->dst)) return false;
         edges.push_back(e);
-        adjacency_lists[e->src].push_back(e->dist);
+        adjacency_matrix[e->src][e->dst] = e;
+        adjacency_matrix[e->dst][e->src] = e;
+        adjacency_lists[e->src].push_back(e->dst);
         if (is_undirected)  adjacency_lists[e->dst].push_back(e->src);
+        graph_has_changed = true;
+        return true;
     }
 
     virtual V_t*
-    get_vertex(int32_t id) {        // O(1) operation
+    get_vertex(uint id) {        // O(1) operation
         if (!id_to_vertex.count(id))    return nullptr;
         return id_to_vertex[id];
+    }
+
+    virtual E_t*
+    get_edge(V_t* v1, V_t* v2) {    // O(1) operation
+        if (!adjacency_matrix[v1].count(v2))    return nullptr;
+        return adjacency_matrix[v1][v2];
     }
 
     virtual void
@@ -86,25 +103,57 @@ public:
                 if (*it == v)   it = adj.erase(it);
                 else            it++;
             }
+            adjacency_matrix[v][w] = nullptr;
+            adjacency_matrix[w][v] = nullptr;
         }
         adjacency_lists.erase(v);
         for (auto it = edges.begin(); it != edges.end();) {
             if (it->src == v || it->dst == v)   it = edges.erase(it);
             else                                it++;
         }
+        graph_has_changed = true;
+    }
+
+    virtual void
+    delete_edge(E_t* e) {       // O(m) operation
+        if (!contains(e))   return;
+
+        adjacency_matrix[e->src][e->dst] = nullptr;
+        adjacency_matrix[e->dst][e->src] = nullptr;
+        
+        auto& adj_src = adjacency_lists[e->src];
+        for (auto it = adj_src.begin(); it != adj_src.end();) {
+            if (*it == e->dst)  it = adj_src.erase(it);
+            else                it++;
+        }
+        auto& adj_dst = adjacency_lists[e->dst];
+        for (auto it = adj_dst.begin(); it != adj_dst.end();) {
+            if (*it == e->src)  it = adj_dst.erase(it);
+            else                it++;
+        }
+
+        for (auto it = edges.begin(); it != edges.end();) {
+            if (*it == e)   it = edges.erase(it);
+            else            it++;
+        }
+
+        graph_has_changed=true;
     }
 
     std::vector<V_t*>   vertices(void) { return vertices; }
     std::vector<E_t*>   edges(void) { return edges; }
     std::vector<V_t*>   neighbors(V_t* v) { return adjacency_lists[v]; }
     uint                degree(V_t* v) { return neighbors(v).size(); }
-private:
+protected:
     std::vector<V_t*>   vertices;
     std::vector<E_t*>   edges;
 
-    std::map<V_t*, std::vector<V_t*> adjacency_lists;
+    TwoLevelMap<V_t*, V_t*, E_t*>       adjacency_matrix;
+    std::map<V_t*, std::vector<V_t*>    adjacency_lists;
+    std::map<uint, V_t*>             id_to_vertex;
 
-    std::map<int32_t, V_t*> id_to_vertex;
+    bool    graph_has_changed;  // Tracks if the graph has changed. May be useful
+                                // for subclasses that need to track state.
 };
 
 // Evaluation functions:

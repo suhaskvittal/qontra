@@ -7,147 +7,78 @@
 #define DECODING_GRAPH_h
 
 #include "defs.h"
-#include "graph/dijkstra.h"
+#include "graph/graph.h"
 
 #include <stim.h>
 
-#include <array>
-#include <functional>
-#include <iostream>
-#include <map>
-#include <set>
-#include <tuple>
-#include <vector>
+#include <algorithm>
 
 #include <math.h>
 
-#define N_COORD 100
+namespace qontra {
+namespace graph {
 
-namespace qrc {
+const uint BOUNDARY_INDEX = std::numeric_limits<uint>::max();
 
-#define BOUNDARY_INDEX ((uint)-1)
+namespace decoding {
 
-class DecodingGraph {
+struct vertex_t : base::vertex_t {
+    std::array<fp_t, 3> coords;
+};
+
+struct edge_t : base::edge_t {
+    fp_t            edge_weight;
+    fp_t            error_probability;
+    std::set<uint>  frames;
+};
+
+}   // decoding
+
+#define __DecodingGraphParent   Graph<decoding::vertex_t, decoding::edge_t>
+
+class DecodingGraph : __DecodingGraphParent {
 public:
     DecodingGraph();
     ~DecodingGraph();
 
-    struct Vertex {
-        int32_t id;
-        std::array<fp_t, N_COORD> coord;
-        uint detector;
+    typedef struct {    // Each pair of vertices has this entry, and each entry
+                        // corresponds to an error chain.
+        uint32_t        chain_length;   // Length of error chain (or shortest path)
+        fp_t            probability;    // Probability of error chain
+        fp_t            weight;         // Weight used for MWPM decoding
+        std::set<uint>  frame_changes;  // Pauli frames that are changed by the chain
+    } matrix_entry_t;
 
-        Vertex()
-            :id(-1), coord(), detector(0)
-        {}
+    matrix_entry_t
+    get_error_chain_data(decoding::vertex_t*, decoding::vertex_t*) {
+        try_update(); 
+        return distance_matrix[v1][v2];
+    }
 
-        Vertex(uint id, std::array<fp_t, N_COORD> coord, uint detector)
-            :id(id), coord(coord), detector(detector)
-        {}
+    // We can represent the number of errors as a polynomial where the coefficient
+    // of xk corresponds to the probability of having k errors.
+    //
+    // We can compute this polynomial using generating functions.
+    //
+    // The below functions return that polynomial and the expected number of errors.
 
-        Vertex(const Vertex& other)
-            :id(other.id), coord(other.coord), detector(other.detector) 
-        {}
-
-        bool operator==(const Vertex& other) const {
-            return id == other.id; 
-        }
-
-        bool operator <(const Vertex& other) const {
-            return id < other.id; 
-        }
-
-        bool operator!=(const Vertex& other) const {
-            return !(*this == other); 
-        }
-    };
-
-    struct Edge {
-        int32_t id;
-        std::pair<uint, uint> detectors;
-        fp_t edge_weight;
-        fp_t error_probability;
-        std::set<uint> frames;
-
-        Edge()
-            :id(-1), detectors(std::make_pair(0,0)), edge_weight(0),
-            error_probability(0), frames(std::set<uint>())
-        {}
-
-        Edge(int32_t id, uint di, uint dj, fp_t w, fp_t p, std::set<uint> frames)
-            :id(id), detectors(std::make_pair(di, dj)), edge_weight(w),
-            error_probability(p), frames(frames)
-        {}
-
-        Edge(const Edge& other)
-            :id(other.id), detectors(other.detectors), 
-            edge_weight(other.edge_weight), 
-            error_probability(other.error_probability),
-            frames(other.frames)
-        {}
-
-        bool operator==(const Edge& other) const {
-            return id == other.id; 
-        }
-
-        bool operator <(const Edge& other) const {
-            return id < other.id; 
-        }
-
-        bool operator!=(const Edge& other) const {
-            return !(*this == other); 
-        }
-    };
-
-    uint count_detectors(void);
-
-    void add_detector(uint, std::array<fp_t, N_COORD>& coord);
-    void add_edge(uint det1, uint det2, fp_t weight,
-            fp_t e_prob, std::set<uint>& frames);
-
-    void remove_vertex(Vertex*);
-    void remove_edge(Edge*);
-
-    Vertex * get_vertex(uint det_id);
-    Vertex * get_next_round(uint det_id);
-    Vertex * get_next_round(Vertex*);
-    Vertex * get_prev_round(uint det_id);
-    Vertex * get_prev_round(Vertex*);
-    Edge * get_edge(uint, uint);
-    Edge * get_edge(Vertex*, Vertex*);
-
-    uint32_t get_chain_length(uint det1, uint det2);
-   
-    std::vector<Vertex*> vertices(void);
-    std::vector<Vertex*> adjacency_list(Vertex*);
+    poly_t  get_error_polynomial(void) { try_update(); return error_polynomial; }
+    fp_t    get_expected_errors(void) { try_update(); return expected_errors; }
 private:
-    std::map<uint, Vertex*> detector_to_vertex;
-    std::map<std::pair<Vertex*, Vertex*>, Edge*> vertices_to_edge;
-    std::map<Vertex*, Vertex*> vertex_to_next_round;
-    std::map<Vertex*, Vertex*> vertex_to_prev_round;
-    std::array<fp_t, N_COORD> boundary_coord;
+    void    build_distance_matrix(void);
+    void    build_error_polynomial(void);
+    void    try_update(void);
 
-    std::vector<Vertex*> vertex_list;
-    std::map<Vertex*, std::vector<Vertex*>> adjacency_matrix;
+    dijkstra::DistanceMatrix<decoding::vertex_t, matrix_entry_t>    distance_matrix;
+
+    poly_t  error_polynomial;
+    fp_t    expected_errors;
 };
 
 DecodingGraph
 to_decoding_graph(const stim::Circuit&);
 
-graph::PathTable<DecodingGraph::Vertex>
-compute_path_table(DecodingGraph&);
-
-typedef std::function<void(fp_t, std::vector<uint>, std::set<uint>)>
-    error_callback_f;
-typedef std::function<void(uint, std::array<fp_t, N_COORD>)>
-    detector_callback_f;
-
-void
-_read_detector_error_model(const stim::DetectorErrorModel&, 
-        uint n_iter, uint& det_offset, 
-        std::array<fp_t, N_COORD>& coord_offset,
-        error_callback_f, detector_callback_f);
-
-}  // qrc
+}   // graph
+}   // qontra
 
 #endif
