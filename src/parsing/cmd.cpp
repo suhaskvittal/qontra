@@ -5,6 +5,8 @@
 
 #include "parsing/cmd.h"
 
+namespace qontra {
+
 const std::regex no_arg_opt("-([A-Za-z]+)");
 const std::regex w_arg_opt("--([A-Za-z-]+)");
 
@@ -15,7 +17,7 @@ CmdParser::CmdParser(int argc, char* argv[])
     int ptr = 1;
     while (ptr < argc) {
         std::string s(argv[ptr]);
-        std::cmatch m;
+        std::smatch m;
         if (std::regex_match(s, m, no_arg_opt)) {
             option_pool.insert(m[1]);
         } else if (std::regex_match(s, m, w_arg_opt)) {
@@ -26,3 +28,4 @@ CmdParser::CmdParser(int argc, char* argv[])
     }
 }
 
+}   // qontra

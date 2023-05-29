@@ -25,10 +25,14 @@ namespace graph {
 
 namespace base {
 
+// Templates for the Graph class below
+// should subclass base::vertex_t and
+// base::edge_t
 struct vertex_t {
     uint id;
 };
 
+template <class V_t>
 struct edge_t {
     V_t* src;
     V_t* dst;
@@ -36,8 +40,8 @@ struct edge_t {
 
 }   // base
 
-template <class V_t, class E_t> // V_t and E_t should subclass vertex_t and edge_t
-class Graph<V_t, E_t> {
+template <class V_t, class E_t>
+class Graph {
 public:
     Graph(void)
         :vertices(), edges(), adjacency_lists(), id_to_vertex()
@@ -45,15 +49,15 @@ public:
     
     virtual ~Graph(void) {}
 
-    virtual void
+    virtual bool
     contains(V_t* v) {              // O(1) operation
         return id_to_vertex.count(v->id);
     }
 
-    virtual void
+    virtual bool
     contains(E_t* e) {              // O(1) operation
-        return adjacency_list[e->src].count(e->dst) 
-                && (adjacency_list[e->src][e->dst] != nullptr);
+        return adjacency_matrix[e->src].count(e->dst) 
+                && (adjacency_matrix[e->src][e->dst] != nullptr);
     }
 
     virtual bool
@@ -69,8 +73,8 @@ public:
     add_edge(E_t* e, bool is_undirected=true) {     // O(1) operation
         if (!contains(e->src) || !contains(e->dst)) return false;
         edges.push_back(e);
-        adjacency_matrix[e->src][e->dst] = e;
-        adjacency_matrix[e->dst][e->src] = e;
+        tlm::put(adjacency_matrix, e->src, e->dst, e);
+        if (is_undirected)  tlm::put(adjacency_matrix, e->dst, e->src, e);
         adjacency_lists[e->src].push_back(e->dst);
         if (is_undirected)  adjacency_lists[e->dst].push_back(e->src);
         graph_has_changed = true;
@@ -108,8 +112,8 @@ public:
         }
         adjacency_lists.erase(v);
         for (auto it = edges.begin(); it != edges.end();) {
-            if (it->src == v || it->dst == v)   it = edges.erase(it);
-            else                                it++;
+            if ((*it)->src == v || (*it)->dst == v) it = edges.erase(it);
+            else                                    it++;
         }
         graph_has_changed = true;
     }
@@ -140,17 +144,17 @@ public:
         graph_has_changed=true;
     }
 
-    std::vector<V_t*>   vertices(void) { return vertices; }
-    std::vector<E_t*>   edges(void) { return edges; }
-    std::vector<V_t*>   neighbors(V_t* v) { return adjacency_lists[v]; }
-    uint                degree(V_t* v) { return neighbors(v).size(); }
+    std::vector<V_t*>   get_vertices(void) { return vertices; }
+    std::vector<E_t*>   get_edges(void) { return edges; }
+    std::vector<V_t*>   get_neighbors(V_t* v) { return adjacency_lists[v]; }
+    uint                get_degree(V_t* v) { return get_neighbors(v).size(); }
 protected:
     std::vector<V_t*>   vertices;
     std::vector<E_t*>   edges;
 
     TwoLevelMap<V_t*, V_t*, E_t*>       adjacency_matrix;
-    std::map<V_t*, std::vector<V_t*>    adjacency_lists;
-    std::map<uint, V_t*>             id_to_vertex;
+    std::map<V_t*, std::vector<V_t*>>   adjacency_lists;
+    std::map<uint, V_t*>                id_to_vertex;
 
     bool    graph_has_changed;  // Tracks if the graph has changed. May be useful
                                 // for subclasses that need to track state.
@@ -160,14 +164,15 @@ protected:
 
 namespace search {  // For BFS/DFS
 
-using callback_t<V_t> = std::function<void(V_t*, V_t*)>;    // This callback is
+template <class V_t>
+using callback_t = std::function<void(V_t*, V_t*)>;    // This callback is
                                                             // called on a 
                                                             // successful traversal
                                                             // from a vertex
                                                             // to its unvisited
                                                             // neighbor
 template <class V_t> void
-safe_call(callback<V_t>* cb, V_t* arg1, V_t* arg2) {
+safe_call(callback_t<V_t>* cb, V_t* arg1, V_t* arg2) {
     if (cb != nullptr)  (*cb)(arg1, arg2);
 }
 
@@ -176,13 +181,8 @@ safe_call(callback<V_t>* cb, V_t* arg1, V_t* arg2) {
 // A function that can perform either BFS or DFS (code is essentially
 // the same, except for the data structure used to store the vertices:
 // queue vs stack, both of which can be modelled by a deque).
-template <class V_t, class E_t>
-search(
-    Graph<V_t, E_t>* graph,
-    V_t* start, 
-    search::callback_t<V_t>* cb,
-    bool dfs) 
-{
+template <class V_t, class E_t> void
+xfs(Graph<V_t, E_t>* graph, V_t* start, search::callback_t<V_t>* cb, bool dfs) {
     std::deque<V_t*> dq;
     std::set<V_t*> visited;
     dq.push_back(start);
@@ -198,7 +198,7 @@ search(
             dq.pop_front();
         }
 
-        for (auto w : graph->neighbors(v)) {
+        for (auto w : graph->get_neighbors(v)) {
             if (visited.count(w))   continue;
             search::safe_call(cb, v, w);
             dq.push_back(w);
@@ -208,8 +208,11 @@ search(
 }
 
 namespace dijkstra {
-    using ewf_t<V_t*> = std::function<fp_t(V_t*, V_t*)>;
-    using DistanceMatrix<V_t, data_t> = TwoLevelMap<V_t, V_t, data_t>;
+    template <class V_t>
+    using ewf_t = std::function<fp_t(V_t*, V_t*)>;
+
+    template <class V_t, class data_t>
+    using DistanceMatrix = TwoLevelMap<V_t*, V_t*, data_t>;
 
     // The callback below is for creating a distance matrix over multiple
     // calls of dijkstra's. The function should return some data for a
@@ -217,21 +220,21 @@ namespace dijkstra {
     // (3) the distances between the first input and every other vertex,
     // (4) the predecessor entry for each vertex in a path from the 
     // first input to that vertex.
-    using callback_t<V_t, data_t> = 
-        std::function<data_t(V_t*, V_t*, 
-                const std::map<V_t*, fp_t>&, const std::map<V_t*, fp_t>&);
+    template <class V_t, class data_t>
+    using callback_t = std::function<data_t(V_t*, V_t*, 
+                            const std::map<V_t*, fp_t>&, const std::map<V_t*, V_t*>&)>;
 }   // dijkstra
 
 // Performs Dijkstra's algorithm given an edge weight function (ewf_t).
-template <class V_t, class E_t>
-dijkstra(
+template <class V_t, class E_t> void
+exec_dijkstra(
     Graph<V_t, E_t>* graph, 
     V_t* src,
     std::map<V_t*, fp_t>& distances,
     std::map<V_t*, V_t*>& predecessors,
     dijkstra::ewf_t<V_t> edge_w_func)
 {
-    typedef struct { V_t* v, fp_t s } pqv_t;
+    typedef struct { V_t* v; fp_t s; } pqv_t;
     struct cmp {
         bool operator()(const pqv_t& v1, const pqv_t& v2) {
             return v1.s > v2.s;
@@ -240,7 +243,7 @@ dijkstra(
 
     std::map<V_t*, pqv_t> v2pv;
     std::priority_queue<pqv_t, std::vector<pqv_t>, cmp> queue;
-    for (V_t* v : graph->vertices()) {
+    for (V_t* v : graph->get_vertices()) {
         if (v == src)   distances[v] = 0;
         else            distances[v] = std::numeric_limits<fp_t>::max();
         predecessors[v] = v;
@@ -256,14 +259,14 @@ dijkstra(
         queue.pop();
         if (pv.s != distances[v])  continue;   // This entry is outdated.
 
-        auto adj = graph->neighbors(v);
+        auto adj = graph->get_neighbors(v);
         for (V_t* w : adj) {
-            fp_t new_dist = distances[w] + edge_w_func(graph, v, w);
+            fp_t new_dist = distances[v] + edge_w_func(v, w);
             if (new_dist < distances[w]) {
                 distances[w] = new_dist;
                 predecessors[w] = v;
                 pqv_t pw = {w, new_dist};
-                queue.push(w);
+                queue.push(pw);
             }
         }
     }
@@ -279,12 +282,12 @@ create_distance_matrix(
     dijkstra::callback_t<V_t, data_t> cb) 
 {
     dijkstra::DistanceMatrix<V_t, data_t> mat;
-    auto vertices = graph->vertices();
+    auto vertices = graph->get_vertices();
     for (uint i = 0; i < vertices.size(); i++) {
         V_t* src = vertices[i];
         std::map<V_t*, V_t*> pred;
         std::map<V_t*, fp_t> dist;
-        dijkstra(graph, src, dist, pred, edge_w_func);
+        exec_dijkstra(graph, src, dist, pred, edge_w_func);
         for (uint j = 0; j < vertices.size(); j++) {
             V_t* dst = vertices[j];
             data_t x = cb(src, dst, dist, pred);

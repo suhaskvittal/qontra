@@ -3,10 +3,12 @@
  *  date:   2 August 2022
  * */
 
-#include "decoding_graph.h"
+#include "graph/decoding_graph.h"
 
 namespace qontra {
 namespace graph {
+
+#define N_COORD 3
 
 typedef std::function<void(fp_t, std::vector<uint>, std::set<uint>)>
     error_callback_t;
@@ -21,37 +23,18 @@ read_detector_error_model(const stim::DetectorErrorModel&,
 
 using namespace decoding;
 
-uint32_t
-DecodingGraph::get_chain_length(vertex_t* v1, vertex_t* v2) {
-    return distance_matrix[v1][v2].chain_length;
-}
-
-fp_t
-DecodingGraph::get_error_probability(vertex_t* v1, vertex_t* v2) {
-    return distance_matrix[v1][v2].probability;
-}
-
-fp_t
-DecodingGraph::get_weight(vertex_t* v1, vertex_t* v2) {
-    return distance_matrix[v1][v2].weight;
-}
-
-std::set<uint>
-DecodingGraph::get_frame_changes(vertex_t* v1, vertex_t* v2) {
-    return distance_matrix[v1][v2].frame_changes;
-}
-
 void
 DecodingGraph::build_distance_matrix() {
-    auto w = [&] (vertex_t* v1, vertex_t* v2)
+    dijkstra::ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
     {
         auto e = this->get_edge(v1, v2);
         return e->edge_weight;
     };
-    auto cb = [&] (vertex_t* src,
-                    vertex_t* dst,
-                    const std::vector<fp_t>& dist,
-                    const std::vector<vertex_t*> pred)
+    dijkstra::callback_t<vertex_t, matrix_entry_t> cb = 
+    [&] (vertex_t* src,
+        vertex_t* dst,
+        const std::map<vertex_t*, fp_t>& dist,
+        const std::map<vertex_t*, vertex_t*>& pred)
     {
         uint32_t length = 0;
         fp_t weight = 0.0;
@@ -59,13 +42,14 @@ DecodingGraph::build_distance_matrix() {
 
         auto curr = dst;
         while (curr != src) {
-            auto next = pred[curr];
+            auto next = pred.at(curr);
             auto e = this->get_edge(next, curr);
+            if (e == nullptr) std::cout << "MAMA MIA!!!\n";
             std::set<uint> new_frames;
             std::set_difference(
                     frames.begin(), frames.end(),
                     e->frames.begin(), e->frames.end(),
-                    std::back_inserter(new_frames));
+                    std::inserter(new_frames, new_frames.end()));
             // Update data
             frames = new_frames;
             weight += e->edge_weight;
@@ -132,6 +116,17 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
             false
         );
     // Create callbacks.
+    detector_callback_t det_f =
+        [&graph](uint det, std::array<fp_t, N_COORD> coords) 
+        {
+            vertex_t* v;
+            if ((v=graph.get_vertex(det)) == nullptr) {
+                v = new vertex_t;
+                v->id = det;
+                graph.add_vertex(v);
+            }
+            v->coords = coords;
+        };
     error_callback_t err_f = 
         [&graph](fp_t prob, std::vector<uint> dets, std::set<uint> frames)
         {
@@ -144,8 +139,20 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
                 dets.push_back(BOUNDARY_INDEX);
             }
             // Now, we should only have two entries in det.
-            auto v1 = graph.get_vertex(dets[0]);
-            auto v2 = graph.get_vertex(dets[1]);
+            vertex_t* v1;
+            vertex_t* v2;
+            if ((v1=graph.get_vertex(dets[0])) == nullptr) {
+                vertex_t* v = new vertex_t;
+                v->id = dets[0];
+                graph.add_vertex(v);
+                v1 = v;
+            }
+            if ((v2=graph.get_vertex(dets[1])) == nullptr) {
+                vertex_t* v = new vertex_t;
+                v->id = dets[1];
+                graph.add_vertex(v);
+                v2 = v;
+            }
             auto e = graph.get_edge(v1, v2);
             if (e != nullptr) {
                 fp_t old_prob = e->error_probability;
@@ -160,18 +167,10 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
                 e->dst = v2;
                 graph.add_edge(e);
             }
-            fp_t edge_weight = (fp_t)log10((1-e_prob)/e_prob);
+            fp_t edge_weight = (fp_t)log10((1-prob)/prob);
             e->edge_weight = edge_weight;
             e->error_probability = prob;
             e->frames = frames;
-        };
-    detector_callback_t det_f =
-        [&graph](uint det, std::array<fp_t, N_COORD> coords) 
-        {
-            vertex_t* v = new vertex_t;
-            v->id = det;
-            v->coords = coords;
-            if (!graph.add_vertex(v))   delete v;
         };
     // Declare coord offset array.
     uint det_offset = 0;
@@ -199,7 +198,7 @@ read_detector_error_model(
                 uint n_repeats = (uint)inst.target_data[0].data;
                 stim::DetectorErrorModel subblock = 
                     dem.blocks[inst.target_data[1].data];
-                _read_detector_error_model(subblock, n_repeats,
+                read_detector_error_model(subblock, n_repeats,
                            det_offset, coord_offset, err_f, det_f);
             } else if (type == stim::DemInstructionType::DEM_ERROR) {
                 std::vector<uint> detectors;

@@ -9,7 +9,7 @@
 #include <stim.h>
 
 #include "defs.h"
-#include "decoding_graph.h"
+#include "graph/decoding_graph.h"
 
 #include <string>
 #include <utility>
@@ -24,7 +24,7 @@ public:
                                                 // be a memory experiment circuit
                                                 // for X rounds.
         :circuit(circ),
-        decoding_graph(to_decoding_graph(circ))
+        decoding_graph(graph::to_decoding_graph(circ))
     {}
 
     virtual ~Decoder() {}
@@ -41,7 +41,6 @@ public:
                                                             // will perform decoding
                                                             // and return a correction.
     virtual std::string name(void) =0;  // Useful for printing out stats.
-
 protected:
     // Other helpful functions:
     //
@@ -62,7 +61,7 @@ protected:
     uint64_t clk_end(void) {
         auto tmp = t_start;
         clk_start();
-        return tmp - t_start;
+        return t_start - tmp;
     }
 
     bool is_error(
@@ -78,7 +77,7 @@ protected:
     }
 
     stim::Circuit circuit;
-    DecodingGraph decoding_graph;
+    graph::DecodingGraph decoding_graph;
 private:
 #ifdef __APPLE__
     uint64_t    t_start;
@@ -92,7 +91,7 @@ private:
 // syndrome_to_vector converts a simd_bits_range_ref to a vector. A vector
 // can be modified and is easier to pass around.
 
-Decoder::vsyndrome_t
+inline Decoder::vsyndrome_t
 syndrome_to_vector(const stim::simd_bits_range_ref& ref, uint size) {
     std::vector<uint8_t> syndrome(size);
     for (uint i = 0; i < size; i++) syndrome[i] = ref[i];

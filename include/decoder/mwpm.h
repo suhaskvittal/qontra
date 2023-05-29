@@ -6,9 +6,9 @@
 #ifndef DECODER_MWPM_h
 #define DECODER_MWPM_h
 
-#include "decoder.h"
-#include "decoding_graph.h"
-#include "graph/dijkstra.h"
+#include "decoder/decoder.h"
+#include "graph/decoding_graph.h"
+#include "graph/graph.h"
 
 #include <PerfectMatching.h>
 
@@ -36,7 +36,6 @@ public:
     {}
 
     std::string name(void) override { return "MWPMDecoder"; }
-    bool        is_software(void) override { return true; }
 
     Decoder::result_t       decode_error(const vsyndrome_t&) override;
 };

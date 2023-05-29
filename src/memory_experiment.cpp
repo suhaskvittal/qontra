@@ -5,16 +5,20 @@
  *  Memory experiment main file.
  * */
 
+#include "decoder/decoder.h"
+#include "decoder/mwpm.h"
 #include "defs.h"
 #include "parsing/cmd.h"
 
 #include <stim.h>
 
+#include <fstream>
+#include <iostream>
+
 #include <mpi.h>
 
 #define SAFE_WR(buf)        if (world_rank == 0) { buf
 #define SAFE_WR_FIN         }
-#define MPI_DECL(typ, x)    typ x; typ __x
 #define SQR(x)              (x)*(x)
 #define MEAN(s, n)          ((fp_t)(s))/((fp_t)(n))
 #define STD(m, ss, n)       ( ((fp_t)(ss))/((fp_t)(n)) - SQR(m) )
@@ -30,22 +34,21 @@ int main(int argc, char* argv[]) {
 
     CmdParser parser(argc, argv);
 
-    std::string help = 
-    "Arguments list:\n"
-    + "\tMemory experiment type ( X (-x) Z (-z) default is memory z)\n"
-    + "\tDistance (--distance, 32-bit)\n"
-    + "\tRounds (--rounds, 32-bit, default is code distance)\n"
-    + "\tPhysical error rate mean (--error-rate, float) -- lognormal distribution\n"
-    + "\tPhysical error rate standard deviation (--error-rate-std, float)\n"
-    + "\tStim file (--stim-file, string) (overrides --distance and --error-rate)\n"
-    + "\tShots (--shots, 64-bit)\n"
-    + "\tShots per batch (--shots-per-batch, 64-bit)\n"
-    + "\tDecoder (MWPM, ...) (--decoder, string)\n"
-    + "\tOutput file (--output-file)\n"
-    + "\tOutput file type (-csv or -tsv, default csv)\n"
-    + "\tSeed (--seed, default 0)\n";
+    std::string help = "Arguments list:\n";
+    help += "\tMemory experiment type ( X (-x) Z (-z) default is memory z)\n";
+    help += "\tDistance (--distance, 32-bit)\n";
+    help += "\tRounds (--rounds, 32-bit, default is code distance)\n";
+    help += "\tPhysical error rate mean (--error-rate, float, lognormal)\n";
+    help += "\tPhysical error rate standard deviation (--error-rate-std, float)\n";
+    help += "\tStim file (--stim-file, string) (overrides distance and error-rate)\n";
+    help += "\tShots (--shots, 64-bit)\n";
+    help += "\tShots per batch (--shots-per-batch, 64-bit)\n";
+    help += "\tDecoder (MWPM, ...) (--decoder, string)\n";
+    help += "\tOutput file (--output-file)\n";
+    help += "\tOutput file type (-csv or -tsv, default csv)\n";
+    help += "\tSeed (--seed, default 0)\n";
 
-    bool help_requested = option_set("h");
+    bool help_requested = parser.option_set("h");
     if (help_requested) {
 help_exit:
         SAFE_WR(std::cout) << help; SAFE_WR_FIN
@@ -63,29 +66,33 @@ help_exit:
     std::string output_file;
     uint64_t seed;
 
-    bool is_memory_x = option_set("x");
-    bool is_tsv =      option_set("tsv");
+    bool is_memory_x = parser.option_set("x");
+    bool is_tsv =      parser.option_set("tsv");
 
     stim::Circuit circuit;
-    if (get_string("stim-file", stim_file)) {
-        FILE* fptr = fopen(stim_file.c_str());
-        circuit = stim::Circuit.from_file(fptr);
+    if (parser.get_string("stim-file", stim_file)) {
+        FILE* fptr = fopen(stim_file.c_str(), "r");
+        circuit = stim::Circuit::from_file(fptr);
         // Null out the other params
         distance = 0;
         pmean = 0;
         pstd = 0;
         fclose(fptr);
-    } else if (get_uint32("distance", distance) && get_float("error-rate", pmean)) {
-        if (!get_uint32("rounds", rounds)) {
+    } else if (parser.get_uint32("distance", distance) 
+            && parser.get_float("error-rate", pmean)) 
+    {
+        if (!parser.get_uint32("rounds", rounds)) {
             rounds = distance;
         }
         std::string task = is_memory_x ? "rotated_memory_x" : "rotated_memory_z";
-        stim::CircuitGenParams params(rounds, distance, task);
-        if (get_float("error-rate-std", pstd)) {
+        stim::CircuitGenParameters params(rounds, distance, task);
+        if (parser.get_float("error-rate-std", pstd)) {
             params.after_clifford_depolarization_stddev = pstd;
             params.before_round_data_depolarization_stddev = pstd;
             params.before_measure_flip_probability_stddev = pstd;
             params.after_reset_flip_probability_stddev = pstd;
+        } else {
+            pstd = 0;
         }
         params.after_clifford_depolarization = pmean;
         params.before_round_data_depolarization = pmean;
@@ -99,18 +106,18 @@ help_exit:
         goto help_exit;
     }
 
-    if (!get_uint64("shots", shots)) goto help_exit;
-    if (!get_uint64("shots-per-batch", shots_per_batch)) {
+    if (!parser.get_uint64("shots", shots)) goto help_exit;
+    if (!parser.get_uint64("shots-per-batch", shots_per_batch)) {
         shots_per_batch = 100'000;
     }
-    if (!get_string("decoder", decoder)) {
+    if (!parser.get_string("decoder", decoder)) {
         decoder = "MWPM";
     }
-    if (!get_string("output-file", output_file)) goto help_exit;
-    if (!get_uint64("seed", seed)) seed = 0;
+    if (!parser.get_string("output-file", output_file)) goto help_exit;
+    if (!parser.get_uint64("seed", seed)) seed = 0;
 
     std::filesystem::path output_path(output_file);
-    std::filesystem::path output_folder = output_file.parent_path();
+    std::filesystem::path output_folder = output_path.parent_path();
     safe_create_directory(output_folder);
     
     bool write_header = !std::filesystem::exists(output_path);
@@ -119,7 +126,7 @@ help_exit:
     std::string br(is_tsv ? "\t" : ",");
 
     if (write_header) { // Create header for stats
-        out << "Distance" << br
+        SAFE_WR(out) << "Distance" << br
             << "Rounds" << br
             << "Pmean" << br
             << "Pstd" << br
@@ -129,10 +136,10 @@ help_exit:
             << "Logical Error Probability" << br
             << "Mean Hamming Weight" << br
             << "Hamming Weight Std" << br
-            << "Max Hamming Weight" << "\n"
+            << "Max Hamming Weight" << br
             << "Mean Time" << br
             << "Time Std" << br
-            << "Max Time" << "\n";
+            << "Max Time" << "\n";  SAFE_WR_FIN
     }
     
     SAFE_WR(out) << distance << br
@@ -141,7 +148,7 @@ help_exit:
         << pstd << br
         << stim_file << br
         << shots << br
-        << decoder; SAFE_WR_FIN
+        << decoder << br; SAFE_WR_FIN
     
     // Build the decoder
     decoder::Decoder* dec;
@@ -156,14 +163,14 @@ help_exit:
     if (world_rank == 0)    __shots += shots % world_size;
 
     std::mt19937_64 rng(seed + world_rank);
-    // Local statistics
-    MPI_DECL(uint64_t, logical_errors);
-    MPI_DECL(uint64_t, hw_sum);
-    MPI_DECL(uint64_t, hw_sqr_sum);
-    MPI_DECL(uint64_t, hw_max);
-    MPI_DECL(fp_t, t_sum);
-    MPI_DECL(fp_t, t_sqr_sum);
-    MPI_DECL(fp_t, t_max);
+
+    uint64_t    logical_errors, __logical_errors = 0;
+    uint64_t    hw_sum, __hw_sum = 0;
+    uint64_t    hw_sqr_sum, __hw_sqr_sum = 0;
+    uint64_t    hw_max, __hw_max = 0;
+    fp_t        t_sum, __t_sum = 0;
+    fp_t        t_sqr_sum, __t_sqr_sum = 0;
+    fp_t        t_max, __t_max = 0;
 
     const uint sample_width = 
         circuit.count_detectors() + circuit.count_observables();
@@ -175,19 +182,20 @@ help_exit:
         samples = samples.transposed();
         for (uint64_t t = 0; t < shots_this_batch; t++) {
             stim::simd_bits_range_ref row = samples[t];
-            stim::simd_bits_range_ref subrow = row.prefix_ref(n_detectors);
+            stim::simd_bits_range_ref subrow = 
+                row.prefix_ref(circuit.count_detectors());
             const uint hw = subrow.popcnt();
             if (hw <= 2) continue;
             auto syndrome = decoder::syndrome_to_vector(row, sample_width);
             auto res = dec->decode_error(syndrome);
             // Update stats
             __logical_errors += res.is_error;
-            __hw_sum += hw.popcnt();
+            __hw_sum += hw;
             __hw_sqr_sum += SQR(hw);
             __hw_max = hw > __hw_max ? hw : __hw_max;
             __t_sum += res.exec_time;
             __t_sqr_sum += SQR(res.exec_time);
-            __t_max = res.exec_time > __t_max : res.exec_time : __t_max;
+            __t_max = res.exec_time > __t_max ? res.exec_time : __t_max;
         }
         __shots -= shots_this_batch;
     }
@@ -200,16 +208,19 @@ help_exit:
                 0, MPI_COMM_WORLD);
     MPI_Reduce(&__hw_max, &hw_max, 1, MPI_UNSIGNED_LONG, MPI_MAX,
                 0, MPI_COMM_WORLD);
-    MPI_Reduce(&__t_sum, &t_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&__t_sqr_sum, &t_sqr_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&__t_max, &t_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&__t_sum, &t_sum, 1, MPI_LONG_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&__t_sqr_sum, &t_sqr_sum, 1, MPI_LONG_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&__t_max, &t_max, 1, MPI_LONG_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     // Calculate means and std
+    std::cout << "errors = " << logical_errors << "\n";
+    fp_t ler = ((fp_t)logical_errors) / ((fp_t)shots);
     fp_t hw_mean = MEAN(hw_sum, shots);
     fp_t hw_std = STD(hw_mean, hw_sqr_sum, shots);
     fp_t t_mean = MEAN(t_sum, shots);
     fp_t t_std = STD(t_mean, t_sqr_sum, shots);
     // Write the data
-    SAFE_WR(out) << hw_mean << br
+    SAFE_WR(out) << ler << br
+        << hw_mean << br
         << hw_std << br
         << hw_max << br
         << t_mean << br

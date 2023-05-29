@@ -12,6 +12,7 @@
 #include <stim.h>
 
 #include <algorithm>
+#include <array>
 
 #include <math.h>
 
@@ -26,7 +27,7 @@ struct vertex_t : base::vertex_t {
     std::array<fp_t, 3> coords;
 };
 
-struct edge_t : base::edge_t {
+struct edge_t : base::edge_t<vertex_t> {
     fp_t            edge_weight;
     fp_t            error_probability;
     std::set<uint>  frames;
@@ -36,7 +37,7 @@ struct edge_t : base::edge_t {
 
 #define __DecodingGraphParent   Graph<decoding::vertex_t, decoding::edge_t>
 
-class DecodingGraph : __DecodingGraphParent {
+class DecodingGraph : public __DecodingGraphParent {
 public:
     DecodingGraph()
         :Graph(), distance_matrix(), error_polynomial(), expected_errors()
@@ -44,7 +45,7 @@ public:
         std::array<fp_t, 3> boundary_coords;
         boundary_coords.fill(-1);
 
-        vertex_t* boundary = new vertex_t;
+        decoding::vertex_t* boundary = new decoding::vertex_t;
         boundary->id = BOUNDARY_INDEX;
         boundary->coords = boundary_coords;
         add_vertex(boundary);
@@ -59,7 +60,7 @@ public:
     } matrix_entry_t;
 
     matrix_entry_t
-    get_error_chain_data(decoding::vertex_t*, decoding::vertex_t*) {
+    get_error_chain_data(decoding::vertex_t* v1, decoding::vertex_t* v2) {
         try_update(); 
         return distance_matrix[v1][v2];
     }

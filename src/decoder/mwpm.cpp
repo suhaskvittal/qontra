@@ -25,7 +25,7 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
 
     if (detectors.size() & 0x1) {
         // Add boundary to matching graph.
-        detectors.push_back(BOUNDARY_INDEX);
+        detectors.push_back(graph::BOUNDARY_INDEX);
     }
     // Build Blossom V instance.
     uint n_vertices = detectors.size();
@@ -37,7 +37,7 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         uint di = detectors[i];
         auto vi = decoding_graph.get_vertex(di);
         for (uint j = i + 1; j < n_vertices; j++) {
-            uint dj = detectors[vj];
+            uint dj = detectors[j];
             auto vj = decoding_graph.get_vertex(dj);
             auto error_data = decoding_graph.get_error_chain_data(vi, vj);
             wgt_t edge_weight = MWPM_TO_INT(error_data.weight);
@@ -59,11 +59,9 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
             if (f >= 0) corr[f] ^= 1;
         }
     }
-    auto time_taken = clk_end();
+    auto time_taken = (fp_t)clk_end();
 
-    bool is_error = is_error(corr, syndrome);
-
-    return (Decoder::result_t) { time_taken, corr, is_error };
+    return (Decoder::result_t) { time_taken, corr, is_error(corr, syndrome) };
 }
 
 }   // decoder

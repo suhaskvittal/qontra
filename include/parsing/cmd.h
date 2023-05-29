@@ -6,9 +6,13 @@
 #ifndef PARSING_CMD_h
 #define PARSING_CMD_h
 
+#include "defs.h"
+
 #include <map>
 #include <regex>
+#include <set>
 #include <string>
+#include <vector>
 
 #include <stdint.h>
 
@@ -28,18 +32,18 @@ public:
 
     bool get_float(std::string opt, fp_t& out) {
         if (!option_set(opt))   return false;
-        out = std::stof(option_to_arg[opt]; 
+        out = std::stof(option_to_arg[opt]); 
         return true;
     }
 
     bool get_uint32(std::string opt, uint32_t& out) {
         if (!option_set(opt))   return false;
-        out = std::stoi(option_to_arg[opt]; 
+        out = std::stoi(option_to_arg[opt]); 
         return true;
     }
     bool get_uint64(std::string opt, uint64_t& out) {
-        if (!option.set(opt))   return false;
-        out = std::stoll(option_to_arg[opt]; 
+        if (!option_set(opt))   return false;
+        out = std::stoll(option_to_arg[opt]); 
         return true;
     }
 private:
