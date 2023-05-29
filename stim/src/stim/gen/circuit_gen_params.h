@@ -57,9 +57,6 @@ public:
     
     bool both_stabilizers = false;
     bool multiple_observables = false;
-    bool swap_lru = false;
-
-    bool initial_state_is_basis_1 = false;
 
     void validate_params() const;
 

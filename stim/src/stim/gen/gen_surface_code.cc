@@ -156,13 +156,6 @@ GeneratedCircuit _finish_surface_code_circuit(
     }
     params.append_reset(head, data_qubits, "ZX"[is_memory_x]);
     params.append_reset(head, measurement_qubits);
-    if (params.initial_state_is_basis_1) {
-        if (is_memory_x) {
-            head.append_op("Z", data_qubits);
-        } else {
-            head.append_op("X", data_qubits);
-        }
-    }
     head += head_cycle;
     for (auto m_index : chosen_basis_measurement_qubits) {
         auto measure = q2p[m_index];

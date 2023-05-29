@@ -32,6 +32,7 @@ public:
     typedef struct {
         fp_t exec_time;
         std::vector<uint8_t> corr;
+        bool is_error;
     } result_t;
 
     typedef std::vector<uint8_t>    vsyndrome_t;
@@ -91,7 +92,7 @@ private:
 // syndrome_to_vector converts a simd_bits_range_ref to a vector. A vector
 // can be modified and is easier to pass around.
 
-std::vector<uint8_t> 
+Decoder::vsyndrome_t
 syndrome_to_vector(const stim::simd_bits_range_ref& ref, uint size) {
     std::vector<uint8_t> syndrome(size);
     for (uint i = 0; i < size; i++) syndrome[i] = ref[i];

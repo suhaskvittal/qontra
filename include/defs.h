@@ -43,6 +43,8 @@ put(TwoLevelMap<T, U, V>& m, T x, U y, V z) {
 void
 safe_create_directory(const std::filesystem::path& path) {
     if (!std::filesystem::exists(path)) {
+        auto parent_path = path.parent_path();
+        safe_create_directory(parent_path);
         std::filesystem::create_directory(path);
     }
 }
