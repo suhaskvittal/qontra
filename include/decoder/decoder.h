@@ -14,87 +14,72 @@
 #include <string>
 #include <utility>
 
-namespace qrc {
-
-/* Benchmark functions and structures*/
-struct DecoderShotResult {
-    fp_t execution_time;
-    fp_t memory_overhead;
-    bool is_logical_error;
-    std::vector<uint8_t> correction;
-    std::map<uint, uint> matching;
-};
+namespace qontra {
 
 class Decoder {
 public: 
-    Decoder(const stim::Circuit&);
+    Decoder(const stim::Circuit& circ)          // The decoder uses the passed in
+                                                // circuit for decoding. It should
+                                                // be a memory experiment circuit
+                                                // for X rounds.
+        :circuit(circ),
+        decoding_graph(to_decoding_graph(circ))
+    {}
+
     virtual ~Decoder() {}
 
-    virtual DecoderShotResult decode_error(const std::vector<uint8_t>&) =0;
+    typedef struct {
+        fp_t exec_time;
+        std::vector<uint8_t> corr;
+    } result_t;
 
-    virtual std::string name(void) =0;
-    virtual bool is_software(void) =0;
+    typedef std::vector<uint8_t>    vsyndrome_t;
 
-    virtual void clear_stats();
-
-    // General decoder statistics
-    // Functions and member variables.
-
-    typedef std::pair<std::vector<uint8_t>, fp_t> SyndromeEvent;
-    /*
-     * Gets all nonzero syndromes and the time required to complete
-     * each of them. Each output pair has format (syndrome, time_taken).
-     * */
-    std::vector<SyndromeEvent> nonzero_syndromes_and_time_taken();
-    /*
-     *  Gets all nonzero syndromes completd within the given time.
-     *  Important for real time decoding. Each output pair has 
-     *  the format: (syndrome, time taken).
-     * */
-    std::vector<SyndromeEvent>
-        nonzero_syndromes_completed_within(fp_t max_time,
-                uint32_t& n_nonzero_syndromes);
-    /*
-     *  Gets the maximum hamming weight that the decoder will
-     *  always complete within max_time.
-     * */
-    uint max_hamming_wgt_completed_within(fp_t max_time);
-    /*
-     *  Gets the potential SRAM cost if all data structures were
-     *  implemented in hardware. Returns amount in bytes.
-     * */
-    virtual uint64_t sram_cost(void);
-    
-    std::vector<std::vector<uint8_t>> syndromes;
-    std::vector<fp_t> execution_times;  // in nanoseconds
-    std::vector<fp_t> memory_overheads; // in bytes
-    uint64_t n_logical_errors;
-    fp_t mean_execution_time;
-    fp_t max_execution_time;
-    fp_t max_execution_time_for_correctable;
-    std::map<uint, fp_t> hamming_weight_dist;
-    // Benchmarking circuit.
-    stim::Circuit circuit;
+    virtual result_t decode_error(const vsyndrome_t&) =0;   // This function
+                                                            // will perform decoding
+                                                            // and return a correction.
+    virtual std::string name(void) =0;  // Useful for printing out stats.
 protected:
-    // Member variables.
-    DecodingGraph graph;
-    // Give all benchmarking functions
-    // friendship.
-    friend void 
-        b_decoder_ler(Decoder*, uint64_t, std::mt19937_64&, bool);
+    // Other helpful functions:
+    void clk_start(void) {  // Records the time the function was called.
+#ifdef __APPLE__
+        t_start = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+#else
+        struct timespec d;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &d);
+        t_start = d.tv_nsec;
+#endif
+    }
+
+    uint64_t clk_end(void) {    // Returns the time elapsed since the last clk_start
+                                // call.
+        auto tmp = t_start;
+        clk_start();
+        return tmp - t_start;
+    }
+
+    stim::Circuit circuit;
+    DecodingGraph decoding_graph;
+private:
+#ifdef __APPLE__
+    uint64_t    t_start;
+#else
+    long        t_start;
+#endif
 };
 
-uint32_t
-syndrome_to_int(const std::vector<uint8_t>&, uint size);
-bool
-is_logical_error(const std::vector<uint8_t>& correction,
-        const std::vector<uint8_t>& syndrome,
-        uint n_detectors, uint n_observables);
+// Helper functions
+// 
+// to_vector converts a simd_bits_range_ref to a vector. A vector
+// can be modified and is easier to pass around.
 
 std::vector<uint8_t> 
-_to_vector(const stim::simd_bits_range_ref&,
-        uint n_detectors, uint n_observables);
+to_vector(const stim::simd_bits_range_ref& ref, uint size) {
+    std::vector<uint8_t> syndrome(size);
+    for (uint i = 0; i < size; i++) syndrome[i] = ref[i];
+    return syndrome;
+}
 
-} // qrc
+}   // qontra
 
 #endif
