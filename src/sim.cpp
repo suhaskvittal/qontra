@@ -33,7 +33,10 @@ QontraSim::QontraSim(uint distance, fp_t p, Code qec_code)
 
 void
 QontraSim::qc_blk_recv_cmd() {
-    // Edit this region if you need to modify syndrome extraction.
+    // Edit this block if you need to add additional quantum gates.
+    //
+    // Here, the quantum computer executes instructions issued by the control
+    // processor. See instruction.h for the physical gate ISA.
     for (auto& inst : instruction_buf) {
         uint n_excluded_trials = inst.exclude_trials.size();
         stim::simd_bit_table x_cpy(n_excluded_trials, qc_x_table_rwidth);
@@ -66,49 +69,53 @@ QontraSim::qc_blk_recv_cmd() {
             }
         }
 
-        std::vector<fp_t> std_error_rates = 
-                get_error_rates(inst, ErrorType::std);
-        std::vector<fp_t> li_error_rates = 
-                get_error_rates(inst, ErrorType::linjection);
-        std::vector<fp_t> lt_error_rates = 
-                get_error_rates(inst, ErrorType::ltransport);
-        std::vector<fp_t> ct_error_rates =
-                get_error_rates(inst, ErrorType::crosstalk);
+        uint n_ops_per_inst;
+        // Update this if there are other two-qubit physical operations
+        if (inst.name == "CX") {
+            n_ops_per_inst = 2;
+        } else {
+            n_ops_per_inst = 1;
+        }
+
+        auto std_errors = get_error_rates(inst, n_ops_per_inst, ErrorType::std);
+        auto li_errors = get_error_rates(inst, n_ops_per_inst, ErrorType::linjection);
+        auto lt_errors = get_error_rates(inst, n_ops_per_inst,  ErrorType::ltransport);
+        auto ct_errors = get_error_rates(inst, n_ops_per_i, ErrorType::crosstalk);
         switch (inst.name) {
         case "H":
             qc_H(inst.operands);
-            qc_eDP1(inst.operands, std_error_rates);
+            qc_eDP1(inst.operands, std_errors);
             break;
         case "X":
             qc_X(inst.operands);
-            qc_eDP1(inst.operands, std_error_rates);
+            qc_eDP1(inst.operands, std_errors);
             break;
         case "Z":
             qc_Z(inst.operands);
-            qc_eDP1(inst.operands, std_error_rates);
+            qc_eDP1(inst.operands, std_errors);
             break;
         case "S":
             qc_S(inst.operands);
-            qc_eDP1(inst.operands, std_error_rates);
+            qc_eDP1(inst.operands, std_errors);
             break;
         case "CX":
             qc_CX(inst.operands);
-            qc_eLT(inst.operands, lt_error_rates);
-            qc_eLI(inst.operands, li_error_rates);
-            qc_eDP2(inst.operands, std_error_rates);
-            qc_eCT(inst.operands, ct_error_rates);
+            qc_eLT(inst.operands, lt_errors);
+            qc_eLI(inst.operands, li_errors);
+            qc_eDP2(inst.operands, std_errors);
+            qc_eCT(inst.operands, ct_errors);
             break;
         case "Mnrc":
-            qc_eX(inst.operands, std_error_rates);
+            qc_eX(inst.operands, std_errors);
             qc_M(inst.operands, false);
             break;
         case "Mrc":
-            qc_eX(inst.operands, std_error_rates);
+            qc_eX(inst.operands, std_errors);
             qc_M(inst.operands, true);
             break;
         case "R":
             qc_R(inst.operands);
-            qc_eX(inst.operands, std_error_rates);
+            qc_eX(inst.operands, std_errors);
             break;
         }
         // Finally, if any trials were excluded, we need to return
@@ -129,6 +136,135 @@ QontraSim::qc_blk_recv_cmd() {
             }
         }
     }
+}
+
+void
+QontraSim::qc_blk_send_syndrome() {
+    // Edit this block if you want to modify syndrome transmission.
+    //
+    // Place syndrome buffer into the control processor's syndrome history
+    auto hist = cp_syndrome_history.transposed(); 
+    for (uint i = 0; i < syndrome_buf_offset) {
+        uint k = syndrome_history_length + i;
+        hist[k] |= qc_syndrome_buf;
+        if (last_syndrome_length > 0) {
+            hist ^= hist[k-last_syndrome_length];
+        }
+    }
+    // Update structures
+    cp_syndrome_history = hist.transposed();
+    last_syndrome_length = syndrome_buf_offset;
+    syndrome_history_length += syndrome_buf_offset;
+
+    fp_t bytes_transmitted = ((fp_t)syndrome_buf_offset) / 3.0;
+    for (uint64_t t = 0; t < n_trials_in_batch; t++) {
+        latency[t] += bytes_transmitted / transmission_bandwidth;
+    }
+}
+
+void
+QontraSim::cp_blk_decode() {
+    // Edit this block if you want to modify decoding logic.
+    /* TODO */
+}
+
+void
+QontraSim::cp_blk_send_cmd() {
+    // Edit this block if you want to modify syndrome extraction.
+    //
+    // Here, the control processor decodes the instructions provided by the user
+    // into physical gate operations for the quantum computer to execute or classical
+    // operations (i.e. arithmetic).
+    //
+    // While the ISA appears CISC, it is more RISC. For example,
+    // the physical operations cannot implement EXTRACT by themselves,
+    // as EXTRACT uses the Mrc operation.
+    const cp::Instruction& inst = imem[pc];
+
+    if (inst.name == "INIT") {
+        // Update logical and physical qubit mappings
+        uint lqubit = inst.operands[0];
+        std::vector<uint> pqubits;
+        for (uint i = 1; i < inst.operands.size(); i++) {
+            uint pqubit = inst.operands[i];
+            physical_to_logical_qubit[pqubit] = lqubit;
+            pqubits.push_back(pqubit);
+        }
+        logical_to_physical_qubit[lqubit] = pqubits;
+    } else if (inst.name == "EXTRACT") {
+        uint lqubit = inst.operands[0];
+        std::vector<uint> pqubits = logical_to_physical_qubit[lqubit];
+        // TODO: finish once connectivity info is available
+    } else if (inst.name == "LSMERGE") {
+        // TODO
+    } else if (inst.name == "LSSPLIT") {
+        // TODO
+    } else if (inst.name == "H" || inst.name == "X" || inst.name == "Z"
+            || inst.name == "S" || inst.name == "CX" || inst.name == "M"
+            || inst.name == "R") 
+    {
+        instruction_buf.push_back((cp::Instruction)inst);
+    } else if (inst.name == "LH") {
+        // TODO
+    } else if (inst.name == "LX") {
+        for (uint q : inst.operands) {
+            cp_x_pauli_frames[q].invert_bits();
+            cp_x_pauli_frames_ideal[q].invert_bits();
+        }
+    } else if (inst.name == "LZ") {
+        for (uint q : inst.operands) {
+            cp_z_pauli_frames[q].invert_bits();
+            cp_z_pauli_frames_ideal[q].invert_bits();
+        }
+    } else if (inst.name == "LS") {
+        // TODO
+    } else if (inst.name == "LMX") {
+        // TODO
+    } else if (inst.name == "LMZ") {
+        // TODO
+    } else if (inst.instruction_type == cp::Instruction::Type::r2) {
+        Register& rout = register_file[inst.operands[0]];
+        Register& rin = register_file[inst.operands[1]];
+        if (inst.name == "NOT") {
+            rout.data = ~rin.data;
+        }
+    } else if (inst.instruction_type == cp::Instruction::Type::r3) {
+        Register& rout = register_file[inst.operands[0]];
+        Register& rin1 = register_file[inst.operands[1]];
+        Register& rin2 = register_file[inst.operands[2]];
+
+        if (inst.name == "ADD") {
+            rout.data = rin1.data + rin2.data;
+        } else if (inst.name == "SUB") {
+            rout.data = rin1.data - rin2.data;
+        } else if (inst.name == "MUL") {
+            rout.data = rin1.data * rin2.data;
+        } else if (inst.name == "DIV") {
+            rout.data = rin1.data / rin2.data;
+        } else if (inst.name == "AND") {
+            rout.data = rin1.data & rin2.data;
+        } else if (inst.name == "OR") {
+            rout.data == rin1.data | rin2.data;
+        } else if (inst.name == "XOR") {
+            rout.data == rin1.data ^ rin2.data;
+        }
+    } else if (inst.instruction_type == cp::Instruction::Type::ro) {
+        Register& rio = register_file[inst.operands[0]];
+        uint64_t addr = register_file[inst.operands[1]];
+        Register& roffset = register_file[inst.operands[2]];
+        uint64_t addr_p_offset = addr + roffset.data;
+        if (inst.name == "ST") {
+            rio.data = dmem[addr_p_offset];
+        } else if (inst.name == "LD") {
+            dmem[addr_p_offset] = rio.data;
+        }
+    } else if (inst.instruction_type == cp::Instruction::Type::ri) {
+        Register& rout = register_file[inst.operands[0]];
+        int64_t immd = (int64_t) inst.operands[1];
+        rout.data = immd;
+    }
+
+    pc++;
 }
 
 void
@@ -298,13 +434,7 @@ QontraSim::qc_M(const std::vector<uint>& operands, bool record_in_syndrome_buf) 
         }
         // Drop the measurement in the syndrome buffer
         if (record_in_syndrome_buf) {
-            qc_syndrome_buf[syndrome_buf_offset] |= qc_r_table[2*n_qubits];
-    `       if (syndrome_buf_lookback > 0) {
-                qc_syndrome_buf[syndrome_buf_offset] ^=
-                    qc_syndrome_buf[syndrome_buf_offset - syndrome_buf_lookback];
-            }
-            syndrome_buf_offset++;
-            next_buf_lookback++;
+            qc_syndrome_buf[syndrome_buf_offset++].swap_with(qc_r_table[2*n_qubits]);
         }
     }
 }
@@ -413,14 +543,14 @@ QontraSim::qc_eLT(const std::vector<uint>& operands, std::vector<fp_t> rates) {
 }
 
 std::vector<fp_t>
-get_error_rates(const qc::Instruction& inst, ErrorType et) {
+get_error_rates(const qc::Instruction& inst, uint n_ops_per_inst, ErrorType et) {
     std::vector<fp_t> rates;
-    if (inst.n_ops == 1) {
+    if (n_ops_per_inst == 1) {
         for (uint op : inst.operands) {
             fp_t e = error_params.op1q[inst.name][op];
             rates.push_back(e);
         }
-    } else if (inst.n_ops == 2) {
+    } else if (n_ops_per_inst == 2) {
         for (uint i = 0; i < inst.operands.size(); i += 2) {
             uint op1 = inst.operands[i];
             uint op2 = inst.operands[i+1];

@@ -14,47 +14,56 @@
 const std::vector<std::string> FTQC_ISA{
     "H",
     "X",
-    "Z",    // virtual (assuming virtual RZ)
+    "Z",
     "CX",
-    "S"     // virtual (assuming virtual RZ)
-    "M",
+    "S",
+    "Mnrc", // does not record measurement
+    "Mrc",  // records measurement and places it into the syndrome buffer
     "R"
 };
 
 const std::vector<std::string> CP_ISA{
-    "INIT",     // Initializes logical qubit
-    "EXTRACT",  // Executes syndrome extraction
-    "LSMERGE",  // Lattice Surgery Merge
-    "LSSPLIT",  // Lattice Surgery Split
+    "INIT",     // logical-qubit, [qubits]  -- initializes logical qubit,
+                //                              even qubits = parity
+                //                              odd qubits = data
+    "EXTRACT",  // logical-qubit            -- performs syndrome extraction
+    "LSMERGE",  // qubit, qubit             -- performs lattice surgery merge
+    "LSSPLIT",  // qubit, qubit             -- performs lattice surgery split
     // Physical operations
     "H",
     "X",
     "Z",
     "S",
-    "Mnrc",     // Does not record measurement
-    "Mrc",      // Records measurement and places it in syndrome buffer.
+    "CX",
+    "M",
     "R",
-    // Logical operations
-    "LH",
-    "LX",
-    "LZ",
-    "LS",
+    // Logical operations (SIMD)
+    "LH",       // qubit
+    "LX",       // qubit
+    "LZ",       // qubit
+    "LS",       // qubit
     "LMX",      // qubit, register
     "LMZ",      // qubit, register
-    "LR",
-    // Compute operations (all integer)
-    "ADD",      // register, register, register -- 1 cycle
-    "SUB",      // register, register, register -- 1 cycle
-    "MUL",      // register, register, register -- 2 cycle pipelined
-    "DIV",      // register, register, register -- 4 cycle pipelined
-    "NOT",      // register, register           -- 1 cycle
-    "AND",      // register, register, register -- 1 cycle
-    "OR",       // register, register, register -- 1 cycle
-    "XOR",      // register, register, register -- 1 cycle
-    // Memory operations
+    // Classical operations (RISC-Style)
+    // Three types:
+    //  R2: r2 = op r1
+    //  R3: r3 = r2 op r1
+    //  RI: register + immediate
+    //  BO: base + offset
+    //  
+    //  Specifiying a register $0 corresponds to the zero register.
+    //  Standard data type is integer.
+    "ADD",      // register, register, register
+    "SUB",      // register, register, register
+    "MUL",      // register, register, register
+    "DIV",      // register, register, register
+    "NOT",      // register, register          
+    "AND",      // register, register, register
+    "OR",       // register, register, register
+    "XOR",      // register, register, register
     "LI",       // register, immediate
-    "ST",       // register, location
-    "LD",       // register, location
+    "ST",       // register[src], location, register[offset]
+    "LD",       // register[dst], location, register[offset]
     // Pseudo operations (cannot be executed on a real system, but
     // are useful in simulation)
     "PEEKX",    // Check X Pauli frame with ideal decoder (cannot err), 
@@ -67,14 +76,11 @@ namespace qc {
 // We define a namespace because control processors
 // also have instruction sets
 
-struct Instruction {   // Physical instruction.
+struct Instruction {    // Physical instruction.
                         // This would be executed by physical operations
                         // on the FTQC.
     std::string name;
     std::vector<uint> operands;
-    uint n_ops; // Number of operands. This is not operand.size(): recall that
-                // operands is a SIMD-style definition, so we just asking if
-                // it is a 1-qubit, 2-qubit, etc. operation.
 
     std::vector<uint64_t> exclude_trials;
 };
@@ -83,12 +89,14 @@ struct Instruction {   // Physical instruction.
 
 namespace cp {
 
-struct Instruction {   // Logical instruction.
+struct Instruction {    // Logical instruction.
                         // This would be executed by Pauli frame updates
                         // or lattice surgery operations.
     std::string name;
     std::vector<uint> operands;
-    uint n_ops;
+
+    enum class Type {r2, r3, bo, ri};
+    Type instruction_type;
 
     std::vector<uint64_t> exclude_trials; 
 };

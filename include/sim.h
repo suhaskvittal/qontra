@@ -103,14 +103,16 @@ protected:
                                                 // executes it. This may modify the
                                                 // quantum state.
     void            qc_blk_send_syndrome(void); // Sends the contents of the syndrome
-                                                // buffer to the control processor.
+                                                // buffer to the control processor and
+                                                // updates the syndrome history.
     // Control Processor + Decoder Blocks
-    void            cp_blk_recv_syndrome(void); // Receives syndrome from the FTQC
-                                                // and updates the syndrome history.
     void            cp_blk_decode(void);        // Decodes the syndrome history and
                                                 // updates the Pauli frames.
     void            cp_blk_send_cmd(void);      // Sends commands to the control
                                                 // processor.
+
+    std::map<uint, uint>                physical_to_logical_qubit;
+    std::map<uint, std::vector<uint>>   logical_to_physical_qubit;
 
     const uint distance;
     const Code qec_code;
@@ -118,6 +120,8 @@ protected:
     uint n_qubits;
     uint64_t n_trials;
     uint64_t n_trials_in_batch;
+
+    std::vector<fp_t> latency;
 private:
     void    qc_initialize_tables(void); // Initializes tables used in 
                                         // tableau algorithm
@@ -150,7 +154,7 @@ private:
                                                                 // tableau algo.
 
     struct Register {
-        uint64_t data = 0;
+        int64_t data = 0;
         bool valid = false;
     };
 
@@ -178,23 +182,28 @@ private:
     uint                    qc_r_table_rwidth;
     uint                    qc_leak_table_rwidth;
 
-    stim::simd_bit_table    qc_syndrome_buf;        // Column-major -- transposed
-                                                    // to row major when retrieving
-                                                    // syndromes.
+    stim::simd_bit_table    qc_syndrome_buf;        // Column-major
     uint                    syndrome_buf_offset;    // Tracks which bit we 
                                                     // are recording.
-    uint                    syndrome_buf_lookback;  // Tracks which bit we XOR with
-                                                    // between rounds.
-    uint                    next_buf_lookback;
     // Control Processor + Decoder structures
-    stim::simd_bit_table    cp_syndrome_history;    // Row-major
-    stim::simd_bit_table    cp_pauli_frames;        // Row-major
+    stim::simd_bit_table    cp_syndrome_history;    // Row-major -- transposed to
+                                                    // column major during syndrome
+                                                    // transmission
+    stim::simd_bit_table    cp_x_pauli_frames;      // Row-major
+    stim::simd_bit_table    cp_z_pauli_frames;      // Row-major
 
-    stim::simd_bit_table    cp_pauli_frames_ideal;  // Row-major, if we had a
-                                                    // perfect decoder that never
-                                                    // failed. A logical error
-                                                    // occurs when the Pauli frames
-                                                    // do not match this ideal.
+    stim::simd_bit_table    cp_x_pauli_frames_ideal;    // Row-major, if we had a
+                                                        // perfect decoder that never
+                                                        // failed. A logical error
+                                                        // occurs when the Pauli frames
+                                                        // do not match this ideal.
+    stim::simd_bit_table    cp_z_pauli_frames_ideal;    // Row-major, if we had a
+                                                        // perfect decoder that never
+                                                        // failed. A logical error
+                                                        // occurs when the Pauli frames
+                                                        // do not match this ideal.
+    uint                    syndrome_history_length;
+    uint                    last_syndrome_length;
 
     uint64_t    pc;
 
