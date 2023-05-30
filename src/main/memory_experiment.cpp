@@ -17,8 +17,6 @@
 
 #include <mpi.h>
 
-#define SAFE_WR(buf)        if (world_rank == 0) { buf
-#define SAFE_WR_FIN         }
 #define SQR(x)              (x)*(x)
 #define MEAN(s, n)          ((fp_t)(s))/((fp_t)(n))
 #define STD(m, ss, n)       ( ((fp_t)(ss))/((fp_t)(n)) - SQR(m) )
@@ -35,7 +33,7 @@ int main(int argc, char* argv[]) {
     CmdParser parser(argc, argv);
 
     std::string help = "Arguments list:\n";
-    help += "\tMemory experiment type ( X (-x) Z (-z) default is memory z)\n";
+    help += "\tMemory experiment type (X (-x) Z (-z) default is -z)\n";
     help += "\tDistance (--distance, 32-bit)\n";
     help += "\tRounds (--rounds, 32-bit, default is code distance)\n";
     help += "\tPhysical error rate mean (--error-rate, float, lognormal)\n";
@@ -51,14 +49,16 @@ int main(int argc, char* argv[]) {
     bool help_requested = parser.option_set("h");
     if (help_requested) {
 help_exit:
-        SAFE_WR(std::cout) << help; SAFE_WR_FIN
+        if (world_rank == 0) {
+            std::cout << help;
+        }
         return 0;
     }
 
     uint32_t distance;
-    uint32_t rounds;
+    uint32_t rounds = 0;
     fp_t pmean;
-    fp_t pstd;
+    fp_t pstd = 0;
     std::string stim_file;
     uint64_t shots;
     uint64_t shots_per_batch;
@@ -121,12 +121,14 @@ help_exit:
     safe_create_directory(output_folder);
     
     bool write_header = !std::filesystem::exists(output_path);
+    MPI_Barrier(MPI_COMM_WORLD);
+
     std::ofstream out(output_path, std::ios::app);
     
     std::string br(is_tsv ? "\t" : ",");
 
-    if (write_header) { // Create header for stats
-        SAFE_WR(out) << "Distance" << br
+    if (write_header && world_rank == 0) { // Create header for stats
+        out << "Distance" << br
             << "Rounds" << br
             << "Pmean" << br
             << "Pstd" << br
@@ -139,21 +141,25 @@ help_exit:
             << "Max Hamming Weight" << br
             << "Mean Time" << br
             << "Time Std" << br
-            << "Max Time" << "\n";  SAFE_WR_FIN
+            << "Max Time" << "\n";
     }
     
-    SAFE_WR(out) << distance << br
-        << rounds << br
-        << pmean << br
-        << pstd << br
-        << stim_file << br
-        << shots << br
-        << decoder << br; SAFE_WR_FIN
+    if (world_rank == 0) {
+        out << distance << br
+            << rounds << br
+            << pmean << br
+            << pstd << br
+            << output_path.filename() << br
+            << shots << br
+            << decoder << br;
+    }
     
     // Build the decoder
     decoder::Decoder* dec;
     if (decoder == "MWPM" || decoder == "mwpm") {
         dec = new decoder::MWPMDecoder(circuit);
+    } else if (decoder == "NONE" || decoder == "none") {
+        dec = nullptr;
     }
 
     // Start the experiment.
@@ -185,14 +191,16 @@ help_exit:
             stim::simd_bits_range_ref subrow = 
                 row.prefix_ref(circuit.count_detectors());
             const uint hw = subrow.popcnt();
-            if (hw <= 2) continue;
-            auto syndrome = decoder::syndrome_to_vector(row, sample_width);
-            auto res = dec->decode_error(syndrome);
-            // Update stats
-            __logical_errors += res.is_error;
+
             __hw_sum += hw;
             __hw_sqr_sum += SQR(hw);
             __hw_max = hw > __hw_max ? hw : __hw_max;
+
+            if (hw <= 2 && dec != nullptr) continue;
+            auto syndrome = decoder::syndrome_to_vector(row, sample_width);
+            auto res = dec->decode_error(syndrome);
+
+            __logical_errors += res.is_error;
             __t_sum += res.exec_time;
             __t_sqr_sum += SQR(res.exec_time);
             __t_max = res.exec_time > __t_max ? res.exec_time : __t_max;
@@ -212,21 +220,23 @@ help_exit:
     MPI_Reduce(&__t_sqr_sum, &t_sqr_sum, 1, MPI_LONG_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&__t_max, &t_max, 1, MPI_LONG_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     // Calculate means and std
-    std::cout << "errors = " << logical_errors << "\n";
     fp_t ler = ((fp_t)logical_errors) / ((fp_t)shots);
     fp_t hw_mean = MEAN(hw_sum, shots);
     fp_t hw_std = STD(hw_mean, hw_sqr_sum, shots);
     fp_t t_mean = MEAN(t_sum, shots);
     fp_t t_std = STD(t_mean, t_sqr_sum, shots);
     // Write the data
-    SAFE_WR(out) << ler << br
-        << hw_mean << br
-        << hw_std << br
-        << hw_max << br
-        << t_mean << br
-        << t_std << br
-        << t_max << "\n";   SAFE_WR_FIN
-    delete dec;
+    if (world_rank == 0) {
+        std::cout << "errors = " << logical_errors << "\n";
+        out << ler << br
+            << hw_mean << br
+            << hw_std << br
+            << hw_max << br
+            << t_mean << br
+            << t_std << br
+            << t_max << "\n";
+    }
+    if (dec != nullptr) delete dec;
 
     MPI_Finalize();
 }

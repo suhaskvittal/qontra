@@ -40,7 +40,9 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
             uint dj = detectors[j];
             auto vj = decoding_graph.get_vertex(dj);
             auto error_data = decoding_graph.get_error_chain_data(vi, vj);
-            wgt_t edge_weight = MWPM_TO_INT(error_data.weight);
+            wgt_t edge_weight;
+            if (error_data.weight > 1000.0) edge_weight = 10000000;
+            else                            edge_weight = MWPM_TO_INT(error_data.weight);
             pm.AddEdge(i, j, edge_weight);
         }
     }
@@ -51,6 +53,7 @@ MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
         uint j = pm.GetMatch(i);
         uint di = detectors[i];
         uint dj = detectors[j];
+        if (di > dj) continue;
 
         auto vi = decoding_graph.get_vertex(di);
         auto vj = decoding_graph.get_vertex(dj);

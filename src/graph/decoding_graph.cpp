@@ -28,7 +28,11 @@ DecodingGraph::build_distance_matrix() {
     dijkstra::ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
     {
         auto e = this->get_edge(v1, v2);
-        return e->edge_weight;
+        if (e == nullptr) {
+            return 1000000000.0;
+        } else {
+            return e->edge_weight;
+        }
     };
     dijkstra::callback_t<vertex_t, matrix_entry_t> cb = 
     [&] (vertex_t* src,
@@ -37,25 +41,30 @@ DecodingGraph::build_distance_matrix() {
         const std::map<vertex_t*, vertex_t*>& pred)
     {
         uint32_t length = 0;
-        fp_t weight = 0.0;
         std::set<uint> frames;
 
-        auto curr = dst;
-        while (curr != src) {
-            auto next = pred.at(curr);
-            auto e = this->get_edge(next, curr);
-            if (e == nullptr) std::cout << "MAMA MIA!!!\n";
-            std::set<uint> new_frames;
-            std::set_difference(
-                    frames.begin(), frames.end(),
-                    e->frames.begin(), e->frames.end(),
-                    std::inserter(new_frames, new_frames.end()));
-            // Update data
-            frames = new_frames;
-            weight += e->edge_weight;
-            length++;
-            curr = next;
+        fp_t weight = dist.at(dst);
+        if (weight < 1000) {
+            auto curr = dst;
+            while (curr != src) {
+                auto next = pred.at(curr);
+                if (curr == next) {
+                    weight = 1000000000;
+                    goto failed;
+                }
+                auto e = this->get_edge(next, curr);
+                std::set<uint> new_frames;
+                std::set_symmetric_difference(
+                        frames.begin(), frames.end(),
+                        e->frames.begin(), e->frames.end(),
+                        std::inserter(new_frames, new_frames.end()));
+                // Update data
+                frames = new_frames;
+                length++;
+                curr = next;
+            }
         }
+failed:
         fp_t prob = pow(10, -weight);
 
         return (matrix_entry_t) {length, prob, weight, frames};
