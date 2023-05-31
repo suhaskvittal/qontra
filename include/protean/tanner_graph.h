@@ -8,7 +8,6 @@
 
 #include "defs.h"
 #include "graph/graph.h"
-#include "protean/dominator_tree.h"
 
 #include <algorithm>
 #include <set>

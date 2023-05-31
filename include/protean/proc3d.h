@@ -26,28 +26,51 @@ struct vertex_t : coupling::vertex_t {
 
 struct edge_t : coupling::edge_t {
     bool is_vertical;
+    uint processor_layer;
 };
 
 }   // proc3d
 
+// The Processor3D's graph structure does not represent the physical
+// characteristics of the chip, and instead represents the connectivity
+// between different qubits on the chip. However, any methods involving
+// edges have been modified to reflect the physical architecture. 
+//
+// For example, the add_edge method appends an edge in a way that maintains
+// the planarity of the main processor (containing the physical qubits) and
+// the other layers through which TSVs may pass through. Get edge also does
+// so similarly and returns the set of edges which physically connect
+// two physical qubits (either one edge (on main processor) or three edges
+// (two edges required for TSV)).
 class Processor3D : public Graph<proc3d::vertex_t, proc3d::edge_t> {
 public:
     Processor3D(uint max_thickness)   
-        :CouplingGraph(false),
+        :Graph(),
         main_processor(true),
         processor_layers(),
         max_thickness(max_thickness),
-        vertex_to_tsv_junctions()
+        vertex_to_tsv_junctions(),
+        coupling_to_edges()
     {}
     Processor3D(const Processor3D& other)
-        :CouplingGraph(other),
+        :Graph(other),
         main_processor(other.main_processor),
         processor_layers(other.processor_layers),
         max_thickness(other.max_thickness),
-        vertex_to_tsv_junctions(other.vertex_to_tsv_junctions)
+        vertex_to_tsv_junctions(other.vertex_to_tsv_junctions),
+        coupling_to_edges(other.coupling_to_edges)
     {}
 
-    bool        add_edge(proc3d::edge_t*, bool is_undirected=true) override;
+    bool    add_edge(proc3d::edge_t*, bool is_undirected=true) override;
+    void    delete_edge(proc3d::edge_t*) override;
+
+    // This method will retrieve the edges corresponding to the physical coupling
+    // (i.e. the vertical TSVs are included).
+    std::vector<proc3d::edge_t*>    get_physical_edges(proc3d::vertex_t* v1, proc3d::vertex_t* v2)
+                { auto e = get_edge(v1, v2); return coupling_to_edges[e]; }
+
+    bool    has_complex_coupling(proc3d::vertex_t* v1, proc3d::vertex_t* v2)
+                { auto e = get_edge(v1, v2); return coupling_to_edges[e].size() > 1; }
 
     // The main processor contains the physical qubits and some couplings. The other
     // processor layers contains couplings enabled by TSVs. Each of the processor layers 
@@ -63,11 +86,21 @@ private:
     uint                        max_thickness;
 
     std::map<proc3d::vertex_t*, std::vector<proc3d::vertex_t*>> vertex_to_tsv_junctions;   
-                                                                        // Maps a vertex on
-                                                                        // the main processor
-                                                                        // to the TSV vertices
-                                                                        // above it on the
-                                                                        // processor layers.
+                                                                // Maps a vertex on the main processor
+                                                                // to the TSV vertices above it on the
+                                                                // processor layers.
+    std::map<proc3d::edge_t*, std::vector<proc3d::edge_t*>>  coupling_to_edges;
+                                                                // Maps each coupling of the processor
+                                                                // to the set of edges required to
+                                                                // implement it.
+                                                                // 
+                                                                // For example, a coupling that is 
+                                                                // on the main processor is mapped to
+                                                                // itself (only one edge).
+                                                                //
+                                                                // A coupling requiring TSVs will
+                                                                // map three edges (two vertical,
+                                                                // one horizontal).
 };
 
 }   // protean

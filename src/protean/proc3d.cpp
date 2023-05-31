@@ -47,6 +47,7 @@ Processor3D::add_edge(proc3d::edge_t* e, bool is_undirected) {
         junc1_junc2->src = junc1;
         junc1_junc2->dst = junc2;
         junc1_junc2->is_vertical = false;
+        junc1_junc2->processor_layer = layer;
 
         proc3d::edge_t src_junc1 = new proc3d::edge_t;
         src_junc1->src = e->src;
@@ -55,14 +56,10 @@ Processor3D::add_edge(proc3d::edge_t* e, bool is_undirected) {
 
         proc3d::edge_t junc2_dst = new proc3d::edge_t;
         junc2_dst->src = junc2;
-        junc2_dst->dst = e->ddst;
+        junc2_dst->dst = e->dst;
         junc2_dst->is_vertical = true;
 
-        add_vertex(junc1);
-        add_vertex(junc2);
-        Graph::add_edge(src_junc1);
-        Graph::add_edge(junc1_junc2);
-        Graph::add_edge(junc2_dst);
+        Graph::add_edge(e);
 
         chip.add_vertex(junc1);
         chip.add_vertex(junc2);
@@ -70,8 +67,34 @@ Processor3D::add_edge(proc3d::edge_t* e, bool is_undirected) {
 
         vertex_to_tsv_junctions[e->src].push_back(junc1);
         vertex_to_tsv_junctions[e->dst].push_back(junc2);
+        coupling_to_edges[e] = std::vector<proc3d::edge_t*>{src_junc1, junc1_junc2, junc2_dst};
     }
     return true;
+}
+
+void
+Processor3D::delete_edge(proc3d::edge_t* e) {
+    Graph::delete_edge(e);
+    auto impl = coupling_to_edges[e];
+    if (impl.size() > 1) {  // Then this is a complex coupling, so remove the corresponding
+                            // metadata.
+        auto vert1 = impl[0];
+        auto horiz = impl[1];
+        auto vert2 = impl[2];
+
+        auto& src_tsv_j = vertex_to_tsv_junctions[vert1->src];
+        for (auto it = src_tsv_j.begin(); it != src_tsv_j.end();) {
+            if (*it == vert1->dst)  it = src_tsv_j.erase(it);
+            else                    it++;
+        }
+        auto& dst_tsv_j = vertex_to_tsv_junctions[vert2->dst];
+        for (auto it = dst_tsv_j.begin(); it != dst_tsv_j.end();) {
+            if (*it == vert2->src)  it = dst_tsv_j.erase(it);
+            else                    it++;
+        }
+        processor_layers[horiz->processor_layer].delete_edge(horiz);
+    }
+    coupling_to_edges.delete(e);
 }
 
 }   // protean
