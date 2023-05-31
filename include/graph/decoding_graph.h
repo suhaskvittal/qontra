@@ -51,6 +51,13 @@ public:
         add_vertex(boundary);
     }
 
+    DecodingGraph(const DecodingGraph& other)
+        :Graph(other),
+        distance_matrix(other.distance_matrix),
+        error_polynomial(other.error_polynomial),
+        expected_errors(other.expected_errors)
+    {}
+
     typedef struct {    // Each pair of vertices has this entry, and each entry
                         // corresponds to an error chain.
         uint32_t        chain_length;   // Length of error chain (or shortest path)

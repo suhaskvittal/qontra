@@ -44,7 +44,15 @@ template <class V_t, class E_t>
 class Graph {
 public:
     Graph(void)
-        :vertices(), edges(), adjacency_lists(), id_to_vertex()
+        :vertices(), edges(), adjacency_matrix(), adjacency_lists(), id_to_vertex()
+    {}
+
+    Graph(const Graph& other)
+        :vertices(other.vertices), 
+        edges(other.edges),
+        adjacency_matrix(other.adjacency_matrix),
+        adjacency_lists(other.adjacency_lists),
+        id_to_vertex(id_to_vertex)
     {}
     
     virtual ~Graph(void) {}
