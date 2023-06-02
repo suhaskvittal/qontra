@@ -18,31 +18,37 @@ namespace protean {
 
 namespace tanner {
 
-struct vertex_t : base::vertex_t {
+struct vertex_t : graph::base::vertex_t {
     uint8_t qubit_type; // 00 = Data, 01 = Gauge, 11 = X parity, 10 = Z parity
 
-    const uint8_t TANNER_DATA =     0x0;
-    const uint8_t TANNER_GAUGE =    0x1;
-    const uint8_t TANNER_XPARITY =  0x2;
-    const uint8_t TANNER_ZPARITY =  0x3;
+    const static uint8_t TANNER_DATA =      0x0;
+    const static uint8_t TANNER_GAUGE =     0x1;
+    const static uint8_t TANNER_XPARITY =   0x2;
+    const static uint8_t TANNER_ZPARITY =   0x3;
 };
 
-struct edge_t : base::edge_t<vertex_t> {
+struct edge_t : graph::base::edge_t {
 };
 
 }   // tanner
 
-class TannerGraph : Graph<tanner::vertex_t, tanner::edge_t> {
+#define __TannerGraphParent graph::Graph<tanner::vertex_t, tanner::edge_t>
+
+class TannerGraph : public __TannerGraphParent {
 public:
     TannerGraph(void)
-        :Graph(), data_qubits(), gauge_qubits(), x_parity_checks(), z_parity_checks(), 
+        :__TannerGraphParent(), 
+        data_qubits(),
+        gauge_qubits(),
+        x_parity_checks(),
+        z_parity_checks(), 
         induced_gauge_index(0)
     {}
 
     TannerGraph(const TannerGraph& other)
-        :Graph(other),
+        :__TannerGraphParent(other),
         data_qubits(other.data_qubits),
-        gauage_qubits(other.gauge_qubits),
+        gauge_qubits(other.gauge_qubits),
         x_parity_checks(other.x_parity_checks),
         z_parity_checks(other.z_parity_checks),
         induced_gauge_index(other.induced_gauge_index)
@@ -56,22 +62,22 @@ public:
         return Graph::add_vertex(v);
     }
 
-    bool add_edge(tanner::edge_t* e) override {
-        auto v = e->src;
-        auto w = e->dst;
+    bool add_edge(tanner::edge_t* e, bool is_undirected=true) override {
+        auto v = (tanner::vertex_t*)e->src;
+        auto w = (tanner::vertex_t*)e->dst;
         // Make sure the edge preserves the bipartite property.
         if ((v->qubit_type > 0) == (w->qubit_type > 0)) return false;
-        else                                            return Graph::add_edge(e);
+        else                                            return Graph::add_edge(e, is_undirected);
     }
 
     void delete_vertex(tanner::vertex_t* v) override {
-        std::vector<tanner::vertex_t*>& cat;
-        if (v->qubit_type == tanner::vertex_t::TANNER_DATA)     cat = data_qubits;
-        if (v->qubit_type == tanner::vertex_t::TANNER_GAUGE)    cat = gauge_qubits;
-        if (v->qubit_type == tanner::vertex_t::TANNER_XPARITY)  cat = x_parity_checks;
-        if (v->qubit_type == tanner::vertex_t::TANNER_ZPARITY)  cat = z_parity_checks;
-        for (auto it = cat.begin(); it != cat.end();) {
-            if (*it == v)   it = cat.erase(it);
+        std::vector<tanner::vertex_t*>* cat;
+        if (v->qubit_type == tanner::vertex_t::TANNER_DATA)     cat = &data_qubits;
+        if (v->qubit_type == tanner::vertex_t::TANNER_GAUGE)    cat = &gauge_qubits;
+        if (v->qubit_type == tanner::vertex_t::TANNER_XPARITY)  cat = &x_parity_checks;
+        if (v->qubit_type == tanner::vertex_t::TANNER_ZPARITY)  cat = &z_parity_checks;
+        for (auto it = cat->begin(); it != cat->end();) {
+            if (*it == v)   it = cat->erase(it);
             else            it++;
         }
     }
@@ -88,7 +94,9 @@ public:
                                                                 // is the intersection of 
                                                                 // adj(X) and adj(Y). The induced
                                                                 // predecessor is added to the
-                                                                // graph.
+                                                                // graph. This function fails
+                                                                // if either arg precedes the
+                                                                // other.
 
     
     std::vector<tanner::vertex_t*>  get_vertices_by_type(uint8_t t) {

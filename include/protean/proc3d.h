@@ -18,13 +18,13 @@ namespace protean {
 
 namespace proc3d {
 
-struct vertex_t : coupling::vertex_t {
+struct vertex_t : graph::coupling::vertex_t {
     uint processor_layer;
 
     bool is_tsv_junction(void) const { return processor_layer > 0; }
 };
 
-struct edge_t : coupling::edge_t {
+struct edge_t : graph::coupling::edge_t {
     bool is_vertical;
     uint processor_layer;
 };
@@ -42,10 +42,12 @@ struct edge_t : coupling::edge_t {
 // so similarly and returns the set of edges which physically connect
 // two physical qubits (either one edge (on main processor) or three edges
 // (two edges required for TSV)).
-class Processor3D : public Graph<proc3d::vertex_t, proc3d::edge_t> {
+#define __Processor3DParent    graph::Graph<proc3d::vertex_t, proc3d::edge_t>
+
+class Processor3D : public __Processor3DParent {
 public:
-    Processor3D(uint max_thickness)   
-        :Graph(),
+    Processor3D(uint max_thickness=std::numeric_limits<uint>::max())
+        :__Processor3DParent(),
         main_processor(true),
         processor_layers(),
         max_thickness(max_thickness),
@@ -53,7 +55,7 @@ public:
         coupling_to_edges()
     {}
     Processor3D(const Processor3D& other)
-        :Graph(other),
+        :__Processor3DParent(other),
         main_processor(other.main_processor),
         processor_layers(other.processor_layers),
         max_thickness(other.max_thickness),
@@ -77,13 +79,13 @@ public:
     // is guaranteed to be planar. Note that we only need to track planarity for the main
     // processor because the secondary layers only have vertices that are TSVs, and each
     // of these can only have one connection.
-    CouplingMap get_main_processor(void) { return main_processor; }
-    CouplingMap get_processor_layer(uint k) { return processor_layer[k]; }
-    uint        get_thickness(void) { return processor_layers.size(); }
+    graph::CouplingGraph    get_main_processor(void) { return main_processor; }
+    graph::CouplingGraph    get_processor_layer(uint k) { return processor_layers[k]; }
+    uint                    get_thickness(void) { return processor_layers.size(); }
 private:
-    CouplingGraph               main_processor;
-    std::vector<CouplingGraph>  processor_layers;
-    uint                        max_thickness;
+    graph::CouplingGraph                main_processor;
+    std::vector<graph::CouplingGraph>   processor_layers;
+    uint                                max_thickness;
 
     std::map<proc3d::vertex_t*, std::vector<proc3d::vertex_t*>> vertex_to_tsv_junctions;   
                                                                 // Maps a vertex on the main processor

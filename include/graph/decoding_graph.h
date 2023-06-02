@@ -27,7 +27,7 @@ struct vertex_t : base::vertex_t {
     std::array<fp_t, 3> coords;
 };
 
-struct edge_t : base::edge_t<vertex_t> {
+struct edge_t : base::edge_t {
     fp_t            edge_weight;
     fp_t            error_probability;
     std::set<uint>  frames;

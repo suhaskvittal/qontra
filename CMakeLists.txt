@@ -12,7 +12,13 @@ set(QONTRA_FILES
     # Parsing
     src/parsing/cmd.cpp
     # Graphs
-    src/graph/decoding_graph.cpp)
+    src/graph/decoding_graph.cpp
+    src/graph/coupling_graph.cpp
+    # Protean
+    src/protean/compiler.cpp
+    src/protean/proc3d.cpp
+    src/protean/tanner_graph.cpp
+    )
 add_library(common INTERFACE)
 add_library(qontra ${QONTRA_FILES})
 add_executable(memory src/main/memory_experiment.cpp ${QONTRA_FILES})
@@ -23,12 +29,17 @@ if(CMAKE_BUILD_TYPE MATCHES Release)
 else()
     target_compile_options(common INTERFACE -ggdb3 -lemon)
 endif()
-target_include_directories(common INTERFACE "include" ${MPI_INCLUDE_PATH})
+
+find_package(MPI REQUIRED)
+find_package(LEMON REQUIRED)
+
+message(${MPI_INCLUDE_PATH})
+
+# I don't know why I have to include /usr/local/include...
+target_include_directories(common INTERFACE "include" ${MPI_INCLUDE_PATH} "/usr/local/include")
 
 add_subdirectory(stim)
 add_subdirectory(blossom5)
-
-find_package(MPI REQUIRED)
 
 target_link_libraries(common INTERFACE libstim)
 target_link_libraries(common INTERFACE libblossom5)

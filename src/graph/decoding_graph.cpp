@@ -172,8 +172,8 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
             } else {
                 // Create new edge if it does not exist.
                 e = new edge_t;
-                e->src = v1;
-                e->dst = v2;
+                e->src = (void*)v1;
+                e->dst = (void*)v2;
                 graph.add_edge(e);
             }
             fp_t edge_weight = (fp_t)log10((1-prob)/prob);

@@ -1,11 +1,11 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   2 August 2022
  * */
 
 #ifndef DEFS_h
 #define DEFS_h
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <map>
@@ -43,6 +43,12 @@ put(TwoLevelMap<T, U, V>& m, T x, U y, V z) {
 
 }   // tlm
 
+//
+// HELPER FUNCTIONS:
+//
+//  safe_create_directory creates folders for a directory (and any necessary parent folders).
+//
+//  is_subset_of checks if container A is a subset of container B.
 
 inline void
 safe_create_directory(const std::filesystem::path& path) {
@@ -52,6 +58,15 @@ safe_create_directory(const std::filesystem::path& path) {
         safe_create_directory(parent_path);
         std::filesystem::create_directory(path);
     }
+}
+
+// Checks if all elements in first arg are in second arg.
+template <class T, class U>
+inline bool is_subset_of(T c1, U c2) {
+    U tmp;
+    std::set_intersection(c1.begin(), c1.end(), c2.begin(), c2.end(),
+            std::inserter(tmp, tmp.begin()));
+    return tmp.size() == c1.size();
 }
 
 }  // qontra

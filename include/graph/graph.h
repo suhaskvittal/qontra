@@ -32,10 +32,9 @@ struct vertex_t {
     uint id;
 };
 
-template <class V_t>
 struct edge_t {
-    V_t* src;
-    V_t* dst;
+    void* src;
+    void* dst;
 };
 
 }   // base
@@ -63,9 +62,17 @@ public:
     }
 
     virtual bool
-    contains(E_t* e) {              // O(1) operation
-        return adjacency_matrix[e->src].count(e->dst) 
-                && (adjacency_matrix[e->src][e->dst] != nullptr);
+    contains(E_t* e) {
+        auto v1 = (V_t*)e->src;
+        auto v2 = (V_t*)e->dst;
+        return adjacency_matrix[v1].count(v2)
+                && adjacency_matrix[v1][v1] == e;
+    }
+
+    virtual bool
+    contains(V_t* v1, V_t* v2) {              // O(1) operation
+        return adjacency_matrix[v1].count(v2) 
+                && (adjacency_matrix[v1][v2] != nullptr);
     }
 
     virtual bool
@@ -79,12 +86,15 @@ public:
 
     virtual bool
     add_edge(E_t* e, bool is_undirected=true) {     // O(1) operation
-        if (!contains(e->src) || !contains(e->dst)) return false;
+        auto src = (V_t*)e->src;
+        auto dst = (V_t*)e->dst;
+        if (!contains(src) || !contains(dst))   return false;
+        if (contains(src, dst))                 return false;
         edges.push_back(e);
-        tlm::put(adjacency_matrix, e->src, e->dst, e);
-        if (is_undirected)  tlm::put(adjacency_matrix, e->dst, e->src, e);
-        adjacency_lists[e->src].push_back(e->dst);
-        if (is_undirected)  adjacency_lists[e->dst].push_back(e->src);
+        tlm::put(adjacency_matrix, src, dst, e);
+        if (is_undirected)  tlm::put(adjacency_matrix, dst, src, e);
+        adjacency_lists[src].push_back(dst);
+        if (is_undirected)  adjacency_lists[dst].push_back(src);
         graph_has_changed = true;
         return true;
     }
@@ -120,8 +130,11 @@ public:
         }
         adjacency_lists.erase(v);
         for (auto it = edges.begin(); it != edges.end();) {
-            if ((*it)->src == v || (*it)->dst == v) it = edges.erase(it);
-            else                                    it++;
+            auto e = *it;
+            auto u1 = (V_t*)e->src;
+            auto u2 = (V_t*)e->dst;
+            if (u1 == v || u2 == v) it = edges.erase(it);
+            else                    it++;
         }
         graph_has_changed = true;
     }
@@ -130,18 +143,21 @@ public:
     delete_edge(E_t* e) {       // O(m) operation
         if (!contains(e))   return;
 
-        adjacency_matrix[e->src][e->dst] = nullptr;
-        adjacency_matrix[e->dst][e->src] = nullptr;
+        auto src = (V_t*)e->src;
+        auto dst = (V_t*)e->dst;
+
+        adjacency_matrix[src][dst] = nullptr;
+        adjacency_matrix[dst][src] = nullptr;
         
-        auto& adj_src = adjacency_lists[e->src];
+        auto& adj_src = adjacency_lists[src];
         for (auto it = adj_src.begin(); it != adj_src.end();) {
-            if (*it == e->dst)  it = adj_src.erase(it);
+            if (*it == dst)  it = adj_src.erase(it);
             else                it++;
         }
-        auto& adj_dst = adjacency_lists[e->dst];
+        auto& adj_dst = adjacency_lists[dst];
         for (auto it = adj_dst.begin(); it != adj_dst.end();) {
-            if (*it == e->src)  it = adj_dst.erase(it);
-            else                it++;
+            if (*it == src) it = adj_dst.erase(it);
+            else            it++;
         }
 
         for (auto it = edges.begin(); it != edges.end();) {
