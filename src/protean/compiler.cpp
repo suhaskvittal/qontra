@@ -71,7 +71,7 @@ Compiler::place(ir_t& curr_ir) {
     }
     // Now make the connections.
     for (auto tv : tanner_graph.get_vertices()) {
-        if (tv->qubit_type == tanner::vertex_t::TANNER_DATA)    continue;
+        if (tv->qubit_type == tanner::vertex_t::DATA)    continue;
         auto pv = arch.get_vertex(tv->id);
 
         auto tv_adj = tanner_graph.get_neighbors(tv);
@@ -151,7 +151,7 @@ Compiler::place(ir_t& curr_ir) {
     // Update IR.
     curr_ir.arch = arch;
     for (auto tv : tanner_graph.get_vertices()) {
-        if (tv->qubit_type == tanner::vertex_t::TANNER_DATA)    continue;   // No need to track data
+        if (tv->qubit_type == tanner::vertex_t::DATA)    continue;   // No need to track data
                                                                             // qubits, as they never
                                                                             // change or gain roles.
         auto pv = arch.get_vertex(tv->id);
@@ -184,7 +184,7 @@ Compiler::reduce(ir_t& curr_ir) {
         proc3d::vertex_t* victim = nullptr;
         for (auto pw : pv_adj) {
             auto tw = tanner_graph.get_vertex(pw->id);
-            if (tw->qubit_type != tanner::vertex_t::TANNER_DATA) {
+            if (tw->qubit_type != tanner::vertex_t::DATA) {
                 victim = pw;
                 break;
             }
@@ -221,10 +221,10 @@ Compiler::schedule(ir_t& curr_ir) {
     Processor3D& arch = curr_ir.arch;
     // Execute the larger checks before the smaller checks.
     std::vector<tanner::vertex_t*>  all_checks;
-    for (auto tv : tanner_graph.get_vertices_by_type(tanner::vertex_t::TANNER_XPARITY)) {
+    for (auto tv : tanner_graph.get_vertices_by_type(tanner::vertex_t::XPARITY)) {
         all_checks.push_back(tv);
     }
-    for (auto tv : tanner_graph.get_vertices_by_type(tanner::vertex_t::TANNER_ZPARITY)) {
+    for (auto tv : tanner_graph.get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
         all_checks.push_back(tv);
     }
 
@@ -332,7 +332,7 @@ Compiler::schedule(ir_t& curr_ir) {
             }
         }
         // Set callback state variables.
-        set_x_parity = tv->qubit_type == tanner::vertex_t::TANNER_XPARITY;
+        set_x_parity = tv->qubit_type == tanner::vertex_t::XPARITY;
         curr_parity_check = pv;
         // Create H and Mrc gates beforehand
         qc::Instruction h;
@@ -386,11 +386,11 @@ Compiler::induce(ir_t& curr_ir) {
     uint new_max_cw = max_induced_check_weight;
     for (uint i = 0; i < vertices.size(); i++) {
         auto tv = vertices[i];
-        if (tv->qubit_type == tanner::vertex_t::TANNER_DATA
+        if (tv->qubit_type == tanner::vertex_t::DATA
             || tanner_graph.get_degree(tv) > max_induced_check_weight)  continue;
         for (uint j = i+1; j < vertices.size(); j++) {
             auto tw = vertices[j];
-            if (tw->qubit_type == tanner::vertex_t::TANNER_DATA
+            if (tw->qubit_type == tanner::vertex_t::DATA
                 || tanner_graph.get_degree(tw) > max_induced_check_weight)  continue;
             auto ti = tanner_graph.induce_predecessor(tv, tw);
             if (ti != nullptr) {
@@ -414,7 +414,7 @@ Compiler::sparsen(ir_t& curr_ir) {
 
     bool any_change = false;
     for (auto tv : vertices) {
-        if (tv->qubit_type == tanner::vertex_t::TANNER_DATA)    continue;
+        if (tv->qubit_type == tanner::vertex_t::DATA)    continue;
         auto tv_adj = tanner_graph.get_neighbors(tv);
         for (uint i = 1; i < tv_adj.size()-1; i++) {
             // We leave up to a degree of 3 (as leaving a degree of 2 will simply
@@ -424,7 +424,7 @@ Compiler::sparsen(ir_t& curr_ir) {
             // Create a new gauge qubit.
             tanner::vertex_t* tg = new tanner::vertex_t;
             tg->id = TANNER_GAUGE_INDEX | ~0xff000000;
-            tg->qubit_type = tanner::vertex_t::TANNER_GAUGE;
+            tg->qubit_type = tanner::vertex_t::GAUGE;
             tanner_graph.add_vertex(tg);
             // Add corresponding edges.
             tanner::edge_t* tx_tg = new tanner::edge_t;

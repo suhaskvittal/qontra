@@ -137,6 +137,7 @@ public:
             else                    it++;
         }
         graph_has_changed = true;
+        delete v;
     }
 
     virtual void
@@ -166,6 +167,7 @@ public:
         }
 
         graph_has_changed=true;
+        delete e;
     }
 
     std::vector<V_t*>   get_vertices(void) { return vertices; }

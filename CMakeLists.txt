@@ -24,6 +24,9 @@ add_library(qontra ${QONTRA_FILES})
 add_executable(memory src/main/memory_experiment.cpp ${QONTRA_FILES})
 add_executable(circuit src/main/build_circuit.cpp ${QONTRA_FILES})
 
+### Protean ###
+add_executable(protean_test src/main/protean/test.cpp ${QONTRA_FILES})
+
 if(CMAKE_BUILD_TYPE MATCHES Release)
     target_compile_options(common INTERFACE -O3 -lemon)
 else()
@@ -48,3 +51,5 @@ target_link_libraries(common INTERFACE ${MPI_CXX_LIBRARIES})
 target_link_libraries(qontra PUBLIC common)
 target_link_libraries(memory PRIVATE common)
 target_link_libraries(circuit PRIVATE common)
+
+target_link_libraries(protean_test PRIVATE common)

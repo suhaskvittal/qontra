@@ -10,7 +10,10 @@
 #include "graph/graph.h"
 
 #include <algorithm>
+#include <fstream>
+#include <iostream>
 #include <set>
+#include <string>
 #include <vector>
 
 namespace qontra {
@@ -21,10 +24,10 @@ namespace tanner {
 struct vertex_t : graph::base::vertex_t {
     uint8_t qubit_type; // 00 = Data, 01 = Gauge, 11 = X parity, 10 = Z parity
 
-    const static uint8_t TANNER_DATA =      0x0;
-    const static uint8_t TANNER_GAUGE =     0x1;
-    const static uint8_t TANNER_XPARITY =   0x2;
-    const static uint8_t TANNER_ZPARITY =   0x3;
+    const static uint8_t DATA =     0x0;
+    const static uint8_t GAUGE =    0x1;
+    const static uint8_t XPARITY =  0x2;
+    const static uint8_t ZPARITY =  0x3;
 };
 
 struct edge_t : graph::base::edge_t {
@@ -55,10 +58,10 @@ public:
     {}
 
     bool add_vertex(tanner::vertex_t* v) override {
-        if (v->qubit_type == tanner::vertex_t::TANNER_DATA)     data_qubits.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::TANNER_GAUGE)    gauge_qubits.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::TANNER_XPARITY)  x_parity_checks.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::TANNER_ZPARITY)  z_parity_checks.push_back(v);
+        if (v->qubit_type == tanner::vertex_t::DATA)     data_qubits.push_back(v);
+        if (v->qubit_type == tanner::vertex_t::GAUGE)    gauge_qubits.push_back(v);
+        if (v->qubit_type == tanner::vertex_t::XPARITY)  x_parity_checks.push_back(v);
+        if (v->qubit_type == tanner::vertex_t::ZPARITY)  z_parity_checks.push_back(v);
         return Graph::add_vertex(v);
     }
 
@@ -72,10 +75,10 @@ public:
 
     void delete_vertex(tanner::vertex_t* v) override {
         std::vector<tanner::vertex_t*>* cat;
-        if (v->qubit_type == tanner::vertex_t::TANNER_DATA)     cat = &data_qubits;
-        if (v->qubit_type == tanner::vertex_t::TANNER_GAUGE)    cat = &gauge_qubits;
-        if (v->qubit_type == tanner::vertex_t::TANNER_XPARITY)  cat = &x_parity_checks;
-        if (v->qubit_type == tanner::vertex_t::TANNER_ZPARITY)  cat = &z_parity_checks;
+        if (v->qubit_type == tanner::vertex_t::DATA)     cat = &data_qubits;
+        if (v->qubit_type == tanner::vertex_t::GAUGE)    cat = &gauge_qubits;
+        if (v->qubit_type == tanner::vertex_t::XPARITY)  cat = &x_parity_checks;
+        if (v->qubit_type == tanner::vertex_t::ZPARITY)  cat = &z_parity_checks;
         for (auto it = cat->begin(); it != cat->end();) {
             if (*it == v)   it = cat->erase(it);
             else            it++;
@@ -114,7 +117,21 @@ private:
     const uint INDUCED_GAUGE_INDEX_FLAG = 1 << 24;
 };
 
+
 }   // protean
+
+namespace graph {
+namespace io {
+
+// Function for io callback.
+//
+// In a tanner graph description file, each line should be of the form:
+//          <X/Z><check-id>,<data-qubit-1>,<data-qubit-2>,...
+
+void    update_tanner_graph(protean::TannerGraph&, std::string); // Callback for io function.
+
+}   // io
+}   // graph
 }   // qontra
 
 #endif  // PROTEAN_TANNER_GRAPH_h
