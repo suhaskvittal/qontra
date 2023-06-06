@@ -14,6 +14,9 @@ Compiler::run(const TannerGraph& tanner_graph, bool verbose) {
     // Set state variables to initial values.
     verbosity = verbose;
     compile_round = 0;
+    called_sparsen = false;
+
+    uint rounds_without_progress = 0;
 
     result_t best_result;
     ir_t ir;
@@ -24,12 +27,18 @@ __place:
         std::cout << "[ place ] ---------------------\n";
     }
     place(ir);
+    if (verbosity) {
+        std::cout << "\tcost = " << objective(ir.arch) << "\n";
+        std::cout << "\tnumber of qubits = " << ir.arch.get_vertices().size() << "\n";
+//      print_connectivity(ir.arch);
+        std::cout << "[ merge ] ---------------------\n";
+    }
+    merge(ir);
 __reduce:
     if (verbosity) {
         std::cout << "\tcost = " << objective(ir.arch) << "\n";
         std::cout << "\tnumber of qubits = " << ir.arch.get_vertices().size() << "\n";
 //      print_connectivity(ir.arch);
-
         std::cout << "[ reduce ] ---------------------\n";
     }
     reduce(ir);
@@ -43,7 +52,7 @@ __reduce:
     schedule(ir);
     if (verbosity) {
         std::cout << "\t#ops = " << ir.schedule.size() << "\n";
-        print_schedule(ir.schedule);
+//      print_schedule(ir.schedule);
 
         std::cout << "[ score ] ---------------------\n";
     }
@@ -57,10 +66,14 @@ __reduce:
         best_result.valid = ir.valid;
         best_result.arch = ir.arch;
         best_result.schedule = ir.schedule;
-    } else if (ir.score >= best_result.score) {
+    } else if (ir.score == best_result.score) {
+        if ((++rounds_without_progress) == 2) return best_result;
+    } else if (ir.score > best_result.score) {
         return best_result;
     }
     // Reset ir (except Tanner graph).
+    auto prev_ir = ir;
+
     ir.arch = Processor3D();
     ir.schedule.clear();
     ir.score = 0.0;
@@ -68,16 +81,21 @@ __reduce:
 
     ir.role_to_qubit.clear();
     ir.qubit_to_roles.clear();
+    ir.is_gauge_only.clear();
     // Perform transformations on Tanner graph.
     compile_round++;
-    if (induce(ir)) {
-        goto __place;
-    } else if (sparsen(ir)) {
-        goto __place;
-    } else {
-        linearize(ir);
-        goto __reduce;
-    }
+    if (verbosity)                      std::cout << "[ induce ] ---------------------\n";
+    if (induce(ir))                     goto __place;
+
+    if (verbosity)                      std::cout << "[ sparsen ] ---------------------\n";
+    if (!called_sparsen && sparsen(ir)) goto __place;
+
+    // If we cannot induce or sparsen to modify the tanner graph, revert back
+    // to the previous IR and try to modify connections there.
+    ir = prev_ir;
+    if (verbosity)      std::cout << "[ linearize ] ---------------------\n";
+    linearize(ir);
+    goto __reduce;
 }
 
 void
@@ -189,6 +207,8 @@ Compiler::place(ir_t& curr_ir) {
         curr_ir.qubit_to_roles[pv] = std::vector<tanner::vertex_t*>();
         curr_ir.qubit_to_roles[pv].push_back(tv);
         curr_ir.role_to_qubit[tv] = pv;
+
+        if (tv->qubit_type == tanner::vertex_t::GAUGE)  curr_ir.is_gauge_only.insert(pv);
     }
 }
 
@@ -227,22 +247,21 @@ Compiler::reduce(ir_t& curr_ir) {
             if (tw->qubit_type != tanner::vertex_t::DATA) {
                 victim = pw;
                 any_nondata_neighbors = true;
-                break;
+                if (curr_ir.is_gauge_only.count(pw))    break;
             }
         }
         if (!any_nondata_neighbors) {
-            for (auto tv : curr_ir.qubit_to_roles[pv]) {
-                if (tv->qubit_type != tanner::vertex_t::GAUGE)  goto reduce_do_not_remove_non_data;
-            }
+            if (!curr_ir.is_gauge_only.count(pv))   goto reduce_do_not_remove_nondata;
             // Otherwise delete the qubit.
             arch.delete_vertex(pv);
             for (auto tv : curr_ir.qubit_to_roles[pv]) {
                 curr_ir.role_to_qubit.erase(tv);
             }
             curr_ir.qubit_to_roles.erase(pv);
+            curr_ir.is_gauge_only.erase(pv);
             continue;
         }
-reduce_do_not_remove_non_data:
+reduce_do_not_remove_nondata:
         if (victim == nullptr)  continue;
         if (verbosity) {
             std::cout << "\tReduced vertex " << PRINT_V(pv->id) 
@@ -270,6 +289,54 @@ reduce_do_not_remove_non_data:
         curr_ir.qubit_to_roles.erase(pv);
         for (auto e : new_edges) {
             arch.add_edge(e);
+        }
+        curr_ir.is_gauge_only.erase(victim);
+    }
+}
+
+void
+Compiler::merge(ir_t& curr_ir) {
+    TannerGraph& tanner_graph = curr_ir.curr_spec;
+    std::map<uint, std::vector<tanner::vertex_t*>> weight_to_checks;
+    for (auto tv : tanner_graph.get_vertices()) {
+        if (tv->qubit_type != tanner::vertex_t::XPARITY
+            || tv->qubit_type != tanner::vertex_t::ZPARITY) continue;
+        uint w = tanner_graph.get_degree(tv);
+        if (!weight_to_checks.count(w)) weight_to_checks[w] = std::vector<tanner::vertex_t*>();
+        weight_to_checks[w].push_back(tv);
+    }
+    // Now, check if any checks in each equivalence class have the same adjacency list.
+    for (auto pair : weight_to_checks) {
+        auto checks = pair.second;
+        std::set<tanner::vertex_t*> already_removed;
+        for (uint i = 0; i < checks.size(); i++) {
+            auto tv = checks[i];
+            if (already_removed.count(tv))  continue;
+
+            auto tv_adj = tanner_graph.get_neighbors(tv);
+            for (uint j = i+1; j < checks.size(); j++) {
+                auto tw = checks[j];
+                if (already_removed.count(tw))  continue;
+
+                auto tw_adj = tanner_graph.get_neighbors(tw);
+                if (tv_adj == tw_adj) {
+                    // Delete the second check and merge the roles.
+                    auto pv = curr_ir.role_to_qubit[tv];
+                    auto pw = curr_ir.role_to_qubit[tw];
+                    auto& roles_of_owner = curr_ir.qubit_to_roles[pw];
+                    for (auto it = roles_of_owner.begin(); it != roles_of_owner.end(); ) {
+                        if (*it == tw)  it = roles_of_owner.erase(it);
+                        else {
+                            curr_ir.qubit_to_roles[pv].push_back(*it);
+                        }
+                    }
+                    curr_ir.arch.delete_vertex(pw);
+                    curr_ir.qubit_to_roles.erase(pw);
+                    curr_ir.role_to_qubit[tw] = curr_ir.role_to_qubit[tv];
+                    
+                    already_removed.insert(tw);
+                }
+            }
         }
     }
 }
@@ -461,6 +528,8 @@ Compiler::induce(ir_t& curr_ir) {
                 uint d = tanner_graph.get_degree(ti);
                 if (d < new_max_cw) new_max_cw = d;
                 any_change = true;
+                std::cout << "\tInduce on " << PRINT_V(tv->id) << " and " << PRINT_V(tw->id)
+                            << " succeeded.\n";
             }
         }
     }
@@ -480,7 +549,7 @@ Compiler::sparsen(ir_t& curr_ir) {
     for (auto tv : vertices) {
         if (tv->qubit_type == tanner::vertex_t::DATA)    continue;
         auto tv_adj = tanner_graph.get_neighbors(tv);
-        for (uint i = 1; i < tv_adj.size()-1; i++) {
+        for (uint i = 1; i < tv_adj.size()-1; i += 2) {
             // We leave up to a degree of 3 (as leaving a degree of 2 will simply
             // result in reduction in the "reduce" pass).
             auto tx = tv_adj[i-1];
@@ -504,20 +573,68 @@ Compiler::sparsen(ir_t& curr_ir) {
             tanner::edge_t* tg_tv = new tanner::edge_t;
             tg_tv->src = (void*)tg;
             tg_tv->dst = (void*)tv;
+            
+            std::cout << "\t( " << PRINT_V(tv->id) << " ) Added new gauge between " 
+                            << PRINT_V(tx->id) << " and "
+                            << PRINT_V(ty->id) << "\n";
+
             tanner_graph.add_edge(tg_tv);
-            // Remove old edges.
-            tanner_graph.delete_edge(tanner_graph.get_edge(tx, tg));
-            tanner_graph.delete_edge(tanner_graph.get_edge(ty, tg));
 
             any_change = true;
         }
     }
-
+    called_sparsen = true;
     return any_change;
 }
 
 void
 Compiler::linearize(ir_t& curr_ir) {
+    // Here, we will search for more reduction opportunities by searching for parity/gauge qubits
+    // with neighboring degree 1 data qubits, such that if we move these qubits, we can reduce
+    // the parity/gauge qubit (as it is now degree 2).
+    TannerGraph& tanner_graph = curr_ir.curr_spec;
+    Processor3D& arch = curr_ir.arch;
+
+    std::vector<proc3d::edge_t*> edges_to_remove;
+    std::vector<proc3d::edge_t*> edges_to_add;
+
+    for (auto tv : tanner_graph.get_vertices()) {
+        auto pv = arch.get_vertex(tv->id);
+        uint deg = arch.get_degree(pv);
+        if (deg > 1)    continue;
+        // Check if any neighboring parity qubits match the criteria.
+        proc3d::vertex_t* victim1 = nullptr;
+        for (auto pw : arch.get_neighbors(pv)) {
+            if (!curr_ir.qubit_to_roles.count(pw))  continue;   // This is a data qubit.
+            uint deg = arch.get_degree(pw);
+            if (deg == 3) {
+                victim1 = pw;
+                break;
+            }
+        }
+        if (victim1 == nullptr)  continue;
+        // Search for a data victim adjacent to pw.
+        uint victim2_dg = std::numeric_limits<uint>::max();
+        proc3d::vertex_t* victim2 = nullptr;
+        for (auto pw : arch.get_neighbors(victim1)) {
+            if (curr_ir.qubit_to_roles.count(pw))  continue;    // This is not a data qubit.
+            if (pw == pv)   continue;
+            deg = arch.get_degree(pw);
+            if (deg < victim2_dg) {
+                victim2_dg = deg;
+                victim2 = pw;
+            }
+        }
+        if (victim2 == nullptr) continue;
+        // Now, we delete the edge between pv and victim1 and move pv adjacent to victim2.
+        auto e1 = arch.get_edge(pv, victim1);
+        arch.delete_edge(e1);
+
+        auto e2 = new proc3d::edge_t;
+        e2->src = (void*)pv;
+        e2->dst = (void*)victim2;
+        arch.add_edge(e2);
+    }
 }
 
 void

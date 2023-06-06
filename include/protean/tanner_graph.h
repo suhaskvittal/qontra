@@ -71,7 +71,13 @@ public:
         auto w = (tanner::vertex_t*)e->dst;
         // Make sure the edge preserves the bipartite property.
         if ((v->qubit_type > 0) == (w->qubit_type > 0)) return false;
-        else                                            return Graph::add_edge(e, is_undirected);
+        bool res = Graph::add_edge(e, is_undirected);
+        if (res) {
+            // Sort adjacency lists.
+            std::sort(adjacency_lists[v].begin(), adjacency_lists[v].end());
+            if (is_undirected)  std::sort(adjacency_lists[w].begin(), adjacency_lists[w].end());
+        }
+        return res;
     }
 
     void delete_vertex(tanner::vertex_t* v) override {
@@ -84,6 +90,7 @@ public:
             if (*it == v)   it = cat->erase(it);
             else            it++;
         }
+        __TannerGraphParent::delete_vertex(v);
     }
 
     std::vector<tanner::vertex_t*>  get_predecessors(tanner::vertex_t*); 

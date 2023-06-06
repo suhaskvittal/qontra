@@ -42,8 +42,9 @@ struct edge_t {
 template <class V_t, class E_t>
 class Graph {
 public:
-    Graph(void)
-        :vertices(), edges(), adjacency_matrix(), adjacency_lists(), id_to_vertex()
+    Graph(bool sorted=false)
+        :vertices(), edges(), adjacency_matrix(), adjacency_lists(), id_to_vertex(),
+        graph_has_changed(false)
     {}
 
     Graph(const Graph& other)
@@ -51,7 +52,8 @@ public:
         edges(other.edges),
         adjacency_matrix(other.adjacency_matrix),
         adjacency_lists(other.adjacency_lists),
-        id_to_vertex(other.id_to_vertex)
+        id_to_vertex(other.id_to_vertex),
+        graph_has_changed(other.graph_has_changed)
     {}
     
     virtual ~Graph(void) {}
@@ -66,7 +68,7 @@ public:
         auto v1 = (V_t*)e->src;
         auto v2 = (V_t*)e->dst;
         return adjacency_matrix[v1].count(v2)
-                && adjacency_matrix[v1][v1] == e;
+                && adjacency_matrix[v1][v2] == e;
     }
 
     virtual bool
@@ -143,7 +145,6 @@ public:
     virtual void
     delete_edge(E_t* e) {       // O(m) operation
         if (!contains(e))   return;
-
         auto src = (V_t*)e->src;
         auto dst = (V_t*)e->dst;
 
@@ -152,8 +153,8 @@ public:
         
         auto& adj_src = adjacency_lists[src];
         for (auto it = adj_src.begin(); it != adj_src.end();) {
-            if (*it == dst)  it = adj_src.erase(it);
-            else                it++;
+            if (*it == dst) it = adj_src.erase(it);
+            else            it++;
         }
         auto& adj_dst = adjacency_lists[dst];
         for (auto it = adj_dst.begin(); it != adj_dst.end();) {

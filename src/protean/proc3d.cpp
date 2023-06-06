@@ -79,7 +79,6 @@ Processor3D::add_edge(proc3d::edge_t* e, bool is_undirected) {
 
 void
 Processor3D::delete_edge(proc3d::edge_t* e) {
-    __Processor3DParent::delete_edge(e);
     auto impl = coupling_to_edges[e];
     if (impl.size() > 1) {  // Then this is a complex coupling, so remove the corresponding
                             // metadata.
@@ -100,6 +99,7 @@ Processor3D::delete_edge(proc3d::edge_t* e) {
         processor_layers[horiz->processor_layer].delete_edge(horiz);
     }
     coupling_to_edges.erase(e);
+    __Processor3DParent::delete_edge(e);
 }
 
 }   // protean

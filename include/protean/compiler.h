@@ -68,24 +68,28 @@ private:
                                                         // contraction. For example, a parity
                                                         // check qubit may need to take on the
                                                         // role of a gauge qubit later.
+        std::set<proc3d::vertex_t*> is_gauge_only;  // Keep track of pure gauge qubits for
+                                                    // operations like reduce.
     } ir_t;
 
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
-    //  (2) Reduce      -- removes redundant qubits from the architecture through contraction.
-    //  (3) Schedule    -- schedules the operations to compute each check.
-    //  (4) Score       -- scores the architecture: if the score worsens, exit.
-    //  (5) Induce      -- induces predecessors onto the Tanner graph.
+    //  (2) Merge       -- merges parity checks that act on the same qubits (i.e. color code)
+    //  (3) Reduce      -- removes redundant qubits from the architecture through contraction.
+    //  (4) Schedule    -- schedules the operations to compute each check.
+    //  (5) Score       -- scores the architecture: if the score worsens, exit.
+    //  (6) Induce      -- induces predecessors onto the Tanner graph.
     //  If Induce fails:
-    //      (6) Sparsen -- if a gauge/parity qubit has too many connections, then split them
+    //      (7) Sparsen -- if a gauge/parity qubit has too many connections, then split them
     //                      into groups of 2 by using intermediate gauge qubits. 
     //  If Sparsen fails:
-    //      (7) Linearize -- linearize data connections in the exist architecture. Jump to (2).
+    //      (8) Linearize -- linearize data connections in the exist architecture. Jump to (2).
     //
     //  We repeat the following until we exit at (4). We assume that the optimization space is
     //  "smooth", so modifications do not chaotically affect the score.
     void    place(ir_t&);
     void    reduce(ir_t&);
+    void    merge(ir_t&);
     void    schedule(ir_t&);
     void    score(ir_t&);
     bool    induce(ir_t&);
@@ -100,6 +104,7 @@ private:
     uint verbosity;
 
     uint compile_round;
+    bool called_sparsen;
 };
 
 void    print_connectivity(Processor3D&);

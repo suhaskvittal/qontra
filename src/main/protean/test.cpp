@@ -21,6 +21,7 @@ using namespace graph;
 using namespace protean;
 
 int main(int argc, char* argv[]) {
+//  const std::string fname = "../graphs/tanner/666_color_code_d3.txt";
     const std::string fname = "../graphs/tanner/rotated_surface_code_d3.txt";
 
     std::ifstream fin(fname);
@@ -51,7 +52,8 @@ int main(int argc, char* argv[]) {
     {
         // Minimize overall connectivity.
         fp_t connectivity = 2 * ((fp_t)proc.get_edges().size()) / ((fp_t)proc.get_vertices().size());
-        return connectivity;
+        fp_t size_score = 0.05 * ((fp_t)proc.get_vertices().size());
+        return connectivity + size_score;
     };
 
     std::vector<compiler::constraint_t> con;    // None for now.

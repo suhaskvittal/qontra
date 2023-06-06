@@ -35,6 +35,9 @@ TannerGraph::induce_predecessor(vertex_t* v1, vertex_t* v2) {
     auto v1_adj = get_neighbors(v1);
     auto v2_adj = get_neighbors(v2);
 
+    std::sort(v1_adj.begin(), v1_adj.end());
+    std::sort(v2_adj.begin(), v2_adj.end());
+
     bool either_precedes = is_subset_of(v1_adj, v2_adj) || is_subset_of(v2_adj, v1_adj); 
     if (either_precedes) return nullptr;
 
