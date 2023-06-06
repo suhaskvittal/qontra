@@ -13,15 +13,15 @@ using namespace tanner;
 std::vector<vertex_t*>
 TannerGraph::get_predecessors(vertex_t* v) {
     std::vector<vertex_t*> pred;
-    std::set<vertex_t*> visited;
+    if (v->qubit_type == vertex_t::DATA)    return pred;
 
+    std::set<vertex_t*> visited;
     auto v_adj = get_neighbors(v);
     for (auto d : v_adj) {
         auto d_adj = get_neighbors(d);
         for (auto w : d_adj) {
-            if (v_adj.size() != d_adj.size() && !visited.count(w)
-                && std::includes(d_adj.begin(), d_adj.end(), v_adj.begin(), v_adj.end()))
-            {
+            auto w_adj = get_neighbors(w);
+            if (v_adj.size() != w_adj.size() && !visited.count(w) && is_subset_of(w_adj, v_adj)) {
                 pred.push_back(w);
                 visited.insert(w);
             }
@@ -41,7 +41,7 @@ TannerGraph::induce_predecessor(vertex_t* v1, vertex_t* v2) {
     std::vector<vertex_t*> induced_adj;
     std::set_intersection(v1_adj.begin(), v1_adj.end(), v2_adj.begin(), v2_adj.end(),
                             std::back_inserter(induced_adj));
-    if (induced_adj.size() == 0)    return nullptr;
+    if (induced_adj.size() < 2)    return nullptr;
     // If there is any intersection, create a vertex and add it and the edges to the graph.
     auto w = new vertex_t;
     w->qubit_type = vertex_t::GAUGE;

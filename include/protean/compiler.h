@@ -23,13 +23,13 @@ namespace qontra {
 namespace protean {
 
 namespace compiler {
-    typedef std::function<bool(const Processor3D&)> constraint_t;   // Constraint type: outputs
-                                                                    // true if the graph obeys
-                                                                    // the specified constraint.
-    typedef std::function<fp_t(const Processor3D&)> cost_t;         // Returns a float scoring
-                                                                    // the graph. The compiler
-                                                                    // will try and minimize this
-                                                                    // score.
+    typedef std::function<bool(Processor3D&)> constraint_t;   // Constraint type: outputs
+                                                              // true if the graph obeys
+                                                              // the specified constraint.
+    typedef std::function<fp_t(Processor3D&)> cost_t;         // Returns a float scoring
+                                                              // the graph. The compiler
+                                                              // will try and minimize this
+                                                              // score.
 }   // compiler
 
 class Compiler {
@@ -47,10 +47,12 @@ public:
     Compiler(const std::vector<compiler::constraint_t>& con, compiler::cost_t obj)
         :constraints(con), 
         objective(obj),
-        max_induced_check_weight(std::numeric_limits<uint>::max())
+        max_induced_check_weight(std::numeric_limits<uint>::max()),
+        verbosity(0),
+        compile_round(0)
     {}
 
-    result_t    run(const TannerGraph&);
+    result_t    run(const TannerGraph&, bool verbose=true);
 private:
     typedef struct {
         TannerGraph                     curr_spec;
@@ -95,7 +97,13 @@ private:
 
     uint max_induced_check_weight;  // We will not create induced predecessors for checks above
                                     // this weight.
+    uint verbosity;
+
+    uint compile_round;
 };
+
+void    print_connectivity(Processor3D&);
+void    print_schedule(const std::vector<qc::Instruction>&);
 
 }
 }   // qontra

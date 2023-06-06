@@ -51,7 +51,7 @@ public:
         edges(other.edges),
         adjacency_matrix(other.adjacency_matrix),
         adjacency_lists(other.adjacency_lists),
-        id_to_vertex(id_to_vertex)
+        id_to_vertex(other.id_to_vertex)
     {}
     
     virtual ~Graph(void) {}
@@ -197,10 +197,6 @@ using callback_t = std::function<void(V_t*, V_t*)>;    // This callback is
                                                             // from a vertex
                                                             // to its unvisited
                                                             // neighbor
-template <class V_t> void
-safe_call(callback_t<V_t>* cb, V_t* arg1, V_t* arg2) {
-    if (cb != nullptr)  (*cb)(arg1, arg2);
-}
 
 }   // search
 
@@ -208,11 +204,10 @@ safe_call(callback_t<V_t>* cb, V_t* arg1, V_t* arg2) {
 // the same, except for the data structure used to store the vertices:
 // queue vs stack, both of which can be modelled by a deque).
 template <class V_t, class E_t> void
-xfs(Graph<V_t, E_t>* graph, V_t* start, search::callback_t<V_t>* cb, bool dfs) {
+xfs(Graph<V_t, E_t>* graph, V_t* start, search::callback_t<V_t> cb, bool dfs) {
     std::deque<V_t*> dq;
     std::set<V_t*> visited;
     dq.push_back(start);
-    visited.insert(start);
 
     while (dq.size()) {
         V_t* v;
@@ -226,10 +221,10 @@ xfs(Graph<V_t, E_t>* graph, V_t* start, search::callback_t<V_t>* cb, bool dfs) {
 
         for (auto w : graph->get_neighbors(v)) {
             if (visited.count(w))   continue;
-            search::safe_call(cb, v, w);
+            cb(v, w);
             dq.push_back(w);
-            visited.insert(w);
         }
+        visited.insert(v);
     }
 }
 

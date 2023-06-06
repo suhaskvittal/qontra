@@ -58,11 +58,12 @@ public:
     {}
 
     bool add_vertex(tanner::vertex_t* v) override {
+        if (!Graph::add_vertex(v))  return false;
         if (v->qubit_type == tanner::vertex_t::DATA)     data_qubits.push_back(v);
         if (v->qubit_type == tanner::vertex_t::GAUGE)    gauge_qubits.push_back(v);
         if (v->qubit_type == tanner::vertex_t::XPARITY)  x_parity_checks.push_back(v);
         if (v->qubit_type == tanner::vertex_t::ZPARITY)  z_parity_checks.push_back(v);
-        return Graph::add_vertex(v);
+        return true;
     }
 
     bool add_edge(tanner::edge_t* e, bool is_undirected=true) override {
@@ -104,7 +105,7 @@ public:
     
     std::vector<tanner::vertex_t*>  get_vertices_by_type(uint8_t t) {
         const std::vector<tanner::vertex_t*> arr[] = 
-                { data_qubits, gauge_qubits, z_parity_checks, x_parity_checks };
+                { data_qubits, gauge_qubits, x_parity_checks, z_parity_checks };
         return arr[t];
     }
 private:
@@ -114,7 +115,7 @@ private:
     std::vector<tanner::vertex_t*>  z_parity_checks;
 
     uint induced_gauge_index;
-    const uint INDUCED_GAUGE_INDEX_FLAG = 1 << 24;
+    const static uint INDUCED_GAUGE_INDEX_FLAG = 1 << 24;
 };
 
 
