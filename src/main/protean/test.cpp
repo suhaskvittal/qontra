@@ -21,8 +21,7 @@ using namespace graph;
 using namespace protean;
 
 int main(int argc, char* argv[]) {
-//  const std::string fname = "../graphs/tanner/666_color_code_d3.txt";
-    const std::string fname = "../graphs/tanner/rotated_surface_code_d3.txt";
+    const std::string fname(argv[1]);
 
     std::ifstream fin(fname);
     io::callback_t<TannerGraph> cb = [] (TannerGraph& g, std::string ln) {
@@ -51,20 +50,20 @@ int main(int argc, char* argv[]) {
     compiler::cost_t cf = [] (Processor3D& proc)
     {
         // Minimize overall connectivity.
-        fp_t connectivity = 2 * ((fp_t)proc.get_edges().size()) / ((fp_t)proc.get_vertices().size());
-        fp_t size_score = 0.05 * ((fp_t)proc.get_vertices().size());
+        fp_t connectivity = proc.get_connectivity();
+        fp_t size_score = 0.1 * ((fp_t)proc.get_vertices().size());
         return connectivity + size_score;
     };
 
     std::vector<compiler::constraint_t> con;    // None for now.
     Compiler compiler(con, cf);
     
-    Compiler::result_t res = compiler.run(graph);
+    Compiler::ir_t res = compiler.run(graph);
 
     // Check what the final result is like:
     std::cout << "Number of qubits = " << res.arch.get_vertices().size() << "\n";
     std::cout << "Thickness = " << res.arch.get_thickness() << "\n";
-    std::cout << "Connectivity = " << cf(res.arch) << "\n";
+    std::cout << "Connectivity = " << res.arch.get_connectivity() << "\n";
 
     std::cout << "Connections:\n";
     for (auto v : res.arch.get_vertices()) {
@@ -74,6 +73,10 @@ int main(int argc, char* argv[]) {
             if (w->is_tsv_junction())   std::cout << "(V)";
         }
         std::cout << "\n";
+    }
+    std::cout << "Mapping:\n";
+    for (auto pair : res.role_to_qubit) {
+        std::cout << "\t" << PRINT_V(pair.first->id) << " --> " << PRINT_V(pair.second->id) << "\n";
     }
 
     return 0;

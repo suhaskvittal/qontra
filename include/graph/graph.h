@@ -175,6 +175,8 @@ public:
     std::vector<E_t*>   get_edges(void) { return edges; }
     std::vector<V_t*>   get_neighbors(V_t* v) { return adjacency_lists[v]; }
     uint                get_degree(V_t* v) { return get_neighbors(v).size(); }
+    fp_t                get_connectivity(void)
+                            { return 2 * ((fp_t)edges.size()) / ((fp_t)vertices.size()); }
 protected:
     std::vector<V_t*>   vertices;
     std::vector<E_t*>   edges;

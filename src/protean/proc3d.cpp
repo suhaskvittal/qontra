@@ -38,8 +38,8 @@ Processor3D::add_edge(proc3d::edge_t* e, bool is_undirected) {
         } else {
             layer = *(open_layers.begin());
             chip = processor_layers[layer];
+            layer++;    // layer is currently the index into processor_layers
         }
-        layer++;    // layer is currently the index into processor_layers
         // Create TSVs and edges.
         proc3d::vertex_t* junc1 = new proc3d::vertex_t;
         proc3d::vertex_t* junc2 = new proc3d::vertex_t;

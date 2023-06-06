@@ -1,5 +1,4 @@
-/* author: Suhas Vittal
- *  date:   31 May 2023
+/* author: Suhas Vittal date:   31 May 2023
  * */
 
 #include "protean/compiler.h"
@@ -9,16 +8,17 @@ namespace protean {
 
 #define PRINT_V(id)  (id >> 30) << "|" << ((id >> 24) & 0x3f) << "|" << (id & 0x00ff'ffff)
 
-Compiler::result_t
+Compiler::ir_t
 Compiler::run(const TannerGraph& tanner_graph, bool verbose) {
     // Set state variables to initial values.
     verbosity = verbose;
+
     compile_round = 0;
     called_sparsen = false;
 
     uint rounds_without_progress = 0;
 
-    result_t best_result;
+    ir_t best_result;
     ir_t ir;
     ir.curr_spec = TannerGraph(tanner_graph);
 
@@ -30,6 +30,7 @@ __place:
     if (verbosity) {
         std::cout << "\tcost = " << objective(ir.arch) << "\n";
         std::cout << "\tnumber of qubits = " << ir.arch.get_vertices().size() << "\n";
+        std::cout << "\tconnectivity = " << ir.arch.get_connectivity() << "\n";
 //      print_connectivity(ir.arch);
         std::cout << "[ merge ] ---------------------\n";
     }
@@ -38,6 +39,7 @@ __reduce:
     if (verbosity) {
         std::cout << "\tcost = " << objective(ir.arch) << "\n";
         std::cout << "\tnumber of qubits = " << ir.arch.get_vertices().size() << "\n";
+        std::cout << "\tconnectivity = " << ir.arch.get_connectivity() << "\n";
 //      print_connectivity(ir.arch);
         std::cout << "[ reduce ] ---------------------\n";
     }
@@ -45,6 +47,7 @@ __reduce:
     if (verbosity) {
         std::cout << "\tcost = " << objective(ir.arch) << "\n";
         std::cout << "\tnumber of qubits = " << ir.arch.get_vertices().size() << "\n";
+        std::cout << "\tconnectivity = " << ir.arch.get_connectivity() << "\n";
 //      print_connectivity(ir.arch);
 
         std::cout << "[ schedule ] ---------------------\n";
@@ -62,10 +65,7 @@ __reduce:
     }
     // Update result.
     if (!best_result.valid || (ir.valid && ir.score < best_result.score)) {
-        best_result.score = ir.score;
-        best_result.valid = ir.valid;
-        best_result.arch = ir.arch;
-        best_result.schedule = ir.schedule;
+        best_result = ir;
     } else if (ir.score == best_result.score) {
         if ((++rounds_without_progress) == 2) return best_result;
     } else if (ir.score > best_result.score) {
@@ -240,14 +240,22 @@ Compiler::reduce(ir_t& curr_ir) {
         //
         // Also check if this qubit is only connected to data qubits. If it is a
         // gauge qubit, then remove it.
+        uint victim_degree = std::numeric_limits<uint>::max();
         proc3d::vertex_t* victim = nullptr;
+        bool victim_is_gauge = false;
         bool any_nondata_neighbors = false;
         for (auto pw : pv_adj) {
             auto tw = tanner_graph.get_vertex(pw->id);
             if (tw->qubit_type != tanner::vertex_t::DATA) {
-                victim = pw;
+                uint deg = arch.get_degree(pw);
+                if (deg < victim_degree 
+                    && !(victim_is_gauge && !curr_ir.is_gauge_only.count(pw))) 
+                {
+                    victim = pw;
+                    victim_degree = deg;
+                    victim_is_gauge = curr_ir.is_gauge_only.count(pw);
+                }
                 any_nondata_neighbors = true;
-                if (curr_ir.is_gauge_only.count(pw))    break;
             }
         }
         if (!any_nondata_neighbors) {
@@ -300,7 +308,7 @@ Compiler::merge(ir_t& curr_ir) {
     std::map<uint, std::vector<tanner::vertex_t*>> weight_to_checks;
     for (auto tv : tanner_graph.get_vertices()) {
         if (tv->qubit_type != tanner::vertex_t::XPARITY
-            || tv->qubit_type != tanner::vertex_t::ZPARITY) continue;
+            && tv->qubit_type != tanner::vertex_t::ZPARITY) continue;
         uint w = tanner_graph.get_degree(tv);
         if (!weight_to_checks.count(w)) weight_to_checks[w] = std::vector<tanner::vertex_t*>();
         weight_to_checks[w].push_back(tv);
@@ -319,21 +327,29 @@ Compiler::merge(ir_t& curr_ir) {
                 if (already_removed.count(tw))  continue;
 
                 auto tw_adj = tanner_graph.get_neighbors(tw);
-                if (tv_adj == tw_adj) {
+                std::vector<tanner::vertex_t*> intersect_adj;
+                std::set_symmetric_difference(tv_adj.begin(), tv_adj.end(),
+                                    tw_adj.begin(), tw_adj.end(),
+                                    std::back_inserter(intersect_adj));
+                if (intersect_adj.empty()) {
                     // Delete the second check and merge the roles.
+                    std::cout << "is enrolled: " 
+                            << curr_ir.role_to_qubit.count(tv)
+                            << curr_ir.role_to_qubit.count(tw) << "\n";
                     auto pv = curr_ir.role_to_qubit[tv];
                     auto pw = curr_ir.role_to_qubit[tw];
-                    auto& roles_of_owner = curr_ir.qubit_to_roles[pw];
-                    for (auto it = roles_of_owner.begin(); it != roles_of_owner.end(); ) {
-                        if (*it == tw)  it = roles_of_owner.erase(it);
-                        else {
-                            curr_ir.qubit_to_roles[pv].push_back(*it);
-                        }
+                    if (verbosity) {
+                        std::cout << "\tMerging " << PRINT_V(pw->id) << " with "
+                                << PRINT_V(pv->id) << "\n";
+                    }
+                    curr_ir.role_to_qubit[tw] = pv;
+                    
+                    for (auto tu : curr_ir.qubit_to_roles[pw]) {
+                        curr_ir.qubit_to_roles[pv].push_back(tu);
                     }
                     curr_ir.arch.delete_vertex(pw);
                     curr_ir.qubit_to_roles.erase(pw);
-                    curr_ir.role_to_qubit[tw] = curr_ir.role_to_qubit[tv];
-                    
+
                     already_removed.insert(tw);
                 }
             }

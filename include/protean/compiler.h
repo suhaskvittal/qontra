@@ -37,23 +37,6 @@ public:
     typedef struct {
     } params_t;
 
-    typedef struct { 
-        fp_t                            score; 
-        bool                            valid; 
-        Processor3D                     arch;
-        std::vector<qc::Instruction>    schedule;
-    } result_t;
-
-    Compiler(const std::vector<compiler::constraint_t>& con, compiler::cost_t obj)
-        :constraints(con), 
-        objective(obj),
-        max_induced_check_weight(std::numeric_limits<uint>::max()),
-        verbosity(0),
-        compile_round(0)
-    {}
-
-    result_t    run(const TannerGraph&, bool verbose=true);
-private:
     typedef struct {
         TannerGraph                     curr_spec;
         Processor3D                     arch;
@@ -72,6 +55,16 @@ private:
                                                     // operations like reduce.
     } ir_t;
 
+    Compiler(const std::vector<compiler::constraint_t>& con, compiler::cost_t obj)
+        :constraints(con), 
+        objective(obj),
+        max_induced_check_weight(std::numeric_limits<uint>::max()),
+        verbosity(0),
+        compile_round(0)
+    {}
+
+    ir_t    run(const TannerGraph&, bool verbose=true);
+private:
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
     //  (2) Merge       -- merges parity checks that act on the same qubits (i.e. color code)
