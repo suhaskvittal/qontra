@@ -108,7 +108,7 @@ public:
                                                                 // graph. This function fails
                                                                 // if either arg precedes the
                                                                 // other.
-
+    bool                    has_copy_in_gauges(const std::vector<tanner::vertex_t*>& adj);
     
     std::vector<tanner::vertex_t*>  get_vertices_by_type(uint8_t t) {
         const std::vector<tanner::vertex_t*> arr[] = 

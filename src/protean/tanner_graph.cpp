@@ -35,9 +35,6 @@ TannerGraph::induce_predecessor(vertex_t* v1, vertex_t* v2) {
     auto v1_adj = get_neighbors(v1);
     auto v2_adj = get_neighbors(v2);
 
-    std::sort(v1_adj.begin(), v1_adj.end());
-    std::sort(v2_adj.begin(), v2_adj.end());
-
     bool either_precedes = is_subset_of(v1_adj, v2_adj) || is_subset_of(v2_adj, v1_adj); 
     if (either_precedes) return nullptr;
 
@@ -45,6 +42,8 @@ TannerGraph::induce_predecessor(vertex_t* v1, vertex_t* v2) {
     std::set_intersection(v1_adj.begin(), v1_adj.end(), v2_adj.begin(), v2_adj.end(),
                             std::back_inserter(induced_adj));
     if (induced_adj.size() < 2)    return nullptr;
+    // Also make sure no other gauge qubits have the same induced adj.
+    if (has_copy_in_gauges(induced_adj))    return nullptr;
     // If there is any intersection, create a vertex and add it and the edges to the graph.
     auto w = new vertex_t;
     w->qubit_type = vertex_t::GAUGE;
@@ -58,6 +57,19 @@ TannerGraph::induce_predecessor(vertex_t* v1, vertex_t* v2) {
     }
 
     return w;
+}
+
+bool
+TannerGraph::has_copy_in_gauges(const std::vector<vertex_t*>& adj) {
+    for (auto g : gauge_qubits) {
+        std::vector<vertex_t*> diff;
+        auto g_adj = get_neighbors(g);
+        std::set_symmetric_difference(g_adj.begin(), g_adj.end(),
+                                adj.begin(), adj.end(),
+                                std::back_inserter(diff));
+        if (diff.empty())   return true;
+    }
+    return false;
 }
 
 }   // protean

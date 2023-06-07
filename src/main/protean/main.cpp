@@ -4,8 +4,8 @@
  * */
 
 #include "defs.h"
-
 #include "graph/io.h"
+#include "parsing/cmd.h"
 #include "protean/compiler.h"
 #include "protean/proc3d.h"
 #include "protean/tanner_graph.h"
@@ -21,9 +21,23 @@ using namespace graph;
 using namespace protean;
 
 int main(int argc, char* argv[]) {
-    const std::string fname(argv[1]);
+    CmdParser parser(argc, argv);
 
-    std::ifstream fin(fname);
+    std::string help = "Arguments list:\n";
+    help += "\tInput tanner graph file (--input)\n";
+    help += "\tOutput folder (--output)\n";
+    help += "\tVerbose (-v)\n";
+
+    std::string file_in;
+    std::string folder_out;
+
+    parser.get_string("input", file_in);
+    parser.get_string("output", folder_out);
+
+    bool verbose = parser.option_set("v");
+
+    // Read the input file.
+    std::ifstream fin(file_in);
     io::callback_t<TannerGraph> cb = [] (TannerGraph& g, std::string ln) {
         io::update_tanner_graph(g, ln);
     };
@@ -32,7 +46,7 @@ int main(int argc, char* argv[]) {
     // Print out adjacency list for each parity qubit.
     std::cout << "Z checks:\n";
     for (auto v : graph.get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
-        std::cout << "Z" << (v->id & 0x3fff'ffff) << " =";
+        std::cout << "\tZ" << (v->id & 0x3fff'ffff) << " =";
         for (auto w : graph.get_neighbors(v)) {
             std::cout << " D" << w->id;
         }
@@ -40,13 +54,13 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "X checks:\n";
     for (auto v : graph.get_vertices_by_type(tanner::vertex_t::XPARITY)) {
-        std::cout << "X" << (v->id & 0x3fff'ffff) << " =";
+        std::cout << "\tX" << (v->id & 0x3fff'ffff) << " =";
         for (auto w : graph.get_neighbors(v)) {
             std::cout << " D" << w->id;
         }
         std::cout << "\n";
     }
-    // Test out the compiler here with a simple cost function.
+    // Define the cost function here.
     compiler::cost_t cf = [] (Processor3D& proc)
     {
         // Minimize overall connectivity.
@@ -54,7 +68,7 @@ int main(int argc, char* argv[]) {
         fp_t size_score = 0.05 * ((fp_t)proc.get_vertices().size());
         return connectivity + size_score;
     };
-
+    // Define any constraints here.
     std::vector<compiler::constraint_t> con;
     compiler::constraint_t con_degree = [] (Processor3D& proc)
     {
@@ -66,29 +80,16 @@ int main(int argc, char* argv[]) {
         return max_degree <= 4;
     };
     con.push_back(con_degree);
-    Compiler compiler(con, cf);
-    
-    Compiler::ir_t res = compiler.run(graph);
 
-    // Check what the final result is like:
+    // Declare compiler and run it.
+    Compiler compiler(con, cf);
+    Compiler::ir_t res = compiler.run(graph);
+    // Print out some simple stats and write to the output folder.
     std::cout << "Number of qubits = " << res.arch.get_vertices().size() << "\n";
-    std::cout << "Thickness = " << res.arch.get_thickness() << "\n";
     std::cout << "Connectivity = " << res.arch.get_connectivity() << "\n";
     std::cout << "Number of ops = " << res.schedule.size() << "\n";
 
-    std::cout << "Connections:\n";
-    for (auto v : res.arch.get_vertices()) {
-        std::cout << "\tQubit " << PRINT_V(v->id) << ":\t";
-        for (auto w : res.arch.get_neighbors(v)) {
-            std::cout << " " << PRINT_V(w->id);
-            if (w->is_tsv_junction())   std::cout << "(V)";
-        }
-        std::cout << "\n";
-    }
-    std::cout << "Mapping:\n";
-    for (auto pair : res.role_to_qubit) {
-        std::cout << "\t" << PRINT_V(pair.first->id) << " --> " << PRINT_V(pair.second->id) << "\n";
-    }
+    write_ir_to_folder(res, folder_out);
 
     return 0;
 }

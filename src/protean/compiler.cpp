@@ -13,7 +13,6 @@ Compiler::run(const TannerGraph& tanner_graph, bool verbose) {
     verbosity = verbose;
 
     compile_round = 0;
-    called_sparsen = false;
 
     uint rounds_without_progress = 0;
 
@@ -61,14 +60,19 @@ __reduce:
     score(ir);
     if (verbosity) {
         std::cout << "\tcost = " << ir.score << ", valid = " << ir.valid << "\n";
+        std::cout << "\trounds without progress = " << rounds_without_progress << "\n";
     }
     // Update result.
     if (!best_result.valid || (ir.valid && ir.score < best_result.score)) {
         best_result = ir;
-    } else if (ir.score == best_result.score || !ir.valid) {
-        if ((++rounds_without_progress) == 2) return best_result;
+    } else if (ir.score == best_result.score) {
+        if (rounds_without_progress >= 2) return best_result;
     } else if (ir.score > best_result.score) {
         return best_result;
+    }
+    if (!ir.valid) {
+        rounds_without_progress++;
+        if (rounds_without_progress >= 10) return best_result;
     }
     // Reset ir (except Tanner graph).
     auto prev_ir = ir;
@@ -83,12 +87,11 @@ __reduce:
     ir.is_gauge_only.clear();
     // Perform transformations on Tanner graph.
     compile_round++;
-    if (verbosity)                      std::cout << "[ induce ] ---------------------\n";
-    if (induce(ir))                     goto __place;
+    if (verbosity)      std::cout << "[ induce ] ---------------------\n";
+    if (induce(ir))     goto __place;
 
-    if (verbosity)                      std::cout << "[ sparsen ] ---------------------\n";
-    if (!called_sparsen && sparsen(ir)) goto __place;
-
+    if (verbosity)      std::cout << "[ sparsen ] ---------------------\n";
+    if (sparsen(ir))    goto __place;
     // If we cannot induce or sparsen to modify the tanner graph, revert back
     // to the previous IR and try to modify connections there.
     ir = prev_ir;
@@ -601,8 +604,6 @@ Compiler::induce(ir_t& curr_ir) {
 
 bool
 Compiler::sparsen(ir_t& curr_ir) {
-    static uint TANNER_GAUGE_INDEX = 0;
-
     TannerGraph& tanner_graph = curr_ir.curr_spec;
     auto vertices = tanner_graph.get_vertices();
 
@@ -615,9 +616,12 @@ Compiler::sparsen(ir_t& curr_ir) {
             // result in reduction in the "reduce" pass).
             auto tx = tv_adj[i-1];
             auto ty = tv_adj[i];
+            std::vector<tanner::vertex_t*> tg_adj{tx, ty};
+            if (tanner_graph.has_copy_in_gauges(tg_adj)) continue;
             // Create a new gauge qubit.
             tanner::vertex_t* tg = new tanner::vertex_t;
-            tg->id = (TANNER_GAUGE_INDEX++) | (tanner::vertex_t::GAUGE << 30);
+            uint index = tanner_graph.get_vertices_by_type(tanner::vertex_t::GAUGE).size();
+            tg->id = (index) | (tanner::vertex_t::GAUGE << 30);
             tg->qubit_type = tanner::vertex_t::GAUGE;
             tanner_graph.add_vertex(tg);
             // Add corresponding edges.
@@ -630,21 +634,14 @@ Compiler::sparsen(ir_t& curr_ir) {
             ty_tg->src = (void*)ty;
             ty_tg->dst = (void*)tg;
             tanner_graph.add_edge(ty_tg);
-
-            tanner::edge_t* tg_tv = new tanner::edge_t;
-            tg_tv->src = (void*)tg;
-            tg_tv->dst = (void*)tv;
             
             std::cout << "\t( " << PRINT_V(tv->id) << " ) Added new gauge between " 
                             << PRINT_V(tx->id) << " and "
                             << PRINT_V(ty->id) << "\n";
 
-            tanner_graph.add_edge(tg_tv);
-
             any_change = true;
         }
     }
-    called_sparsen = true;
     return any_change;
 }
 
@@ -721,6 +718,96 @@ print_schedule(const std::vector<qc::Instruction>& sched) {
         }
         std::cout << "\n";
     }
+}
+
+void
+write_ir_to_folder(Compiler::ir_t& ir, std::string folder_name) {
+    std::filesystem::path folder(folder_name);
+    safe_create_directory(folder);
+    std::filesystem::path arch_folder = folder/"arch";
+    safe_create_directory(arch_folder);
+    // Write spec.txt
+    std::filesystem::path spec = folder/"spec.txt";
+    std::ofstream spec_out(spec);
+
+    TannerGraph& tanner_graph = ir.curr_spec;
+    for (auto tv : tanner_graph.get_vertices()) {
+        if (tv->qubit_type == tanner::vertex_t::DATA)   continue;
+        spec_out << "GXZ"[tv->qubit_type-1] << (tv->id & 0x00ff'ffff);
+        for (auto tw : tanner_graph.get_neighbors(tv)) {
+            spec_out << "," << tw->id;
+        }
+        spec_out << "\n";
+    }
+    // Write arch/coupling files.
+    std::filesystem::path flat_map = arch_folder/"flat_map.txt";
+    std::filesystem::path d3d_map = arch_folder/"3d_map.txt";
+
+    std::ofstream flat_map_out(flat_map);
+    std::ofstream d3d_map_out(d3d_map);
+    
+    Processor3D& arch = ir.arch;
+    // First, organize the qubits into more appropriate ids.
+    std::map<uint, uint> id_to_num;
+    uint k = 0;
+    for (auto v : arch.get_vertices())  id_to_num[v->id] = k++;
+    // Now, write the architecture.
+    for (auto e : arch.get_edges()) {
+        auto pv = (proc3d::vertex_t*)e->src;
+        auto pw = (proc3d::vertex_t*)e->dst;
+        // Flat map is pretty straightforward.
+        flat_map_out << id_to_num[pv->id] << "," << id_to_num[pw->id] << "\n";
+        // Check if the connection is complex.
+        auto impl = arch.get_physical_edges(pv, pw);
+        d3d_map_out << id_to_num[pv->id];
+        for (auto f : impl) {
+            auto py = (proc3d::vertex_t*)f->dst;
+            d3d_map_out << "," << py->id;
+        }
+        d3d_map_out << "," << id_to_num[pw->id] << "\n";
+    }
+    // Write Tanner vertex to physical qubit mapping.
+    std::filesystem::path labels = folder/"labels.txt";
+    std::ofstream label_out(labels);
+
+    auto& role_to_qubit = ir.role_to_qubit;
+    for (auto pair : role_to_qubit) {
+        auto tv = pair.first;
+        auto pv = pair.second;
+        label_out << "DGXZ"[tv->qubit_type];
+        label_out << (tv->id & 0x00ff'ffff) << "," << id_to_num[pv->id] << "\n";
+    }
+    // Write schedule of operations
+    std::filesystem::path sched = folder/"schedule.qasm";
+    std::ofstream sched_out(sched);
+
+    uint cbit = 0;
+    std::string sched_str;
+    for (auto inst : ir.schedule) {
+        if (inst.name == "Mrc") {
+            sched_str += "measure q[" + std::to_string(id_to_num[inst.operands[0]]) 
+                + "] -> c[" + std::to_string(cbit++) + "];\n";
+        } else {
+            std::string opname;
+            if (inst.name == "R")   opname = "reset";
+            else {
+                for (auto x : inst.name)    opname.push_back(std::tolower(x));
+            }
+            uint ops_per_call = opname == "cx" ? 2 : 1;
+            for (uint i = 0; i < inst.operands.size(); i += ops_per_call) {
+                sched_str += opname + " q[" + std::to_string(id_to_num[inst.operands[i]]) + "]";
+                if (ops_per_call == 2) {
+                    sched_str += ",q[" + std::to_string(id_to_num[inst.operands[i+1]]) + "]";
+                }
+                sched_str += ";\n";
+            }
+        }
+    }
+    sched_out << "OPENQASM 2.0;\n"
+                << "include \"qelib1.inc\";\n"
+                << "qreg q[" << arch.get_vertices().size() << "];\n"
+                << "creg c[" << cbit << "];\n"
+                << sched_str;
 }
 
 }   // protean

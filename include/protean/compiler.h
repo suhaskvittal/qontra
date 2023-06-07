@@ -15,7 +15,9 @@
 #include <lemon/matching.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <functional>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -79,7 +81,7 @@ private:
     //      (7) Sparsen -- if a gauge/parity qubit has too many connections, then split them
     //                      into groups of 2 by using intermediate gauge qubits. 
     //  If Sparsen fails:
-    //      (8) Linearize -- linearize data connections in the exist architecture. Jump to (2).
+    //      (8) Linearize -- linearize data connections in the exist architecture. Jump to (3).
     //
     //  We repeat the following until we exit at (4). We assume that the optimization space is
     //  "smooth", so modifications do not chaotically affect the score.
@@ -106,7 +108,16 @@ private:
 void    print_connectivity(Processor3D&);
 void    print_schedule(const std::vector<qc::Instruction>&);
 
-}
+// write_ir_to_folder dumps an IR to a folder into the following files:
+//  (1) spec.txt    (TannerGraph)
+//  (2) arch/
+//      (a) flat_map.txt    (Processor3D, connections without verticality, not necessarily planar)
+//      (b) 3d_map.txt      (Processor3D, connections with verticality, k-planar)
+//  (3) labels.txt  (role_to_qubit)
+//  (4) schedule.qasm (schedule)
+void    write_ir_to_folder(Compiler::ir_t&, std::string);
+
+}   // protean
 }   // qontra
 
 #endif  // PROTEAN_COMPILER_h
