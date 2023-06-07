@@ -51,11 +51,21 @@ int main(int argc, char* argv[]) {
     {
         // Minimize overall connectivity.
         fp_t connectivity = proc.get_connectivity();
-        fp_t size_score = 0.1 * ((fp_t)proc.get_vertices().size());
+        fp_t size_score = 0.05 * ((fp_t)proc.get_vertices().size());
         return connectivity + size_score;
     };
 
-    std::vector<compiler::constraint_t> con;    // None for now.
+    std::vector<compiler::constraint_t> con;
+    compiler::constraint_t con_degree = [] (Processor3D& proc)
+    {
+        uint max_degree = 0;
+        for (auto v : proc.get_vertices()) {
+            uint deg = proc.get_degree(v);
+            if (deg > max_degree)   max_degree = deg;
+        }
+        return max_degree <= 4;
+    };
+    con.push_back(con_degree);
     Compiler compiler(con, cf);
     
     Compiler::ir_t res = compiler.run(graph);
@@ -64,6 +74,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Number of qubits = " << res.arch.get_vertices().size() << "\n";
     std::cout << "Thickness = " << res.arch.get_thickness() << "\n";
     std::cout << "Connectivity = " << res.arch.get_connectivity() << "\n";
+    std::cout << "Number of ops = " << res.schedule.size() << "\n";
 
     std::cout << "Connections:\n";
     for (auto v : res.arch.get_vertices()) {

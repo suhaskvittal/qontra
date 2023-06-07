@@ -1,5 +1,4 @@
-/* author: Suhas Vittal date:   31 May 2023
- * */
+/* author: Suhas Vittal date:   31 May 2023 */
 
 #include "protean/compiler.h"
 
@@ -66,7 +65,7 @@ __reduce:
     // Update result.
     if (!best_result.valid || (ir.valid && ir.score < best_result.score)) {
         best_result = ir;
-    } else if (ir.score == best_result.score) {
+    } else if (ir.score == best_result.score || !ir.valid) {
         if ((++rounds_without_progress) == 2) return best_result;
     } else if (ir.score > best_result.score) {
         return best_result;
@@ -218,6 +217,13 @@ Compiler::reduce(ir_t& curr_ir) {
     // zero-degree qubits (these are obviously gauge qubits).
     TannerGraph& tanner_graph = curr_ir.curr_spec;
     Processor3D& arch = curr_ir.arch;
+    // Solve this as a maximum matching problem.
+    using namespace lemon;
+    ListGraph matching_graph;
+    ListGraph::EdgeMap<int> graph_weights(matching_graph);
+
+    std::map<proc3d::vertex_t*, ListGraph::Node> proc2lemon;
+    std::map<ListGraph::Node, proc3d::vertex_t*> lemon2proc;
 
     for (auto pv : arch.get_vertices()) {
         if (!curr_ir.qubit_to_roles.count(pv))    continue;   // This is a data qubit.
@@ -246,60 +252,102 @@ Compiler::reduce(ir_t& curr_ir) {
         bool any_nondata_neighbors = false;
         for (auto pw : pv_adj) {
             auto tw = tanner_graph.get_vertex(pw->id);
-            if (tw->qubit_type != tanner::vertex_t::DATA) {
-                uint deg = arch.get_degree(pw);
-                if (deg < victim_degree 
-                    && !(victim_is_gauge && !curr_ir.is_gauge_only.count(pw))) 
-                {
-                    victim = pw;
-                    victim_degree = deg;
-                    victim_is_gauge = curr_ir.is_gauge_only.count(pw);
-                }
-                any_nondata_neighbors = true;
-            }
+            if (tw->qubit_type != tanner::vertex_t::DATA)   any_nondata_neighbors = true;
         }
         if (!any_nondata_neighbors) {
             if (!curr_ir.is_gauge_only.count(pv))   goto reduce_do_not_remove_nondata;
             // Otherwise delete the qubit.
-            arch.delete_vertex(pv);
+            if (verbosity) {
+                std::cout << "\tDeleting qubit " << PRINT_V(pv->id) << "\n";
+            }
             for (auto tv : curr_ir.qubit_to_roles[pv]) {
                 curr_ir.role_to_qubit.erase(tv);
             }
             curr_ir.qubit_to_roles.erase(pv);
             curr_ir.is_gauge_only.erase(pv);
+            arch.delete_vertex(pv);
             continue;
         }
 reduce_do_not_remove_nondata:
-        if (victim == nullptr)  continue;
-        if (verbosity) {
-            std::cout << "\tReduced vertex " << PRINT_V(pv->id) 
-                    << " to " << PRINT_V(victim->id) << "\n";
+        // Create node for pv.
+        ListGraph::Node pv_node;
+        if (!proc2lemon.count(pv)) {
+            pv_node = matching_graph.addNode();
+            proc2lemon[pv] = pv_node;
+            lemon2proc[pv_node] = pv;
+        } else {
+            pv_node = proc2lemon[pv];
         }
-        for (auto tv : curr_ir.qubit_to_roles[pv]) {
-            curr_ir.qubit_to_roles[victim].push_back(tv);
-            curr_ir.role_to_qubit[tv] = victim;
-        }
-        // Delete pv and connect its neighbors to the victim.
-        std::vector<proc3d::edge_t*> new_edges; // We're temporarily storing the new edges in a
-                                                // std::vector because adding edges will cause
-                                                // planarity checks. To not do these prematurely,
-                                                // we will allocate the edges and add them after
-                                                // deleting pv.
+
         for (auto pw : pv_adj) {
-            if (pw == victim)   continue;
-            auto e1 = arch.get_edge(pv, pw);
-            auto e2 = new proc3d::edge_t;
-            e2->src = (void*)victim;
-            e2->dst = (void*)pw;
-            new_edges.push_back(e2);
+            auto tw = tanner_graph.get_vertex(pw->id);
+            if (tw->qubit_type == tanner::vertex_t::DATA)   continue;
+            uint pw_deg = arch.get_degree(pw);
+            if (pw_deg <= 2)    continue;
+            ListGraph::Node pw_node;
+            if (!proc2lemon.count(pw)) {
+                pw_node = matching_graph.addNode();
+                proc2lemon[pw] = pw_node;
+                lemon2proc[pw_node] = pw;
+            } else {
+                pw_node = proc2lemon[pw];
+            }
+            auto e = matching_graph.addEdge(pv_node, pw_node);
+            // Prioritize matching to gauge qubits.
+            graph_weights[e] = curr_ir.is_gauge_only.count(pw) ? 1 : 1;
         }
-        arch.delete_vertex(pv);
-        curr_ir.qubit_to_roles.erase(pv);
-        for (auto e : new_edges) {
-            arch.add_edge(e);
-        }
-        curr_ir.is_gauge_only.erase(victim);
     }
+    // Now that we have the matching structure completed, solve for the maximum matching.
+    MaxWeightedMatching matching(matching_graph, graph_weights);
+    matching.run();
+    std::set<proc3d::vertex_t*> visited;
+    std::set<proc3d::vertex_t*> deallocated;
+    std::vector<proc3d::edge_t*> new_edges; // We're temporarily storing the new edges in a
+                                            // std::vector because adding edges will cause
+                                            // planarity checks. To not do these prematurely,
+                                            // we will allocate the edges and add them after
+                                            // deleting pv.
+    for (auto pair : proc2lemon) {
+        auto pv = pair.first;
+        auto pv_node = pair.second;
+        auto pw_node = matching.mate(pv_node);
+        auto pw = lemon2proc[pw_node];
+
+        if (pw == nullptr || pv == nullptr)  continue;
+        if (visited.count(pv) || visited.count(pw)) continue;
+        
+        uint deg_pv = arch.get_degree(pv);
+        if (deg_pv > 2) {
+            // Swap pv and pw
+            auto tmp = pv;
+            pv = pw; pw = tmp;
+        }
+        // Delete pv and connect its neighbors to pw.
+        auto pv_adj = arch.get_neighbors(pv);
+        for (auto pu : pv_adj) {
+            if (pu == pw)   continue;
+            auto e = new proc3d::edge_t;
+            e->src = (void*)pw;
+            e->dst = (void*)pu;
+            new_edges.push_back(e);
+        }
+        curr_ir.is_gauge_only.erase(pw);
+        for (auto tv : curr_ir.qubit_to_roles[pv]) {
+            curr_ir.role_to_qubit[tv] = pw;
+            curr_ir.qubit_to_roles[pw].push_back(tv);
+        }
+        curr_ir.qubit_to_roles.erase(pv);
+
+        if (verbosity) {
+            std::cout << "\tReducing " << PRINT_V(pv->id) << " to " << PRINT_V(pw->id) << "\n";
+        }
+        
+        visited.insert(pv);
+        visited.insert(pw);
+        deallocated.insert(pv);
+    }
+    for (auto pv : deallocated) arch.delete_vertex(pv);
+    for (auto e : new_edges)    arch.add_edge(e);
 }
 
 void
@@ -333,9 +381,6 @@ Compiler::merge(ir_t& curr_ir) {
                                     std::back_inserter(intersect_adj));
                 if (intersect_adj.empty()) {
                     // Delete the second check and merge the roles.
-                    std::cout << "is enrolled: " 
-                            << curr_ir.role_to_qubit.count(tv)
-                            << curr_ir.role_to_qubit.count(tw) << "\n";
                     auto pv = curr_ir.role_to_qubit[tv];
                     auto pw = curr_ir.role_to_qubit[tw];
                     if (verbosity) {

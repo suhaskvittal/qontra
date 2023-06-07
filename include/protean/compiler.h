@@ -11,6 +11,9 @@
 #include "protean/proc3d.h"
 #include "protean/tanner_graph.h"
 
+#include <lemon/list_graph.h>
+#include <lemon/matching.h>
+
 #include <algorithm>
 #include <functional>
 #include <iostream>
