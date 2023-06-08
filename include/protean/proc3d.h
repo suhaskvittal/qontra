@@ -54,6 +54,7 @@ public:
         vertex_to_tsv_junctions(),
         coupling_to_edges()
     {}
+
     Processor3D(const Processor3D& other)
         :__Processor3DParent(other),
         main_processor(other.main_processor),
@@ -63,7 +64,19 @@ public:
         coupling_to_edges(other.coupling_to_edges)
     {}
 
-    bool    add_edge(proc3d::edge_t*, bool is_undirected=true) override;
+    ~Processor3D(void) {
+        // Delete the vertical edges only; RAII should clean up the vertices and edges
+        // in the coupling graphs for each layer.
+        for (auto pair : coupling_to_edges) {
+            auto impl = pair.second;
+            if (impl.size() > 1) {
+                delete impl[0];
+                delete impl[2];
+            }
+        }
+    }
+
+    bool    add_edge(proc3d::edge_t*) override;
     void    delete_edge(proc3d::edge_t*) override;
 
     // This method will retrieve the edges corresponding to the physical coupling

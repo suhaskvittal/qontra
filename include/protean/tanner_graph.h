@@ -66,16 +66,16 @@ public:
         return true;
     }
 
-    bool add_edge(tanner::edge_t* e, bool is_undirected=true) override {
+    bool add_edge(tanner::edge_t* e) override {
         auto v = (tanner::vertex_t*)e->src;
         auto w = (tanner::vertex_t*)e->dst;
         // Make sure the edge preserves the bipartite property.
         if ((v->qubit_type > 0) == (w->qubit_type > 0)) return false;
-        bool res = Graph::add_edge(e, is_undirected);
+        bool res = Graph::add_edge(e);
         if (res) {
             // Sort adjacency lists.
             std::sort(adjacency_lists[v].begin(), adjacency_lists[v].end());
-            if (is_undirected)  std::sort(adjacency_lists[w].begin(), adjacency_lists[w].end());
+            if (e->is_undirected)   std::sort(adjacency_lists[w].begin(), adjacency_lists[w].end());
         }
         return res;
     }

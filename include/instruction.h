@@ -103,4 +103,7 @@ struct Instruction {    // Logical instruction.
 
 }   // cp
 
+template <class I_t>
+using schedule_t = std::vector<I_t>;
+
 #endif  // INSTRUCTION_H

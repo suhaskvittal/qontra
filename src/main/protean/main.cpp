@@ -61,35 +61,44 @@ int main(int argc, char* argv[]) {
         std::cout << "\n";
     }
     // Define the cost function here.
-    compiler::cost_t cf = [] (Processor3D& proc)
+    compiler::cost_t cf = [] (compiler::ir_t* ir)
     {
         // Minimize overall connectivity.
-        fp_t connectivity = proc.get_connectivity();
-        fp_t size_score = 0.05 * ((fp_t)proc.get_vertices().size());
+        fp_t connectivity = ir->arch.get_connectivity();
+        fp_t size_score = 0.05 * ((fp_t)ir->arch.get_vertices().size());
+        fp_t op_score = 0.005 * ir->schedule.size();
         return connectivity + size_score;
     };
     // Define any constraints here.
     std::vector<compiler::constraint_t> con;
-    compiler::constraint_t con_degree = [] (Processor3D& proc)
+    compiler::constraint_t con_degree = [] (compiler::ir_t* ir)
     {
         uint max_degree = 0;
-        for (auto v : proc.get_vertices()) {
-            uint deg = proc.get_degree(v);
+        for (auto v : ir->arch.get_vertices()) {
+            uint deg = ir->arch.get_degree(v);
             if (deg > max_degree)   max_degree = deg;
         }
         return max_degree <= 4;
     };
+    compiler::constraint_t con_conn = [] (compiler::ir_t* ir)
+    {
+        return ir->arch.get_connectivity() < 2.9;
+    };
     con.push_back(con_degree);
+//  con.push_back(con_conn);
 
     // Declare compiler and run it.
     Compiler compiler(con, cf);
-    Compiler::ir_t res = compiler.run(graph);
+    compiler::ir_t* res = compiler.run(graph);
     // Print out some simple stats and write to the output folder.
-    std::cout << "Number of qubits = " << res.arch.get_vertices().size() << "\n";
-    std::cout << "Connectivity = " << res.arch.get_connectivity() << "\n";
-    std::cout << "Number of ops = " << res.schedule.size() << "\n";
+    std::cout << "Cost = " << cf(res) << ", valid = " << res->valid << "\n";
+    std::cout << "Number of qubits = " << res->arch.get_vertices().size() << "\n";
+    std::cout << "Connectivity = " << res->arch.get_connectivity() << "\n";
+    std::cout << "Number of ops = " << res->schedule.size() << "\n";
 
     write_ir_to_folder(res, folder_out);
+
+    delete res;
 
     return 0;
 }

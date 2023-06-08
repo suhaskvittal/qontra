@@ -28,24 +28,10 @@ namespace qontra {
 namespace protean {
 
 namespace compiler {
-    typedef std::function<bool(Processor3D&)> constraint_t;   // Constraint type: outputs
-                                                              // true if the graph obeys
-                                                              // the specified constraint.
-    typedef std::function<fp_t(Processor3D&)> cost_t;         // Returns a float scoring
-                                                              // the graph. The compiler
-                                                              // will try and minimize this
-                                                              // score.
-}   // compiler
-
-class Compiler {
-public:
-    typedef struct {
-    } params_t;
-
     typedef struct {
         TannerGraph                     curr_spec;
         Processor3D                     arch;
-        std::vector<qc::Instruction>    schedule;
+        schedule_t<qc::Instruction>     schedule;
         fp_t                            score;
         bool                            valid;
         // Data structures:
@@ -60,6 +46,20 @@ public:
                                                     // operations like reduce.
     } ir_t;
 
+    typedef std::function<bool(ir_t*)> constraint_t;   // Constraint type: outputs
+                                                              // true if the graph obeys
+                                                              // the specified constraint.
+    typedef std::function<fp_t(ir_t*)> cost_t;         // Returns a float scoring
+                                                              // the graph. The compiler
+                                                              // will try and minimize this
+                                                              // score.
+}   // compiler
+
+class Compiler {
+public:
+    typedef struct {
+    } params_t;
+
     Compiler(const std::vector<compiler::constraint_t>& con, compiler::cost_t obj)
         :constraints(con), 
         objective(obj),
@@ -68,7 +68,7 @@ public:
         compile_round(0)
     {}
 
-    ir_t    run(const TannerGraph&, bool verbose=true);
+    compiler::ir_t* run(const TannerGraph&, bool verbose=true);
 private:
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
@@ -85,14 +85,14 @@ private:
     //
     //  We repeat the following until we exit at (4). We assume that the optimization space is
     //  "smooth", so modifications do not chaotically affect the score.
-    void    place(ir_t&);
-    void    reduce(ir_t&);
-    void    merge(ir_t&);
-    void    schedule(ir_t&);
-    void    score(ir_t&);
-    bool    induce(ir_t&);
-    bool    sparsen(ir_t&);
-    void    linearize(ir_t&);
+    void    place(compiler::ir_t*);
+    void    reduce(compiler::ir_t*);
+    void    merge(compiler::ir_t*);
+    void    schedule(compiler::ir_t*);
+    void    score(compiler::ir_t*);
+    bool    induce(compiler::ir_t*);
+    bool    sparsen(compiler::ir_t*);
+    void    linearize(compiler::ir_t*);
 
     const std::vector<compiler::constraint_t>   constraints;
     const compiler::cost_t                      objective;
@@ -106,7 +106,7 @@ private:
 };
 
 void    print_connectivity(Processor3D&);
-void    print_schedule(const std::vector<qc::Instruction>&);
+void    print_schedule(const schedule_t<qc::Instruction>&);
 
 // write_ir_to_folder dumps an IR to a folder into the following files:
 //  (1) spec.txt    (TannerGraph)
@@ -115,7 +115,7 @@ void    print_schedule(const std::vector<qc::Instruction>&);
 //      (b) 3d_map.txt      (Processor3D, connections with verticality, k-planar)
 //  (3) labels.txt  (role_to_qubit)
 //  (4) schedule.qasm (schedule)
-void    write_ir_to_folder(Compiler::ir_t&, std::string);
+void    write_ir_to_folder(compiler::ir_t*, std::string);
 
 }   // protean
 }   // qontra

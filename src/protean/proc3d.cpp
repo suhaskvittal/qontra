@@ -11,15 +11,17 @@ namespace protean {
 using namespace proc3d;
 
 bool
-Processor3D::add_edge(proc3d::edge_t* e, bool is_undirected) {
-    if (!__Processor3DParent::add_edge(e, is_undirected)) return false;
+Processor3D::add_edge(proc3d::edge_t* e) {
+    if (!__Processor3DParent::add_edge(e)) return false;
     auto src = (vertex_t*)e->src;
     auto dst = (vertex_t*)e->dst;
     // Add the edge to the processor while preserving planarity.
     bool will_be_planar = main_processor.test_planarity_after_add(e);
     if (will_be_planar) {
-        main_processor.add_edge(e);
+        main_processor.add_edge(e, will_be_planar);
     } else {
+        std::cout << "Number of edges: " << main_processor.get_edges().size()
+            << ", tracking planarity = " << main_processor.tracking_planarity() << "\n";
         std::set<uint> open_layers;
         for (uint i = 0; i < get_thickness(); i++)  open_layers.insert(i);
         for (auto tsv : vertex_to_tsv_junctions[src]) {

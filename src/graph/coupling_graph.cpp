@@ -11,20 +11,22 @@ namespace graph {
 using namespace coupling;
 
 bool
-CouplingGraph::test_planarity_after_add(
-        const std::vector<edge_t*>& edges, bool are_undirected) 
-{
+CouplingGraph::test_planarity_after_add(const std::vector<edge_t*>& edges) {
     if (!is_planar) return false;   // Adding edges can only make something nonplanar. No need
                                     // to check if the graph is already nonplanar.
     bool curr_planarity = is_planar;
 
+    bool pdod = dealloc_on_delete;
+    dealloc_on_delete = false;
+
     // Temporarily update the graph
-    for (auto e : edges)    Graph::add_edge(e, are_undirected);
+    for (auto e : edges)    Graph::add_edge(e);
     check_planarity();
     bool will_be_planar = is_planar;
     for (auto e : edges)    Graph::delete_edge(e);
 
     is_planar = curr_planarity;
+    dealloc_on_delete = pdod;
     return will_be_planar;
 }
 
@@ -33,6 +35,8 @@ CouplingGraph::test_planarity_after_delete(const std::vector<vertex_t*>& vertice
     if (is_planar)  return true;    // Deleting vertices can only make something planar. No need
                                     // to check if the graph is already planar.
     bool curr_planarity = is_planar;
+    bool pdod = dealloc_on_delete;
+    dealloc_on_delete = false;
 
     std::set<edge_t*> removed_edges;
     for (auto v : vertices) {
@@ -50,6 +54,7 @@ CouplingGraph::test_planarity_after_delete(const std::vector<vertex_t*>& vertice
     for (auto e : removed_edges)    Graph::add_edge(e);
 
     is_planar = curr_planarity;
+    dealloc_on_delete = pdod;
     return will_be_planar;
 }
 
@@ -57,6 +62,8 @@ bool
 CouplingGraph::test_planarity_after_delete(const std::vector<edge_t*>& edges) {
     if (is_planar)  return true;    // See rationale in the above function.
     bool curr_planarity = is_planar;
+    bool pdod = dealloc_on_delete;
+    dealloc_on_delete = false;
     
     for (auto e : edges)    Graph::delete_edge(e);
     check_planarity();
@@ -64,13 +71,18 @@ CouplingGraph::test_planarity_after_delete(const std::vector<edge_t*>& edges) {
     for (auto e : edges)    Graph::add_edge(e);
 
     is_planar = curr_planarity;
+    dealloc_on_delete = pdod;
     return will_be_planar;
 }
 
 void
 CouplingGraph::check_planarity() {
     if (!track_planarity) return;
-    if (edges.size() > 3*vertices.size() - 5) {
+    if (vertices.size() < 3) {
+        is_planar = true;
+        return;
+    }
+    if (vertices.size() >= 3 && edges.size() > 3*vertices.size() - 6) {
         is_planar = false;
         return;
     }
