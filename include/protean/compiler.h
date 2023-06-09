@@ -50,21 +50,24 @@ namespace compiler {
                                                     // operations like reduce.
     };
 
-    typedef std::function<bool(ir_t*)> constraint_t;   // Constraint type: outputs
-                                                              // true if the graph obeys
-                                                              // the specified constraint.
-    typedef std::function<fp_t(ir_t*)> cost_t;         // Returns a float scoring
-                                                              // the graph. The compiler
-                                                              // will try and minimize this
-                                                              // score.
+    typedef std::function<fp_t(ir_t*)> cost_t;  // Returns a float scoring the IR. The compiler
+                                                // will try and minimize this score.
+    typedef struct {
+        uint max_qubits         = std::numeric_limits<uint>::max();
+        uint max_connectivity   = std::numeric_limits<uint>::max();
+        uint max_thickness      = std::numeric_limits<uint>::max();
+
+        uint max_mean_connectivity  = std::numeric_limits<uint>::max();
+    } constraint_t;
 }   // compiler
 
 class Compiler {
 public:
     typedef struct {
+        bool verbose =  false;
     } params_t;
 
-    Compiler(const std::vector<compiler::constraint_t>& con, compiler::cost_t obj)
+    Compiler(compiler::constraint_t con, compiler::cost_t obj)
         :constraints(con), 
         objective(obj),
         max_induced_check_weight(std::numeric_limits<uint>::max()),
@@ -72,10 +75,15 @@ public:
         compile_round(0)
     {}
 
-    compiler::ir_t* run(TannerGraph*, bool verbose=true);
+    compiler::ir_t* run(TannerGraph*);
+
+    params_t    params;
 private:
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
+    //                      Place is not guaranteed to obey constraints. Instead, future passes
+    //                      should try and fit the initial placement according to the specified
+    //                      constraints.
     //  (2) Merge       -- merges parity checks that act on the same qubits (i.e. color code)
     //  (3) Reduce      -- removes redundant qubits from the architecture through contraction.
     //  (4) Schedule    -- schedules the operations to compute each check.
@@ -98,13 +106,11 @@ private:
     bool    sparsen(compiler::ir_t*);
     void    linearize(compiler::ir_t*);
 
-    const std::vector<compiler::constraint_t>   constraints;
-    const compiler::cost_t                      objective;
+    const compiler::constraint_t    constraints;
+    const compiler::cost_t          objective;
 
     uint max_induced_check_weight;  // We will not create induced predecessors for checks above
                                     // this weight.
-    uint verbosity;
-
     uint compile_round;
     bool called_sparsen;
 };

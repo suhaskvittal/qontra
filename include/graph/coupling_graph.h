@@ -64,11 +64,11 @@ public:
     // We note that if track_planarity is false, then planarity is not checked.
 
     bool    add_edge(coupling::edge_t* e) override
-                { bool out = Graph::add_edge(e); check_planarity(); return out; }
+                { bool out = Graph::add_edge(e); update_state(); return out; }
     void    delete_vertex(coupling::vertex_t* v) override
-                { Graph::delete_vertex(v); check_planarity(); }
+                { Graph::delete_vertex(v); update_state(); }
     void    delete_edge(coupling::edge_t* e) override
-                { Graph::delete_edge(e); check_planarity(); }
+                { Graph::delete_edge(e); update_state(); }
 
     // Use the below functions to perform planarity modifying operations in a batch.
     // 
@@ -76,11 +76,11 @@ public:
     // updating after every individual operation.
 
     void    add_edges(const std::vector<coupling::edge_t*> edges) 
-                { for (auto e : edges) { Graph::add_edge(e); } check_planarity(); }
+                { for (auto e : edges) { Graph::add_edge(e); } update_state(); }
     void    delete_vertices(const std::vector<coupling::vertex_t*> vertices)
-                { for (auto v : vertices) { Graph::delete_vertex(v); } check_planarity(); }
+                { for (auto v : vertices) { Graph::delete_vertex(v); } update_state(); }
     void    delete_edges(const std::vector<coupling::edge_t*> edges)
-                { for (auto e : edges) { Graph::delete_edge(e); } check_planarity(); }
+                { for (auto e : edges) { Graph::delete_edge(e); } update_state(); }
 
     // Use the below functions to update planarity given a prior test
     // (i.e. one might test planarity after adding an edge and only add the edge if the
@@ -93,15 +93,16 @@ public:
     void    delete_edge(coupling::edge_t* e, bool p)
                 { Graph::delete_edge(e); is_planar = p; }
 
-    bool    planar(void) { return is_planar; }
+    bool    planar(void) { update_state(); return is_planar; }
     bool    tracking_planarity(void) { return track_planarity; }
 
     void toggle_track_planarity(void) { 
         track_planarity = !track_planarity;
-        if (track_planarity)    check_planarity();
+        if (track_planarity)    update_state();
     }
+protected:
+    bool    update_state(void) override;  // Uses LEMON
 private:
-    void    check_planarity(void);  // Uses LEMON
 
     bool    is_planar;
     bool    track_planarity;

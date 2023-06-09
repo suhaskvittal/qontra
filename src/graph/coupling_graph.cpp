@@ -21,12 +21,13 @@ CouplingGraph::test_planarity_after_add(const std::vector<edge_t*>& edges) {
 
     // Temporarily update the graph
     for (auto e : edges)    Graph::add_edge(e);
-    check_planarity();
+    update_state();
     bool will_be_planar = is_planar;
     for (auto e : edges)    Graph::delete_edge(e);
 
     is_planar = curr_planarity;
     dealloc_on_delete = pdod;
+    graph_has_changed = false;  // Unset the flag so we don't incur additional updates.
     return will_be_planar;
 }
 
@@ -48,13 +49,14 @@ CouplingGraph::test_planarity_after_delete(const std::vector<vertex_t*>& vertice
         }
         Graph::delete_vertex(v);
     }
-    check_planarity();
+    update_state();
     bool will_be_planar = is_planar;
     for (auto v : vertices)         Graph::add_vertex(v);
     for (auto e : removed_edges)    Graph::add_edge(e);
 
     is_planar = curr_planarity;
     dealloc_on_delete = pdod;
+    graph_has_changed = false;  // Unset the flag so we don't incur additional updates.
     return will_be_planar;
 }
 
@@ -66,25 +68,27 @@ CouplingGraph::test_planarity_after_delete(const std::vector<edge_t*>& edges) {
     dealloc_on_delete = false;
     
     for (auto e : edges)    Graph::delete_edge(e);
-    check_planarity();
+    update_state();
     bool will_be_planar = is_planar;
     for (auto e : edges)    Graph::add_edge(e);
 
     is_planar = curr_planarity;
     dealloc_on_delete = pdod;
+    graph_has_changed = false;  // Unset the flag so we don't incur additional updates.
     return will_be_planar;
 }
 
-void
-CouplingGraph::check_planarity() {
-    if (!track_planarity) return;
+bool
+CouplingGraph::update_state() {
+    if (!__CouplingGraphParent::update_state()) return false;
+    if (!track_planarity)                       return true;
     if (vertices.size() < 3) {
         is_planar = true;
-        return;
+        return true;
     }
     if (vertices.size() >= 3 && edges.size() > 3*vertices.size() - 6) {
         is_planar = false;
-        return;
+        return true;
     }
     // We'll use LEMON for this.
     lemon::ListGraph planar_graph;
@@ -99,6 +103,7 @@ CouplingGraph::check_planarity() {
         planar_graph.addEdge(x, y);
     }
     is_planar = lemon::checkPlanarity(planar_graph);
+    return true;
 }
 
 }   // graph

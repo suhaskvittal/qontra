@@ -191,11 +191,27 @@ public:
     std::vector<E_t*>   get_edges(void) { return edges; }
     std::vector<V_t*>   get_neighbors(V_t* v) { return adjacency_lists[v]; }
     uint                get_degree(V_t* v) { return get_neighbors(v).size(); }
-    fp_t                get_connectivity(void)
+    fp_t                get_mean_connectivity(void)
                             { return 2 * ((fp_t)edges.size()) / ((fp_t)vertices.size()); }
+    uint                get_max_connectivity(void)
+                            { update_state(); return max_degree; }
 
     bool    dealloc_on_delete;  // Deletes vertices and edges on delete functions if set.
 protected:
+    // Updates graph if graph_has_changed is set.
+    // Subclasses should override this method if they track state in any way.
+    // 
+    // Returns true if the state was updated.
+    virtual bool update_state(void) {
+        if (!graph_has_changed) return false;
+        max_degree = 0;
+        for (auto v : vertices) {
+            if (get_degree(v) > max_degree) max_degree = get_degree(v);
+        }
+        graph_has_changed = false;
+        return true;
+    }
+
     std::vector<V_t*>   vertices;
     std::vector<E_t*>   edges;
 
@@ -205,6 +221,8 @@ protected:
 
     bool    graph_has_changed;  // Tracks if the graph has changed. May be useful
                                 // for subclasses that need to track state.
+private:
+    uint max_degree;
 };
 
 // Evaluation functions:

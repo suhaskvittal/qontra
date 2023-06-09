@@ -58,8 +58,14 @@ public:
     }
 
     bool check_if_dag(void) { // Returns true if this graph is a DAG.
-        if (!graph_has_changed) return is_dag;
+        update_state();
+        return is_dag;
+    }
 
+    dag::vertex_t<I_t>* get_root(void) { return root; }
+protected:
+    bool update_state(void) override {
+        if (!__DependenceGraphParent::update_state())   return false;        
         typedef dep::vertex_t<I_t> V_t;
         std::map<V_t, uint> level_map;
         search::callback_t<V_t> cb = [&] (V_t* v1, V_t* v2)
@@ -70,11 +76,7 @@ public:
             level_map[v2] = level_map[v1]+1;
         };
         xfs(this, root, cb, false);
-        graph_has_changed = false;
-        return is_dag;
     }
-
-    dag::vertex_t<I_t>* get_root(void) { return root; }
 private:
     dep::vertex_t<I_t>* root;   // Single source of the DAG. Has no data (inst_p = nullptr).
 

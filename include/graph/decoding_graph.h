@@ -68,7 +68,7 @@ public:
 
     matrix_entry_t
     get_error_chain_data(decoding::vertex_t* v1, decoding::vertex_t* v2) {
-        try_update(); 
+        update_state(); 
         return distance_matrix[v1][v2];
     }
 
@@ -79,12 +79,13 @@ public:
     //
     // The below functions return that polynomial and the expected number of errors.
 
-    poly_t  get_error_polynomial(void) { try_update(); return error_polynomial; }
-    fp_t    get_expected_errors(void) { try_update(); return expected_errors; }
+    poly_t  get_error_polynomial(void) { update_state(); return error_polynomial; }
+    fp_t    get_expected_errors(void) { update_state(); return expected_errors; }
+protected:
+    bool    update_state(void) override;
 private:
     void    build_distance_matrix(void);
     void    build_error_polynomial(void);
-    void    try_update(void);
 
     dijkstra::DistanceMatrix<decoding::vertex_t, matrix_entry_t>    distance_matrix;
 

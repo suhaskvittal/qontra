@@ -101,13 +101,12 @@ DecodingGraph::build_error_polynomial() {
     expected_errors = expectation;
 }
 
-void 
-DecodingGraph::try_update(void) {
-    if (graph_has_changed) {
-        build_distance_matrix();
-        build_error_polynomial();
-        graph_has_changed = false;
-    }
+bool 
+DecodingGraph::update_state() {
+    if (!__DecodingGraphParent::update_state()) return false;
+    build_distance_matrix();
+    build_error_polynomial();
+    return true;
 }
 
 DecodingGraph

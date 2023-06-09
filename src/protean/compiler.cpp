@@ -1,4 +1,7 @@
-/* author: Suhas Vittal date:   31 May 2023 */
+/* 
+ * author: Suhas Vittal 
+ * date:   31 May 2023 
+ * */
 
 #include "protean/compiler.h"
 
@@ -10,10 +13,8 @@ namespace protean {
 using namespace compiler;
 
 ir_t*
-Compiler::run(TannerGraph* tanner_graph, bool verbose) {
+Compiler::run(TannerGraph* tanner_graph) {
     // Set state variables to initial values.
-    verbosity = verbose;
-
     compile_round = 0;
 
     uint rounds_without_progress = 0;
@@ -23,44 +24,40 @@ Compiler::run(TannerGraph* tanner_graph, bool verbose) {
     ir->curr_spec = tanner_graph;
     ir->arch = new Processor3D;
 __place:
-    if (verbosity) {
+    if (params.verbose) {
         std::cout << "[ place ] ---------------------\n";
     }
     place(ir);
-    if (verbosity) {
+    if (params.verbose) {
         std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_connectivity() << "\n";
-//      print_connectivity(ir->arch);
         std::cout << "[ merge ] ---------------------\n";
     }
     merge(ir);
 __reduce:
-    if (verbosity) {
+    if (params.verbose) {
         std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_connectivity() << "\n";
-//      print_connectivity(ir->arch);
         std::cout << "[ reduce ] ---------------------\n";
     }
     reduce(ir);
-    if (verbosity) {
+    if (params.verbose) {
         std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_connectivity() << "\n";
-//      print_connectivity(ir->arch);
 
         std::cout << "[ schedule ] ---------------------\n";
     }
     schedule(ir);
-    if (verbosity) {
+    if (params.verbose) {
         std::cout << "\t#ops = " << ir->schedule.size() << "\n";
-//      print_schedule(ir->schedule);
 
         std::cout << "[ score ] ---------------------\n";
     }
     score(ir);
-    if (verbosity) {
+    if (params.verbose) {
         std::cout << "\tcost = " << ir->score << ", valid = " << ir->valid << "\n";
         std::cout << "\trounds without progress = " << rounds_without_progress << "\n";
     }
@@ -86,14 +83,14 @@ __reduce:
     new_ir->arch = new Processor3D;
     // Perform transformations on Tanner graph.
     compile_round++;
-    if (verbosity)      std::cout << "[ induce ] ---------------------\n";
+    if (params.verbose)      std::cout << "[ induce ] ---------------------\n";
     if (induce(new_ir)) {
         delete ir;
         ir = new_ir;
         goto __place;
     }
 
-    if (verbosity)      std::cout << "[ sparsen ] ---------------------\n";
+    if (params.verbose)      std::cout << "[ sparsen ] ---------------------\n";
     if (sparsen(ir)) {
         delete ir;
         ir = new_ir;
@@ -102,7 +99,7 @@ __reduce:
     // If we cannot induce or sparsen to modify the tanner graph, revert back
     // to the previous IR and try to modify connections there.
     delete new_ir;
-    if (verbosity)      std::cout << "[ linearize ] ---------------------\n";
+    if (params.verbose)      std::cout << "[ linearize ] ---------------------\n";
     //linearize(ir);
     goto __reduce;
 }
@@ -222,6 +219,63 @@ Compiler::place(ir_t* curr_ir) {
 }
 
 void
+Compiler::merge(ir_t* curr_ir) {
+    // No need to check for constraint violations in merge
+    // as merge will always reduce the number of qubits and
+    // connectivity.
+
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    std::map<uint, std::vector<tanner::vertex_t*>> weight_to_checks;
+    for (auto tv : tanner_graph->get_vertices()) {
+        if (tv->qubit_type != tanner::vertex_t::XPARITY
+            && tv->qubit_type != tanner::vertex_t::ZPARITY) continue;
+        uint w = tanner_graph->get_degree(tv);
+        if (!weight_to_checks.count(w)) weight_to_checks[w] = std::vector<tanner::vertex_t*>();
+        weight_to_checks[w].push_back(tv);
+    }
+    // Now, check if any checks in each equivalence class have the same adjacency list.
+    for (auto pair : weight_to_checks) {
+        auto checks = pair.second;
+        std::set<tanner::vertex_t*> already_removed;
+        for (uint i = 0; i < checks.size(); i++) {
+            auto tv = checks[i];
+            if (already_removed.count(tv))  continue;
+
+            auto tv_adj = tanner_graph->get_neighbors(tv);
+            for (uint j = i+1; j < checks.size(); j++) {
+                auto tw = checks[j];
+                if (already_removed.count(tw))  continue;
+
+                auto tw_adj = tanner_graph->get_neighbors(tw);
+                if (tv_adj.size() != tw_adj.size()) continue;
+                std::vector<tanner::vertex_t*> intersect_adj;
+                std::set_symmetric_difference(tv_adj.begin(), tv_adj.end(),
+                                    tw_adj.begin(), tw_adj.end(),
+                                    std::back_inserter(intersect_adj));
+                if (intersect_adj.empty()) {
+                    // Delete the second check and merge the roles.
+                    auto pv = curr_ir->role_to_qubit[tv];
+                    auto pw = curr_ir->role_to_qubit[tw];
+                    if (params.verbose) {
+                        std::cout << "\tMerging " << PRINT_V(pw->id) << " with "
+                                << PRINT_V(pv->id) << "\n";
+                    }
+                    curr_ir->role_to_qubit[tw] = pv;
+                    
+                    for (auto tu : curr_ir->qubit_to_roles[pw]) {
+                        curr_ir->qubit_to_roles[pv].push_back(tu);
+                    }
+                    curr_ir->arch->delete_vertex(pw);
+                    curr_ir->qubit_to_roles.erase(pw);
+
+                    already_removed.insert(tw);
+                }
+            }
+        }
+    }
+}
+
+void
 Compiler::reduce(ir_t* curr_ir) {
     // Modify the architecture by contracting degree-2 non-data qubits and removing
     // zero-degree qubits (these are obviously gauge qubits).
@@ -267,7 +321,7 @@ Compiler::reduce(ir_t* curr_ir) {
         if (!any_nondata_neighbors) {
             if (!curr_ir->is_gauge_only.count(pv))   goto reduce_do_not_remove_nondata;
             // Otherwise delete the qubit.
-            if (verbosity) {
+            if (params.verbose) {
                 std::cout << "\tDeleting qubit " << PRINT_V(pv->id) << "\n";
             }
             for (auto tv : curr_ir->qubit_to_roles[pv]) {
@@ -348,7 +402,7 @@ reduce_do_not_remove_nondata:
         }
         curr_ir->qubit_to_roles.erase(pv);
 
-        if (verbosity) {
+        if (params.verbose) {
             std::cout << "\tReducing " << PRINT_V(pv->id) << " to " << PRINT_V(pw->id) << "\n";
         }
         
@@ -358,59 +412,6 @@ reduce_do_not_remove_nondata:
     }
     for (auto pv : deallocated) arch->delete_vertex(pv);
     for (auto e : new_edges)    arch->add_edge(e);
-}
-
-void
-Compiler::merge(ir_t* curr_ir) {
-    TannerGraph* tanner_graph = curr_ir->curr_spec;
-    std::map<uint, std::vector<tanner::vertex_t*>> weight_to_checks;
-    for (auto tv : tanner_graph->get_vertices()) {
-        if (tv->qubit_type != tanner::vertex_t::XPARITY
-            && tv->qubit_type != tanner::vertex_t::ZPARITY) continue;
-        uint w = tanner_graph->get_degree(tv);
-        if (!weight_to_checks.count(w)) weight_to_checks[w] = std::vector<tanner::vertex_t*>();
-        weight_to_checks[w].push_back(tv);
-    }
-    // Now, check if any checks in each equivalence class have the same adjacency list.
-    for (auto pair : weight_to_checks) {
-        auto checks = pair.second;
-        std::set<tanner::vertex_t*> already_removed;
-        for (uint i = 0; i < checks.size(); i++) {
-            auto tv = checks[i];
-            if (already_removed.count(tv))  continue;
-
-            auto tv_adj = tanner_graph->get_neighbors(tv);
-            for (uint j = i+1; j < checks.size(); j++) {
-                auto tw = checks[j];
-                if (already_removed.count(tw))  continue;
-
-                auto tw_adj = tanner_graph->get_neighbors(tw);
-                if (tv_adj.size() != tw_adj.size()) continue;
-                std::vector<tanner::vertex_t*> intersect_adj;
-                std::set_symmetric_difference(tv_adj.begin(), tv_adj.end(),
-                                    tw_adj.begin(), tw_adj.end(),
-                                    std::back_inserter(intersect_adj));
-                if (intersect_adj.empty()) {
-                    // Delete the second check and merge the roles.
-                    auto pv = curr_ir->role_to_qubit[tv];
-                    auto pw = curr_ir->role_to_qubit[tw];
-                    if (verbosity) {
-                        std::cout << "\tMerging " << PRINT_V(pw->id) << " with "
-                                << PRINT_V(pv->id) << "\n";
-                    }
-                    curr_ir->role_to_qubit[tw] = pv;
-                    
-                    for (auto tu : curr_ir->qubit_to_roles[pw]) {
-                        curr_ir->qubit_to_roles[pv].push_back(tu);
-                    }
-                    curr_ir->arch->delete_vertex(pw);
-                    curr_ir->qubit_to_roles.erase(pw);
-
-                    already_removed.insert(tw);
-                }
-            }
-        }
-    }
 }
 
 void
@@ -601,7 +602,7 @@ Compiler::induce(ir_t* curr_ir) {
                 uint d = tanner_graph->get_degree(ti);
                 if (d < new_max_cw) new_max_cw = d;
                 any_change = true;
-                if (verbosity) {
+                if (params.verbose) {
                     std::cout << "\tInduced gauge " << PRINT_V(ti->id)
                                 << " on " << PRINT_V(tv->id) << " and " << PRINT_V(tw->id)
                                 << " succeeded.\n";
@@ -647,7 +648,7 @@ Compiler::sparsen(ir_t* curr_ir) {
             ty_tg->dst = (void*)tg;
             tanner_graph->add_edge(ty_tg);
             
-            if (verbosity) {
+            if (params.verbose) {
                 std::cout << "\t( " << PRINT_V(tv->id) << " ) Added new gauge between " 
                                 << PRINT_V(tx->id) << " and "
                                 << PRINT_V(ty->id) << "\n";
