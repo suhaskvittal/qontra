@@ -24,23 +24,15 @@ int main(int argc, char* argv[]) {
     CmdParser parser(argc, argv);
 
     std::string help = "Arguments list:\n";
-    help += "\tCode name (--code), do not have to use --input and --output if used\n";
-    help += "\t\tAssumes that there is a ../graphs/tanner/*.txt file and ../data folder";
     help += "\tInput tanner graph file (--input)\n";
     help += "\tOutput folder (--output)\n";
     help += "\tVerbose (-v)\n";
 
-    std::string code_name;
     std::string file_in;
     std::string folder_out;
 
-    if (parser.get_string("code", code_name)) {
-        file_in = std::string("../graphs/tanner/") + code_name + std::string(".txt");
-        folder_out = std::string("../data/") + code_name;
-    } else {
-        parser.get_string("input", file_in);
-        parser.get_string("output", folder_out);
-    }
+    parser.get_string("input", file_in);
+    parser.get_string("output", folder_out);
 
     bool verbose = parser.option_set("v");
 
@@ -75,12 +67,11 @@ int main(int argc, char* argv[]) {
         fp_t connectivity = ir->arch->get_mean_connectivity();
         fp_t size_score = 0.05 * ((fp_t)ir->arch->get_vertices().size());
         fp_t op_score = 0.005 * ir->schedule.size();
-        return size_score;
+        return connectivity;
     };
     // Define any constraints here.
     compiler::constraint_t con;
-    con.max_mean_connectivity = 2.8;
-    con.max_connectivity = 4;
+    con.max_mean_connectivity = 3;
 
     // Declare compiler and run it.
     Compiler compiler(con, cf);

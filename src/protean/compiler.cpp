@@ -31,23 +31,35 @@ __place:
     if (params.verbose) {
         std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
-        std::cout << "\tconnectivity = " << ir->arch->get_connectivity() << "\n";
-        std::cout << "[ merge ] ---------------------\n";
+        std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << "\n";
+        std::cout << "[ unify ] ---------------------\n";
     }
-    merge(ir);
+    unify(ir);
 __reduce:
     if (params.verbose) {
         std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
-        std::cout << "\tconnectivity = " << ir->arch->get_connectivity() << "\n";
+        std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << "\n";
         std::cout << "[ reduce ] ---------------------\n";
     }
     reduce(ir);
+    // Check if we need to call merge or split
     if (params.verbose) {
         std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
-        std::cout << "\tconnectivity = " << ir->arch->get_connectivity() << "\n";
-
+        std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
+                    << ir->arch->get_max_connectivity() << "\n";
+    }
+    if (check_size_violation(ir)) {
+        if (params.verbose) std::cout << "[ merge ] ---------------------\n";
+        if (merge(ir))  goto __reduce;
+    }
+    if (check_connectivity_violation(ir)) {
+        if (params.verbose) std::cout << "[ split ] ---------------------\n";
+        if (split(ir))  goto __reduce;
+    }
+__schedule:
+    if (params.verbose) {
         std::cout << "[ schedule ] ---------------------\n";
     }
     schedule(ir);
@@ -67,7 +79,8 @@ __reduce:
         || (ir->valid && ir->score < best_result->score)) 
     {
         best_result = ir;
-    } else if (ir->score == best_result->score) {
+    } else if (ir->score <= best_result->score + 1e-2) {
+        std::cout << "\tNO PROGRESS.\n";
         rounds_without_progress++;
         if (rounds_without_progress >= 2) return best_result;
     } else if (ir->score > best_result->score) {
@@ -85,23 +98,16 @@ __reduce:
     compile_round++;
     if (params.verbose)      std::cout << "[ induce ] ---------------------\n";
     if (induce(new_ir)) {
-        delete ir;
+        if (best_result != ir) delete ir;
         ir = new_ir;
         goto __place;
     }
 
     if (params.verbose)      std::cout << "[ sparsen ] ---------------------\n";
-    if (sparsen(ir)) {
-        delete ir;
-        ir = new_ir;
-        goto __place;
-    }
-    // If we cannot induce or sparsen to modify the tanner graph, revert back
-    // to the previous IR and try to modify connections there.
-    delete new_ir;
-    if (params.verbose)      std::cout << "[ linearize ] ---------------------\n";
-    //linearize(ir);
-    goto __reduce;
+    sparsen(ir);
+    if (best_result != ir) delete ir;
+    ir = new_ir;
+    goto __place;
 }
 
 void
@@ -219,9 +225,9 @@ Compiler::place(ir_t* curr_ir) {
 }
 
 void
-Compiler::merge(ir_t* curr_ir) {
-    // No need to check for constraint violations in merge
-    // as merge will always reduce the number of qubits and
+Compiler::unify(ir_t* curr_ir) {
+    // No need to check for constraint violations in unify
+    // as unify will always reduce the number of qubits and
     // connectivity.
 
     TannerGraph* tanner_graph = curr_ir->curr_spec;
@@ -277,6 +283,9 @@ Compiler::merge(ir_t* curr_ir) {
 
 void
 Compiler::reduce(ir_t* curr_ir) {
+    // We need not check if any connectivity constraints are violated as connectivity is
+    // maintained.
+    //
     // Modify the architecture by contracting degree-2 non-data qubits and removing
     // zero-degree qubits (these are obviously gauge qubits).
     TannerGraph* tanner_graph = curr_ir->curr_spec;
@@ -412,6 +421,98 @@ reduce_do_not_remove_nondata:
     }
     for (auto pv : deallocated) arch->delete_vertex(pv);
     for (auto e : new_edges)    arch->add_edge(e);
+}
+
+bool
+Compiler::merge(ir_t* curr_ir) {
+    Processor3D* arch = curr_ir->arch;
+
+    uint min_total_degree = std::numeric_limits<uint>::max();
+    proc3d::edge_t* min_edge = nullptr;
+    for (auto e : arch->get_edges()) {
+        auto v1 = (proc3d::vertex_t*)e->src;
+        auto v2 = (proc3d::vertex_t*)e->dst;
+        // Make sure neither qubit is a data qubit.
+        if (curr_ir->qubit_to_roles.count(v1) || curr_ir->qubit_to_roles.count(v2)) continue;
+        uint d = arch->get_degree(v1) + arch->get_degree(v2);
+        if (d < min_total_degree) {
+            min_total_degree = d;
+            min_edge = e;
+        }
+    }
+    if (min_edge == nullptr)    return false;
+    // Merge the qubits in the min_edge.
+    auto v1 = (proc3d::vertex_t*)min_edge->src;
+    auto v2 = (proc3d::vertex_t*)min_edge->dst;
+    std::vector<proc3d::edge_t*> new_edges;
+    for (auto w : arch->get_neighbors(v2)) {
+        if (w == v1)    continue;
+        if (arch->contains(v1, w))  continue;
+
+        auto f = new proc3d::edge_t;
+        f->src = (void*)v1;
+        f->dst = (void*)w;
+        new_edges.push_back(f);
+    }
+    // Transfer roles of v2 to v1 and delete v2.
+    for (auto tv : curr_ir->qubit_to_roles[v2]) {
+        curr_ir->qubit_to_roles[v1].push_back(tv);
+        curr_ir->role_to_qubit[tv] = v1;
+    }
+    if (params.verbose) {
+        std::cout << "\tDeleted qubit " << PRINT_V(v2->id) << " and merged it with "
+                << PRINT_V(v1->id) << ".\n";
+    }
+    arch->delete_vertex(v2);
+    // Add new edges
+    for (auto f : new_edges)    arch->add_edge(f);
+    return true;
+}
+
+bool
+Compiler::split(ir_t* curr_ir) {
+    static uint MIDDLEMAN_INDEX = 0;
+
+    Processor3D* arch = curr_ir->arch;
+    
+    uint max_degree = 0;
+    proc3d::vertex_t* target;
+    for (auto v : arch->get_vertices()) {
+        uint d = arch->get_degree(v);
+        if (d > max_degree) {
+            target = v;
+            max_degree = d;
+        }
+    }
+    if (max_degree <= 3)    return false; // Don't even try -- no point.
+
+    // Create the partner qubit
+    proc3d::vertex_t* dup = new proc3d::vertex_t;
+    dup->id = ((target->id & 0x00ff'ffff) << 6) | MIDDLEMAN_INDEX++ | (tanner::vertex_t::GAUGE << 30);
+    arch->add_vertex(dup);
+    auto target_dup = new proc3d::edge_t;
+    target_dup->src = target;
+    target_dup->dst = dup;
+    // Create a dummy entry for roles
+    curr_ir->qubit_to_roles[dup] = std::vector<tanner::vertex_t*>();
+    // Create adjacency list -- equally partition neighbors of target between target and dup.
+    auto tar_adj = arch->get_neighbors(target);
+
+    std::vector<proc3d::edge_t*> new_edges;
+    for (uint i = 0; i < (max_degree>>1); i++) {
+        auto pv = tar_adj[i];
+        proc3d::edge_t* e = new proc3d::edge_t;
+        e->src = (void*)dup;
+        e->dst = (void*)pv;
+        new_edges.push_back(e);
+        // Delete the edge between target and pv.
+        auto f = arch->get_edge(target, pv);
+        arch->delete_edge(f);
+    }
+
+    arch->add_edge(target_dup);
+    for (auto e : new_edges)    arch->add_edge(e);
+    return true;
 }
 
 void
@@ -574,10 +675,11 @@ Compiler::schedule(ir_t* curr_ir) {
 
 void
 Compiler::score(ir_t* curr_ir) {
-    curr_ir->valid = true;
-    for (auto constraint : constraints) {
-        curr_ir->valid &= constraint(curr_ir);
-    }
+    // Check if constraints are maintained.
+    curr_ir->valid = !check_connectivity_violation(curr_ir)
+                && !check_size_violation(curr_ir)
+                && curr_ir->arch->get_thickness() <= constraints.max_thickness;
+    // If constraints are maintained, score the IR.
     if (curr_ir->valid)  curr_ir->score = objective(curr_ir);
 }
 

@@ -23,6 +23,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <utility>
 
 namespace qontra {
 namespace protean {
@@ -57,7 +58,7 @@ namespace compiler {
         uint max_connectivity   = std::numeric_limits<uint>::max();
         uint max_thickness      = std::numeric_limits<uint>::max();
 
-        uint max_mean_connectivity  = std::numeric_limits<uint>::max();
+        fp_t max_mean_connectivity =    std::numeric_limits<fp_t>::max();
     } constraint_t;
 }   // compiler
 
@@ -65,41 +66,72 @@ class Compiler {
 public:
     typedef struct {
         bool verbose =  false;
+
     } params_t;
 
     Compiler(compiler::constraint_t con, compiler::cost_t obj)
         :constraints(con), 
         objective(obj),
         max_induced_check_weight(std::numeric_limits<uint>::max()),
-        verbosity(0),
-        compile_round(0)
+        compile_round(0),
+        params()
     {}
 
     compiler::ir_t* run(TannerGraph*);
 
     params_t    params;
 private:
+    // These constraint checks return true if there is a violation.
+    bool check_connectivity_violation(compiler::ir_t* ir) {
+        return ir->arch->get_mean_connectivity() > constraints.max_mean_connectivity
+            || ir->arch->get_max_connectivity() > constraints.max_connectivity;
+    }
+
+    bool check_size_violation(compiler::ir_t* ir) {
+        return ir->arch->get_vertices().size() > constraints.max_qubits;
+    }
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
     //                      Place is not guaranteed to obey constraints. Instead, future passes
     //                      should try and fit the initial placement according to the specified
     //                      constraints.
-    //  (2) Merge       -- merges parity checks that act on the same qubits (i.e. color code)
+    //  (2) Unify       -- merges parity checks that act on the same qubits (i.e. color code)
     //  (3) Reduce      -- removes redundant qubits from the architecture through contraction.
-    //  (4) Schedule    -- schedules the operations to compute each check.
-    //  (5) Score       -- scores the architecture: if the score worsens, exit.
-    //  (6) Induce      -- induces predecessors onto the Tanner graph.
+    //
+    //  (4)
+    //  If constraints.max_qubits is violated:
+    //      (a) Merge: Find a pair of adjacent non-data qubits and merge them. Choose this pair
+    //                  such that their degrees are minimized.
+    //      Jump to (3).
+    //  If constraints.max_connectivity is violated:
+    //      (b) Split: Find the most connected qubit and split it into two. If the qubit is a 
+    //                  a data qubit, then create a gauge qubit.
+    //      Jump to (3).
+    //
+    //  (5) Micro-Schedule  -- schedules the operations for each check.
+    //  (6) Macro-Schedule  -- schedules the order of computing each check.
+    //  
+    //  (6) Score   -- check if IR is valid. If not, jump to 7.
+    //  If Observable is defined:
+    //      (a) Find the best CNOT order by repeatedly calling the score function.
+    //  Else:
+    //      (b) Score normally.
+    //
+    //  (7) Induce      -- induces predecessors onto the Tanner graph.
+    //
     //  If Induce fails:
-    //      (7) Sparsen -- if a gauge/parity qubit has too many connections, then split them
-    //                      into groups of 2 by using intermediate gauge qubits. 
+    //      (8) Sparsen -- if a gauge/parity qubit has too many connections, then split them
+    //                      into groups of 2 by using intermediate gauge qubits.
     //  If Sparsen fails:
-    //      (8) Linearize -- linearize data connections in the exist architecture. Jump to (3).
+    //      (9) Linearize -- linearize data connections in the exist architecture. Jump to (3).
     //
     //  We repeat the following until we exit at (4). We assume that the optimization space is
     //  "smooth", so modifications do not chaotically affect the score.
     void    place(compiler::ir_t*);
+    void    unify(compiler::ir_t*);
     void    reduce(compiler::ir_t*);
-    void    merge(compiler::ir_t*);
+    bool    merge(compiler::ir_t*);
+    bool    split(compiler::ir_t*);
     void    schedule(compiler::ir_t*);
     void    score(compiler::ir_t*);
     bool    induce(compiler::ir_t*);
