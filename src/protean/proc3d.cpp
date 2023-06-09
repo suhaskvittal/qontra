@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   31 May 2023
  * */
 
@@ -11,6 +10,13 @@ namespace protean {
 using namespace proc3d;
 
 bool
+Processor3D::add_vertex(proc3d::vertex_t* v) {
+    if (!main_processor.add_vertex(v))  return false;
+    if (!Graph::add_vertex(v))  return false;
+    return true;
+}
+
+bool
 Processor3D::add_edge(proc3d::edge_t* e) {
     if (!__Processor3DParent::add_edge(e)) return false;
     auto src = (vertex_t*)e->src;
@@ -19,6 +25,7 @@ Processor3D::add_edge(proc3d::edge_t* e) {
     bool will_be_planar = main_processor.test_planarity_after_add(e);
     if (will_be_planar) {
         main_processor.add_edge(e, will_be_planar);
+        coupling_to_edges[e] = std::vector<proc3d::edge_t*>{e};
     } else {
         std::cout << "Number of edges: " << main_processor.get_edges().size()
             << ", tracking planarity = " << main_processor.tracking_planarity() << "\n";
@@ -30,18 +37,20 @@ Processor3D::add_edge(proc3d::edge_t* e) {
         for (auto tsv : vertex_to_tsv_junctions[dst]) {
             open_layers.erase(tsv->processor_layer);
         }
+try_placement:
         // If there are no open layers, add a new processor layer.
-        graph::CouplingGraph chip;
         uint layer;
         if (open_layers.empty()) {
             layer = get_thickness();
             if (layer == max_thickness) return false;   // Cannot add another layer.
-            processor_layers.push_back(chip);
+            graph::CouplingGraph new_chip;
+            new_chip.dealloc_on_delete = false;
+            processor_layers.push_back(new_chip);
         } else {
             layer = *(open_layers.begin());
-            chip = processor_layers[layer];
-            layer++;    // layer is currently the index into processor_layers
         }
+        graph::CouplingGraph& chip = processor_layers[layer];
+        layer++;
         // Create TSVs and edges.
         proc3d::vertex_t* junc1 = new proc3d::vertex_t;
         proc3d::vertex_t* junc2 = new proc3d::vertex_t;
@@ -66,11 +75,17 @@ Processor3D::add_edge(proc3d::edge_t* e) {
         junc2_dst->dst = dst;
         junc2_dst->is_vertical = true;
 
-        Graph::add_edge(e);
-
         chip.add_vertex(junc1);
         chip.add_vertex(junc2);
-        chip.add_edge(junc1_junc2);
+        if (!chip.add_edge(junc1_junc2)) {
+            chip.delete_vertex(junc1);
+            chip.delete_vertex(junc2);
+            delete src_junc1;
+            delete junc1_junc2;
+            delete junc2_dst;
+            open_layers.erase(layer-1);
+            goto try_placement;
+        }
 
         vertex_to_tsv_junctions[src].push_back(junc1);
         vertex_to_tsv_junctions[dst].push_back(junc2);
@@ -80,9 +95,44 @@ Processor3D::add_edge(proc3d::edge_t* e) {
 }
 
 void
+Processor3D::delete_vertex(proc3d::vertex_t* v) {
+    for (auto w : get_neighbors(v)) {
+        auto e = get_edge(v, w);        
+        auto impl = coupling_to_edges[e];
+        if (impl.size() == 3) {
+            auto vert1 = impl[0];
+            auto horiz = impl[1];
+            auto vert2 = impl[2];
+
+            auto tsv_j = vertex_to_tsv_junctions[w];
+            for (auto it = tsv_j.begin(); it != tsv_j.end();) {
+                if (*it == (vertex_t*)vert2->src)       it = tsv_j.erase(it);
+                else if (*it == (vertex_t*)vert1->dst)  it = tsv_j.erase(it);
+                else                                    it++;
+            }
+
+            processor_layers[horiz->processor_layer-1].delete_vertex((vertex_t*)vert1->dst);
+            processor_layers[horiz->processor_layer-1].delete_vertex((vertex_t*)vert2->src);
+            processor_layers[horiz->processor_layer-1].delete_edge(horiz);
+
+            if (dealloc_on_delete) {
+                delete vert1;
+                delete vert2;
+            }
+        }
+        coupling_to_edges.erase(e);
+    } 
+    vertex_to_tsv_junctions.erase(v);
+    main_processor.delete_vertex(v);
+    __Processor3DParent::delete_vertex(v);
+}
+
+void
 Processor3D::delete_edge(proc3d::edge_t* e) {
+    if (e == nullptr)   return;
+
     auto impl = coupling_to_edges[e];
-    if (impl.size() > 1) {  // Then this is a complex coupling, so remove the corresponding
+    if (impl.size() == 3) {  // Then this is a complex coupling, so remove the corresponding
                             // metadata.
         auto vert1 = impl[0];
         auto horiz = impl[1];
@@ -98,7 +148,16 @@ Processor3D::delete_edge(proc3d::edge_t* e) {
             if (*it == (vertex_t*)vert2->src)   it = dst_tsv_j.erase(it);
             else                                it++;
         }
+        processor_layers[horiz->processor_layer].delete_vertex((vertex_t*)vert1->dst);
+        processor_layers[horiz->processor_layer].delete_vertex((vertex_t*)vert2->src);
         processor_layers[horiz->processor_layer].delete_edge(horiz);
+
+        if (dealloc_on_delete) {
+            delete vert1;
+            delete vert2;
+        }
+    } else {
+        main_processor.delete_edge(e);
     }
     coupling_to_edges.erase(e);
     __Processor3DParent::delete_edge(e);

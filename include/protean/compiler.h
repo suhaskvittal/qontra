@@ -28,9 +28,13 @@ namespace qontra {
 namespace protean {
 
 namespace compiler {
-    typedef struct {
-        TannerGraph                     curr_spec;
-        Processor3D                     arch;
+    struct ir_t {
+        ~ir_t(void) {
+            delete arch;
+        }
+
+        TannerGraph*                    curr_spec;
+        Processor3D*                    arch;
         schedule_t<qc::Instruction>     schedule;
         fp_t                            score;
         bool                            valid;
@@ -44,7 +48,7 @@ namespace compiler {
                                                         // role of a gauge qubit later.
         std::set<proc3d::vertex_t*> is_gauge_only;  // Keep track of pure gauge qubits for
                                                     // operations like reduce.
-    } ir_t;
+    };
 
     typedef std::function<bool(ir_t*)> constraint_t;   // Constraint type: outputs
                                                               // true if the graph obeys
@@ -68,7 +72,7 @@ public:
         compile_round(0)
     {}
 
-    compiler::ir_t* run(const TannerGraph&, bool verbose=true);
+    compiler::ir_t* run(TannerGraph*, bool verbose=true);
 private:
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
@@ -105,7 +109,7 @@ private:
     bool called_sparsen;
 };
 
-void    print_connectivity(Processor3D&);
+void    print_connectivity(Processor3D*);
 void    print_schedule(const schedule_t<qc::Instruction>&);
 
 // write_ir_to_folder dumps an IR to a folder into the following files:

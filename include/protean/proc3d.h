@@ -53,7 +53,9 @@ public:
         max_thickness(max_thickness),
         vertex_to_tsv_junctions(),
         coupling_to_edges()
-    {}
+    {
+        main_processor.dealloc_on_delete = false;
+    }
 
     Processor3D(const Processor3D& other)
         :__Processor3DParent(other),
@@ -65,10 +67,9 @@ public:
     {}
 
     ~Processor3D(void) {
-        // Delete the vertical edges only; RAII should clean up the vertices and edges
-        // in the coupling graphs for each layer.
         for (auto pair : coupling_to_edges) {
             auto impl = pair.second;
+            // Delete physical edges for any virtual edges.
             if (impl.size() > 1) {
                 delete impl[0];
                 delete impl[2];
@@ -76,7 +77,9 @@ public:
         }
     }
 
+    bool    add_vertex(proc3d::vertex_t*) override;
     bool    add_edge(proc3d::edge_t*) override;
+    void    delete_vertex(proc3d::vertex_t*) override;
     void    delete_edge(proc3d::edge_t*) override;
 
     // This method will retrieve the edges corresponding to the physical coupling

@@ -60,7 +60,6 @@ public:
     
     virtual ~Graph(void) {
         if (dealloc_on_delete) {
-            std::cout << "Deleting data in class " << typeid(*this).name() << "\n";
             for (auto v : vertices) delete v;
             for (auto e : edges)    delete e;
         }
@@ -146,7 +145,10 @@ public:
             auto e = *it;
             auto u1 = (V_t*)e->src;
             auto u2 = (V_t*)e->dst;
-            if (u1 == v || u2 == v) it = edges.erase(it);
+            if (u1 == v || u2 == v) { 
+                it = edges.erase(it); 
+                if (dealloc_on_delete)  delete e;
+            }
             else                    it++;
         }
         graph_has_changed = true;

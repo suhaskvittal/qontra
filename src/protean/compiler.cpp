@@ -10,7 +10,7 @@ namespace protean {
 using namespace compiler;
 
 ir_t*
-Compiler::run(const TannerGraph& tanner_graph, bool verbose) {
+Compiler::run(TannerGraph* tanner_graph, bool verbose) {
     // Set state variables to initial values.
     verbosity = verbose;
 
@@ -21,6 +21,7 @@ Compiler::run(const TannerGraph& tanner_graph, bool verbose) {
     ir_t* best_result = nullptr;
     ir_t* ir = new ir_t;
     ir->curr_spec = tanner_graph;
+    ir->arch = new Processor3D;
 __place:
     if (verbosity) {
         std::cout << "[ place ] ---------------------\n";
@@ -28,8 +29,8 @@ __place:
     place(ir);
     if (verbosity) {
         std::cout << "\tcost = " << objective(ir) << "\n";
-        std::cout << "\tnumber of qubits = " << ir->arch.get_vertices().size() << "\n";
-        std::cout << "\tconnectivity = " << ir->arch.get_connectivity() << "\n";
+        std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
+        std::cout << "\tconnectivity = " << ir->arch->get_connectivity() << "\n";
 //      print_connectivity(ir->arch);
         std::cout << "[ merge ] ---------------------\n";
     }
@@ -37,16 +38,16 @@ __place:
 __reduce:
     if (verbosity) {
         std::cout << "\tcost = " << objective(ir) << "\n";
-        std::cout << "\tnumber of qubits = " << ir->arch.get_vertices().size() << "\n";
-        std::cout << "\tconnectivity = " << ir->arch.get_connectivity() << "\n";
+        std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
+        std::cout << "\tconnectivity = " << ir->arch->get_connectivity() << "\n";
 //      print_connectivity(ir->arch);
         std::cout << "[ reduce ] ---------------------\n";
     }
     reduce(ir);
     if (verbosity) {
         std::cout << "\tcost = " << objective(ir) << "\n";
-        std::cout << "\tnumber of qubits = " << ir->arch.get_vertices().size() << "\n";
-        std::cout << "\tconnectivity = " << ir->arch.get_connectivity() << "\n";
+        std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
+        std::cout << "\tconnectivity = " << ir->arch->get_connectivity() << "\n";
 //      print_connectivity(ir->arch);
 
         std::cout << "[ schedule ] ---------------------\n";
@@ -82,6 +83,7 @@ __reduce:
     // Reset ir (except Tanner graph).
     ir_t* new_ir = new ir_t;
     new_ir->curr_spec = ir->curr_spec;
+    new_ir->arch = new Processor3D;
     // Perform transformations on Tanner graph.
     compile_round++;
     if (verbosity)      std::cout << "[ induce ] ---------------------\n";
@@ -101,7 +103,7 @@ __reduce:
     // to the previous IR and try to modify connections there.
     delete new_ir;
     if (verbosity)      std::cout << "[ linearize ] ---------------------\n";
-    linearize(ir);
+    //linearize(ir);
     goto __reduce;
 }
 
@@ -118,36 +120,36 @@ Compiler::place(ir_t* curr_ir) {
     //  (2) If X has no predecessors, we directly connect it to its data qubits.
     
     // First create the qubits for each vertex.
-    TannerGraph& tanner_graph = curr_ir->curr_spec;
-    Processor3D& arch = curr_ir->arch;
-    for (auto v : tanner_graph.get_vertices()) {
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    Processor3D* arch = curr_ir->arch;
+    for (auto v : tanner_graph->get_vertices()) {
         proc3d::vertex_t* w = new proc3d::vertex_t;
         w->id = v->id;
         w->processor_layer = 0;
-        arch.add_vertex(w);
+        arch->add_vertex(w);
     }
     // Now make the connections.
-    for (auto tv : tanner_graph.get_vertices()) {
+    for (auto tv : tanner_graph->get_vertices()) {
         if (tv->qubit_type == tanner::vertex_t::DATA)    continue;
-        auto pv = arch.get_vertex(tv->id);
+        auto pv = arch->get_vertex(tv->id);
 
-        auto tv_adj = tanner_graph.get_neighbors(tv);
-        auto pred = tanner_graph.get_predecessors(tv);
+        auto tv_adj = tanner_graph->get_neighbors(tv);
+        auto pred = tanner_graph->get_predecessors(tv);
         if (pred.empty() || (compile_round == 0)) {
             // Just connect to the data qubits.
             for (auto tw : tv_adj) {
-                auto pw = arch.get_vertex(tw->id);
+                auto pw = arch->get_vertex(tw->id);
                 proc3d::edge_t* e = new proc3d::edge_t;
                 e->src = (void*)pv;
                 e->dst = (void*)pw;
-                arch.add_edge(e);
+                arch->add_edge(e);
             }
         } else {
             // Scan for other parity checks.            
             std::set<tanner::vertex_t*> unsat_adj(tv_adj.begin(), tv_adj.end());
             for (auto it = pred.begin(); it != pred.end(); ) {
                 tanner::vertex_t* tw = *it;
-                auto tw_adj = tanner_graph.get_neighbors(tw);
+                auto tw_adj = tanner_graph->get_neighbors(tw);
                 bool is_subset_of_unsat = is_subset_of(tw_adj, unsat_adj);
                 if (!is_subset_of_unsat) {
                     // No reason to connect to this qubit.
@@ -162,11 +164,11 @@ Compiler::place(ir_t* curr_ir) {
                                         std::inserter(unsat_diff, unsat_diff.begin()));
                     unsat_adj = unsat_diff;
                     
-                    auto pw = arch.get_vertex(tw->id);
+                    auto pw = arch->get_vertex(tw->id);
                     auto e = new proc3d::edge_t;
                     e->src = (void*)pv;
                     e->dst = (void*)pw;
-                    arch.add_edge(e);
+                    arch->add_edge(e);
                     it = pred.erase(it);
                 } else {
                     it++;
@@ -175,7 +177,7 @@ Compiler::place(ir_t* curr_ir) {
             // Go through once more and try to connect to gauge qubits.
             for (auto it = pred.begin(); it != pred.end(); ) {
                 tanner::vertex_t* tw = *it;
-                auto tw_adj = tanner_graph.get_neighbors(tw);
+                auto tw_adj = tanner_graph->get_neighbors(tw);
                 bool is_subset_of_unsat = is_subset_of(tw_adj, unsat_adj);
                 if (!is_subset_of_unsat) {
                     // No reason to connect to this qubit.
@@ -188,29 +190,29 @@ Compiler::place(ir_t* curr_ir) {
                                     tw_adj.begin(), tw_adj.end(),
                                     std::inserter(unsat_diff, unsat_diff.begin()));
                 unsat_adj = unsat_diff;
-                auto pw = arch.get_vertex(tw->id);
+                auto pw = arch->get_vertex(tw->id);
                 auto e = new proc3d::edge_t;
                 e->src = (void*)pv;
                 e->dst = (void*)pw;
-                arch.add_edge(e);
+                arch->add_edge(e);
                 it = pred.erase(it);
             }
             // If any data qubits remain in the unsat set, connect to them as well.
             for (auto tw : unsat_adj) {
-                auto pw = arch.get_vertex(tw->id);
+                auto pw = arch->get_vertex(tw->id);
                 auto e = new proc3d::edge_t;
                 e->src = (void*)pv;
                 e->dst = (void*)pw;
-                arch.add_edge(e);
+                arch->add_edge(e);
             }
         }
     }
     // Update IR.
-    for (auto tv : tanner_graph.get_vertices()) {
+    for (auto tv : tanner_graph->get_vertices()) {
         if (tv->qubit_type == tanner::vertex_t::DATA)   continue;   // No need to track data
                                                                     // qubits, as they never
                                                                     // change or gain roles.
-        auto pv = arch.get_vertex(tv->id);
+        auto pv = arch->get_vertex(tv->id);
         curr_ir->qubit_to_roles[pv] = std::vector<tanner::vertex_t*>();
         curr_ir->qubit_to_roles[pv].push_back(tv);
         curr_ir->role_to_qubit[tv] = pv;
@@ -223,8 +225,8 @@ void
 Compiler::reduce(ir_t* curr_ir) {
     // Modify the architecture by contracting degree-2 non-data qubits and removing
     // zero-degree qubits (these are obviously gauge qubits).
-    TannerGraph& tanner_graph = curr_ir->curr_spec;
-    Processor3D& arch = curr_ir->arch;
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    Processor3D* arch = curr_ir->arch;
     // Solve this as a maximum matching problem.
     using namespace lemon;
     ListGraph matching_graph;
@@ -233,12 +235,12 @@ Compiler::reduce(ir_t* curr_ir) {
     std::map<proc3d::vertex_t*, ListGraph::Node> proc2lemon;
     std::map<ListGraph::Node, proc3d::vertex_t*> lemon2proc;
 
-    for (auto pv : arch.get_vertices()) {
+    for (auto pv : arch->get_vertices()) {
         if (!curr_ir->qubit_to_roles.count(pv))    continue;   // This is a data qubit.
-        uint deg = arch.get_degree(pv);
+        uint deg = arch->get_degree(pv);
         // First check if it is zero-degree.
         if (deg == 0) {
-            arch.delete_vertex(pv);
+            arch->delete_vertex(pv);
             for (auto tv : curr_ir->qubit_to_roles[pv]) {
                 curr_ir->role_to_qubit.erase(tv);
             }
@@ -247,7 +249,7 @@ Compiler::reduce(ir_t* curr_ir) {
         }
         // Otherwise, just skip if deg > 2.
         if (deg > 2)    continue;
-        auto pv_adj = arch.get_neighbors(pv);
+        auto pv_adj = arch->get_neighbors(pv);
         // When contracting, we must shift the role of the contracted
         // qubit to a non-data qubit. Check if it has any adjacent
         // non-data qubits.
@@ -259,7 +261,7 @@ Compiler::reduce(ir_t* curr_ir) {
         bool victim_is_gauge = false;
         bool any_nondata_neighbors = false;
         for (auto pw : pv_adj) {
-            auto tw = tanner_graph.get_vertex(pw->id);
+            auto tw = tanner_graph->get_vertex(pw->id);
             if (tw->qubit_type != tanner::vertex_t::DATA)   any_nondata_neighbors = true;
         }
         if (!any_nondata_neighbors) {
@@ -273,7 +275,7 @@ Compiler::reduce(ir_t* curr_ir) {
             }
             curr_ir->qubit_to_roles.erase(pv);
             curr_ir->is_gauge_only.erase(pv);
-            arch.delete_vertex(pv);
+            arch->delete_vertex(pv);
             continue;
         }
 reduce_do_not_remove_nondata:
@@ -288,9 +290,9 @@ reduce_do_not_remove_nondata:
         }
 
         for (auto pw : pv_adj) {
-            auto tw = tanner_graph.get_vertex(pw->id);
+            auto tw = tanner_graph->get_vertex(pw->id);
             if (tw->qubit_type == tanner::vertex_t::DATA)   continue;
-            uint pw_deg = arch.get_degree(pw);
+            uint pw_deg = arch->get_degree(pw);
             if (pw_deg <= 2)    continue;
             ListGraph::Node pw_node;
             if (!proc2lemon.count(pw)) {
@@ -324,14 +326,14 @@ reduce_do_not_remove_nondata:
         if (pw == nullptr || pv == nullptr)  continue;
         if (visited.count(pv) || visited.count(pw)) continue;
         
-        uint deg_pv = arch.get_degree(pv);
+        uint deg_pv = arch->get_degree(pv);
         if (deg_pv > 2) {
             // Swap pv and pw
             auto tmp = pv;
             pv = pw; pw = tmp;
         }
         // Delete pv and connect its neighbors to pw.
-        auto pv_adj = arch.get_neighbors(pv);
+        auto pv_adj = arch->get_neighbors(pv);
         for (auto pu : pv_adj) {
             if (pu == pw)   continue;
             auto e = new proc3d::edge_t;
@@ -354,18 +356,18 @@ reduce_do_not_remove_nondata:
         visited.insert(pw);
         deallocated.insert(pv);
     }
-    for (auto pv : deallocated) arch.delete_vertex(pv);
-    for (auto e : new_edges)    arch.add_edge(e);
+    for (auto pv : deallocated) arch->delete_vertex(pv);
+    for (auto e : new_edges)    arch->add_edge(e);
 }
 
 void
 Compiler::merge(ir_t* curr_ir) {
-    TannerGraph& tanner_graph = curr_ir->curr_spec;
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
     std::map<uint, std::vector<tanner::vertex_t*>> weight_to_checks;
-    for (auto tv : tanner_graph.get_vertices()) {
+    for (auto tv : tanner_graph->get_vertices()) {
         if (tv->qubit_type != tanner::vertex_t::XPARITY
             && tv->qubit_type != tanner::vertex_t::ZPARITY) continue;
-        uint w = tanner_graph.get_degree(tv);
+        uint w = tanner_graph->get_degree(tv);
         if (!weight_to_checks.count(w)) weight_to_checks[w] = std::vector<tanner::vertex_t*>();
         weight_to_checks[w].push_back(tv);
     }
@@ -377,12 +379,13 @@ Compiler::merge(ir_t* curr_ir) {
             auto tv = checks[i];
             if (already_removed.count(tv))  continue;
 
-            auto tv_adj = tanner_graph.get_neighbors(tv);
+            auto tv_adj = tanner_graph->get_neighbors(tv);
             for (uint j = i+1; j < checks.size(); j++) {
                 auto tw = checks[j];
                 if (already_removed.count(tw))  continue;
 
-                auto tw_adj = tanner_graph.get_neighbors(tw);
+                auto tw_adj = tanner_graph->get_neighbors(tw);
+                if (tv_adj.size() != tw_adj.size()) continue;
                 std::vector<tanner::vertex_t*> intersect_adj;
                 std::set_symmetric_difference(tv_adj.begin(), tv_adj.end(),
                                     tw_adj.begin(), tw_adj.end(),
@@ -400,7 +403,7 @@ Compiler::merge(ir_t* curr_ir) {
                     for (auto tu : curr_ir->qubit_to_roles[pw]) {
                         curr_ir->qubit_to_roles[pv].push_back(tu);
                     }
-                    curr_ir->arch.delete_vertex(pw);
+                    curr_ir->arch->delete_vertex(pw);
                     curr_ir->qubit_to_roles.erase(pw);
 
                     already_removed.insert(tw);
@@ -412,23 +415,23 @@ Compiler::merge(ir_t* curr_ir) {
 
 void
 Compiler::schedule(ir_t* curr_ir) {
-    TannerGraph& tanner_graph = curr_ir->curr_spec;
-    Processor3D& arch = curr_ir->arch;
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    Processor3D* arch = curr_ir->arch;
     // Execute the larger checks before the smaller checks.
     std::vector<tanner::vertex_t*>  all_checks;
-    for (auto tv : tanner_graph.get_vertices_by_type(tanner::vertex_t::XPARITY)) {
+    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::XPARITY)) {
         all_checks.push_back(tv);
     }
-    for (auto tv : tanner_graph.get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
+    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
         all_checks.push_back(tv);
     }
 
     typedef struct {
         bool operator()(tanner::vertex_t* x, tanner::vertex_t* y) {
-            return g.get_degree(x) > g.get_degree(y);
+            return g->get_degree(x) > g->get_degree(y);
         }
 
-        TannerGraph& g;
+        TannerGraph* g;
     } check_cmp;
     check_cmp c = {tanner_graph};
     std::sort(all_checks.begin(), all_checks.end(), c);
@@ -497,15 +500,15 @@ Compiler::schedule(ir_t* curr_ir) {
         if (v1 != curr_parity_check)    schedule_buffer.push_back(inst);
     };
 
-    auto distance_matrix = create_distance_matrix(&arch, idw, d_cb);
+    auto distance_matrix = create_distance_matrix(arch, idw, d_cb);
     for (auto tv : all_checks) {
         schedule_graph_t scheduling_graph;
         std::set<proc3d::vertex_t*> non_data_qubits;
 
         auto pv = curr_ir->role_to_qubit[tv];
-        auto tv_adj = tanner_graph.get_neighbors(tv);
+        auto tv_adj = tanner_graph->get_neighbors(tv);
         for (auto td : tv_adj) {
-            auto pd = arch.get_vertex(td->id);
+            auto pd = arch->get_vertex(td->id);
             if (!distance_matrix[pd][pv].valid) {
                 std::cerr << "ERROR: cannot schedule check " << PRINT_V(tv->id)
                         << " [@" << PRINT_V(pv->id) << "] because data qubit " 
@@ -524,7 +527,7 @@ Compiler::schedule(ir_t* curr_ir) {
                 e->src = (void*)py; // Reverse the order for BFS
                 e->dst = (void*)px;
                 e->is_undirected = false;
-                scheduling_graph.add_edge(e);
+                if (!scheduling_graph.add_edge(e))  delete e;
                 non_data_qubits.insert(py);
             }
         }
@@ -550,10 +553,6 @@ Compiler::schedule(ir_t* curr_ir) {
         // Add the gates to the schedule.
         if (set_x_parity) {
             schedule.push_back(h);
-        }
-        for (auto e : scheduling_graph.get_edges()) {
-            auto src = (tanner::vertex_t*)e->src;
-            auto dst = (tanner::vertex_t*)e->dst;
         }
         xfs(&scheduling_graph, pv, s_cb, false);
         for (auto inst : schedule_buffer) schedule.push_back(inst);
@@ -583,8 +582,8 @@ Compiler::score(ir_t* curr_ir) {
 
 bool
 Compiler::induce(ir_t* curr_ir) {
-    TannerGraph& tanner_graph = curr_ir->curr_spec;
-    auto vertices = tanner_graph.get_vertices();
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    auto vertices = tanner_graph->get_vertices();
 
     bool any_change = false;
     
@@ -592,18 +591,21 @@ Compiler::induce(ir_t* curr_ir) {
     for (uint i = 0; i < vertices.size(); i++) {
         auto tv = vertices[i];
         if (tv->qubit_type == tanner::vertex_t::DATA
-            || tanner_graph.get_degree(tv) > max_induced_check_weight)  continue;
+            || tanner_graph->get_degree(tv) > max_induced_check_weight)  continue;
         for (uint j = i+1; j < vertices.size(); j++) {
             auto tw = vertices[j];
             if (tw->qubit_type == tanner::vertex_t::DATA
-                || tanner_graph.get_degree(tw) > max_induced_check_weight)  continue;
-            auto ti = tanner_graph.induce_predecessor(tv, tw);
+                || tanner_graph->get_degree(tw) > max_induced_check_weight)  continue;
+            auto ti = tanner_graph->induce_predecessor(tv, tw);
             if (ti != nullptr) {
-                uint d = tanner_graph.get_degree(ti);
+                uint d = tanner_graph->get_degree(ti);
                 if (d < new_max_cw) new_max_cw = d;
                 any_change = true;
-                std::cout << "\tInduce on " << PRINT_V(tv->id) << " and " << PRINT_V(tw->id)
-                            << " succeeded.\n";
+                if (verbosity) {
+                    std::cout << "\tInduced gauge " << PRINT_V(ti->id)
+                                << " on " << PRINT_V(tv->id) << " and " << PRINT_V(tw->id)
+                                << " succeeded.\n";
+                }
             }
         }
     }
@@ -614,40 +616,42 @@ Compiler::induce(ir_t* curr_ir) {
 
 bool
 Compiler::sparsen(ir_t* curr_ir) {
-    TannerGraph& tanner_graph = curr_ir->curr_spec;
-    auto vertices = tanner_graph.get_vertices();
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    auto vertices = tanner_graph->get_vertices();
 
     bool any_change = false;
     for (auto tv : vertices) {
         if (tv->qubit_type == tanner::vertex_t::DATA)    continue;
-        auto tv_adj = tanner_graph.get_neighbors(tv);
+        auto tv_adj = tanner_graph->get_neighbors(tv);
         for (uint i = 1; i < tv_adj.size()-1; i += 2) {
             // We leave up to a degree of 3 (as leaving a degree of 2 will simply
             // result in reduction in the "reduce" pass).
             auto tx = tv_adj[i-1];
             auto ty = tv_adj[i];
             std::vector<tanner::vertex_t*> tg_adj{tx, ty};
-            if (tanner_graph.has_copy_in_gauges(tg_adj)) continue;
+            if (tanner_graph->has_copy_in_gauges(tg_adj)) continue;
             // Create a new gauge qubit.
             tanner::vertex_t* tg = new tanner::vertex_t;
-            uint index = tanner_graph.get_vertices_by_type(tanner::vertex_t::GAUGE).size();
+            uint index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
             tg->id = (index) | (tanner::vertex_t::GAUGE << 30);
             tg->qubit_type = tanner::vertex_t::GAUGE;
-            tanner_graph.add_vertex(tg);
+            tanner_graph->add_vertex(tg);
             // Add corresponding edges.
             tanner::edge_t* tx_tg = new tanner::edge_t;
             tx_tg->src = (void*)tx;
             tx_tg->dst = (void*)tg;
-            tanner_graph.add_edge(tx_tg);
+            tanner_graph->add_edge(tx_tg);
 
             tanner::edge_t* ty_tg = new tanner::edge_t;
             ty_tg->src = (void*)ty;
             ty_tg->dst = (void*)tg;
-            tanner_graph.add_edge(ty_tg);
+            tanner_graph->add_edge(ty_tg);
             
-            std::cout << "\t( " << PRINT_V(tv->id) << " ) Added new gauge between " 
-                            << PRINT_V(tx->id) << " and "
-                            << PRINT_V(ty->id) << "\n";
+            if (verbosity) {
+                std::cout << "\t( " << PRINT_V(tv->id) << " ) Added new gauge between " 
+                                << PRINT_V(tx->id) << " and "
+                                << PRINT_V(ty->id) << "\n";
+            }
 
             any_change = true;
         }
@@ -660,21 +664,21 @@ Compiler::linearize(ir_t* curr_ir) {
     // Here, we will search for more reduction opportunities by searching for parity/gauge qubits
     // with neighboring degree 1 data qubits, such that if we move these qubits, we can reduce
     // the parity/gauge qubit (as it is now degree 2).
-    TannerGraph& tanner_graph = curr_ir->curr_spec;
-    Processor3D& arch = curr_ir->arch;
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    Processor3D* arch = curr_ir->arch;
 
     std::vector<proc3d::edge_t*> edges_to_remove;
     std::vector<proc3d::edge_t*> edges_to_add;
 
-    for (auto tv : tanner_graph.get_vertices()) {
-        auto pv = arch.get_vertex(tv->id);
-        uint deg = arch.get_degree(pv);
+    for (auto tv : tanner_graph->get_vertices()) {
+        auto pv = arch->get_vertex(tv->id);
+        uint deg = arch->get_degree(pv);
         if (deg > 1)    continue;
         // Check if any neighboring parity qubits match the criteria.
         proc3d::vertex_t* victim1 = nullptr;
-        for (auto pw : arch.get_neighbors(pv)) {
+        for (auto pw : arch->get_neighbors(pv)) {
             if (!curr_ir->qubit_to_roles.count(pw))  continue;   // This is a data qubit.
-            uint deg = arch.get_degree(pw);
+            uint deg = arch->get_degree(pw);
             if (deg == 3) {
                 victim1 = pw;
                 break;
@@ -684,10 +688,10 @@ Compiler::linearize(ir_t* curr_ir) {
         // Search for a data victim adjacent to pw.
         uint victim2_dg = std::numeric_limits<uint>::max();
         proc3d::vertex_t* victim2 = nullptr;
-        for (auto pw : arch.get_neighbors(victim1)) {
+        for (auto pw : arch->get_neighbors(victim1)) {
             if (curr_ir->qubit_to_roles.count(pw))  continue;    // This is not a data qubit.
             if (pw == pv)   continue;
-            deg = arch.get_degree(pw);
+            deg = arch->get_degree(pw);
             if (deg < victim2_dg) {
                 victim2_dg = deg;
                 victim2 = pw;
@@ -695,22 +699,22 @@ Compiler::linearize(ir_t* curr_ir) {
         }
         if (victim2 == nullptr) continue;
         // Now, we delete the edge between pv and victim1 and move pv adjacent to victim2.
-        auto e1 = arch.get_edge(pv, victim1);
-        arch.delete_edge(e1);
+        auto e1 = arch->get_edge(pv, victim1);
+        arch->delete_edge(e1);
 
         auto e2 = new proc3d::edge_t;
         e2->src = (void*)pv;
         e2->dst = (void*)victim2;
-        arch.add_edge(e2);
+        arch->add_edge(e2);
     }
 }
 
 void
-print_connectivity(Processor3D& arch) {
+print_connectivity(Processor3D* arch) {
     std::cout << "Connections:\n";
-    for (auto v : arch.get_vertices()) {
+    for (auto v : arch->get_vertices()) {
         std::cout << "\tQubit " << PRINT_V(v->id) << ":\t";
-        for (auto w : arch.get_neighbors(v)) {
+        for (auto w : arch->get_neighbors(v)) {
             std::cout << " " << PRINT_V(w->id);
             if (w->is_tsv_junction())   std::cout << "(V)";
         }
@@ -740,11 +744,11 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
     std::filesystem::path spec = folder/"spec.txt";
     std::ofstream spec_out(spec);
 
-    TannerGraph& tanner_graph = ir->curr_spec;
-    for (auto tv : tanner_graph.get_vertices()) {
+    TannerGraph* tanner_graph = ir->curr_spec;
+    for (auto tv : tanner_graph->get_vertices()) {
         if (tv->qubit_type == tanner::vertex_t::DATA)   continue;
         spec_out << "GXZ"[tv->qubit_type-1] << (tv->id & 0x00ff'ffff);
-        for (auto tw : tanner_graph.get_neighbors(tv)) {
+        for (auto tw : tanner_graph->get_neighbors(tv)) {
             spec_out << "," << tw->id;
         }
         spec_out << "\n";
@@ -756,19 +760,19 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
     std::ofstream flat_map_out(flat_map);
     std::ofstream d3d_map_out(d3d_map);
     
-    Processor3D& arch = ir->arch;
+    Processor3D* arch = ir->arch;
     // First, organize the qubits into more appropriate ids.
     std::map<uint, uint> id_to_num;
     uint k = 0;
-    for (auto v : arch.get_vertices())  id_to_num[v->id] = k++;
+    for (auto v : arch->get_vertices())  id_to_num[v->id] = k++;
     // Now, write the architecture.
-    for (auto e : arch.get_edges()) {
+    for (auto e : arch->get_edges()) {
         auto pv = (proc3d::vertex_t*)e->src;
         auto pw = (proc3d::vertex_t*)e->dst;
         // Flat map is pretty straightforward.
         flat_map_out << id_to_num[pv->id] << "," << id_to_num[pw->id] << "\n";
         // Check if the connection is complex.
-        auto impl = arch.get_physical_edges(pv, pw);
+        auto impl = arch->get_physical_edges(pv, pw);
         d3d_map_out << id_to_num[pv->id];
         for (auto f : impl) {
             auto py = (proc3d::vertex_t*)f->dst;
@@ -786,6 +790,10 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
         auto pv = pair.second;
         label_out << "DGXZ"[tv->qubit_type];
         label_out << (tv->id & 0x00ff'ffff) << "," << id_to_num[pv->id] << "\n";
+    }
+    // Also write data qubits
+    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
+        label_out << "D" << (tv->id & 0x00ff'ffff) << "," << id_to_num[tv->id] << "\n";
     }
     // Write schedule of operations
     std::filesystem::path sched = folder/"schedule.qasm";
@@ -815,7 +823,7 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
     }
     sched_out << "OPENQASM 2.0;\n"
                 << "include \"qelib1.inc\";\n"
-                << "qreg q[" << arch.get_vertices().size() << "];\n"
+                << "qreg q[" << arch->get_vertices().size() << "];\n"
                 << "creg c[" << cbit << "];\n"
                 << sched_str;
 }
