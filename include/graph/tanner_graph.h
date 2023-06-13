@@ -3,8 +3,8 @@
  *  date:   30 May 2023
  * */
 
-#ifndef PROTEAN_TANNER_GRAPH_h
-#define PROTEAN_TANNER_GRAPH_h
+#ifndef TANNER_GRAPH_h
+#define TANNER_GRAPH_h
 
 #include "defs.h"
 #include "graph/graph.h"
@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace qontra {
-namespace protean {
+namespace graph {
 
 namespace tanner {
 
@@ -125,10 +125,6 @@ private:
     const static uint INDUCED_GAUGE_INDEX_FLAG = 1 << 24;
 };
 
-
-}   // protean
-
-namespace graph {
 namespace io {
 
 // Function for io callback.
@@ -136,10 +132,11 @@ namespace io {
 // In a tanner graph description file, each line should be of the form:
 //          <X/Z><check-id>,<data-qubit-1>,<data-qubit-2>,...
 
-void    update_tanner_graph(protean::TannerGraph&, std::string); // Callback for io function.
+void    update_tanner_graph(graph::TannerGraph&, std::string); // Callback for io function.
 
 }   // io
+
 }   // graph
 }   // qontra
 
-#endif  // PROTEAN_TANNER_GRAPH_h
+#endif  // TANNER_GRAPH_h

@@ -7,9 +7,9 @@
 #define PROTEAN_COMPILER_h
 
 #include "defs.h"
+#include "graph/tanner_graph.h"
 #include "instruction.h"
 #include "protean/proc3d.h"
-#include "protean/tanner_graph.h"
 
 #include <lemon/list_graph.h>
 #include <lemon/matching.h>
@@ -34,14 +34,16 @@ namespace compiler {
             delete arch;
         }
 
-        TannerGraph*                    curr_spec;
+        graph::TannerGraph*             curr_spec;
         Processor3D*                    arch;
         schedule_t<qc::Instruction>     schedule;
         fp_t                            score;
         bool                            valid;
         // Data structures:
-        std::map<tanner::vertex_t*, proc3d::vertex_t*>              role_to_qubit;
-        std::map<proc3d::vertex_t*, std::vector<tanner::vertex_t*>> qubit_to_roles;
+        std::map<graph::tanner::vertex_t*, proc3d::vertex_t*>
+                                                role_to_qubit;
+        std::map<proc3d::vertex_t*, std::vector<graph::tanner::vertex_t*>>
+                                                qubit_to_roles;
                                                         // During the "reduce"  pass, a qubit
                                                         // may take on multiple roles due to a
                                                         // contraction. For example, a parity
@@ -77,7 +79,7 @@ public:
         params()
     {}
 
-    compiler::ir_t* run(TannerGraph*);
+    compiler::ir_t* run(graph::TannerGraph*);
 
     params_t    params;
 private:

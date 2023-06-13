@@ -5,10 +5,10 @@
 
 #include "defs.h"
 #include "graph/io.h"
+#include "graph/tanner_graph.h"
 #include "parsing/cmd.h"
 #include "protean/compiler.h"
 #include "protean/proc3d.h"
-#include "protean/tanner_graph.h"
 
 #include <fstream>
 #include <iostream>
