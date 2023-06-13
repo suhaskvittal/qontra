@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 # Declare executable.
 set(QONTRA_FILES
+    # Top-Level
+    src/experiments.cpp
     # Decoders
     src/decoder/mwpm.cpp
     # Parsing

@@ -41,6 +41,8 @@ public:
                                                             // will perform decoding
                                                             // and return a correction.
     virtual std::string name(void) =0;  // Useful for printing out stats.
+
+    stim::Circuit       get_circuit(void) { return circuit; }
 protected:
     // Other helpful functions:
     //
