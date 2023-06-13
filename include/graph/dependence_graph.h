@@ -30,10 +30,6 @@ struct edge_t : base::edge_t {
 // Two instructions have an edge in the DAG if they share an
 // operand. The direction of the edge points in the direction
 // of the later operation.
-//
-// For efficiency, we do not enforce the DAG property (only the
-// directed property). However, we offer a method to check if
-// the object is a DAG.
 template <class I_t>
 class DependenceGraph : public __DependenceGraphParent {
 public:
@@ -51,32 +47,35 @@ public:
         is_dag(other.is_dag)
     {}
 
-    // Enforce the directed property.
-    bool add_edge(dep::edge_t* e) override { 
-        if (e->is_undirected) return false;
-        return __DependenceGraphParent::add_edge(e);
-    }
+    bool add_vertex(dep::vertex_t<I_t>* v) override {
+        if (!Graph::add_vertex(v))  return false;
 
-    bool check_if_dag(void) { // Returns true if this graph is a DAG.
-        update_state();
-        return is_dag;
-    }
-
-    dag::vertex_t<I_t>* get_root(void) { return root; }
-protected:
-    bool update_state(void) override {
-        if (!__DependenceGraphParent::update_state())   return false;        
-        typedef dep::vertex_t<I_t> V_t;
-        std::map<V_t, uint> level_map;
+        std::map<uint, dag::vertex_t<I_t>*> operand_to_ancestor;
+        for (auto x : v->inst_p->operands)  operand_to_ancestor[x] = root;
+        // Get ancestors via BFS.
         search::callback_t<V_t> cb = [&] (V_t* v1, V_t* v2)
         {
-            if (level_map.count(v2) && level_map[v2] < level_map[v1]) {
-                this->is_dag = false;
-            }
-            level_map[v2] = level_map[v1]+1;
+            for (auto x : v2->inst_p->operands) operand_to_ancestor[x] = v2;
         };
-        xfs(this, root, cb, false);
+        // Connect v to all ancestors
+        std::set<dag::vertex_t<I_t>*> already_connected;
+        for (auto x : v->inst_p->operands) {
+            auto a = operand_to_ancestor[x];
+            if (already_connected.count(a)) continue;
+
+            dep::edge_t* e = new dep::edge_t;
+            e->src = a;
+            e->dst = v;
+            e->is_undirected = false;
+            Graph::add_edge(e);
+
+            already_connected.insert(a);
+        }
+        return true;
     }
+
+    bool add_edge(dep::edge_t* e) =delete;
+    dag::vertex_t<I_t>* get_root(void) { return root; }
 private:
     dep::vertex_t<I_t>* root;   // Single source of the DAG. Has no data (inst_p = nullptr).
 
@@ -84,7 +83,18 @@ private:
 };
 
 template <class I_t>
-DependenceGraph<I_t>    from_schedule(const schedule_t<I_t>&);
+DependenceGraph<I_t> from_schedule(const schedule_t<I_t>& schedule) {
+    DependenceGraph<I_t> graph;
+
+    uint index = 0;
+    for (auto& inst : schedule) {
+        dep::vertex_t* v = new dep::vertex_t;
+        v->id = index++;
+        v->inst_p = &inst;
+        graph.add_vertex(v);
+    }
+    return graph;
+}
 
 }   // graph
 }   // qontra

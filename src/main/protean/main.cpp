@@ -75,12 +75,12 @@ int main(int argc, char* argv[]) {
         fp_t connectivity = ir->arch->get_mean_connectivity();
         fp_t size_score = 0.05 * ((fp_t)ir->arch->get_vertices().size());
         fp_t op_score = 0.005 * ir->schedule.size();
-        return size_score;
+        return connectivity + size_score;
     };
     // Define any constraints here.
     compiler::constraint_t con;
     con.max_mean_connectivity = 2.8;
-    con.max_connectivity = 4;
+    con.max_connectivity = 3;
 
     // Declare compiler and run it.
     Compiler compiler(con, cf);

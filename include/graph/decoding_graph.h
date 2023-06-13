@@ -87,7 +87,7 @@ private:
     void    build_distance_matrix(void);
     void    build_error_polynomial(void);
 
-    dijkstra::DistanceMatrix<decoding::vertex_t, matrix_entry_t>    distance_matrix;
+    distance::DistanceMatrix<decoding::vertex_t, matrix_entry_t>    distance_matrix;
 
     poly_t  error_polynomial;
     fp_t    expected_errors;

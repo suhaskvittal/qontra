@@ -62,7 +62,7 @@ __schedule:
     if (params.verbose) {
         std::cout << "[ schedule ] ---------------------\n";
     }
-    schedule(ir);
+    micro_schedule(ir);
     if (params.verbose) {
         std::cout << "\t#ops = " << ir->schedule.size() << "\n";
 
@@ -299,7 +299,7 @@ Compiler::reduce(ir_t* curr_ir) {
     std::map<ListGraph::Node, proc3d::vertex_t*> lemon2proc;
 
     for (auto pv : arch->get_vertices()) {
-        if (!curr_ir->qubit_to_roles.count(pv))    continue;   // This is a data qubit.
+        if (curr_ir->is_data(pv))   continue;
         uint deg = arch->get_degree(pv);
         // First check if it is zero-degree.
         if (deg == 0) {
@@ -433,7 +433,7 @@ Compiler::merge(ir_t* curr_ir) {
         auto v1 = (proc3d::vertex_t*)e->src;
         auto v2 = (proc3d::vertex_t*)e->dst;
         // Make sure neither qubit is a data qubit.
-        if (curr_ir->qubit_to_roles.count(v1) || curr_ir->qubit_to_roles.count(v2)) continue;
+        if (curr_ir->is_data(v1) || curr_ir->is_data(v2))   continue;
         uint d = arch->get_degree(v1) + arch->get_degree(v2);
         if (d < min_total_degree) {
             min_total_degree = d;
@@ -516,10 +516,13 @@ Compiler::split(ir_t* curr_ir) {
 }
 
 void
-Compiler::schedule(ir_t* curr_ir) {
+Compiler::micro_schedule(ir_t* curr_ir) {
+    // Here, we will create schedules for computing each parity check qubit.
+    // In macro_schedule, we will combine these schedules in a way that minimizes 
+    // depth.
     TannerGraph* tanner_graph = curr_ir->curr_spec;
     Processor3D* arch = curr_ir->arch;
-    // Execute the larger checks before the smaller checks.
+
     std::vector<tanner::vertex_t*>  all_checks;
     for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::XPARITY)) {
         all_checks.push_back(tv);
@@ -527,22 +530,12 @@ Compiler::schedule(ir_t* curr_ir) {
     for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
         all_checks.push_back(tv);
     }
-
-    typedef struct {
-        bool operator()(tanner::vertex_t* x, tanner::vertex_t* y) {
-            return g->get_degree(x) > g->get_degree(y);
-        }
-
-        TannerGraph* g;
-    } check_cmp;
-    check_cmp c = {tanner_graph};
-    std::sort(all_checks.begin(), all_checks.end(), c);
     // We will use Dijkstra's algorithm to get a table of shortest paths from each data qubit
     // to any check. When trying to execute a check, we will attempt to merge paths from
     // multiple data qubits to compute the CNOT schedule.
     using namespace graph;
 
-    dijkstra::ewf_t<proc3d::vertex_t> idw = [&] (proc3d::vertex_t* v, proc3d::vertex_t* w)
+    distance::ewf_t<proc3d::vertex_t> idw = [&] (proc3d::vertex_t* v, proc3d::vertex_t* w)
     {
         return 1;
     };
@@ -552,7 +545,7 @@ Compiler::schedule(ir_t* curr_ir) {
         bool valid;
     } entry_t;
 
-    dijkstra::callback_t<proc3d::vertex_t, entry_t> d_cb = 
+    distance::callback_t<proc3d::vertex_t, entry_t> d_cb = 
     [&] (proc3d::vertex_t* v1, proc3d::vertex_t* v2,
         const std::map<proc3d::vertex_t*, fp_t>& dist,
         const std::map<proc3d::vertex_t*, proc3d::vertex_t*>& pred)
@@ -574,7 +567,6 @@ Compiler::schedule(ir_t* curr_ir) {
         return x;
     };
 
-    schedule_t<qc::Instruction> schedule;
     std::deque<qc::Instruction> schedule_buffer;
     
     // To schedule the CNOTs for measuring each parity check, we will create graphs
@@ -585,13 +577,24 @@ Compiler::schedule(ir_t* curr_ir) {
 
     typedef Graph<proc3d::vertex_t, base::edge_t> schedule_graph_t;
 
-    // set_x_parity and curr_parity_check are state variables that are used to adopt
+    // set_x_parity, curr_check, and curr_parity_qubit are state variables that are used to adopt
     // the callback to the graph without making a callback for every parity check.
     bool set_x_parity = false;
-    proc3d::vertex_t* curr_parity_check;
+    tanner::vertex_t* curr_check;
+    proc3d::vertex_t* curr_parity_qubit;
+
+    std::map<proc3d::vertex_t*, std::vector<tanner::vertex_t*>> qubit_to_users; 
+                                                                    // Maps gauge/parity qubits
+                                                                    // to the checks that require
+                                                                    // them.
     search::callback_t<proc3d::vertex_t> s_cb =
     [&] (proc3d::vertex_t* v1, proc3d::vertex_t* v2)
     {
+        // Note that this function is called in reverse order, so
+        // v1 is towards the parity qubit, and v2 is away from the parity qubit.
+        // 
+        // Thus, parity qubits can only be v1, and data qubits can only be v2.
+
         qc::Instruction inst;
         inst.name = "CX";
         if (set_x_parity)   inst.operands = std::vector<uint>{v1->id, v2->id};
@@ -599,10 +602,12 @@ Compiler::schedule(ir_t* curr_ir) {
         schedule_buffer.push_front(inst);
 
         // We also need to include undo operations at the end.
-        if (v1 != curr_parity_check)    schedule_buffer.push_back(inst);
+        if (v1 != curr_parity_qubit)    schedule_buffer.push_back(inst);
+
+        qubit_to_users[v1].push_back(curr_check);
     };
 
-    auto distance_matrix = create_distance_matrix(arch, idw, d_cb);
+    auto distance_matrix = distance::create_distance_matrix(arch, idw, d_cb);
     for (auto tv : all_checks) {
         schedule_graph_t scheduling_graph;
         std::set<proc3d::vertex_t*> non_data_qubits;
@@ -635,7 +640,8 @@ Compiler::schedule(ir_t* curr_ir) {
         }
         // Set callback state variables.
         set_x_parity = tv->qubit_type == tanner::vertex_t::XPARITY;
-        curr_parity_check = pv;
+        curr_check = tv;
+        curr_parity_qubit = pv;
         // Create H and Mrc gates beforehand
         qc::Instruction h;
         qc::Instruction meas;
@@ -652,17 +658,20 @@ Compiler::schedule(ir_t* curr_ir) {
         reset.name = std::string("R");
         reset.operands.push_back(pv->id);
 
+        schedule_t<qc::Instruction> schedule;
         // Add the gates to the schedule.
         if (set_x_parity) {
             schedule.push_back(h);
         }
-        xfs(&scheduling_graph, pv, s_cb, false);
+        search::xfs(&scheduling_graph, pv, s_cb, false);
         for (auto inst : schedule_buffer) schedule.push_back(inst);
         if (set_x_parity) {
             schedule.push_back(h);
         }
         schedule.push_back(meas);
         schedule.push_back(reset);
+        // Define the micro schedule.
+        curr_ir->check_to_impl[tv] = schedule;
         // Clear the scheduling buffer for the next qubit.
         schedule_buffer.clear();
         // Deallocate entries in scheduling graph manually: we want to destroy
@@ -670,7 +679,37 @@ Compiler::schedule(ir_t* curr_ir) {
         scheduling_graph.dealloc_on_delete = false;
         for (auto e : scheduling_graph.get_edges()) delete e;
     }
-    curr_ir->schedule = schedule;
+    // Now, identify the conflicting parity checks from qubit_to_users.
+    for (auto pair : qubit_to_users) {
+        auto checks = pair.second;
+        for (uint i = 0; i < checks.size(); i++) {
+            auto c1 = checks[i];
+            for (uint j = i+1; j < checks.size(); j++) {
+                auto c2 = checks[j];
+                curr_ir->conflicting_checks.insert(std::make_pair(c1, c2));
+                curr_ir->conflicting_checks.insert(std::make_pair(c2, c1));
+            }
+        }
+    }
+}
+
+void
+Compiler::macro_schedule(ir_t* curr_ir) {
+    // Now, given the micro-schedules, we want to design the final schedule that measures
+    // all checks.
+    graph::DependenceGraph dependency_graph;
+    std::set<tanner::vertex_t*>  all_checks;
+    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::XPARITY)) {
+        all_checks.insert(tv);
+    }
+    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
+        all_checks.insert(tv);
+    }
+    
+    while (all_checks.size()) {
+        // Perform maximum matching on the remaining checks to get a maximal set to schedule.
+
+    }
 }
 
 void
@@ -722,44 +761,51 @@ Compiler::sparsen(ir_t* curr_ir) {
     TannerGraph* tanner_graph = curr_ir->curr_spec;
     auto vertices = tanner_graph->get_vertices();
 
-    bool any_change = false;
+    uint max_degree = 0;
+    tanner::vertex_t* target = nullptr;
+    // Get maximum degree vertex in tanner graph.
     for (auto tv : vertices) {
-        if (tv->qubit_type == tanner::vertex_t::DATA)    continue;
-        auto tv_adj = tanner_graph->get_neighbors(tv);
-        for (uint i = 1; i < tv_adj.size()-1; i += 2) {
-            // We leave up to a degree of 3 (as leaving a degree of 2 will simply
-            // result in reduction in the "reduce" pass).
-            auto tx = tv_adj[i-1];
-            auto ty = tv_adj[i];
-            std::vector<tanner::vertex_t*> tg_adj{tx, ty};
-            if (tanner_graph->has_copy_in_gauges(tg_adj)) continue;
-            // Create a new gauge qubit.
-            tanner::vertex_t* tg = new tanner::vertex_t;
-            uint index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
-            tg->id = (index) | (tanner::vertex_t::GAUGE << 30);
-            tg->qubit_type = tanner::vertex_t::GAUGE;
-            tanner_graph->add_vertex(tg);
-            // Add corresponding edges.
-            tanner::edge_t* tx_tg = new tanner::edge_t;
-            tx_tg->src = (void*)tx;
-            tx_tg->dst = (void*)tg;
-            tanner_graph->add_edge(tx_tg);
-
-            tanner::edge_t* ty_tg = new tanner::edge_t;
-            ty_tg->src = (void*)ty;
-            ty_tg->dst = (void*)tg;
-            tanner_graph->add_edge(ty_tg);
-            
-            if (params.verbose) {
-                std::cout << "\t( " << PRINT_V(tv->id) << " ) Added new gauge between " 
-                                << PRINT_V(tx->id) << " and "
-                                << PRINT_V(ty->id) << "\n";
-            }
-
-            any_change = true;
+        if (tv->qubit_type == tanner::vertex_t::DATA
+            || curr_ir->sparsen_visited_set.count(tv))  continue;
+        uint d = tanner_graph->get_degree(tv);
+        if (d > max_degree) {
+            target = tv;
+            max_degree = d;
         }
     }
-    return any_change;
+    if (target == nullptr)  return false;
+    auto target_adj = tanner_graph->get_neighbors(target);
+    for (uint i = 1; i < target_adj.size()-1; i += 2) {
+        // We leave up to a degree of 3 (as leaving a degree of 2 will simply
+        // result in reduction in the "reduce" pass).
+        auto tx = target_adj[i-1];
+        auto ty = target_adj[i];
+        std::vector<tanner::vertex_t*> tg_adj{tx, ty};
+        if (tanner_graph->has_copy_in_gauges(tg_adj)) continue;
+        // Create a new gauge qubit.
+        tanner::vertex_t* tg = new tanner::vertex_t;
+        uint index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
+        tg->id = (index) | (tanner::vertex_t::GAUGE << 30);
+        tg->qubit_type = tanner::vertex_t::GAUGE;
+        tanner_graph->add_vertex(tg);
+        // Add corresponding edges.
+        tanner::edge_t* tx_tg = new tanner::edge_t;
+        tx_tg->src = (void*)tx;
+        tx_tg->dst = (void*)tg;
+        tanner_graph->add_edge(tx_tg);
+
+        tanner::edge_t* ty_tg = new tanner::edge_t;
+        ty_tg->src = (void*)ty;
+        ty_tg->dst = (void*)tg;
+        tanner_graph->add_edge(ty_tg);
+        
+        if (params.verbose) {
+            std::cout << "\t( " << PRINT_V(target->id) << " ) Added new gauge between " 
+                            << PRINT_V(tx->id) << " and "
+                            << PRINT_V(ty->id) << "\n";
+        }
+    }
+    return true;
 }
 
 void
@@ -780,7 +826,7 @@ Compiler::linearize(ir_t* curr_ir) {
         // Check if any neighboring parity qubits match the criteria.
         proc3d::vertex_t* victim1 = nullptr;
         for (auto pw : arch->get_neighbors(pv)) {
-            if (!curr_ir->qubit_to_roles.count(pw))  continue;   // This is a data qubit.
+            if (curr_ir->is_data(pw))   continue;
             uint deg = arch->get_degree(pw);
             if (deg == 3) {
                 victim1 = pw;
@@ -792,7 +838,7 @@ Compiler::linearize(ir_t* curr_ir) {
         uint victim2_dg = std::numeric_limits<uint>::max();
         proc3d::vertex_t* victim2 = nullptr;
         for (auto pw : arch->get_neighbors(victim1)) {
-            if (curr_ir->qubit_to_roles.count(pw))  continue;    // This is not a data qubit.
+            if (!curr_ir->is_data(pw))  continue;
             if (pw == pv)   continue;
             deg = arch->get_degree(pw);
             if (deg < victim2_dg) {
