@@ -144,11 +144,26 @@ QontraSim::qc_blk_send_syndrome() {
     //
     // Place syndrome buffer into the control processor's syndrome history
     auto hist = cp_syndrome_history.transposed(); 
+    // If the new size of the syndrome history will exceed the critical size,
+    // then remove the oldest bits.
+    if (syndrome_history_length + syndrome_buf_offset 
+            > syndrome_history_critical_size) 
+    {
+        uint lost_bits = syndrome_history_length + syndrome_buf_offset
+                            - syndrome_history_critical_size;
+        for (uint i = 0; i < syndrome_history_length; i++) {
+            hist[i].clear();
+            if (syndrome_history_length - i < lost_bits) {
+                hist[i] |= hist[i+lost_bits].clear();
+            }
+        }
+        syndrome_history_length -= lost_bits;
+    }
     for (uint i = 0; i < syndrome_buf_offset) {
         uint k = syndrome_history_length + i;
         hist[k] |= qc_syndrome_buf;
         if (last_syndrome_length > 0) {
-            hist ^= hist[k-last_syndrome_length];
+            hist[k] ^= hist[k-last_syndrome_length];
         }
     }
     // Update structures
@@ -165,7 +180,14 @@ QontraSim::qc_blk_send_syndrome() {
 void
 QontraSim::cp_blk_decode() {
     // Edit this block if you want to modify decoding logic.
-    /* TODO */
+    const stim::Circuit xcirc = x_dec->get_circuit();
+    const stim::Circuit zcirc = z_dec->get_circuit();
+    const uint xwidth = xcirc.count_detectors() + xcirc.count_observables();
+    const uint zwidth = zcirc.count_detectors() + zcirc.count_observables();
+    for (uint64_t i = 0; i < n_trials_in_batch; i++) {
+        auto syndrome = decoder::syndrome_to_vector(cp_syndrome_history[i]);
+        // Separate into X-syndrome and Z-syndrome.
+    }
 }
 
 void
