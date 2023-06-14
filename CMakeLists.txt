@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 # Declare executable.
 set(QONTRA_FILES
+    # Top-Level
+    src/experiments.cpp
     # Decoders
     src/decoder/mwpm.cpp
     # Parsing
@@ -14,10 +16,10 @@ set(QONTRA_FILES
     # Graphs
     src/graph/decoding_graph.cpp
     src/graph/coupling_graph.cpp
+    src/graph/tanner_graph.cpp
     # Protean
     src/protean/compiler.cpp
     src/protean/proc3d.cpp
-    src/protean/tanner_graph.cpp
     )
 add_library(common INTERFACE)
 add_library(qontra ${QONTRA_FILES})

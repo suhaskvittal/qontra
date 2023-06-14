@@ -16,8 +16,6 @@ const uint64_t DMEM_SIZE = 1 << 14;     // 16 KB
 
 namespace qontra {
 
-enum class Code { surf, hhex };
-
 // Flags for enabling certain policies:
 // 
 // Implemented so far:
@@ -32,7 +30,7 @@ const uint8_t CONTRASIM_EN_ERASER = 0x1;
 
 class QontraSim {
 public:
-    QontraSim(uint distance, fp_t p, Code);
+    QontraSim(uint distance, fp_t p);
 
     stim::Circuit   get_canonical_circuit(void);    // Gets circuit to be consumed
                                                     // by decoder given *standard*
@@ -42,22 +40,20 @@ public:
                                                     // 1q errors, 2q errors, readout
                                                     // errors, and coherence/idling
                                                     // errors.
-    void            load_decoder(/* TODO */);       // Loads decoder to use during
+    void            load_decoder(decoder::Decoder* x_dec, decoder::Decoder* z_dec);
+                                                    // Loads decoder to use during
                                                     // simulation.
     void            load_flags(uint64_t);           // Loads flags to be used during
                                                     // simulation.
     void            load_imem(std::string);         // Loads instruction memory
                                                     // (assumed to be all SRAM) with
                                                     // control instructions.
-    void            load_imem_with_memory_x(void);
-    void            load_imem_with_memory_y(void);  // Loads instruction memory
-                                                    // with control instructions for
-                                                    // memory_Y experiment. Final
-                                                    // measurement is replaced with
-                                                    // PEEKZ and PEEKX operations.
-    void            load_imem_with_memory_z(void);
+    void            load_memory_x(uint rounds);     // Loads instruction memory with
+                                                    // control instructions to
+                                                    // execute memory experiment.
+    void            load_memory_z(uint rounds);
 
-    void            run(uint rounds);
+    void            run(uint64_t shots);
 
     std::string     dump_stats(void);
     void            write_stats_to_file(std::string);
@@ -115,7 +111,9 @@ protected:
     std::map<uint, std::vector<uint>>   logical_to_physical_qubit;
 
     const uint distance;
-    const Code qec_code;
+
+    decoder::Decoder* x_dec;
+    decoder::Decoder* z_dec;
 
     uint n_qubits;
     uint64_t n_trials;
@@ -186,9 +184,7 @@ private:
     uint                    syndrome_buf_offset;    // Tracks which bit we 
                                                     // are recording.
     // Control Processor + Decoder structures
-    stim::simd_bit_table    cp_syndrome_history;    // Row-major -- transposed to
-                                                    // column major during syndrome
-                                                    // transmission
+    stim::simd_bit_table    cp_syndrome_history;    // Column-major
     stim::simd_bit_table    cp_x_pauli_frames;      // Row-major
     stim::simd_bit_table    cp_z_pauli_frames;      // Row-major
 
@@ -202,8 +198,12 @@ private:
                                                         // failed. A logical error
                                                         // occurs when the Pauli frames
                                                         // do not match this ideal.
-    uint                    syndrome_history_length;
-    uint                    last_syndrome_length;
+
+    uint    syndrome_history_length;            // Number of bits in syndrome history.
+    uint    last_syndrome_length;               // Number of bits recorded in last
+                                                // round.
+    uint    syndrome_history_critical_size;     // Critical point where oldest data
+                                                // starts getting overwritten.
 
     uint64_t    pc;
 

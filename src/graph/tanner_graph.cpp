@@ -3,10 +3,10 @@
  *  date:   30 May 2023
  * */
 
-#include "protean/tanner_graph.h"
+#include "graph/tanner_graph.h"
 
 namespace qontra {
-namespace protean {
+namespace graph {
 
 using namespace tanner;
 
@@ -72,15 +72,10 @@ TannerGraph::has_copy_in_gauges(const std::vector<vertex_t*>& adj) {
     return false;
 }
 
-}   // protean
-
-namespace graph {
 namespace io {
 
 void
-update_tanner_graph(protean::TannerGraph& graph, std::string line) {
-    using namespace protean;
-
+update_tanner_graph(graph::TannerGraph& graph, std::string line) {
     size_t ssi;   // Variable for calculating substring indices.
 
     if (line.size() == 0)   return; // Nothing to be done.
@@ -123,6 +118,6 @@ update_tanner_graph(protean::TannerGraph& graph, std::string line) {
 }
 
 }   // io
-}   // graph
 
+}   // graph
 }   // qontra

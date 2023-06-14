@@ -8,6 +8,7 @@
 #include "decoder/decoder.h"
 #include "decoder/mwpm.h"
 #include "defs.h"
+#include "experiments.h"
 #include "parsing/cmd.h"
 
 #include <stim.h>
@@ -16,10 +17,6 @@
 #include <iostream>
 
 #include <mpi.h>
-
-#define SQR(x)              (x)*(x)
-#define MEAN(s, n)          ((fp_t)(s))/((fp_t)(n))
-#define STD(m, ss, n)       ( ((fp_t)(ss))/((fp_t)(n)) - SQR(m) )
 
 using namespace qontra;
 
@@ -159,84 +156,22 @@ help_exit:
     if (decoder == "MWPM" || decoder == "mwpm") {
         dec = new decoder::MWPMDecoder(circuit);
     } else if (decoder == "NONE" || decoder == "none") {
-        dec = nullptr;
+        std::cout << help;
+        return 1;
     }
-
-    // Start the experiment.
-    //
-    // This code uses MPI to distribute the task.
-    uint64_t __shots = shots / world_size;
-    if (world_rank == 0)    __shots += shots % world_size;
-
-    std::mt19937_64 rng(seed + world_rank);
-
-    uint64_t    logical_errors, __logical_errors = 0;
-    uint64_t    hw_sum, __hw_sum = 0;
-    uint64_t    hw_sqr_sum, __hw_sqr_sum = 0;
-    uint64_t    hw_max, __hw_max = 0;
-    fp_t        t_sum, __t_sum = 0;
-    fp_t        t_sqr_sum, __t_sqr_sum = 0;
-    fp_t        t_max, __t_max = 0;
-
-    const uint sample_width = 
-        circuit.count_detectors() + circuit.count_observables();
-    while (__shots > 0) {
-        const uint64_t shots_this_batch = 
-            __shots < shots_per_batch ? __shots : shots_per_batch;
-        auto samples = stim::detector_samples(
-                            circuit, shots_this_batch, false, true, rng);
-        samples = samples.transposed();
-        for (uint64_t t = 0; t < shots_this_batch; t++) {
-            stim::simd_bits_range_ref row = samples[t];
-            stim::simd_bits_range_ref subrow = 
-                row.prefix_ref(circuit.count_detectors());
-            const uint hw = subrow.popcnt();
-
-            __hw_sum += hw;
-            __hw_sqr_sum += SQR(hw);
-            __hw_max = hw > __hw_max ? hw : __hw_max;
-
-            if (hw <= 2 && dec != nullptr) continue;
-            auto syndrome = decoder::syndrome_to_vector(row, sample_width);
-            auto res = dec->decode_error(syndrome);
-
-            __logical_errors += res.is_error;
-            __t_sum += res.exec_time;
-            __t_sqr_sum += SQR(res.exec_time);
-            __t_max = res.exec_time > __t_max ? res.exec_time : __t_max;
-        }
-        __shots -= shots_this_batch;
-    }
-
-    MPI_Reduce(&__logical_errors, &logical_errors, 1, MPI_UNSIGNED_LONG,
-                MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&__hw_sum, &hw_sum, 1, MPI_UNSIGNED_LONG, MPI_SUM,
-                0, MPI_COMM_WORLD);
-    MPI_Reduce(&__hw_sqr_sum, &hw_sqr_sum, 1, MPI_UNSIGNED_LONG, MPI_SUM,
-                0, MPI_COMM_WORLD);
-    MPI_Reduce(&__hw_max, &hw_max, 1, MPI_UNSIGNED_LONG, MPI_MAX,
-                0, MPI_COMM_WORLD);
-    MPI_Reduce(&__t_sum, &t_sum, 1, MPI_LONG_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&__t_sqr_sum, &t_sqr_sum, 1, MPI_LONG_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&__t_max, &t_max, 1, MPI_LONG_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    // Calculate means and std
-    fp_t ler = ((fp_t)logical_errors) / ((fp_t)shots);
-    fp_t hw_mean = MEAN(hw_sum, shots);
-    fp_t hw_std = STD(hw_mean, hw_sqr_sum, shots);
-    fp_t t_mean = MEAN(t_sum, shots);
-    fp_t t_std = STD(t_mean, t_sqr_sum, shots);
+    // Execute the experiment
+    auto res = memory_experiment(dec, shots);
     // Write the data
     if (world_rank == 0) {
-        std::cout << "errors = " << logical_errors << "\n";
-        out << ler << br
-            << hw_mean << br
-            << hw_std << br
-            << hw_max << br
-            << t_mean << br
-            << t_std << br
-            << t_max << "\n";
+        out << res.logical_error_rate << br
+            << res.hw_mean << br
+            << res.hw_std << br
+            << res.hw_max << br
+            << res.t_mean << br
+            << res.t_std << br
+            << res.t_max << "\n";
     }
-    if (dec != nullptr) delete dec;
-
+    delete dec;
     MPI_Finalize();
+    return 0;
 }
