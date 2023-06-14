@@ -8,6 +8,7 @@
 
 #include "defs.h"
 #include "graph/graph.h"
+#include "graph/algorithms/distance.h"
 
 #include <stim.h>
 

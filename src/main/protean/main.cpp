@@ -73,14 +73,20 @@ int main(int argc, char* argv[]) {
     {
         // Minimize overall connectivity.
         fp_t connectivity = ir->arch->get_mean_connectivity();
-        fp_t size_score = 0.05 * ((fp_t)ir->arch->get_vertices().size());
-        fp_t op_score = 0.005 * ir->schedule.size();
-        return connectivity + size_score;
+        fp_t size = 0.05 * ((fp_t)ir->arch->get_vertices().size());
+        fp_t op_cnt = 0.005 * ir->schedule.size();
+
+        fp_t op_depth = 0.0;
+        if (ir->dependency_graph != nullptr) {
+            op_depth = 0.1 * ir->dependency_graph->get_depth();
+        }
+
+        return connectivity + size + op_cnt + op_depth;
     };
     // Define any constraints here.
     compiler::constraint_t con;
-    con.max_mean_connectivity = 2.8;
-    con.max_connectivity = 3;
+    con.max_mean_connectivity = 2.9;
+    con.max_connectivity = 4;
 
     // Declare compiler and run it.
     Compiler compiler(con, cf);
@@ -92,6 +98,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Number of qubits = " << res->arch->get_vertices().size() << "\n";
     std::cout << "Connectivity = " << res->arch->get_mean_connectivity() << "\n";
     std::cout << "Number of ops = " << res->schedule.size() << "\n";
+    std::cout << "Schedule depth = " << res->dependency_graph->get_depth() << "\n";
 
     write_ir_to_folder(res, folder_out);
 

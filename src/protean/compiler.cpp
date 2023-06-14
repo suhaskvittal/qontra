@@ -63,8 +63,10 @@ __schedule:
         std::cout << "[ schedule ] ---------------------\n";
     }
     micro_schedule(ir);
+    macro_schedule(ir);
     if (params.verbose) {
         std::cout << "\t#ops = " << ir->schedule.size() << "\n";
+        std::cout << "\tdepth = " << ir->dependency_graph->get_depth() << "\n";
 
         std::cout << "[ score ] ---------------------\n";
     }
@@ -241,7 +243,7 @@ Compiler::unify(ir_t* curr_ir) {
     }
     // Now, check if any checks in each equivalence class have the same adjacency list.
     for (auto pair : weight_to_checks) {
-        auto checks = pair.second;
+        const auto& checks = pair.second;
         std::set<tanner::vertex_t*> already_removed;
         for (uint i = 0; i < checks.size(); i++) {
             auto tv = checks[i];
@@ -535,11 +537,6 @@ Compiler::micro_schedule(ir_t* curr_ir) {
     // multiple data qubits to compute the CNOT schedule.
     using namespace graph;
 
-    distance::ewf_t<proc3d::vertex_t> idw = [&] (proc3d::vertex_t* v, proc3d::vertex_t* w)
-    {
-        return 1;
-    };
-    
     typedef struct {
         std::vector<proc3d::vertex_t*> path;
         bool valid;
@@ -607,7 +604,8 @@ Compiler::micro_schedule(ir_t* curr_ir) {
         qubit_to_users[v1].push_back(curr_check);
     };
 
-    auto distance_matrix = distance::create_distance_matrix(arch, idw, d_cb);
+    auto distance_matrix = distance::create_distance_matrix(
+            arch, unit_ewf_t<proc3d::vertex_t>(), d_cb);
     for (auto tv : all_checks) {
         schedule_graph_t scheduling_graph;
         std::set<proc3d::vertex_t*> non_data_qubits;
@@ -681,7 +679,7 @@ Compiler::micro_schedule(ir_t* curr_ir) {
     }
     // Now, identify the conflicting parity checks from qubit_to_users.
     for (auto pair : qubit_to_users) {
-        auto checks = pair.second;
+        const auto& checks = pair.second;
         for (uint i = 0; i < checks.size(); i++) {
             auto c1 = checks[i];
             for (uint j = i+1; j < checks.size(); j++) {
@@ -695,21 +693,163 @@ Compiler::micro_schedule(ir_t* curr_ir) {
 
 void
 Compiler::macro_schedule(ir_t* curr_ir) {
+    using namespace graph;
+
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    Processor3D* arch = curr_ir->arch;
+
     // Now, given the micro-schedules, we want to design the final schedule that measures
     // all checks.
-    graph::DependenceGraph dependency_graph;
-    std::set<tanner::vertex_t*>  all_checks;
+    auto dependency_graph = new graph::DependenceGraph<qc::Instruction>;
+    uint opcount = 0;
+    // Create conflict graph between the checks. Two checks have an edge in the
+    // conflict graph if they are conflicting.
+    typedef Graph<tanner::vertex_t, base::edge_t> ConflictGraph;
+    ConflictGraph confg;
+    confg.dealloc_on_delete = false;
     for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::XPARITY)) {
-        all_checks.insert(tv);
+        confg.add_vertex(tv);
     }
     for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
-        all_checks.insert(tv);
+        confg.add_vertex(tv);
     }
-    
-    while (all_checks.size()) {
-        // Perform maximum matching on the remaining checks to get a maximal set to schedule.
 
+    std::vector<base::edge_t*> confg_edges;
+    for (auto pair : curr_ir->conflicting_checks) {
+        auto e = new base::edge_t;
+        e->src = (void*)pair.first;
+        e->dst = (void*)pair.second;
+        confg.add_edge(e);
+        confg_edges.push_back(e);
     }
+    while (confg.get_vertices().size()) {
+        // Compute MIS on the remaining checks to get a maximal set to schedule.
+        auto indep = mis::approx_greedy(&confg);
+
+        // Remove larger part from conflict graph and get the micro-schedules for each check.
+        std::vector<schedule_t<qc::Instruction>> micro_sched;
+        for (auto v : indep) {
+            confg.delete_vertex(v);
+            micro_sched.push_back(curr_ir->check_to_impl[v]);
+        }
+
+        // Perform any H gates in these schedules.
+        for (auto& sch : micro_sched) {
+            while (sch.front().name == "H") {
+                const auto& tmp = sch.front();
+                // The instruction may be SIMD-like, so we must split it up.
+                for (auto op : tmp.operands) {
+                    qc::Instruction* h = new qc::Instruction;
+                    h->name = "H";
+                    h->operands = std::vector<uint>{op};
+                    h->exclude_trials = tmp.exclude_trials;
+
+                    auto vh = new dep::vertex_t<qc::Instruction>;
+                    vh->id = opcount++;
+                    vh->inst_p = h;
+                    dependency_graph->add_vertex(vh);
+                }
+                sch.pop_front();
+            }
+        }
+
+        // Collect the set of CNOTs required to complete the checks.
+        // Now, perform maximum matching to identify what operations to perform.
+        lemon::ListGraph mg;
+        // Each listgraph node will be in either of these maps.
+        std::map<lemon::ListGraph::Node, proc3d::vertex_t*> node_to_qubit;
+        std::map<proc3d::vertex_t*, lemon::ListGraph::Node> qubit_to_node;
+
+        std::map<lemon::ListGraph::Edge, qc::Instruction>   edge_to_op;
+
+        for (auto& sch : micro_sched) {
+            while (sch.front().name == "CX") {
+                const qc::Instruction& cx = sch.front();
+                // Instruction may be SIMD-like, so split it up.
+                for (uint i = 0; i < cx.operands.size(); i++) {
+                    uint operand = cx.operands[i];
+                    // Create listgraph node if it does not exist.
+                    proc3d::vertex_t* voperand = arch->get_vertex(operand);
+                    lemon::ListGraph::Node op_node;
+                    if (!qubit_to_node.count(voperand)) {
+                        // Create listgraph node.
+                        op_node = mg.addNode();
+                        node_to_qubit[op_node] = voperand;
+                        qubit_to_node[voperand] = op_node;
+                    } else {
+                        op_node = qubit_to_node[voperand];
+                    }
+                    // Create edge if i is odd.
+                    if (i & 0x1) {
+                        proc3d::vertex_t* woperand = arch->get_vertex(cx.operands[i-1]);
+                        lemon::ListGraph::Node other_op_node = qubit_to_node[woperand];
+
+                        auto e = mg.addEdge(op_node, other_op_node);
+                        edge_to_op[e] = (qc::Instruction) {
+                            "CX",
+                            std::vector<uint>{cx.operands[i-1], operand},
+                            cx.exclude_trials
+                        };
+                    }
+                }
+                sch.pop_front();
+            }
+        }
+
+        // Perform maximum matching until cx nodes are removed.
+        while (edge_to_op.size()) {
+            lemon::MaxMatching mm(mg);
+            mm.run();
+            std::set<proc3d::vertex_t*> visited;
+            for (auto it = edge_to_op.begin(); it != edge_to_op.end(); ) {
+                const auto& op_edge = it->first;
+                const auto& inst = it->second;
+
+                if (mm.matching(op_edge)) {
+                    // Delete edge from listgraph and from edge_to_op.
+                    mg.erase(op_edge);
+                    // Add operation to dependency graph.
+                    qc::Instruction* cx = new qc::Instruction;
+                    cx->name = "CX";
+                    cx->operands = inst.operands;
+                    cx->exclude_trials = inst.exclude_trials;
+
+                    auto cxv = new dep::vertex_t<qc::Instruction>;
+                    cxv->id = opcount++;
+                    cxv->inst_p = cx;
+                    dependency_graph->add_vertex(cxv);
+                    it = edge_to_op.erase(it);
+                } else {
+                    it++;
+                }
+            }
+        }
+
+        // Add the remaining operations for the chosen checks.
+        for (auto& sch : micro_sched) {
+            while (sch.size()) {
+                const auto& tmp = sch.front();
+
+                qc::Instruction* m = new qc::Instruction;
+                m->name = tmp.name;
+                m->operands = tmp.operands;
+                m->exclude_trials = tmp.exclude_trials;
+
+                auto vm = new dep::vertex_t<qc::Instruction>;
+                vm->id = opcount++;
+                vm->inst_p = m;
+                dependency_graph->add_vertex(vm);
+
+                sch.pop_front();
+            }
+        }
+    }
+
+    // Only deallocate the edges in the conflict graph.
+    for (auto e : confg_edges)   delete e;
+    // Update IR.
+    curr_ir->dependency_graph = dependency_graph;
+    curr_ir->schedule = curr_ir->dependency_graph->to_schedule();
 }
 
 void

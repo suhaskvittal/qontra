@@ -230,13 +230,8 @@ private:
 template <class V_t>
 using ewf_t = std::function<fp_t(V_t*, V_t*)>;
 
-template <class V_t> inline ewf_t
+template <class V_t> inline ewf_t<V_t>
 unit_ewf_t(void) { return ([] (V_t* v1, V_t* v2) { return 1.0; }); }
-
-#include "graph/algorithms/search.h"    // Contains definitions for BFS/DFS.
-#include "graph/algorithms/distance.h"  // Contains definitions for Distance computation
-                                        // (i.e. Dijkstra)
-// Other uncommon algorithms should be loaded at the behest of the user.
 
 }   // graph
 }   // qontra

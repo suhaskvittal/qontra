@@ -25,7 +25,7 @@ using namespace decoding;
 
 void
 DecodingGraph::build_distance_matrix() {
-    distance::ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
+    ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
     {
         auto e = this->get_edge(v1, v2);
         if (e == nullptr) {

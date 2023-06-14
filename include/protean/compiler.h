@@ -6,9 +6,11 @@
 #define PROTEAN_COMPILER_h
 
 #include "defs.h"
+#include "graph/algorithms/distance.h"
+#include "graph/algorithms/mis.h"
+#include "graph/algorithms/search.h"
 #include "graph/dependence_graph.h"
 #include "graph/graph.h"
-#include "graph/algorithms/maxcut.h"
 #include "instruction.h"
 #include "protean/proc3d.h"
 #include "protean/tanner_graph.h"
@@ -23,6 +25,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <random>
 #include <set>
 #include <vector>
 #include <utility>
@@ -34,6 +37,7 @@ namespace compiler {
     struct ir_t {
         ~ir_t(void) {
             delete arch;
+            delete dependency_graph;
         }
 
         TannerGraph*                    curr_spec;
@@ -58,7 +62,7 @@ namespace compiler {
         std::set<std::pair<tanner::vertex_t*, tanner::vertex_t*>>   conflicting_checks;
                                                             // A set of checks that cannot be
                                                             // scheduled concurrently.
-        graph::DependenceGraph<qc::Instruction>                     dependency_graph;
+        graph::DependenceGraph<qc::Instruction>*                    dependency_graph;
                                                             // Defines the dependence relation
                                                             // for the instrucitons in the 
                                                             // macro-schedule.

@@ -8,8 +8,8 @@
 
 #include "defs.h"
 
+#include <deque>
 #include <string>
-#include <vector>
 
 const std::vector<std::string> FTQC_ISA{
     "H",
@@ -20,6 +20,7 @@ const std::vector<std::string> FTQC_ISA{
     "Mnrc", // does not record measurement
     "Mrc",  // records measurement and places it into the syndrome buffer
     "R"
+    "NOP",  // essentially a delay operation
 };
 
 const std::vector<std::string> CP_ISA{
@@ -104,6 +105,6 @@ struct Instruction {    // Logical instruction.
 }   // cp
 
 template <class I_t>
-using schedule_t = std::vector<I_t>;
+using schedule_t = std::deque<I_t>;
 
 #endif  // INSTRUCTION_H

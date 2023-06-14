@@ -16,15 +16,19 @@ namespace graph {
 namespace cut {
 
 template <class V_t, int k>
-using Partition = std::array<std::set<V_t>, k>;
+using partition_t = std::array<std::set<V_t*>, k>;
 
 namespace maxcut {
 
-template <class V_t, class E_t> Partition<V_t, 2>
-maxcut_approx_greedy(Graph<V_t, E_t>* graph, ewf_t edge_w_func) {
+// Algorithms for computing the max-cut of a graph:
+//
+// approx_greedy achieves a 0.5 approximation ratio.
+
+template <class V_t, class E_t> partition_t<V_t, 2>
+approx_greedy(Graph<V_t, E_t>* graph, ewf_t edge_w_func) {
     auto vertices = graph->get_vertices();
 
-    Partition<V_t, 2>  partition;
+    partition_t<V_t, 2>  partition;
     partition.fill(std::set<V_t>());
 
     for (auto v : vertices) {
@@ -34,7 +38,7 @@ maxcut_approx_greedy(Graph<V_t, E_t>* graph, ewf_t edge_w_func) {
             if (partition[0].count(w))          bias -= x;
             else if (partition[1].count(w))     bias += x;
         }
-        partition[bias < 0.0].insert(v);
+        partition[bias < 0].insert(v);
     }
     return partition;
 }
