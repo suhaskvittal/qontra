@@ -328,6 +328,35 @@ struct simd_bits_range_ref {
     }
 
     template <typename FUNC>
+    inline void for_each_word(
+        simd_bits_range_ref other1,
+        simd_bits_range_ref other2,
+        simd_bits_range_ref other3,
+        simd_bits_range_ref other4,
+        simd_bits_range_ref other5,
+        simd_bits_range_ref other6,
+        FUNC body) const {
+        auto *v0 = ptr_simd;
+        auto *v1 = other1.ptr_simd;
+        auto *v2 = other2.ptr_simd;
+        auto *v3 = other3.ptr_simd;
+        auto *v4 = other4.ptr_simd;
+        auto *v5 = other5.ptr_simd;
+        auto *v6 = other6.ptr_simd;
+        auto *v0_end = v0 + num_simd_words;
+        while (v0 != v0_end) {
+            body(*v0, *v1, *v2, *v3, *v4, *v5, *v6);
+            v0++;
+            v1++;
+            v2++;
+            v3++;
+            v4++;
+            v5++;
+            v6++;
+        }
+    }
+
+    template <typename FUNC>
     inline void for_each_set_bit(FUNC body) {
         size_t n = num_bits_padded();
         for (size_t k = 0; k < n; k += 64) {

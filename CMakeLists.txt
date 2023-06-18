@@ -20,19 +20,21 @@ set(QONTRA_FILES
     # Protean
     src/protean/compiler.cpp
     src/protean/proc3d.cpp
+    # Simulation
+    src/sim/clifford_sim.cpp
     )
-add_library(common INTERFACE)
 add_library(qontra ${QONTRA_FILES})
-add_executable(memory src/main/memory_experiment.cpp ${QONTRA_FILES})
-add_executable(circuit src/main/build_circuit.cpp ${QONTRA_FILES})
+add_executable(memory src/main/memory_experiment.cpp)
+add_executable(circuit src/main/build_circuit.cpp)
+add_executable(cliff src/main/test/cliffsimtest.cpp)
 
 ### Protean ###
-add_executable(protean_main src/main/protean/main.cpp ${QONTRA_FILES})
+add_executable(protean_main src/main/protean/main.cpp)
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-    target_compile_options(common INTERFACE -O3 -lemon)
+    target_compile_options(qontra PUBLIC -O3 -lemon)
 else()
-    target_compile_options(common INTERFACE -ggdb3 -lemon)
+    target_compile_options(qontra PUBLIC -ggdb3 -lemon)
 endif()
 
 find_package(MPI REQUIRED)
@@ -41,17 +43,17 @@ find_package(LEMON REQUIRED)
 message(${MPI_INCLUDE_PATH})
 
 # I don't know why I have to include /usr/local/include...
-target_include_directories(common INTERFACE "include" ${MPI_INCLUDE_PATH} "/usr/local/include")
+target_include_directories(qontra PUBLIC "include" ${MPI_INCLUDE_PATH} "/usr/local/include")
 
 add_subdirectory(stim)
 add_subdirectory(blossom5)
 
-target_link_libraries(common INTERFACE libstim)
-target_link_libraries(common INTERFACE libblossom5)
-target_link_libraries(common INTERFACE ${MPI_CXX_LIBRARIES})
+target_link_libraries(qontra PUBLIC libstim)
+target_link_libraries(qontra PUBLIC libblossom5)
+target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
 
-target_link_libraries(qontra PUBLIC common)
-target_link_libraries(memory PRIVATE common)
-target_link_libraries(circuit PRIVATE common)
+target_link_libraries(memory PRIVATE qontra)
+target_link_libraries(circuit PRIVATE qontra)
+target_link_libraries(cliff PRIVATE qontra)
 
-target_link_libraries(protean_main PRIVATE common)
+target_link_libraries(protean_main PRIVATE qontra)
