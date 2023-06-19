@@ -16,7 +16,8 @@ namespace experiments {
 bool        G_USE_MPI  = true;
 uint64_t    G_SHOTS_PER_BATCH = 100'000;
 uint64_t    G_BASE_SEED = 0;
-bool        G_FILTER_OUT_TRIVIAL_SYNDROMES = true;  // Ignores syndromes with hw <= 2.
+bool        G_FILTER_OUT_SYNDROMES = true;
+uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
 
 }   // experiments
 
@@ -71,17 +72,20 @@ memory_experiment(decoder::Decoder* dec, uint64_t shots, cb_t1 cb1, cb_t2 cb2) {
     cb_t1 dec_cb = [&] (stim::simd_bits_range_ref& row)
     {
         cb1(row);
-        stim::simd_bits_range_ref subrow = 
-            row.prefix_ref(circuit.count_detectors());
-        const uint hw = subrow.popcnt();
+        uint obs_bits = 0;
+        for (uint i = 0; i < circuit.count_observables(); i++) {
+            obs_bits += row[i+circuit.count_detectors()];
+        }
+        const uint hw = row.popcnt() - obs_bits;
         __hw_sum += hw;
         __hw_sqr_sum += SQR(hw);
         __hw_max = hw > __hw_max ? hw : __hw_max;
-        if (G_FILTER_OUT_TRIVIAL_SYNDROMES && hw <= 2) {
+        if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
             return;
         }
-        auto syndrome = decoder::syndrome_to_vector(row, sample_width);
-        auto res = dec->decode_error(syndrome); __logical_errors += res.is_error;
+        syndrome_t syndrome(row);
+        auto res = dec->decode_error(syndrome); 
+        __logical_errors += res.is_error;
         __t_sum += res.exec_time;
         __t_sqr_sum += SQR(res.exec_time);
         __t_max = res.exec_time > __t_max ? res.exec_time : __t_max;

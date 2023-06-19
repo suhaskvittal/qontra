@@ -41,7 +41,8 @@ typedef struct {
 extern bool     G_USE_MPI;                          // Default is true.
 extern uint64_t G_SHOTS_PER_BATCH;                  // Default is 100'000.
 extern uint64_t G_BASE_SEED;                        // Default is 0.
-extern bool     G_FILTER_OUT_TRIVIAL_SYNDROMES;     // Default is true.
+extern bool     G_FILTER_OUT_SYNDROMES;             // Default is true.
+extern uint64_t G_FILTERING_HAMMING_WEIGHT;         // Default is 2.
 
 }   // experiments
 

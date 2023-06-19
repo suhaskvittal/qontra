@@ -123,7 +123,6 @@ CliffordSimulator::M(std::vector<uint> operands, bool record) {
             uint k = n_qubits*i + j;
             x_table[x_width-1] |= x_table[k];
         }
-        std::cout << "any nonzero: " << x_table[x_width-1] << "\n";
         // If the qubit was leaked, also set it to 0: we can quickly determine
         // the random result here.
         leak_table[j].invert_bits();
@@ -138,7 +137,6 @@ CliffordSimulator::M(std::vector<uint> operands, bool record) {
             x_table[2*n_qubits*n_qubits + j].clear();   // Remember X and Z tables are
             z_table[2*n_qubits*n_qubits + j].clear();   // flattened 2d arrays.
         }
-        std::cout << "any nonzero: " << x_table[x_width-1] << "\n";
         r_table[2*n_qubits].clear();
         for (uint i = 0; i < n_qubits; i++) {
             // Predicate the rowsum where xij = 1
@@ -160,7 +158,6 @@ CliffordSimulator::M(std::vector<uint> operands, bool record) {
         // This takes more time as we must handle each case separately.
         for (uint64_t t = 0; t < shots; t++) {
             if (!x_table[x_width-1][t]) continue;
-            std::cout << "indeterminate! (t = " << t << ")\n";
             // Find first i where xia = 1 in i = n+1 to 2n. Call this ii.
             uint ii;
             for (uint i = n_qubits; i < 2*n_qubits; i++) {
@@ -170,7 +167,6 @@ CliffordSimulator::M(std::vector<uint> operands, bool record) {
                     break;
                 }
             }
-            std::cout << "ii = " << ii << "\n";
             // First perform rowsums.
             for (uint i = 0; i < 2*n_qubits; i++) {
                 uint k = n_qubits*i + j;

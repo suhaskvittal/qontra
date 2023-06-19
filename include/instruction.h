@@ -8,8 +8,11 @@
 
 #include "defs.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
+
+namespace qontra {
 
 const std::vector<std::string> FTQC_ISA{
     "H",
@@ -30,13 +33,13 @@ const std::vector<std::string> CP_ISA{
     "LSMERGE",  // qubit, qubit             -- performs lattice surgery merge
     "LSSPLIT",  // qubit, qubit             -- performs lattice surgery split
     // Physical operations
-    "H",
-    "X",
-    "Z",
-    "S",
-    "CX",
-    "M",
-    "R",
+    "PH",
+    "PX",
+    "PZ",
+    "PS",
+    "PCX",
+    "PM",
+    "PR",
     // Logical operations (SIMD)
     "LH",       // qubit
     "LX",       // qubit
@@ -64,12 +67,9 @@ const std::vector<std::string> CP_ISA{
     "LI",       // register, immediate
     "ST",       // register[src], location, register[offset]
     "LD",       // register[dst], location, register[offset]
-    // Pseudo operations (cannot be executed on a real system, but
-    // are useful in simulation)
-    "PEEKX",    // Check X Pauli frame with ideal decoder (cannot err), 
-                //  place in register
-    "PEEKZ"     // Check Z Pauli frame with ideal decoder (cannot err),
-                //  place in register
+    // Other instructions (no operands)
+    "EXIT",
+    "NOP"
 };
 
 namespace qc {
@@ -101,9 +101,20 @@ struct Instruction {    // Logical instruction.
     std::vector<uint64_t> exclude_trials; 
 };
 
+const Instruction NOP = {"NOP", {}, Instruction::Type::ri, {}};
+
+typedef struct {
+    cp::Instruction inst;
+    bool            with_prev;  // Set if this instruction is in the same
+                                // word as the previous instruction in a
+                                // schedule.
+} vliw_t;
+
 }   // cp
 
 template <class I_t>
 using schedule_t = std::vector<I_t>;
+
+}   // qontra
 
 #endif  // INSTRUCTION_H

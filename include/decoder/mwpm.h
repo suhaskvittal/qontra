@@ -37,7 +37,7 @@ public:
 
     std::string name(void) override { return "MWPMDecoder"; }
 
-    Decoder::result_t       decode_error(const vsyndrome_t&) override;
+    Decoder::result_t       decode_error(const syndrome_t&) override;
 };
 
 }   // decoder

@@ -9,19 +9,12 @@ namespace qontra {
 namespace decoder {
 
 Decoder::result_t
-MWPMDecoder::decode_error(const std::vector<uint8_t>& syndrome) {
+MWPMDecoder::decode_error(const syndrome_t& syndrome) {
     const uint n_detectors = circuit.count_detectors();
     const uint n_observables = circuit.count_observables();
 
     clk_start();
-
-    // Count number of detectors.
-    std::vector<uint> detectors;
-    for (uint i = 0; i < n_detectors; i++) {
-        if (syndrome[i]) {
-            detectors.push_back(i);
-        }
-    }
+    std::vector<uint> detectors = get_nonzero_detectors(syndrome);
 
     if (detectors.size() & 0x1) {
         // Add boundary to matching graph.

@@ -26,6 +26,8 @@ set(QONTRA_FILES
 add_library(qontra ${QONTRA_FILES})
 add_executable(memory src/main/memory_experiment.cpp)
 add_executable(circuit src/main/build_circuit.cpp)
+
+### TESTING ###
 add_executable(cliff src/main/test/cliffsimtest.cpp)
 
 ### Protean ###

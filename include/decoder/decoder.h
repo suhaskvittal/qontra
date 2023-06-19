@@ -14,6 +14,8 @@
 #include <string>
 #include <utility>
 
+#include <strings.h>
+
 namespace qontra {
 namespace decoder {
 
@@ -35,9 +37,7 @@ public:
         bool is_error;
     } result_t;
 
-    typedef std::vector<uint8_t>    vsyndrome_t;
-
-    virtual result_t decode_error(const vsyndrome_t&) =0;   // This function
+    virtual result_t decode_error(const syndrome_t&) =0;    // This function
                                                             // will perform decoding
                                                             // and return a correction.
     virtual std::string name(void) =0;  // Useful for printing out stats.
@@ -67,7 +67,7 @@ protected:
     }
 
     bool is_error(
-            const std::vector<uint8_t>& correction, const vsyndrome_t& syndrome)
+            const std::vector<uint8_t>& correction, const syndrome_t& syndrome)
     {
         const uint n_detectors = circuit.count_detectors();
         const uint n_observables = circuit.count_observables();
@@ -76,6 +76,28 @@ protected:
             is_error |= correction[i] ^ syndrome[n_detectors+i];
         }
         return is_error;
+    }
+
+    template <class T> std::vector<uint>
+    // T = stim::simd_bits or stim::simd_bits_range_ref
+    get_nonzero_detectors(const T syndrome) {
+        std::vector<uint> det;
+        uint64_t w = 0;
+        uint64_t last_bit = 0;
+        while (det.size() < syndrome.popcnt()) {
+            uint64_t i = ffsll(syndrome.u64[w] & ~((1L << last_bit)-1));
+            if (i == 0) {   // No match found.
+                last_bit = 0;
+                w++;
+                continue;
+            }
+            uint d = (w << 6) | (i-1);
+            if (d >= circuit.count_detectors()) break;
+            det.push_back(d);
+            last_bit = i & 0x3f;
+            w += (i >= 64);
+        }
+        return det;
     }
 
     stim::Circuit circuit;
@@ -87,18 +109,6 @@ private:
     long        t_start;
 #endif
 };
-
-// Helper functions
-// 
-// syndrome_to_vector converts a simd_bits_range_ref to a vector. A vector
-// can be modified and is easier to pass around.
-
-inline Decoder::vsyndrome_t
-syndrome_to_vector(const stim::simd_bits_range_ref& ref, uint size) {
-    std::vector<uint8_t> syndrome(size);
-    for (uint i = 0; i < size; i++) syndrome[i] = ref[i];
-    return syndrome;
-}
 
 }   // decoder
 }   // qontra

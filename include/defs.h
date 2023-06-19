@@ -1,9 +1,12 @@
-/* author: Suhas Vittal
+/* 
+ *  author: Suhas Vittal
  *  date:   2 August 2022
  * */
 
 #ifndef DEFS_h
 #define DEFS_h
+
+#include <stim.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -27,12 +30,12 @@ const fp_t GB = MB*1024.0;
 
 namespace qontra {
 
-// Useful typedefs:
 typedef std::vector<fp_t>   poly_t;
 
 template <class T, class U, class V>
 using TwoLevelMap = std::map<T, std::map<U, V>>;
 
+// Two-level maps:
 namespace tlm {
 
 template <class T, class U, class V> void 
@@ -42,6 +45,8 @@ put(TwoLevelMap<T, U, V>& m, T x, U y, V z) {
 }
 
 }   // tlm
+
+typedef stim::simd_bits syndrome_t;
 
 //
 // HELPER FUNCTIONS:
