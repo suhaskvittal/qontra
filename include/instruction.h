@@ -8,6 +8,8 @@
 
 #include "defs.h"
 
+#include <stim.h>
+
 #include <deque>
 #include <string>
 
@@ -84,6 +86,9 @@ struct Instruction {    // Physical instruction.
     std::vector<uint> operands;
 
     std::vector<uint64_t> exclude_trials;
+
+    // Extra metadata
+    bool    is_measuring_x_check;
 };
 
 }   // qc
@@ -106,5 +111,12 @@ struct Instruction {    // Logical instruction.
 
 template <class I_t>
 using schedule_t = std::deque<I_t>;
+
+template <class I_t> std::string
+str(const I_t& x) {
+    std::string out = x.name;
+    for (uint op : x.operands)  out += " " + std::to_string(op);
+    return out;
+}
 
 #endif  // INSTRUCTION_H

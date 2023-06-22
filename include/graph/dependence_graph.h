@@ -39,7 +39,8 @@ public:
         :__DependenceGraphParent(),
         root(new dep::vertex_t<I_t>),
         depth(0),
-        vertex_to_depth()
+        vertex_to_depth(),
+        barrier_index(0)
     {
         root->inst_p = nullptr;
         vertex_to_depth[root] = 0;
@@ -61,7 +62,8 @@ public:
         :__DependenceGraphParent(other),
         root(other.root),
         depth(other.depth),
-        vertex_to_depth(other.vertex_to_depth)
+        vertex_to_depth(other.vertex_to_depth),
+        barrier_index(other.barrier_index)
     {}
 
     ~DependenceGraph(void) {
@@ -107,6 +109,16 @@ public:
         return true;
     }
 
+    void add_barrier(const std::vector<uint>& operands) {
+        I_t* barrier = new I_t;
+        barrier->name = "NOP";
+        barrier->operands = operands; 
+        auto vb = new dep::vertex_t<I_t>;
+        vb->id = (barrier_index++) | (1 << 31);
+        vb->inst_p = barrier;
+        add_vertex(vb);
+    }
+
     // Adding edges manually is disabled to maintain the DAG property.
     bool add_edge(dep::edge_t*)     { return false; }
     void delete_edge(dep::edge_t*)  { }
@@ -127,6 +139,14 @@ public:
         return sch;
     }
 
+    std::vector<dep::vertex_t<I_t>*> get_vertices_at_depth(uint d) {
+        std::vector<dep::vertex_t<I_t>*> layer;
+        for (auto v : this->vertices) {
+            if (vertex_to_depth[v] == d)    layer.push_back(v);
+        }
+        return layer;
+    }
+
     dep::vertex_t<I_t>* get_root(void)      { return root; }
     uint                get_depth(void)     { return depth; }
 
@@ -136,6 +156,8 @@ private:
 
     uint                                depth;
     std::map<dep::vertex_t<I_t>*, uint> vertex_to_depth;
+
+    uint    barrier_index;
 };
 
 }   // graph

@@ -582,9 +582,9 @@ Compiler::micro_schedule(ir_t* curr_ir) {
     proc3d::vertex_t* curr_parity_qubit;
 
     std::map<proc3d::vertex_t*, std::vector<tanner::vertex_t*>> qubit_to_users; 
-                                                                    // Maps gauge/parity qubits
-                                                                    // to the checks that require
-                                                                    // them.
+                                                        // Maps gauge/parity qubits
+                                                        // to the checks that require
+                                                        // them.
     search::callback_t<proc3d::vertex_t> s_cb =
     [&] (proc3d::vertex_t* v1, proc3d::vertex_t* v2)
     {
@@ -653,6 +653,7 @@ Compiler::micro_schedule(ir_t* curr_ir) {
 
         meas.name = std::string("Mrc");
         meas.operands.push_back(pv->id);
+        meas.is_measuring_x_check = set_x_parity;
 
         reset.name = std::string("R");
         reset.operands.push_back(pv->id);
@@ -715,6 +716,10 @@ Compiler::macro_schedule(ir_t* curr_ir) {
         confg.add_vertex(tv);
     }
 
+    // Create barrier operands for easy access.
+    std::vector<uint> barrier_operands;
+    for (auto v : arch->get_vertices()) barrier_operands.push_back(v->id);
+
     std::vector<base::edge_t*> confg_edges;
     for (auto pair : curr_ir->conflicting_checks) {
         auto e = new base::edge_t;
@@ -753,6 +758,7 @@ Compiler::macro_schedule(ir_t* curr_ir) {
                 sch.pop_front();
             }
         }
+        dependency_graph->add_barrier(barrier_operands);
 
         // Collect the set of CNOTs required to complete the checks.
         // Now, perform maximum matching to identify what operations to perform.
@@ -825,24 +831,30 @@ Compiler::macro_schedule(ir_t* curr_ir) {
                 }
             }
         }
+        dependency_graph->add_barrier(barrier_operands);
 
+        std::string op_order[3] = {"H", "Mrc", "R"};
         // Add the remaining operations for the chosen checks.
-        for (auto& sch : micro_sched) {
-            while (sch.size()) {
-                const auto& tmp = sch.front();
+        for (uint ord = 0; ord < 3; ord++) {
+            for (auto& sch : micro_sched) {
+                while (sch.front().name == op_order[ord]) {
+                    const auto& tmp = sch.front();
 
-                qc::Instruction* m = new qc::Instruction;
-                m->name = tmp.name;
-                m->operands = tmp.operands;
-                m->exclude_trials = tmp.exclude_trials;
+                    qc::Instruction* m = new qc::Instruction;
+                    m->name = tmp.name;
+                    m->operands = tmp.operands;
+                    m->exclude_trials = tmp.exclude_trials;
+                    m->is_measuring_x_check = tmp.is_measuring_x_check;
 
-                auto vm = new dep::vertex_t<qc::Instruction>;
-                vm->id = opcount++;
-                vm->inst_p = m;
-                dependency_graph->add_vertex(vm);
+                    auto vm = new dep::vertex_t<qc::Instruction>;
+                    vm->id = opcount++;
+                    vm->inst_p = m;
+                    dependency_graph->add_vertex(vm);
 
-                sch.pop_front();
+                    sch.pop_front();
+                }
             }
+            dependency_graph->add_barrier(barrier_operands);
         }
     }
 
@@ -1024,6 +1036,177 @@ print_schedule(const schedule_t<qc::Instruction>& sched) {
     }
 }
 
+stim::Circuit
+build_stim_circuit(
+        compiler::ir_t* ir, 
+        uint rounds, 
+        const std::vector<uint>& obs, 
+        bool is_memory_x,
+        ErrorTable& errors,
+        TimeTable& times) 
+{
+    auto tanner_graph = ir->curr_spec;
+    auto arch = ir->arch;
+    auto dependency_graph = ir->dependency_graph;
+    // First assign data qubits, then assign other qubits.    
+    // This will keep the numbering consistent with the spec provided by the user.
+    uint k = 0;
+    std::map<uint, uint> id_to_num;
+    for (auto v : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
+        id_to_num[v->id] = v->id;   // Note that data qubits have the same ID as
+                                    // in the physical architecture.
+        if (v->id > k)  k = v->id;
+    }
+    const uint n_data = k+1;
+    for (auto v : arch->get_vertices()) {
+        if (ir->is_data(v)) continue;
+        id_to_num[v->id] = ++k;
+    }
+    const uint n_nondata = k - n_data;
+    const uint n = k;
+
+    // Print out ID mapping (debug)
+    for (auto pair : id_to_num) {
+        std::cout << PRINT_V(pair.first) << " --> " << pair.second << "\n";
+    }
+
+    stim::Circuit circuit;
+    // Add initialization for memory experiment.
+    for (auto v : arch->get_vertices()) {
+        uint i = id_to_num[v->id];
+        circuit.append_op("R", {i});
+        circuit.append_op("X_ERROR", {i}, errors.op1q["R"][v->id]); 
+        if (is_memory_x && i < n_data) {
+            circuit.append_op("H", {i});
+            circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][v->id]); 
+        }
+    }
+    // Add syndrome extraction rounds to circuit. 
+    // Note that the schedule is one round.
+    fp_t prev_round_length = 0.0;
+    uint prev_round_meas = 0;
+    for (uint r = 0; r < rounds; r++) {
+        circuit.append_op("TICK", {});
+        // Apply decoherence on data qubits.
+        for (uint i = 0; i < n_data; i++) {
+            fp_t e = 1.0 - exp(-prev_round_length / times.t1[i]);
+            circuit.append_op("DEPOLARIZE1", {i}, e);
+        }
+        // Schedule operations by depth in the circuit.
+        prev_round_length = 0.0;
+
+        uint this_round_meas = 0;
+        std::vector<uint> meas_events;
+        for (uint d = 1; d <= dependency_graph->get_depth(); d++) {
+            auto ops = dependency_graph->get_vertices_at_depth(d);
+            fp_t layer_length = 0.0;
+            for (auto v : ops) {
+                qc::Instruction* inst = v->inst_p;
+                if (inst->name == "NOP")    continue;
+
+                std::vector<uint> operands = inst->operands;
+                // Add operation and add errors depending on which operation it is.
+                fp_t max_opt = 0;
+                if (inst->name == "CX") {
+                    for (uint j = 0; j < operands.size(); j += 2) {
+                        uint x1 = operands[j];
+                        uint x2 = operands[j+1];
+                        auto x1_x2 = std::make_pair(x1, x2);
+
+                        uint i1 = id_to_num[x1];
+                        uint i2 = id_to_num[x2];
+
+                        circuit.append_op(inst->name, {i1, i2});
+                        circuit.append_op("L_TRANSPORT", {i1, i2},
+                                errors.op2q_leakage_transport["CX"][x1_x2]);
+                        circuit.append_op("L_ERROR", {i1, i2},
+                                errors.op2q_leakage_injection["CX"][x1_x2]);
+                        circuit.append_op("DEPOLARIZE2", {i1, i2},
+                                errors.op2q["CX"][x1_x2]);
+                        // To implement crosstalk, we will just apply depolarizing
+                        // errors on nearby qubits.
+                        /*
+                        auto pv1 = arch->get_vertex(x1);
+                        auto pv2 = arch->get_vertex(x2);
+                        for (auto pw : arch->get_neighbors(pv1)) {
+                            if (pw == pv2)  continue;
+                            uint iw = id_to_num[pw->id];
+                            circuit.append_op("DEPOLARIZE1", {iw}, 
+                                    errors.op2q_crosstalk["CX"][x1_x2]);
+                        }
+                        for (auto pw : arch->get_neighbors(pv2)) {
+                            if (pw == pv1)  continue;
+                            uint iw = id_to_num[pw->id];
+                            circuit.append_op("DEPOLARIZE1", {iw}, 
+                                    errors.op2q_crosstalk["CX"][x1_x2]);
+                        }
+                        fp_t t = times.op2q["CX"][x1_x2];
+                        if (t > max_opt)    max_opt = t;
+                        */
+                    }
+                } else {
+                    for (uint x : operands) {
+                        uint i = id_to_num[x];
+                        if (inst->name == "Mrc" || inst->name == "Mnrc") {
+                            circuit.append_op("X_ERROR", {i}, errors.op1q["Mrc"][x]);
+                            circuit.append_op("M", {i});
+
+                            // If this measuring the same check as the memory experiment
+                            // targets, then mark it as a recorded detection event.
+                            if (inst->is_measuring_x_check == is_memory_x) {
+                                meas_events.push_back(this_round_meas);
+                            }
+                            this_round_meas++;
+                        } else if (inst->name == "R") {
+                            circuit.append_op(inst->name, {i});
+                            circuit.append_op("X_ERROR", {i}, errors.op1q["R"][x]);
+                        } else {
+                            circuit.append_op(inst->name, {i});
+                            circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][x]);
+                        }
+                        fp_t t = times.op1q[inst->name][x];
+                        if (t > max_opt)    max_opt = t;
+                    }
+                }
+                if (layer_length < max_opt) layer_length = max_opt;
+            }
+            prev_round_length += layer_length;
+        }
+        // Add error detection events.
+        if (r == 0) {
+            for (uint m : meas_events) {
+                circuit.append_op("DETECTOR", 
+                        { (this_round_meas - m) | stim::TARGET_RECORD_BIT });
+            }
+        } else {
+            for (uint m : meas_events) {
+                circuit.append_op("DETECTOR", 
+                    { (this_round_meas - m) | stim::TARGET_RECORD_BIT,
+                        (this_round_meas - m + prev_round_meas) | stim::TARGET_RECORD_BIT });
+            }
+        }
+        prev_round_meas = this_round_meas;
+    }
+    // Finally, measure all the data qubits.
+    for (uint i = 0; i < n_data; i++) {
+        // Don't have any errors -- makes life easier.
+        if (is_memory_x) {
+            circuit.append_op("H", {i});
+        }
+        circuit.append_op("M", {i});
+    }
+    // Record observable.
+    std::vector<uint> obs_inc;
+    for (uint i : obs) {
+        obs_inc.push_back((n_data - i) | stim::TARGET_RECORD_BIT);
+    }
+    std::sort(obs_inc.begin(), obs_inc.end());
+    circuit.append_op("OBSERVABLE_INCLUDE", obs_inc, 0);
+
+    std::cout << circuit.flattened().str() << "\n";
+    return circuit;
+}
+
 void
 write_ir_to_folder(ir_t* ir, std::string folder_name) {
     std::filesystem::path folder(folder_name);
@@ -1092,6 +1275,7 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
     uint cbit = 0;
     std::string sched_str;
     for (auto inst : ir->schedule) {
+        if (inst.name == "NOP") continue;
         if (inst.name == "Mrc") {
             sched_str += "measure q[" + std::to_string(id_to_num[inst.operands[0]]) 
                 + "] -> c[" + std::to_string(cbit++) + "];\n";

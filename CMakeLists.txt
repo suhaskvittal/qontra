@@ -14,8 +14,7 @@ set(QONTRA_FILES
     # Parsing
     src/parsing/cmd.cpp
     # Graphs
-    src/graph/decoding_graph.cpp
-    src/graph/coupling_graph.cpp
+    src/graph/decoding_graph.cpp src/graph/coupling_graph.cpp
     src/graph/tanner_graph.cpp
     # Protean
     src/protean/compiler.cpp
@@ -30,9 +29,9 @@ add_executable(circuit src/main/build_circuit.cpp ${QONTRA_FILES})
 add_executable(protean_main src/main/protean/main.cpp ${QONTRA_FILES})
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-    target_compile_options(common INTERFACE -O3 -lemon)
+    target_compile_options(common INTERFACE -O3 -lemon -fno-strict-aliasing)
 else()
-    target_compile_options(common INTERFACE -ggdb3 -lemon)
+    target_compile_options(common INTERFACE -ggdb3 -lemon -fno-strict-aliasing)
 endif()
 
 find_package(MPI REQUIRED)

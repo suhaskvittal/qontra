@@ -14,9 +14,12 @@
 #include "graph/tanner_graph.h"
 #include "instruction.h"
 #include "protean/proc3d.h"
+#include "tables.h"
 
 #include <lemon/list_graph.h>
 #include <lemon/matching.h>
+
+#include <stim.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -29,6 +32,8 @@
 #include <set>
 #include <vector>
 #include <utility>
+
+#include <math.h>
 
 namespace qontra {
 namespace protean {
@@ -58,21 +63,23 @@ namespace compiler {
         std::set<proc3d::vertex_t*> is_gauge_only;  // Keep track of pure gauge qubits for
                                                     // operations like reduce.
 
-        std::map<tanner::vertex_t*, schedule_t<qc::Instruction>>    check_to_impl;  
+        std::map<graph::tanner::vertex_t*, schedule_t<qc::Instruction>>    
+                                                        check_to_impl;  
                                                             // Contains micro-schedules which
                                                             // implement each parity check.
-        std::set<std::pair<tanner::vertex_t*, tanner::vertex_t*>>   conflicting_checks;
+        std::set<std::pair<graph::tanner::vertex_t*, graph::tanner::vertex_t*>>
+                                                        conflicting_checks;
                                                             // A set of checks that cannot be
                                                             // scheduled concurrently.
-        graph::DependenceGraph<qc::Instruction>*                    dependency_graph;
+        graph::DependenceGraph<qc::Instruction>*        dependency_graph;
                                                             // Defines the dependence relation
                                                             // for the instrucitons in the 
                                                             // macro-schedule.
                                             
-        std::set<tanner::vertex_t*> sparsen_visited_set;
+        std::set<graph::tanner::vertex_t*>              sparsen_visited_set;
 
         bool is_data(proc3d::vertex_t* v) {
-            return !qubit_to_roles.count(v);
+            return (v->id >> 30) == graph::tanner::vertex_t::DATA;
         }
     };
 
@@ -183,6 +190,24 @@ private:
 void    print_connectivity(Processor3D*);
 void    print_schedule(const schedule_t<qc::Instruction>&);
 
+// build_stim_circuit writes a memory experiment Stim spec for a given IR 
+// and Z/X observable. The user must provide:
+//  (1) An IR.
+//  (2) The number of rounds for the memory experiment.
+//  (3) The logical observable to measure.
+//  (4) Whether or not the experiment is an X memory experiment.
+//  (5) A table of error rates (keys should be the physical qubit ids from ir->arch)
+//          Currently supports all errors but correlated errors and dephasing errors.
+//  (6) A table of timing data (keys should be the physical qubit ids from ir->arch)
+
+stim::Circuit   build_stim_circuit(
+                    compiler::ir_t*, 
+                    uint rounds, 
+                    const std::vector<uint>& obs,
+                    bool is_memory_x,
+                    ErrorTable&,
+                    TimeTable&);
+
 // write_ir_to_folder dumps an IR to a folder into the following files:
 //  (1) spec.txt    (TannerGraph)
 //  (2) arch/
@@ -190,6 +215,7 @@ void    print_schedule(const schedule_t<qc::Instruction>&);
 //      (b) 3d_map.txt      (Processor3D, connections with verticality, k-planar)
 //  (3) labels.txt  (role_to_qubit)
 //  (4) schedule.qasm (schedule)
+
 void    write_ir_to_folder(compiler::ir_t*, std::string);
 
 }   // protean
