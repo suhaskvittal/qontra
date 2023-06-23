@@ -33,6 +33,12 @@ simd_bit_table::simd_bit_table(size_t min_bits_major, size_t min_bits_minor, boo
     }
 }
 
+simd_bit_table::simd_bit_table(const simd_bit_table& other)
+    :num_simd_words_major(other.num_simd_words_major),
+    num_simd_words_minor(other.num_simd_words_minor),
+    data(other.data)
+{}
+
 simd_bit_table simd_bit_table::identity(size_t n) {
     simd_bit_table result(n, n);
     for (size_t k = 0; k < n; k++) {

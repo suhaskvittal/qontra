@@ -215,6 +215,54 @@ CliffordSimulator::R(std::vector<uint> operands) {
 }
 
 void
+CliffordSimulator::eDPO(std::vector<uint> operands, std::vector<fp_t> rates) {
+    for (uint i = 0; i < operands.size(); i++) {
+        uint j = operands[i];
+        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
+        [&] (size_t t) {
+            for (uint ii = 0; ii < 2*n_qubits; ii++) {
+                uint k = n_qubits*ii + j;
+                // Implement this as a reset.
+                x_table[k][t] &= z_table[k][t];
+                r_table[ii][t] ^= x_table[k][t];
+                x_table[k][t] = 0;
+                z_table[k][t];
+                // Not sure if |2> also relaxes to |0> at the same rate. 
+                // We'll make a conservative assumption that if the qubit
+                // is leaked, it is now in |1>
+                r_table[ii][t] ^= leak_table[j][t];
+                leak_table[j][t] = 0;
+            }
+        });
+    }
+}
+
+void
+CliffordSimulator::eDPH(std::vector<uint> operands, std::vector<fp_t> rates) {
+    // I believe that properly simulating dephasing errors requires a density
+    // matrix simulator, so to a first order approximation, we will just
+    // perform a "Hadamard error" so we rotate the qubit by 90 deg. This
+    // leaves it in a quantum superposition of its "opposing" state.
+    //  i.e. |+> --> |0> = |+> + |->    (ignoring the constant for readability)
+    //       |0> --> |+> = |0> + |1>
+    for (uint i = 0; i < operands.size(); i++) {
+        uint j = operands[i];
+        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
+        [&] (size_t t) {
+            for (uint ii = 0; ii < 2*n_qubits; ii++) {
+                uint k = n_qubits*ii + j;
+                r_table[ii][t] ^= x_table[k][t] & z_table[k][t] & ~leak_table[j][t];
+                auto tmp = z_table[k][t];
+                z_table[k][t] = (z_table[k][t] & leak_table[j][t])
+                                | (x_table[k][t] & ~leak_table[j][t]);
+                x_table[k][t] = (x_table[k][t] & leak_table[j][t])
+                                | (tmp & ~leak_table[j][t]);
+            }
+        });
+    }
+}
+
+void
 CliffordSimulator::eDP1(std::vector<uint> operands, std::vector<fp_t> rates) {
     for (uint i = 0; i < operands.size(); i++) {
         uint j = operands[i];
@@ -379,6 +427,11 @@ CliffordSimulator::rowsum(uint h, uint i, bool use_pred,
 }
 
 void
+CliffordSimulator::reduce_record_by(uint64_t s) {
+    record_offset -= s;
+}
+
+void
 CliffordSimulator::shift_record_by(uint64_t offset) {
     for (uint64_t i = 0; i < record_offset; i++) {
         if (i < record_offset - offset) {
@@ -391,8 +444,24 @@ CliffordSimulator::shift_record_by(uint64_t offset) {
 }
 
 void
-CliffordSimulator::xor_record_with_previous(uint64_t offset) {
-    record_table[record_offset] ^= record_table[record_offset - offset];
+CliffordSimulator::xor_record_with(uint64_t src, uint64_t dst) {
+    record_table[record_offset - dst] ^= record_table[record_offset - src];
+}
+
+void
+CliffordSimulator::snapshot() {
+    x_table_cpy = stim::simd_bit_table(x_table);
+    z_table_cpy = stim::simd_bit_table(z_table);
+    r_table_cpy = stim::simd_bit_table(r_table);
+    leak_table_cpy = stim::simd_bit_table(leak_table);
+}
+
+void
+CliffordSimulator::rollback_at_trial(uint64_t t) {
+    for (uint i = 0; i < x_width; i++)  x_table[i][t] = x_table_cpy[i][t];
+    for (uint i = 0; i < z_width; i++)  z_table[i][t] = z_table_cpy[i][t];
+    for (uint i = 0; i < r_width; i++)  r_table[i][t] = r_table_cpy[i][t];
+    for (uint i = 0; i < leak_width; i++)  leak_table[i][t] = leak_table_cpy[i][t];
 }
 
 }   // qontra

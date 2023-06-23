@@ -69,14 +69,24 @@ public:
     void    M(std::vector<uint>, bool record=true);
     void    R(std::vector<uint>);
 
+    void    eDPO(std::vector<uint>, std::vector<fp_t>);
+    void    eDPH(std::vector<uint>, std::vector<fp_t>);
+
     void    eDP1(std::vector<uint>, std::vector<fp_t>);
     void    eDP2(std::vector<uint>, std::vector<fp_t>);
     void    eX(std::vector<uint>, std::vector<fp_t>);
     void    eLI(std::vector<uint>, std::vector<fp_t>);
     void    eLT(std::vector<uint>, std::vector<fp_t>);
 
+    void    reduce_record_by(uint64_t);
     void    shift_record_by(uint64_t);
     void    xor_record_with(uint64_t src, uint64_t dst);
+
+    void    snapshot(void); // Copies the state tables into new data structures
+                            // for use later.
+    void    rollback_at_trial(uint64_t);    // Rolls back the state to the snapshot
+
+    uint64_t    get_record_size(void) { return record_offset; }
 
     stim::simd_bit_table record_table;
 private:
@@ -88,6 +98,11 @@ private:
     stim::simd_bit_table    z_table;
     stim::simd_bit_table    r_table;    // Has four extra rows for executing rowsum.
     stim::simd_bit_table    leak_table; // Only has n rows.
+
+    stim::simd_bit_table    x_table_cpy;
+    stim::simd_bit_table    z_table_cpy;
+    stim::simd_bit_table    r_table_cpy;
+    stim::simd_bit_table    leak_table_cpy;
 
     const uint      n_qubits;
     const uint64_t  shots;

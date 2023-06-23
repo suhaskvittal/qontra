@@ -16,6 +16,8 @@
 #include <map>
 #include <vector>
 
+#include <math.h>
+
 namespace qontra {
 
 // The ControlSimulator simulates high-level aspects
@@ -49,8 +51,8 @@ class ControlSimulator {
 
     struct params_t {
         // Simulation parameters
-        fp_t        kill_batch_after_time_elapsed = 10e6; 
-                                            // In microseconds, halts
+        uint64_t    kill_batch_after_time_elapsed = 1000 * 1'000'000'000; 
+                                            // In nanoseconds, halts
                                             // the simulator after this
                                             // much walltime has elapsed.
         // Control system configuration
@@ -58,13 +60,20 @@ class ControlSimulator {
         // Configuration of quantum computer
         TimeTable   timing;
         ErrorTable  errors;
+
+        uint64_t    apply_periodic_errors_at_t = 1000;
+                                            // Apply state errors on all qubits
+                                            // as frequently as shown.
+        bool        simulate_periodic_as_dpo_and_dph = true;
+                                            // If false, we just do depolarizing
+                                            // errors instead.
     };
     params_t params;
     // Stats: add any new stats if necessary.
-    stim::simd_bit_table            latency(experiments::G_SHOTS_PER_BATCH, 64);
+    stim::simd_bit_table                latency(experiments::G_SHOTS_PER_BATCH, 64);
                                         // Latency is a 64-bit integer: 
                                         // units are ns.
-    std::map<uint64_t, uint64_t>    prob_histograms;
+    std::map<stim::simd_bits, uint64_t> prob_histograms;
                                         // Stores the number of shots that 
                                         // give certain output measurements.
     uint64_t    n_trials_killed;
@@ -80,6 +89,7 @@ private:
     typedef std::function<void(std::vector<uint>, std::vector<fp_t>)>   ef_t;
 
     void        apply_gate_error(Instruction&);
+    void        apply_periodic_error(void);
 
     uint64_t    shots_in_curr_batch;
     Timer       timer;
@@ -91,8 +101,9 @@ private:
     // Simulation structures:
     Decoder*                decoder; // Should return XZ frame changes
     CliffordSimulator       csim;
-    stim::simd_bit_table    event_history;
     stim::simd_bit_table    pauli_frames;
+    stim::simd_bit_table    obs_buffer;
+    stim::simd_bit_table    obs_buffer_size;
     // Microarchitecture
     schedule_t              program;    // Program should remain constant
     stim::simd_bit_table    pc;

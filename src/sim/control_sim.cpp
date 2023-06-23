@@ -36,7 +36,8 @@ ControlSimulator::run(uint64_t shots) {
         trial_done.invert_bits();
 
         timer.clk_start();
-
+        
+        int64_t t_since_last_periodic_error = params.apply_periodic_errors_at_t;
         while (trial_done.not_zero()) {
             RT();
             QEX();
@@ -57,6 +58,10 @@ ControlSimulator::run(uint64_t shots) {
                         qex_qubit_busy[i].u64[q] -= t;
                     }
                 }
+            }
+            t_since_last_periodic_error -= t;
+            if (t_since_last_periodic_error <= 0) {
+                apply_periodic_error();
             }
             // Check if we need to abort any trials.
             auto rt = timer.clk_end();
@@ -111,6 +116,12 @@ ControlSimulator::ID() {
     for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
         if (id_stall[t] || !if_id_valid[t])   continue;
         id_pc[t].u64[0] = if_pc[t].u64[0];
+        // Check if the instruction is excluded from this trial.
+        // If so, invalidate the pipeline latch.
+        auto inst = program[id_pc[t].u64[0]];
+        if (inst.exclude_trials.count(t)) {
+            if_qex_valid[t] = 0;
+        }
     }
 }
 
@@ -124,6 +135,9 @@ ControlSimulator::QEX() {
     //
     // Assume these are already detection events.
     stim::simd_bit_table syndromes = csim.record_table.transposed();
+    // As we can execute quantum instructions in a batch, track
+    // which instructions are being executed in which trials.
+    std::map<Instruction, std::set<uint>>   instruction_to_trials;
 
     for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
         if (qex_stall[t] || !id_qex_valid[t])   continue;
@@ -138,10 +152,62 @@ ControlSimulator::QEX() {
             }
         }
         if (stall_pipeline) continue;
-
-        // Otherwise execute the operation, along with any
-        // errors.
-    
+        // These instructions operate on a trial by trial basis.
+        if (inst.name == "DECODE") {
+            syndrome_t s(syndromes[t]);
+            auto res = decoder->decode_error(s);
+            uint64_t exec_time = (uint64_t)res.exec_time;
+            // Decoder may get backlogged if it does not complete on time.
+            //
+            // But this is fine.
+            decoder_busy[t].u64[0] += exec_time;
+            // Update Pauli frames
+            for (uint i = 0; i < res.correction.size(); i++) {
+                pauli_frames[t][i] ^= res.correction[i];
+            }
+        } else if (inst.name == "BRDECBUSY") {
+            if (decoder_busy[t].not_zero()) {
+                // Set PC and invalidate ID.
+                id_qex_valid[t] = 0;
+                pc[t] = inst.operands[0];
+            }
+        } else if (inst.name == "FENCEDEC") {
+            if (decoder_busy[t].not_zero()) {
+                id_stall[t] = 1;
+                qex_rt_valid[t] = 0;
+            }
+        } else if (inst.name == "RECORDXOR") {
+            uint src = inst.operands[0];
+            uint dst = inst.operands[1];
+            csim.xor_record_with(src, dst);
+        } else if (inst.name == "OBS") {
+            uint8_t obs = 0;
+            uint len = csim.get_record_size();
+            for (uint offset : inst.operands) {
+                obs ^= csim.record_table[len-offset];
+            }
+            obs_buffer[t][obs_buffer_size[t].u64[0]++] = obs;
+        } else if (inst.name == "SAVEMEAS") {
+            stim::simd_bits x(obs_buffer[t]);
+            prob_histograms[x]++;
+            obs_buffer[t].clear();
+        } else {
+            // These should be instructions that benefit from operating
+            // on multiple trials at once (i.e. quantum gates).
+            //
+            // We can execute the gates for all trials, and then rollback
+            // the changes for any trials that did not want to execute the
+            // gate.
+            instruction_to_trials[inst].insert(t);
+        }
+    }
+    // Now execute the instructions in instruction_to_trials.
+    for (auto pair : instruction_to_trials) {
+        // Create snapshot of Clifford simulator state.
+        csim.snapshot();
+        auto& inst = pair.first;
+        // Execute the operation, alongside any errors.
+        //
         // Before operation errors:
         const std::set<std::string> apply_error_before{
             "Mrc",
@@ -166,29 +232,6 @@ ControlSimulator::QEX() {
             csim.M(inst.operands, inst.name == "Mrc");
         } else if (inst.name == "R") {
             csim.R(inst.operands);
-        } else if (inst.name == "DECODE") {
-            syndrome_t s(syndromes[t]);
-            auto res = decoder->decode_error(s);
-            uint64_t exec_time = (uint64_t)res.exec_time;
-            // Decoder may get backlogged if it does not complete on time.
-            //
-            // But this is fine.
-            decoder_busy[t].u64[0] += exec_time;
-            // Update Pauli frames
-            for (uint i = 0; i < res.correction.size(); i++) {
-                pauli_frames[t][i] ^= res.correction[i];
-            }
-        } else if (inst.name == "BRDECBUSY") {
-            if (decoder_busy[t].not_zero()) {
-                // Set PC and invalidate ID.
-                id_qex_valid[t] = 0;
-                pc[t] = inst.operands[0];
-            }
-        } else if (inst.name == "FENCEDEC") {
-            if (decoder_busy[t].not_zero()) {
-                id_stall[t] = 1;
-                qex_rt_valid[t] = 0;
-            }
         }
 
         // After operation errors:
@@ -197,19 +240,28 @@ ControlSimulator::QEX() {
         }
 
         // Now set the qubits as busy for X amount of time.
-        if (inst.name == "CX") {
-            for (uint i = 0; i < inst.operands.size(); i += 2) {
-                uint x = inst.operands[i];
-                uint y = inst.operands[i+1];
-                fp_t t = params.timing.op2q[inst.name][std::make_pair(x, y)];
-                qex_qubit_busy[t].u64[x] = t;
-                qex_qubit_busy[t].u64[y] = t;
-            }
-        } else {
-            if (params.timing.op1q.count(inst.name)) {
-                for (uint x : inst.operands) {
-                    fp_t t = params.timing.op1q[inst.name][x];
-                    qex_qubit_busy[t].u64[x] = t;
+        //
+        // Or if the trial did not want to execute the operation, rollback
+        // the change.
+        for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
+            if (!pair.second.count(t)) {
+                csim.rollback_at_trial(t);
+            } else {
+                if (inst.name == "CX") {
+                    for (uint i = 0; i < inst.operands.size(); i += 2) {
+                        uint x = inst.operands[i];
+                        uint y = inst.operands[i+1];
+                        fp_t t = params.timing.op2q[inst.name][std::make_pair(x, y)];
+                        qex_qubit_busy[t].u64[x] = t;
+                        qex_qubit_busy[t].u64[y] = t;
+                    }
+                } else {
+                    if (params.timing.op1q.count(inst.name)) {
+                        for (uint x : inst.operands) {
+                            fp_t t = params.timing.op1q[inst.name][x];
+                            qex_qubit_busy[t].u64[x] = t;
+                        }
+                    }
                 }
             }
         }
@@ -248,6 +300,32 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
         } else {
             csim.eDP1(inst.operands, e);
         }
+    }
+}
+
+void
+ControlSimulator::apply_periodic_error() {
+    const fp_t t = params.apply_periodic_at_t;
+    std::vector<uint> q;
+    if (params.simulate_periodic_as_dpo_and_dph) {
+        std::vector<fp_t> e1, e2;
+        for (uint i = 0; i < n_qubits; i++) {
+            q.push_back(i);
+            fp_t x = 1 - exp(-t / params.timing.t1[i]);
+            fp_t y = 1 - exp(-t / params.timing.t2[i]);
+            e1.push_back(x);
+            e2.push_back(y);
+        }
+        csim.eDPO(q, e1);
+        csim.eDPH(q, e2);
+    } else {
+        std::vector<fp_t> e;
+        for (uint i = 0; i < n_qubits; i++) {
+            fp_t mt = 0.5 * (params.timing.t1[i] + params.timing.t2[i]);
+            q.push_back(i);
+            e.push_back(1 - exp(-t / mt));
+        }
+        csim.eDP1(q, e);
     }
 }
 
