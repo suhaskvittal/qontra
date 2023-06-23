@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   31 May 2023
  * */
 
@@ -7,12 +6,20 @@
 #define PROTEAN_COMPILER_h
 
 #include "defs.h"
+#include "graph/algorithms/distance.h"
+#include "graph/algorithms/mis.h"
+#include "graph/algorithms/search.h"
+#include "graph/dependence_graph.h"
+#include "graph/graph.h"
 #include "graph/tanner_graph.h"
 #include "instruction.h"
 #include "protean/proc3d.h"
+#include "tables.h"
 
 #include <lemon/list_graph.h>
 #include <lemon/matching.h>
+
+#include <stim.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -21,9 +28,12 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <random>
 #include <set>
 #include <vector>
 #include <utility>
+
+#include <math.h>
 
 namespace qontra {
 namespace protean {
@@ -32,6 +42,7 @@ namespace compiler {
     struct ir_t {
         ~ir_t(void) {
             delete arch;
+            delete dependency_graph;
         }
 
         graph::TannerGraph* curr_spec;
@@ -51,6 +62,25 @@ namespace compiler {
                                                         // role of a gauge qubit later.
         std::set<proc3d::vertex_t*> is_gauge_only;  // Keep track of pure gauge qubits for
                                                     // operations like reduce.
+
+        std::map<graph::tanner::vertex_t*, schedule_t<qc::Instruction>>    
+                                                        check_to_impl;  
+                                                            // Contains micro-schedules which
+                                                            // implement each parity check.
+        std::set<std::pair<graph::tanner::vertex_t*, graph::tanner::vertex_t*>>
+                                                        conflicting_checks;
+                                                            // A set of checks that cannot be
+                                                            // scheduled concurrently.
+        graph::DependenceGraph<qc::Instruction>*        dependency_graph;
+                                                            // Defines the dependence relation
+                                                            // for the instrucitons in the 
+                                                            // macro-schedule.
+                                            
+        std::set<graph::tanner::vertex_t*>              sparsen_visited_set;
+
+        bool is_data(proc3d::vertex_t* v) {
+            return (v->id >> 30) == graph::tanner::vertex_t::DATA;
+        }
     };
 
     typedef std::function<fp_t(ir_t*)> cost_t;  // Returns a float scoring the IR. The compiler
@@ -76,8 +106,11 @@ public:
         objective(obj),
         max_induced_check_weight(std::numeric_limits<uint>::max()),
         compile_round(0),
-        params()
+        params(),
+        rng(0)
     {}
+
+    void            set_seed(uint64_t s) { rng.seed(s); }
 
     compiler::ir_t* run(graph::TannerGraph*);
 
@@ -111,7 +144,8 @@ private:
     //      Jump to (3).
     //
     //  (5) Micro-Schedule  -- schedules the operations for each check.
-    //  (6) Macro-Schedule  -- schedules the order of computing each check.
+    //  (6) Macro-Schedule  -- schedules the order of computing each check such that depth is
+    //                          minimized.
     //  
     //  (6) Score   -- check if IR is valid. If not, jump to 7.
     //  If Observable is defined:
@@ -134,6 +168,8 @@ private:
     void    reduce(compiler::ir_t*);
     bool    merge(compiler::ir_t*);
     bool    split(compiler::ir_t*);
+    void    micro_schedule(compiler::ir_t*);
+    void    macro_schedule(compiler::ir_t*);
     void    schedule(compiler::ir_t*);
     void    score(compiler::ir_t*);
     bool    induce(compiler::ir_t*);
@@ -147,10 +183,30 @@ private:
                                     // this weight.
     uint compile_round;
     bool called_sparsen;
+
+    std::mt19937_64 rng;
 };
 
 void    print_connectivity(Processor3D*);
 void    print_schedule(const schedule_t&);
+
+// build_stim_circuit writes a memory experiment Stim spec for a given IR 
+// and Z/X observable. The user must provide:
+//  (1) An IR.
+//  (2) The number of rounds for the memory experiment.
+//  (3) The logical observable to measure.
+//  (4) Whether or not the experiment is an X memory experiment.
+//  (5) A table of error rates (keys should be the physical qubit ids from ir->arch)
+//          Currently supports all errors but correlated errors and dephasing errors.
+//  (6) A table of timing data (keys should be the physical qubit ids from ir->arch)
+
+stim::Circuit   build_stim_circuit(
+                    compiler::ir_t*, 
+                    uint rounds, 
+                    const std::vector<uint>& obs,
+                    bool is_memory_x,
+                    ErrorTable&,
+                    TimeTable&);
 
 // write_ir_to_folder dumps an IR to a folder into the following files:
 //  (1) spec.txt    (TannerGraph)
@@ -159,6 +215,7 @@ void    print_schedule(const schedule_t&);
 //      (b) 3d_map.txt      (Processor3D, connections with verticality, k-planar)
 //  (3) labels.txt  (role_to_qubit)
 //  (4) schedule.qasm (schedule)
+
 void    write_ir_to_folder(compiler::ir_t*, std::string);
 
 }   // protean

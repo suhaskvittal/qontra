@@ -25,7 +25,7 @@ using namespace decoding;
 
 void
 DecodingGraph::build_distance_matrix() {
-    dijkstra::ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
+    ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
     {
         auto e = this->get_edge(v1, v2);
         if (e == nullptr) {
@@ -34,7 +34,7 @@ DecodingGraph::build_distance_matrix() {
             return e->edge_weight;
         }
     };
-    dijkstra::callback_t<vertex_t, matrix_entry_t> cb = 
+    distance::callback_t<vertex_t, matrix_entry_t> cb = 
     [&] (vertex_t* src,
         vertex_t* dst,
         const std::map<vertex_t*, fp_t>& dist,
@@ -70,7 +70,7 @@ failed:
         return (matrix_entry_t) {length, prob, weight, frames};
     };
 
-    distance_matrix = create_distance_matrix(this, w, cb);
+    distance_matrix = distance::create_distance_matrix(this, w, cb);
 }
 
 void

@@ -14,8 +14,7 @@ set(QONTRA_FILES
     # Parsing
     src/parsing/cmd.cpp
     # Graphs
-    src/graph/decoding_graph.cpp
-    src/graph/coupling_graph.cpp
+    src/graph/decoding_graph.cpp src/graph/coupling_graph.cpp
     src/graph/tanner_graph.cpp
     # Protean
     src/protean/compiler.cpp
@@ -34,9 +33,9 @@ add_executable(cliff src/main/test/cliffsimtest.cpp)
 add_executable(protean_main src/main/protean/main.cpp)
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-    target_compile_options(qontra PUBLIC -O3 -lemon)
+    target_compile_options(qontra PUBLIC -O3 -lemon -fno-strict-aliasing)
 else()
-    target_compile_options(qontra PUBLIC -ggdb3 -lemon)
+    target_compile_options(qontra PUBLIC -ggdb3 -lemon -fno-strict-aliasing)
 endif()
 
 find_package(MPI REQUIRED)

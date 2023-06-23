@@ -3,12 +3,16 @@
  *  date:   05 June 2023
  * */
 
+#include "decoder/decoder.h"
+#include "decoder/mwpm.h"
 #include "defs.h"
+#include "experiments.h"
 #include "graph/io.h"
 #include "graph/tanner_graph.h"
 #include "parsing/cmd.h"
 #include "protean/compiler.h"
 #include "protean/proc3d.h"
+#include "tables.h"
 
 #include <fstream>
 #include <iostream>
@@ -28,7 +32,21 @@ int main(int argc, char* argv[]) {
     help += "\t\tAssumes that there is a ../graphs/tanner/*.txt file and ../data folder";
     help += "\tInput tanner graph file (--input)\n";
     help += "\tOutput folder (--output)\n";
+    // Memory experiment parameters
+    help += "\tRounds for memory experiment (--rounds)\n";
+    help += "\tPhysical error rate (--per)\n";
+    help += "\tObservable to measure (--obs), format should be obs1_obs2_obs3_...\n";
+    help += "\tShots (--shots)\n";
+    help += "\tMemory experiment (-x or -z), default is memory Z\n";
+
     help += "\tVerbose (-v)\n";
+
+    bool help_requested = parser.option_set("h");
+    if (help_requested) {
+help_exit:
+        std::cout << help;
+        return 0;
+    }
 
     std::string code_name;
     std::string file_in;
@@ -42,7 +60,31 @@ int main(int argc, char* argv[]) {
         parser.get_string("output", folder_out);
     }
 
+    uint rounds;
+    fp_t per;
+    std::string obs_str;
+    uint64_t shots;
+
+    if (!parser.get_uint32("rounds", rounds))   goto help_exit;
+    if (!parser.get_float("per", per))          goto help_exit;
+    if (!parser.get_string("obs", obs_str))     goto help_exit;
+    if (!parser.get_uint64("shots", shots))     goto help_exit;
+
     bool verbose = parser.option_set("v");
+    bool is_memory_x = parser.option_set("x");
+
+    // Parse the observable string.
+    std::vector<uint> obs;
+    size_t pssi = 0, ssi;
+    while (true) {
+        if ((ssi = obs_str.find("_", pssi)) == std::string::npos) {
+            ssi = obs_str.size();
+        }
+        uint x = std::stoi(obs_str.substr(pssi, ssi));
+        obs.push_back(x);
+        pssi = ssi+1;
+        if (ssi == obs_str.size()) break;
+    }
 
     // Read the input file.
     std::ifstream fin(file_in);
@@ -68,18 +110,67 @@ int main(int argc, char* argv[]) {
         }
         std::cout << "\n";
     }
+
     // Define the cost function here.
-    compiler::cost_t cf = [] (compiler::ir_t* ir)
+    compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
-        // Minimize overall connectivity.
-        fp_t connectivity = ir->arch->get_mean_connectivity();
-        fp_t size_score = 0.05 * ((fp_t)ir->arch->get_vertices().size());
-        fp_t op_score = 0.005 * ir->schedule.size();
-        return size_score;
+        if (ir->dependency_graph == nullptr)    return 0.0;
+        // Build error and time tables.
+        // Only need to define H, Mrc, R, and CX.
+        ErrorTable et;
+        TimeTable tt;
+        for (auto v : ir->arch->get_vertices()) {
+            et.op1q["H"][v->id] = 0.1*per;
+            et.op1q["Mrc"][v->id] = 10*per;
+            et.op1q["R"][v->id] = 0.1*per;
+
+            tt.op1q["H"][v->id] = 50;
+            tt.op1q["Mrc"][v->id] = 600;
+            tt.op1q["R"][v->id] = 50;
+
+            tt.t1[v->id] = 0.5 * (1/per) * 1e3;
+
+            uint dg = ir->arch->get_degree(v);
+            fp_t ct_e = 0.01 * per * pow(M_E, dg - 2);
+            for (auto w : ir->arch->get_neighbors(v)) {
+                auto v_w = std::make_pair(v->id, w->id);
+                auto w_v = std::make_pair(w->id, v->id);
+
+                et.op2q["CX"][v_w] = per;
+                et.op2q["CX"][w_v] = per;
+
+                tt.op2q["CX"][v_w] = 150;
+                tt.op2q["CX"][w_v] = 150;
+
+                if (ct_e > et.op2q_crosstalk["CX"][v_w]) {
+                    et.op2q_crosstalk["CX"][v_w] = ct_e;
+                    et.op2q_crosstalk["CX"][w_v] = ct_e;
+                }
+            }
+        }
+
+        // Run memory experiment using MWPM decoding.
+        write_ir_to_folder(ir, "protean/tmp");
+        stim::Circuit circuit = build_stim_circuit(
+                                    ir,
+                                    rounds,
+                                    obs,
+                                    is_memory_x,
+                                    et,
+                                    tt);
+        std::ofstream out("protean/circ.stim");
+        out << circuit.str() << "\n";
+        std::cout << circuit.str() << "\n";
+
+        decoder::MWPMDecoder mwpm(circuit);
+
+        experiments::G_USE_MPI = false; // Disable when MPI version is ready.
+        auto res = memory_experiment(&mwpm, shots);
+        return res.logical_error_rate;
     };
+
     // Define any constraints here.
     compiler::constraint_t con;
-    con.max_mean_connectivity = 2.8;
     con.max_connectivity = 4;
 
     // Declare compiler and run it.
@@ -92,6 +183,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Number of qubits = " << res->arch->get_vertices().size() << "\n";
     std::cout << "Connectivity = " << res->arch->get_mean_connectivity() << "\n";
     std::cout << "Number of ops = " << res->schedule.size() << "\n";
+    std::cout << "Schedule depth = " << res->dependency_graph->get_depth() << "\n";
 
     write_ir_to_folder(res, folder_out);
 
