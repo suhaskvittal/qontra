@@ -575,8 +575,8 @@ Compiler::schedule(ir_t* curr_ir) {
         return x;
     };
 
-    schedule_t<qc::Instruction> schedule;
-    std::deque<qc::Instruction> schedule_buffer;
+    schedule_t schedule;
+    std::deque<Instruction> schedule_buffer;
     
     // To schedule the CNOTs for measuring each parity check, we will create graphs
     // (schedule_graph_t) and perform BFS on them. The idea is that these graphs should be
@@ -593,7 +593,7 @@ Compiler::schedule(ir_t* curr_ir) {
     search::callback_t<proc3d::vertex_t> s_cb =
     [&] (proc3d::vertex_t* v1, proc3d::vertex_t* v2)
     {
-        qc::Instruction inst;
+        Instruction inst;
         inst.name = "CX";
         if (set_x_parity)   inst.operands = std::vector<uint>{v1->id, v2->id};
         else                inst.operands = std::vector<uint>{v2->id, v1->id};
@@ -638,9 +638,9 @@ Compiler::schedule(ir_t* curr_ir) {
         set_x_parity = tv->qubit_type == tanner::vertex_t::XPARITY;
         curr_parity_check = pv;
         // Create H and Mrc gates beforehand
-        qc::Instruction h;
-        qc::Instruction meas;
-        qc::Instruction reset;
+        Instruction h;
+        Instruction meas;
+        Instruction reset;
 
         h.name = std::string("H");
         for (auto p : non_data_qubits) {
@@ -827,7 +827,7 @@ print_connectivity(Processor3D* arch) {
 }
 
 void
-print_schedule(const schedule_t<qc::Instruction>& sched) {
+print_schedule(const schedule_t& sched) {
     std::cout << "Schedule:\n";
     for (auto op : sched) {
         std::cout << "\t" << op.name;

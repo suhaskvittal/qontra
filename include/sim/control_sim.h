@@ -23,7 +23,7 @@ namespace qontra {
 class ControlSimulator {
     ControlSimulator(uint n_qubits,
                     decoder::Decoder* dec,
-                    const schedule_t<cp::Instruction>& program)
+                    const schedule_t& program)
         // Simulation state tracking
         :decoder_busy(experiments::G_SHOTS_PER_BATCH, 64),
         time(0),
@@ -71,7 +71,7 @@ private:
     stim::simd_bit_table    event_history;
     stim::simd_bit_table    pauli_frames;   // Two bits per logical qubit.
     // Microarchitecture
-    schedule_t<cp::Instruction> program;    // We need not worry about
+    schedule_t              program;    // We need not worry about
                                             // branches.
     stim::simd_bit_table        pc;
 

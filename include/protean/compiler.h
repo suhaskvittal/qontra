@@ -34,11 +34,11 @@ namespace compiler {
             delete arch;
         }
 
-        graph::TannerGraph*             curr_spec;
-        Processor3D*                    arch;
-        schedule_t<qc::Instruction>     schedule;
-        fp_t                            score;
-        bool                            valid;
+        graph::TannerGraph* curr_spec;
+        Processor3D*        arch;
+        schedule_t          schedule;
+        fp_t                score;
+        bool                valid;
         // Data structures:
         std::map<graph::tanner::vertex_t*, proc3d::vertex_t*>
                                                 role_to_qubit;
@@ -150,7 +150,7 @@ private:
 };
 
 void    print_connectivity(Processor3D*);
-void    print_schedule(const schedule_t<qc::Instruction>&);
+void    print_schedule(const schedule_t&);
 
 // write_ir_to_folder dumps an IR to a folder into the following files:
 //  (1) spec.txt    (TannerGraph)
