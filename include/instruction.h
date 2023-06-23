@@ -28,7 +28,12 @@ const std::vector<std::string> ISA{
     "Mnrc", // does not record measurement
     "Mrc",  // records measurement and places it into a buffer
     "R"
-    "NOP",  // essentially a delay operation
+    "DECODE",       // Tells decoder to decode syndrome.
+    "BRDECBUSY",    // Jumps to instruction if decoder is busy (still decoding)
+    "FENCEDEC",     // Waits until the decoder finishes.
+    "NOP",          // essentially a delay operation
+    // Virtual instruction
+    "DONE",         // Tells the simulator we are done (virtual instruction)
 };
 
 struct Instruction {

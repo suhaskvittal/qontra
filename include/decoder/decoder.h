@@ -10,6 +10,7 @@
 
 #include "defs.h"
 #include "graph/decoding_graph.h"
+#include "timer.h"
 
 #include <string>
 #include <utility>
@@ -46,25 +47,7 @@ public:
 protected:
     // Other helpful functions:
     //
-    // clk_start: records the time it was called.
-    // clk_end: records the time elapsed since the last clk_start.
     // is_error: checks if the provided correction is a logical error.
-
-    void clk_start(void) {
-#ifdef __APPLE__
-        t_start = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
-#else
-        struct timespec d;
-        clock_gettime(CLOCK_MONOTONIC_RAW, &d);
-        t_start = d.tv_nsec;
-#endif
-    }
-
-    uint64_t clk_end(void) {
-        auto tmp = t_start;
-        clk_start();
-        return t_start - tmp;
-    }
 
     bool is_error(
             const std::vector<uint8_t>& correction, const syndrome_t& syndrome)
@@ -100,14 +83,10 @@ protected:
         return det;
     }
 
-    stim::Circuit circuit;
-    graph::DecodingGraph decoding_graph;
-private:
-#ifdef __APPLE__
-    uint64_t    t_start;
-#else
-    long        t_start;
-#endif
+    stim::Circuit           circuit;
+    graph::DecodingGraph    decoding_graph;
+
+    Timer   timer;
 };
 
 }   // decoder

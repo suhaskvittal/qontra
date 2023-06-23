@@ -378,4 +378,21 @@ CliffordSimulator::rowsum(uint h, uint i, bool use_pred,
     r_table[2*n_qubits+2].clear();
 }
 
+void
+CliffordSimulator::shift_record_by(uint64_t offset) {
+    for (uint64_t i = 0; i < record_offset; i++) {
+        if (i < record_offset - offset) {
+            record_table[i].swap_with(record_table[i + offset);
+        } else {
+            record_table[i].clear();
+        }
+    }
+    record_offset -= offset;
+}
+
+void
+CliffordSimulator::xor_record_with_previous(uint64_t offset) {
+    record_table[record_offset] ^= record_table[record_offset - offset];
+}
+
 }   // qontra

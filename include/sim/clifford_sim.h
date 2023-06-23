@@ -74,7 +74,9 @@ public:
     void    eX(std::vector<uint>, std::vector<fp_t>);
     void    eLI(std::vector<uint>, std::vector<fp_t>);
     void    eLT(std::vector<uint>, std::vector<fp_t>);
-    void    eCT(std::vector<uint>, std::vector<fp_t>);
+
+    void    shift_record_by(uint64_t);
+    void    xor_record_with(uint64_t src, uint64_t dst);
 
     stim::simd_bit_table record_table;
 private:

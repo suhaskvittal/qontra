@@ -13,7 +13,7 @@ MWPMDecoder::decode_error(const syndrome_t& syndrome) {
     const uint n_detectors = circuit.count_detectors();
     const uint n_observables = circuit.count_observables();
 
-    clk_start();
+    timer.clk_start();
     std::vector<uint> detectors = get_nonzero_detectors(syndrome);
 
     if (detectors.size() & 0x1) {
@@ -55,7 +55,7 @@ MWPMDecoder::decode_error(const syndrome_t& syndrome) {
             if (f >= 0) corr[f] ^= 1;
         }
     }
-    auto time_taken = (fp_t)clk_end();
+    auto time_taken = (fp_t)timer.clk_end();
 
     return (Decoder::result_t) { time_taken, corr, is_error(corr, syndrome) };
 }
