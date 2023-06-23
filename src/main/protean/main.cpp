@@ -158,6 +158,9 @@ help_exit:
                                     is_memory_x,
                                     et,
                                     tt);
+        std::ofstream out("protean/circ.stim");
+        out << circuit.str() << "\n";
+        std::cout << circuit.str() << "\n";
 
         decoder::MWPMDecoder mwpm(circuit);
 
@@ -168,7 +171,6 @@ help_exit:
 
     // Define any constraints here.
     compiler::constraint_t con;
-    con.max_mean_connectivity = 2.9;
     con.max_connectivity = 4;
 
     // Declare compiler and run it.

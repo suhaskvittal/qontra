@@ -8,6 +8,8 @@
 namespace qontra {
 namespace protean {
 
+#define DISABLE_ERRORS
+
 #define PRINT_V(id)  (id >> 30) << "|" << ((id >> 24) & 0x3f) << "|" << (id & 0x00ff'ffff)
 
 using namespace graph;
@@ -32,15 +34,18 @@ __place:
     if (params.verbose) {
         std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
-        std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << "\n";
+        std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
+                    << ir->arch->get_max_connectivity() << "\n";
         std::cout << "[ unify ] ---------------------\n";
     }
     unify(ir);
+    /*
 __reduce:
     if (params.verbose) {
         std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
-        std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << "\n";
+        std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
+                    << ir->arch->get_max_connectivity() << "\n";
         std::cout << "[ reduce ] ---------------------\n";
     }
     reduce(ir);
@@ -59,6 +64,7 @@ __reduce:
         if (params.verbose) std::cout << "[ split ] ---------------------\n";
         if (split(ir))  goto __reduce;
     }
+    */
 __schedule:
     if (params.verbose) {
         std::cout << "[ schedule ] ---------------------\n";
@@ -962,56 +968,6 @@ Compiler::sparsen(ir_t* curr_ir) {
 }
 
 void
-Compiler::linearize(ir_t* curr_ir) {
-    // Here, we will search for more reduction opportunities by searching for parity/gauge qubits
-    // with neighboring degree 1 data qubits, such that if we move these qubits, we can reduce
-    // the parity/gauge qubit (as it is now degree 2).
-    TannerGraph* tanner_graph = curr_ir->curr_spec;
-    Processor3D* arch = curr_ir->arch;
-
-    std::vector<proc3d::edge_t*> edges_to_remove;
-    std::vector<proc3d::edge_t*> edges_to_add;
-
-    for (auto tv : tanner_graph->get_vertices()) {
-        auto pv = arch->get_vertex(tv->id);
-        uint deg = arch->get_degree(pv);
-        if (deg > 1)    continue;
-        // Check if any neighboring parity qubits match the criteria.
-        proc3d::vertex_t* victim1 = nullptr;
-        for (auto pw : arch->get_neighbors(pv)) {
-            if (curr_ir->is_data(pw))   continue;
-            uint deg = arch->get_degree(pw);
-            if (deg == 3) {
-                victim1 = pw;
-                break;
-            }
-        }
-        if (victim1 == nullptr)  continue;
-        // Search for a data victim adjacent to pw.
-        uint victim2_dg = std::numeric_limits<uint>::max();
-        proc3d::vertex_t* victim2 = nullptr;
-        for (auto pw : arch->get_neighbors(victim1)) {
-            if (!curr_ir->is_data(pw))  continue;
-            if (pw == pv)   continue;
-            deg = arch->get_degree(pw);
-            if (deg < victim2_dg) {
-                victim2_dg = deg;
-                victim2 = pw;
-            }
-        }
-        if (victim2 == nullptr) continue;
-        // Now, we delete the edge between pv and victim1 and move pv adjacent to victim2.
-        auto e1 = arch->get_edge(pv, victim1);
-        arch->delete_edge(e1);
-
-        auto e2 = new proc3d::edge_t;
-        e2->src = (void*)pv;
-        e2->dst = (void*)victim2;
-        arch->add_edge(e2);
-    }
-}
-
-void
 print_connectivity(Processor3D* arch) {
     std::cout << "Connections:\n";
     for (auto v : arch->get_vertices()) {
@@ -1075,10 +1031,14 @@ build_stim_circuit(
     for (auto v : arch->get_vertices()) {
         uint i = id_to_num[v->id];
         circuit.append_op("R", {i});
+#ifndef DISABLE_ERRORS
         circuit.append_op("X_ERROR", {i}, errors.op1q["R"][v->id]); 
+#endif
         if (is_memory_x && i < n_data) {
             circuit.append_op("H", {i});
+#ifndef DISABLE_ERRORS
             circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][v->id]); 
+#endif
         }
     }
     // Add syndrome extraction rounds to circuit. 
@@ -1090,7 +1050,9 @@ build_stim_circuit(
         // Apply decoherence on data qubits.
         for (uint i = 0; i < n_data; i++) {
             fp_t e = 1.0 - exp(-prev_round_length / times.t1[i]);
+#ifndef DISABLE_ERRORS
             circuit.append_op("DEPOLARIZE1", {i}, e);
+#endif
         }
         // Schedule operations by depth in the circuit.
         prev_round_length = 0.0;
@@ -1098,6 +1060,8 @@ build_stim_circuit(
         uint this_round_meas = 0;
         std::vector<uint> meas_events;
         for (uint d = 1; d <= dependency_graph->get_depth(); d++) {
+            circuit.append_op("TICK", {});
+
             auto ops = dependency_graph->get_vertices_at_depth(d);
             fp_t layer_length = 0.0;
             for (auto v : ops) {
@@ -1117,12 +1081,14 @@ build_stim_circuit(
                         uint i2 = id_to_num[x2];
 
                         circuit.append_op(inst->name, {i1, i2});
+#ifndef DISABLE_ERRORS
                         circuit.append_op("L_TRANSPORT", {i1, i2},
                                 errors.op2q_leakage_transport["CX"][x1_x2]);
                         circuit.append_op("L_ERROR", {i1, i2},
                                 errors.op2q_leakage_injection["CX"][x1_x2]);
                         circuit.append_op("DEPOLARIZE2", {i1, i2},
                                 errors.op2q["CX"][x1_x2]);
+#endif
                         // To implement crosstalk, we will just apply depolarizing
                         // errors on nearby qubits.
                         /*
@@ -1148,7 +1114,9 @@ build_stim_circuit(
                     for (uint x : operands) {
                         uint i = id_to_num[x];
                         if (inst->name == "Mrc" || inst->name == "Mnrc") {
+#ifndef DISABLE_ERRORS
                             circuit.append_op("X_ERROR", {i}, errors.op1q["Mrc"][x]);
+#endif
                             circuit.append_op("M", {i});
 
                             // If this measuring the same check as the memory experiment
@@ -1159,10 +1127,14 @@ build_stim_circuit(
                             this_round_meas++;
                         } else if (inst->name == "R") {
                             circuit.append_op(inst->name, {i});
+#ifndef DISABLE_ERRORS
                             circuit.append_op("X_ERROR", {i}, errors.op1q["R"][x]);
+#endif
                         } else {
                             circuit.append_op(inst->name, {i});
+#ifndef DISABLE_ERRORS
                             circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][x]);
+#endif
                         }
                         fp_t t = times.op1q[inst->name][x];
                         if (t > max_opt)    max_opt = t;
@@ -1202,8 +1174,6 @@ build_stim_circuit(
     }
     std::sort(obs_inc.begin(), obs_inc.end());
     circuit.append_op("OBSERVABLE_INCLUDE", obs_inc, 0);
-
-    std::cout << circuit.flattened().str() << "\n";
     return circuit;
 }
 
