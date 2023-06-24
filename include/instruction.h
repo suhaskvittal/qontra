@@ -8,13 +8,9 @@
 
 #include "defs.h"
 
-<<<<<<< HEAD
-#include <algorithm>
-=======
 #include <stim.h>
 
 #include <deque>
->>>>>>> b7fe2b4c19394c47367f32573cb9420d0bd2c7dc
 #include <string>
 
 namespace qontra {
@@ -46,16 +42,22 @@ const std::vector<std::string> ISA{
 
 struct Instruction {
     std::string name;
-    std::vector<int> operands;
+    std::vector<uint> operands;
 
     std::set<uint64_t> exclude_trials;
 
     // Extra metadata
     bool    is_measuring_x_check;
 
-    std::string str(void) {
+    std::string str(void) const {
         std::string out = name;
-        for (uint op : operands)  out += " " + std::to_string(op);
+        bool first = true;
+        for (uint op : operands) {
+            if (first)  out += "\t";
+            else        out += ",";
+            out += std::to_string(op);
+            first = false;
+        }
         return out;
     }
 
@@ -69,5 +71,16 @@ struct Instruction {
 };
 
 typedef std::vector<Instruction>    schedule_t;
+
+inline std::string
+to_text(const schedule_t& sch) {
+    std::string out;
+    for (const auto& inst : sch) {
+        out += inst.str() + "\n";
+    }
+    return out;
+}
+
+}   // qontra
 
 #endif  // INSTRUCTION_H

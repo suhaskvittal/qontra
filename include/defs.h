@@ -22,7 +22,9 @@ typedef double fp_t;
 typedef uint32_t uint;
 #endif
 
-typedef uint64_t addr_t;
+typedef uint64_t                addr_t;
+typedef std::vector<uint64_t>   vlw_t;
+typedef stim::simd_bits syndrome_t;
 
 const fp_t KB = 1024.0;
 const fp_t MB = KB*1024.0;
@@ -46,14 +48,13 @@ put(TwoLevelMap<T, U, V>& m, T x, U y, V z) {
 
 }   // tlm
 
-typedef stim::simd_bits syndrome_t;
-
 //
 // HELPER FUNCTIONS:
 //
 //  safe_create_directory creates folders for a directory (and any necessary parent folders).
 //
 //  is_subset_of checks if container A is a subset of container B.
+//  to_vlw converts a stim::simd_bits or stim::simd_bits_range_ref object to a vlw_t
 
 inline void
 safe_create_directory(const std::filesystem::path& path) {
@@ -66,8 +67,8 @@ safe_create_directory(const std::filesystem::path& path) {
 }
 
 // Checks if all elements in first arg are in second arg.
-template <class T, class U>
-inline bool is_subset_of(T c1, U c2) {
+template <class T, class U> inline bool 
+is_subset_of(T c1, U c2) {
     U tmp;
     std::set_intersection(c1.begin(), c1.end(), c2.begin(), c2.end(),
             std::inserter(tmp, tmp.begin()));
@@ -75,5 +76,14 @@ inline bool is_subset_of(T c1, U c2) {
 }
 
 }  // qontra
+
+ // T must either be stim::simd_bits or stim::simd_bits_range_ref
+template <class T> inline vlw_t
+to_vlw(T x, uint64_t len) {
+    uint n = (len >> 6)+1;
+    vlw_t w(n);
+    for (uint i = 0; i < n; i++)    w[i] = x.u64[i];
+    return w;
+} 
 
 #endif

@@ -11,10 +11,12 @@
 #include "experiments.h"
 #include "instruction.h"
 #include "sim/clifford_sim.h"
+#include "tables.h"
 
 #include <functional>
 #include <map>
 #include <vector>
+#include <random>
 
 #include <math.h>
 
@@ -26,35 +28,54 @@ namespace qontra {
 //  (2) Decoding and tracking of Pauli frames
 
 class ControlSimulator {
+public:
     ControlSimulator(uint n_qubits,
                     decoder::Decoder* dec,
                     const schedule_t& program)
+        // Stats
+        :latency(experiments::G_SHOTS_PER_BATCH, 64),
         // Simulation state tracking
-        :decoder_busy(experiments::G_SHOTS_PER_BATCH, 64),
-        time(0),
+        decoder_busy(experiments::G_SHOTS_PER_BATCH, 64),
+        trial_done(experiments::G_SHOTS_PER_BATCH),
         // Simulation structures
-        decoder(dec)
+        decoder(dec),
         csim(n_qubits, experiments::G_SHOTS_PER_BATCH),
-        event_history(8192, experiments::G_SHOTS_PER_BATCH),
-        pauli_frames(128, experiments::G_SHOTS_PER_BATCH),
+        pauli_frames(experiments::G_SHOTS_PER_BATCH, 128),
+        obs_buffer(experiments::G_SHOTS_PER_BATCH, 128),
+        obs_buffer_size(experiments::G_SHOTS_PER_BATCH, 64),
         // Microarchitecture
         program(program),
-        pc(experiments::G_SHOTS_PER_SHOTS, 64),
+        pc(experiments::G_SHOTS_PER_BATCH, 64),
         // IF io
         if_stall(experiments::G_SHOTS_PER_BATCH),
         if_pc(experiments::G_SHOTS_PER_BATCH, 64),
-
+        if_id_valid(experiments::G_SHOTS_PER_BATCH),
+        // ID io
+        id_stall(experiments::G_SHOTS_PER_BATCH),
+        id_pc(experiments::G_SHOTS_PER_BATCH, 64),
+        id_qex_valid(experiments::G_SHOTS_PER_BATCH),
+        // QEX io
+        qex_stall(experiments::G_SHOTS_PER_BATCH),
+        qex_rt_valid(experiments::G_SHOTS_PER_BATCH),
+        qex_pc(experiments::G_SHOTS_PER_BATCH, 64),
+        qex_qubit_busy(experiments::G_SHOTS_PER_BATCH, 64*n_qubits),
+        // RT io
+        rt_stall(experiments::G_SHOTS_PER_BATCH),
+        // Other
+        n_qubits(n_qubits),
+        rng(0)
     {}
 
-    bool run(uint64_t shots);
+    void run(uint64_t shots);
     void clear();
 
     struct params_t {
         // Simulation parameters
-        uint64_t    kill_batch_after_time_elapsed = 1000 * 1'000'000'000; 
+        uint64_t    kill_batch_after_time_elapsed = 1000L * 1'000'000'000L; 
                                             // In nanoseconds, halts
                                             // the simulator after this
                                             // much walltime has elapsed.
+        uint        verbose = 0;
         // Control system configuration
         fp_t        clock_frequency = 250e6;
         // Configuration of quantum computer
@@ -70,10 +91,10 @@ class ControlSimulator {
     };
     params_t params;
     // Stats: add any new stats if necessary.
-    stim::simd_bit_table                latency(experiments::G_SHOTS_PER_BATCH, 64);
+    stim::simd_bit_table                latency;
                                         // Latency is a 64-bit integer: 
                                         // units are ns.
-    std::map<stim::simd_bits, uint64_t> prob_histograms;
+    std::map<vlw_t, uint64_t>           prob_histograms;
                                         // Stores the number of shots that 
                                         // give certain output measurements.
     uint64_t    n_trials_killed;
@@ -97,9 +118,8 @@ private:
     // Simulation state tracking
     stim::simd_bit_table    decoder_busy;
     stim::simd_bits         trial_done; // Active-low: if 1, then not finished.
-    uint64_t                time;
     // Simulation structures:
-    Decoder*                decoder; // Should return XZ frame changes
+    decoder::Decoder*       decoder; // Should return XZ frame changes
     CliffordSimulator       csim;
     stim::simd_bit_table    pauli_frames;
     stim::simd_bit_table    obs_buffer;
@@ -123,9 +143,9 @@ private:
     stim::simd_bit_table    qex_qubit_busy;
     // RT io
     stim::simd_bits         rt_stall;
-    stim::simd_bit_table    rt_record_when_done;
 
-    const uint n_qubits;
+    const uint      n_qubits;
+    std::mt19937_64 rng;
 };
 
 }   // qontra

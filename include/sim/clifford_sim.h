@@ -29,18 +29,22 @@ extern uint64_t G_RECORD_SPACE_SIZE;
 
 class CliffordSimulator {
 public:
-    CliffordSimulator(uint n, uint64_t shots)
+    CliffordSimulator(uint n, uint64_t max_shots)
         :n_qubits(n),
-        shots(shots),
+        max_shots(max_shots),
         x_width(__CSIM_X_WIDTH(n)),
         z_width(__CSIM_Z_WIDTH(n)),
         r_width(__CSIM_R_WIDTH(n)),
         leak_width(n),
-        x_table(__CSIM_X_WIDTH(n), shots),
-        z_table(__CSIM_Z_WIDTH(n), shots),
-        r_table(__CSIM_R_WIDTH(n), shots),
-        leak_table(n, shots),
-        record_table(cliffsim::G_RECORD_SPACE_SIZE, shots),
+        x_table(__CSIM_X_WIDTH(n), max_shots),
+        z_table(__CSIM_Z_WIDTH(n), max_shots),
+        r_table(__CSIM_R_WIDTH(n), max_shots),
+        leak_table(n, max_shots),
+        x_table_cpy(__CSIM_X_WIDTH(n), max_shots),
+        z_table_cpy(__CSIM_Z_WIDTH(n), max_shots),
+        r_table_cpy(__CSIM_R_WIDTH(n), max_shots),
+        leak_table_cpy(n, max_shots),
+        record_table(cliffsim::G_RECORD_SPACE_SIZE, max_shots),
         record_offset(0),
         rng(0)
     {
@@ -88,7 +92,8 @@ public:
 
     uint64_t    get_record_size(void) { return record_offset; }
 
-    stim::simd_bit_table record_table;
+    stim::simd_bit_table    record_table;
+    uint64_t                shots;
 private:
     void    init_tables(void);
     void    rowsum(uint h, uint i, bool use_pred, stim::simd_bits_range_ref pred);
@@ -105,7 +110,7 @@ private:
     stim::simd_bit_table    leak_table_cpy;
 
     const uint      n_qubits;
-    const uint64_t  shots;
+    const uint64_t  max_shots;
 
     const uint x_width;
     const uint z_width;

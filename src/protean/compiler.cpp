@@ -665,7 +665,7 @@ Compiler::micro_schedule(ir_t* curr_ir) {
         reset.name = std::string("R");
         reset.operands.push_back(pv->id);
 
-        schedule_t<qc::Instruction> schedule;
+        schedule_t schedule;
         // Add the gates to the schedule.
         if (set_x_parity) {
             schedule.push_back(h);
@@ -709,7 +709,7 @@ Compiler::macro_schedule(ir_t* curr_ir) {
 
     // Now, given the micro-schedules, we want to design the final schedule that measures
     // all checks.
-    auto dependency_graph = new graph::DependenceGraph<qc::Instruction>;
+    auto dependency_graph = new graph::DependenceGraph;
     uint opcount = 0;
     // Create conflict graph between the checks. Two checks have an edge in the
     // conflict graph if they are conflicting.
@@ -740,7 +740,7 @@ Compiler::macro_schedule(ir_t* curr_ir) {
         auto indep = mis::approx_greedy(&confg);
 
         // Remove larger part from conflict graph and get the micro-schedules for each check.
-        std::vector<schedule_t<qc::Instruction>> micro_sched;
+        std::vector<schedule_t> micro_sched;
         for (auto v : indep) {
             confg.delete_vertex(v);
             micro_sched.push_back(curr_ir->check_to_impl[v]);
@@ -752,17 +752,17 @@ Compiler::macro_schedule(ir_t* curr_ir) {
                 const auto& tmp = sch.front();
                 // The instruction may be SIMD-like, so we must split it up.
                 for (auto op : tmp.operands) {
-                    qc::Instruction* h = new qc::Instruction;
+                    Instruction* h = new Instruction;
                     h->name = "H";
                     h->operands = std::vector<uint>{op};
                     h->exclude_trials = tmp.exclude_trials;
 
-                    auto vh = new dep::vertex_t<qc::Instruction>;
+                    auto vh = new dep::vertex_t;
                     vh->id = opcount++;
                     vh->inst_p = h;
                     dependency_graph->add_vertex(vh);
                 }
-                sch.pop_front();
+                sch.erase(sch.begin());
             }
         }
         dependency_graph->add_barrier(barrier_operands);
@@ -774,11 +774,11 @@ Compiler::macro_schedule(ir_t* curr_ir) {
         std::map<lemon::ListGraph::Node, proc3d::vertex_t*> node_to_qubit;
         std::map<proc3d::vertex_t*, lemon::ListGraph::Node> qubit_to_node;
 
-        std::map<lemon::ListGraph::Edge, qc::Instruction>   edge_to_op;
+        std::map<lemon::ListGraph::Edge, Instruction>   edge_to_op;
 
         for (auto& sch : micro_sched) {
             while (sch.front().name == "CX") {
-                const qc::Instruction& cx = sch.front();
+                const Instruction& cx = sch.front();
                 // Instruction may be SIMD-like, so split it up.
                 for (uint i = 0; i < cx.operands.size(); i++) {
                     uint operand = cx.operands[i];
@@ -799,14 +799,14 @@ Compiler::macro_schedule(ir_t* curr_ir) {
                         lemon::ListGraph::Node other_op_node = qubit_to_node[woperand];
 
                         auto e = mg.addEdge(op_node, other_op_node);
-                        edge_to_op[e] = (qc::Instruction) {
+                        edge_to_op[e] = (Instruction) {
                             "CX",
                             std::vector<uint>{cx.operands[i-1], operand},
                             cx.exclude_trials
                         };
                     }
                 }
-                sch.pop_front();
+                sch.erase(sch.begin());
             }
         }
 
@@ -823,12 +823,12 @@ Compiler::macro_schedule(ir_t* curr_ir) {
                     // Delete edge from listgraph and from edge_to_op.
                     mg.erase(op_edge);
                     // Add operation to dependency graph.
-                    qc::Instruction* cx = new qc::Instruction;
+                    Instruction* cx = new Instruction;
                     cx->name = "CX";
                     cx->operands = inst.operands;
                     cx->exclude_trials = inst.exclude_trials;
 
-                    auto cxv = new dep::vertex_t<qc::Instruction>;
+                    auto cxv = new dep::vertex_t;
                     cxv->id = opcount++;
                     cxv->inst_p = cx;
                     dependency_graph->add_vertex(cxv);
@@ -847,18 +847,18 @@ Compiler::macro_schedule(ir_t* curr_ir) {
                 while (sch.front().name == op_order[ord]) {
                     const auto& tmp = sch.front();
 
-                    qc::Instruction* m = new qc::Instruction;
+                    Instruction* m = new Instruction;
                     m->name = tmp.name;
                     m->operands = tmp.operands;
                     m->exclude_trials = tmp.exclude_trials;
                     m->is_measuring_x_check = tmp.is_measuring_x_check;
 
-                    auto vm = new dep::vertex_t<qc::Instruction>;
+                    auto vm = new dep::vertex_t;
                     vm->id = opcount++;
                     vm->inst_p = m;
                     dependency_graph->add_vertex(vm);
 
-                    sch.pop_front();
+                    sch.erase(sch.begin());
                 }
             }
             dependency_graph->add_barrier(barrier_operands);
@@ -1066,7 +1066,7 @@ build_stim_circuit(
             auto ops = dependency_graph->get_vertices_at_depth(d);
             fp_t layer_length = 0.0;
             for (auto v : ops) {
-                qc::Instruction* inst = v->inst_p;
+                Instruction* inst = v->inst_p;
                 if (inst->name == "NOP")    continue;
 
                 std::vector<uint> operands = inst->operands;

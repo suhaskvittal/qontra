@@ -9,8 +9,8 @@
 #include "graph/algorithms/distance.h"
 #include "graph/algorithms/mis.h"
 #include "graph/algorithms/search.h"
-#include "graph/dependence_graph.h"
 #include "graph/graph.h"
+#include "graph/dependence_graph.h"
 #include "graph/tanner_graph.h"
 #include "instruction.h"
 #include "protean/proc3d.h"
@@ -63,20 +63,19 @@ namespace compiler {
         std::set<proc3d::vertex_t*> is_gauge_only;  // Keep track of pure gauge qubits for
                                                     // operations like reduce.
 
-        std::map<graph::tanner::vertex_t*, schedule_t<qc::Instruction>>    
-                                                        check_to_impl;  
-                                                            // Contains micro-schedules which
-                                                            // implement each parity check.
+        std::map<graph::tanner::vertex_t*, schedule_t>  
+                                            check_to_impl;  
+                                                // Contains micro-schedules which
+                                                // implement each parity check.
         std::set<std::pair<graph::tanner::vertex_t*, graph::tanner::vertex_t*>>
-                                                        conflicting_checks;
-                                                            // A set of checks that cannot be
-                                                            // scheduled concurrently.
-        graph::DependenceGraph<qc::Instruction>*        dependency_graph;
-                                                            // Defines the dependence relation
-                                                            // for the instrucitons in the 
-                                                            // macro-schedule.
-                                            
-        std::set<graph::tanner::vertex_t*>              sparsen_visited_set;
+                                            conflicting_checks;
+                                                // A set of checks that cannot be
+                                                // scheduled concurrently.
+        graph::DependenceGraph*             dependency_graph;
+                                                // Defines the dependence relation
+                                                // for the instrucitons in the 
+                                                // macro-schedule.
+        std::set<graph::tanner::vertex_t*>  sparsen_visited_set;
 
         bool is_data(proc3d::vertex_t* v) {
             return (v->id >> 30) == graph::tanner::vertex_t::DATA;

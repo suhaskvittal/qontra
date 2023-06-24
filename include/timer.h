@@ -32,11 +32,11 @@ public:
 
     uint64_t clk_end(void) {
 #ifdef __APPLE__
-        t_end = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+        auto t_end = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
 #else
         struct timespec d;
         clock_gettime(CLOCK_MONOTONIC_RAW, &d);
-        t_end = d.tv_nsec;
+        auto t_end = d.tv_nsec;
 #endif
         return t_end - t_start;
     }

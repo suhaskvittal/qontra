@@ -98,13 +98,14 @@ CliffordSimulator::CX(std::vector<uint> operands) {
                 stim::simd_word rz2(rng(), rng());
 
                 // Only update phase if the qubits are not leaked.
-                // Otherwise, apply a random depolarizing error.
                 r ^= (x1 & z2) & ~(x2 ^ z1) & ~(l1 | l2);
-
-                x2 ^= (l1 & rx2) | (~l1 & x1);
-                z1 ^= (l2 & rz1) | (~l2 & z1);
-                x1 ^= l2 & rx1;
-                z2 ^= l1 & rz2;
+                x2 ^= ~(l1 | l2) & x1;
+                z1 ^= ~(l1 | l2) & z2;
+                // Apply depolarizing error if they are leaked.
+                r ^= (z1 & rx1 & l2)
+                        & (x1 & rz1 & l2)
+                        & (z2 & rx2 & l1)
+                        & (x2 & rz2 & l2);
             });
         }
     }
@@ -198,19 +199,24 @@ CliffordSimulator::M(std::vector<uint> operands, bool record) {
 
 void
 CliffordSimulator::R(std::vector<uint> operands) {
-    // We can just implement this as a "CNOT" between a qubit and itself.
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        for (uint j : operands) {
-            uint k = n_qubits*i + j;
-            x_table[k] &= z_table[k];
-            r_table[i] ^= x_table[k];
-            x_table[k].clear();
-            z_table[k].clear();
-        }
-    }
-
+    // Remove leakage.
     for (uint j : operands) {
         leak_table[j].clear();
+    }
+    // Implement as a measure + X gate.
+    uint64_t r = record_offset;
+    M(operands, true);
+    while (record_offset > r) {
+        uint j = operands[record_offset-r-1];
+        for (uint i = 0; i < 2*n_qubits; i++) {
+            uint k = i*n_qubits + j;
+            r_table[i].for_each_word(
+                z_table[k], record_table[record_offset-1],
+            [&](auto& r, auto& z, auto& rec) {
+                r ^= z & rec;
+            });
+        }
+        record_table[--record_offset].clear();
     }
 }
 
@@ -271,8 +277,9 @@ CliffordSimulator::eDP1(std::vector<uint> operands, std::vector<fp_t> rates) {
             for (uint ii = 0; ii < 2*n_qubits; ii++) {
                 uint k = n_qubits*ii + j;
                 auto p = rng() & 3;
-                x_table[k][t] ^= ~leak_table[k][t] & (p & 1);
-                z_table[k][t] ^= ~leak_table[k][t] & (p & 2);
+                r_table[ii][t] ^= ((z_table[k][t]) & (p & 1))
+                                    & ((x_table[k][t]) & (p & 2))
+                                    & ~leak_table[j][t];
             }
         });
     }
@@ -290,10 +297,12 @@ CliffordSimulator::eDP2(std::vector<uint> operands, std::vector<fp_t> rates) {
                 uint k1 = n_qubits*ii + j1;
                 uint k2 = n_qubits*ii + j2;
                 auto p = rng() & 15;
-                x_table[k1][t] ^= ~leak_table[k1][t] & (p & 1);
-                z_table[k1][t] ^= ~leak_table[k1][t] & (p & 2);
-                x_table[k2][t] ^= ~leak_table[k2][t] & (p & 4);
-                z_table[k2][t] ^= ~leak_table[k2][t] & (p & 8);
+                r_table[ii][t] ^= ((z_table[k1][t]) & (p & 1))
+                                    & ((x_table[k1][t]) & (p & 2))
+                                    & ~leak_table[j1][t];
+                r_table[ii][t] ^= ((z_table[k2][t]) & (p & 4))
+                                    & ((x_table[k2][t]) & (p & 8))
+                                    & ~leak_table[j2][t];
                 // Todo: flag correlated errors
             }
         });
@@ -302,13 +311,13 @@ CliffordSimulator::eDP2(std::vector<uint> operands, std::vector<fp_t> rates) {
 
 void
 CliffordSimulator::eX(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i += 2) {
+    for (uint i = 0; i < operands.size(); i++) {
         uint j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
             for (uint ii = 0; ii < 2*n_qubits; ii++) {
                 uint k = n_qubits*ii + j;
-                x_table[k][t] ^= ~leak_table[k][t];
+                r_table[ii][t] ^= z_table[k][t] & ~leak_table[j][t];
             }
         });
     }
@@ -435,7 +444,7 @@ void
 CliffordSimulator::shift_record_by(uint64_t offset) {
     for (uint64_t i = 0; i < record_offset; i++) {
         if (i < record_offset - offset) {
-            record_table[i].swap_with(record_table[i + offset);
+            record_table[i].swap_with(record_table[i + offset]);
         } else {
             record_table[i].clear();
         }

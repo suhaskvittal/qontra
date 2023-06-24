@@ -44,11 +44,11 @@ public:
         vertex_to_depth[root] = 0;
     }
 
-    DependenceGraph(const schedule_t& schedule) 
+    DependenceGraph(schedule_t& schedule) 
         :DependenceGraph()
     {
         uint index = 0;
-        for (const auto& inst : schedule) {
+        for (auto& inst : schedule) {
             auto v = new dep::vertex_t;
             v->id = index++;
             v->inst_p = &inst;
