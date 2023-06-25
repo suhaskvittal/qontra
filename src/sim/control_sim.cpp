@@ -23,6 +23,7 @@ ControlSimulator::run(uint64_t shots) {
 
     uint64_t __n_trials_killed = 0;
     uint64_t __latency_max = 0;
+    uint64_t __sim_time = 0;
     uint64_t latency_sum, __latency_sum = 0;
     uint64_t latency_sqr_sum, __latency_sqr_sum = 0;
 
@@ -46,8 +47,9 @@ ControlSimulator::run(uint64_t shots) {
         csim.reset_sim();
         csim.shots = shots_in_curr_batch;
         pauli_frames.clear();
+        event_history.clear();
         obs_buffer.clear();
-        obs_buffer_size.clear();
+        obs_buffer_max_written = 0;
 
         latency.clear();
 
@@ -80,7 +82,7 @@ ControlSimulator::run(uint64_t shots) {
                     << latency[0].u64[0] << ") = " 
                     << pc[0].u64[0] << "\t"
                     << "@ " << program[pc[0].u64[0]].str() << "\n";
-                std::cout << "No. of trials done: " << 
+                std::cout << "\tNo. of trials done: " << 
                     (shots_in_curr_batch - trial_done.popcnt()) << "\n";
             }
             RT();
@@ -113,6 +115,10 @@ ControlSimulator::run(uint64_t shots) {
             }
             // Check if we need to abort any trials.
             auto rt = timer.clk_end();
+            if (params.verbose) {
+                std::cout << "\tTime elapsed since batch start: " 
+                    << rt*1e-9 << "\n";
+            }
             if (rt > params.kill_batch_after_time_elapsed) {
                 __n_trials_killed += trial_done.popcnt();
                 trial_done.clear();
@@ -125,6 +131,8 @@ ControlSimulator::run(uint64_t shots) {
             __latency_sqr_sum += SQR(x);
             if (x > __latency_max)  __latency_max = x;
         }
+        auto rt = timer.clk_end();
+        __sim_time += rt;
         shots_left -= shots_in_curr_batch;
     }
 
@@ -137,11 +145,14 @@ ControlSimulator::run(uint64_t shots) {
                     MPI_SUM, MPI_COMM_WORLD);
         MPI_Allreduce(&__latency_sqr_sum, &latency_sqr_sum, 1, MPI_UNSIGNED_LONG,
                     MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(&__sim_time, &sim_time, 1, MPI_UNSIGNED_LONG,
+                    MPI_SUM, MPI_COMM_WORLD);
     } else {
         n_trials_killed = __n_trials_killed;
         latency_max = __latency_max;
         latency_sum = __latency_sum;
         latency_sqr_sum = __latency_sqr_sum;
+        sim_time = __sim_time;
     }
     latency_mean = MEAN(latency_sum, shots);
     latency_std = STD(latency_mean, latency_sqr_sum, shots);
@@ -196,11 +207,14 @@ ControlSimulator::QEX() {
     qex_stall = rt_stall;
     qex_rt_valid = id_qex_valid;
 
-    // Keep the syndromes in the following data structure -- hopefully
-    // they are cached.
-    //
-    // Assume these are already detection events.
-    stim::simd_bit_table syndromes = csim.record_table.transposed();
+    // Keep the following data structures' transposes here.
+    // The assumption is that by temporal locality, we will be
+    // accessing the contents of these structures each trial (assuming
+    // that most trials are at the same point in the program). So,
+    // this should maximize cache accesses.
+    stim::simd_bit_table events_t = event_history.transposed();
+    stim::simd_bit_table obs_t = obs_buffer.transposed();
+
     // As we can execute quantum instructions in a batch, track
     // which instructions are being executed in which trials.
     std::map<Instruction, std::set<uint>>   instruction_to_trials;
@@ -220,7 +234,7 @@ ControlSimulator::QEX() {
         if (stall_pipeline) continue;
         // These instructions operate on a trial by trial basis.
         if (inst.name == "decode") {
-            syndrome_t s(syndromes[t]);
+            syndrome_t s(events_t[t]);
             auto res = decoder->decode_error(s);
             uint64_t exec_time = (uint64_t)res.exec_time;
             // Decoder may get backlogged if it does not complete on time.
@@ -242,21 +256,9 @@ ControlSimulator::QEX() {
                 id_stall[t] = 1;
                 qex_rt_valid[t] = 0;
             }
-        } else if (inst.name == "event") {
-            uint src = inst.operands[0];
-            uint dst = inst.operands[1];
-            csim.xor_record_with(src, dst);
-        } else if (inst.name == "obs") {
-            uint8_t obs = 0;
-            uint len = csim.get_record_size();
-            for (uint offset : inst.operands) {
-                obs ^= csim.record_table[len-offset][t];
-            }
-            obs_buffer[t][obs_buffer_size[t].u64[0]++] = obs;
         } else if (inst.name == "savem") {
-            vlw_t x = to_vlw(obs_buffer[t], obs_buffer_size[t].u64[0]);
+            vlw_t x = to_vlw(obs_t[t], obs_buffer_max_written);
             prob_histograms[x]++;
-            obs_buffer[t].clear();
         } else if (inst.name == "done") {
             trial_done[t] = 0;
         } else {
@@ -278,7 +280,9 @@ ControlSimulator::QEX() {
         if (params.verbose) {
             std::cout << "\t\t\t" << inst.str() << "\tT !=";
             for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
-                if (!pair.second.count(t))  std::cout << " " << t;
+                if (!pair.second.count(t)) {
+                    std::cout << " " << t;
+                }
             }
             std::cout << "\n";
         }
@@ -310,6 +314,21 @@ ControlSimulator::QEX() {
             csim.M(inst.operands, inst.name == "mrc");
         } else if (inst.name == "reset") {
             csim.R(inst.operands);
+        } else if (inst.name == "event") {
+            const uint k = inst.operands[0];
+            event_history[k].clear();
+            const uint len = csim.get_record_size();
+            for (uint i = 1; i < inst.operands.size(); i++) {
+                event_history[k] ^= csim.record_table[len - inst.operands[i]];
+            }
+        } else if (inst.name == "obs") {
+            const uint k = inst.operands[0];
+            obs_buffer[k].clear();
+            const uint len = csim.get_record_size();
+            for (uint i = 1; i < inst.operands.size(); i++) {
+                obs_buffer[k] ^= csim.record_table[len - inst.operands[i]];
+            }
+            if (k+1 > obs_buffer_max_written) obs_buffer_max_written = k+1;
         }
 
         // After operation errors:
@@ -326,28 +345,30 @@ ControlSimulator::QEX() {
                 if (params.verbose) {
                     std::cout << "\t\tRolling back state at T = " << t << "\n";
                 }
-                csim.rollback_at_trial(t);
-            } else {
-                if (inst.name == "CX") {
-                    for (uint i = 0; i < inst.operands.size(); i += 2) {
-                        uint x = inst.operands[i];
-                        uint y = inst.operands[i+1];
-                        fp_t tt = params.timing.op2q[inst.name][std::make_pair(x, y)];
-                        qex_qubit_busy[t].u64[x] = tt;
-                        qex_qubit_busy[t].u64[y] = tt;
-                    }
+                // Undo any changes
+                if (inst.name == "event") {
+                    const uint k = inst.operands[0];
+                    event_history[k][t] = 0;
                 } else {
-                    if (params.timing.op1q.count(inst.name)) {
-                        for (uint x : inst.operands) {
-                            fp_t tt = params.timing.op1q[inst.name][x];
-                            qex_qubit_busy[t].u64[x] = tt;
-                        }
-                    } else if (inst.name == "mrc" || inst.name == "mnrc") {
-                        for (uint x : inst.operands) {
-                            fp_t tt = params.timing.op1q["m"][x];
-                            qex_qubit_busy[t].u64[x] = tt;
-                        }
-                    }
+                    csim.rollback_at_trial(t);
+                }
+                continue;
+            }
+            if (inst.name == "CX") {
+                for (uint i = 0; i < inst.operands.size(); i += 2) {
+                    uint x = inst.operands[i];
+                    uint y = inst.operands[i+1];
+                    fp_t tt = params.timing.op2q[inst.name][std::make_pair(x, y)];
+                    qex_qubit_busy[t].u64[x] = tt;
+                    qex_qubit_busy[t].u64[y] = tt;
+                }
+            } else {
+                std::string key = inst.name;
+                if (key == "mrc" || key == "mnrc")  key = "m";
+                if (!params.timing.op1q.count(inst.name))   continue;
+                for (uint x : inst.operands) {
+                    fp_t tt = params.timing.op1q[key][x];
+                    qex_qubit_busy[t].u64[x] = tt;
                 }
             }
         }

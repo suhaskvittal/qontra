@@ -30,11 +30,13 @@ const std::vector<std::string> ISA{
     "brdb",         // Jumps to instruction if decoder is busy (still decoding)
     "dfence",       // Waits until decoder finishes.
     "event",        // Creates a detection event and writes to an event history
-                    // buffer. The operands' (which are lookback indices into the
-                    // measurement record) corresponding entries are XORd to create
-                    // the event.
-    "obs",          // Computes observable by XORing corresponding results in the
-                    // record. Measurement outcome is placed in a buffer.
+                    // buffer. The first operand indicates the event index (0
+                    // to 4095), and the remaining operands' (which are lookback 
+                    // indices into the measurement record) corresponding entries 
+                    // are XORd to create the event.
+    "obs",          // Computes observable by XORing operands (after the first) 
+                    // in the record. Observable is placed in a buffer at the
+                    // location specified by the first operand.
     "savem",        // The bitstring in the observable buffer is record in a 
                     // probability histogram.
     // Virtual instruction

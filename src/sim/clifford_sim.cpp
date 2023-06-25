@@ -453,11 +453,6 @@ CliffordSimulator::shift_record_by(uint64_t offset) {
 }
 
 void
-CliffordSimulator::xor_record_with(uint64_t src, uint64_t dst) {
-    record_table[record_offset - dst] ^= record_table[record_offset - src];
-}
-
-void
 CliffordSimulator::snapshot() {
     x_table_cpy = stim::simd_bit_table(x_table);
     z_table_cpy = stim::simd_bit_table(z_table);

@@ -34,6 +34,7 @@ public:
                     const schedule_t& program)
         // Stats
         :latency(experiments::G_SHOTS_PER_BATCH, 64),
+        sim_time(0),
         // Simulation state tracking
         decoder_busy(experiments::G_SHOTS_PER_BATCH, 64),
         trial_done(experiments::G_SHOTS_PER_BATCH),
@@ -41,8 +42,9 @@ public:
         decoder(dec),
         csim(n_qubits, experiments::G_SHOTS_PER_BATCH),
         pauli_frames(experiments::G_SHOTS_PER_BATCH, 128),
-        obs_buffer(experiments::G_SHOTS_PER_BATCH, 128),
-        obs_buffer_size(experiments::G_SHOTS_PER_BATCH, 64),
+        event_history(4096, experiments::G_SHOTS_PER_BATCH),
+        obs_buffer(128, experiments::G_SHOTS_PER_BATCH),
+        obs_buffer_max_written(0),
         // Microarchitecture
         program(program),
         pc(experiments::G_SHOTS_PER_BATCH, 64),
@@ -102,6 +104,8 @@ public:
     uint64_t    latency_max;
     uint64_t    latency_mean;
     uint64_t    latency_std;
+
+    uint64_t    sim_time;
 private:
     void        IF(void);   // Instruction fetch
     void        ID(void);   // Instruction decode
@@ -123,8 +127,9 @@ private:
     decoder::Decoder*       decoder; // Should return XZ frame changes
     CliffordSimulator       csim;
     stim::simd_bit_table    pauli_frames;
+    stim::simd_bit_table    event_history;
     stim::simd_bit_table    obs_buffer;
-    stim::simd_bit_table    obs_buffer_size;
+    uint64_t                obs_buffer_max_written;
     // Microarchitecture
     schedule_t              program;    // Program should remain constant
     stim::simd_bit_table    pc;

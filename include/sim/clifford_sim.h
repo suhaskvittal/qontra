@@ -84,7 +84,6 @@ public:
 
     void    reduce_record_by(uint64_t);
     void    shift_record_by(uint64_t);
-    void    xor_record_with(uint64_t src, uint64_t dst);
 
     void    snapshot(void); // Copies the state tables into new data structures
                             // for use later.
