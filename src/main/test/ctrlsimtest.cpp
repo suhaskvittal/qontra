@@ -4,6 +4,7 @@
  * */
 
 #include "decoder/mwpm.h"
+#include "parsing/cmd.h"
 #include "sim/control_sim.h"
 
 #include <stim.h>
@@ -14,40 +15,26 @@
 using namespace qontra;
 
 int main(int argc, char* argv[]) {
+    CmdParser cmd_parser(argc, argv);
+
     schedule_t  prog;
-    
-    stim::CircuitGenParameters circ_params(1, 3, "rotated_memory_z");
-    auto circ = stim::generate_surface_code_circuit(circ_params).circuit;
+    uint        n;
 
-    const uint n = from_stim_circuit(circ, prog);
-    
-    prog.pop_back();
-    prog.push_back({"obs", {0, 7}, {}});
-    prog.push_back({"obs", {1, 8}, {}});
-    prog.push_back({"obs", {2, 9}, {}});
-    /*
-    prog.push_back({"obs", {7, 14, 22}, {}});
-    prog.push_back({"obs", {8, 15, 23}, {}});
-    prog.push_back({"obs", {9, 16, 24}, {}});
-    prog.push_back({"obs", {10, 17, 25}, {}});
-    */
+    if (cmd_parser.option_set("asm")) {
+        std::string asm_file;
+        cmd_parser.get_string("asm", asm_file);
+        prog = from_file(asm_file);
 
-    /*
-    prog.push_back({"decode", {0}, {}});
-    prog.push_back({"xorfr", {0, 0}, {}});
-    */
-    prog.push_back({"savem", {}, {}});
-    prog.push_back({"done", {}, {}});
-    /*
-    const uint n = 2;
-    prog.push_back({"h", {0}, {}});
-    prog.push_back({"cx", {0, 1}, {}});
-    prog.push_back({"mrc", {0, 1}, {}});
-    prog.push_back({"obs", {0, 1}, {}});
-    prog.push_back({"obs", {1, 2}, {}});
-    prog.push_back({"savem", {}, {}});
-    prog.push_back({"done", {}, {}});
-    */
+        cmd_parser.get_uint32("size", n);
+    } else {
+        stim::CircuitGenParameters circ_params(1, 3, "rotated_memory_z");
+        auto circ = stim::generate_surface_code_circuit(circ_params).circuit;
+
+        n = from_stim_circuit(circ, prog);
+
+        prog.push_back({"savem", {}, {}});
+        prog.push_back({"done", {}, {}});
+    }
 
     std::cout << schedule_to_text(prog) << "\n";
 

@@ -14,8 +14,11 @@ set(QONTRA_FILES
     src/decoder/mwpm.cpp
     # Parsing
     src/parsing/cmd.cpp
+    include/parsing/asm/parser.tab.c
+    include/parsing/asm/lex.yy.c
     # Graphs
-    src/graph/decoding_graph.cpp src/graph/coupling_graph.cpp
+    src/graph/decoding_graph.cpp 
+    src/graph/coupling_graph.cpp
     src/graph/tanner_graph.cpp
     # Protean
     src/protean/compiler.cpp
@@ -44,10 +47,17 @@ endif()
 find_package(MPI REQUIRED)
 find_package(LEMON REQUIRED)
 
+find_package(FLEX REQUIRED)
+find_package(BISON REQUIRED)
+
 message(${MPI_INCLUDE_PATH})
 
 # I don't know why I have to include /usr/local/include...
-target_include_directories(qontra PUBLIC "include" ${MPI_INCLUDE_PATH} "/usr/local/include")
+target_include_directories(qontra PUBLIC
+    "include" 
+    ${MPI_INCLUDE_PATH} 
+    ${FLEX_INCLUDE_DIRS}
+    "/usr/local/include")
 
 add_subdirectory(stim)
 add_subdirectory(blossom5)
@@ -55,6 +65,8 @@ add_subdirectory(blossom5)
 target_link_libraries(qontra PUBLIC libstim)
 target_link_libraries(qontra PUBLIC libblossom5)
 target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
+target_link_libraries(qontra PUBLIC ${BISON_LIBRARIES})
+target_link_libraries(qontra PUBLIC ${FLEX_LIBRARIES})
 
 target_link_libraries(memory PRIVATE qontra)
 target_link_libraries(circuit PRIVATE qontra)

@@ -7,11 +7,15 @@
 #define INSTRUCTION_h
 
 #include "defs.h"
+#include "parsing/asm/common.h"
+#include "parsing/asm/parser.tab.h"
 
 #include <stim.h>
 
 #include <deque>
 #include <string>
+
+#include <stdio.h>
 
 namespace qontra {
 
@@ -87,6 +91,7 @@ typedef std::vector<Instruction>    schedule_t;
 
 std::string     schedule_to_text(const schedule_t&);
 uint            from_stim_circuit(const stim::Circuit&, schedule_t&);
+schedule_t      from_file(std::string fname);
 
 }   // qontra
 
