@@ -134,15 +134,15 @@ CliffordSimulator::M(std::vector<uint> operands, bool record) {
         // to happen wherever x_table[x_width-1] = 0
         // 
         // Clear out row 2*n_qubits+1
-        for (uint j = 0; j < n_qubits; j++) {
-            x_table[2*n_qubits*n_qubits + j].clear();   // Remember X and Z tables are
-            z_table[2*n_qubits*n_qubits + j].clear();   // flattened 2d arrays.
+        for (uint jj = 0; jj < n_qubits; jj++) {
+            x_table[2*n_qubits*n_qubits + jj].clear();  // Remember X and Z tables are
+            z_table[2*n_qubits*n_qubits + jj].clear();  // flattened 2d arrays.
         }
         r_table[2*n_qubits].clear();
         for (uint i = 0; i < n_qubits; i++) {
             // Predicate the rowsum where xij = 1
             uint k = n_qubits*i + j;
-            rowsum(2*n_qubits, i+n_qubits, true, x_table[k]);
+            browsum(2*n_qubits, i+n_qubits, true, x_table[k]);
         }
         // Measurement outcome is r_table[2*n_qubits]
         // Condition results based on x_table[x_width-1] = 0
@@ -172,7 +172,7 @@ CliffordSimulator::M(std::vector<uint> operands, bool record) {
             for (uint i = 0; i < 2*n_qubits; i++) {
                 uint k = n_qubits*i + j;
                 if (i != ii && x_table[k][t]) {
-                    rowsum(i, ii, false, x_table[0]);
+                    rowsum(i, ii, t);
                 }
             }
             // Second, swap (ii-n)-th row with ii-th row and clear
@@ -192,6 +192,7 @@ CliffordSimulator::M(std::vector<uint> operands, bool record) {
         }
 
         if (record) {
+            record_table[record_offset].clear();
             record_table[record_offset++].swap_with(r_table[2*n_qubits]);
         }
     }
@@ -369,7 +370,34 @@ CliffordSimulator::init_tables() {
 }
 
 void
-CliffordSimulator::rowsum(uint h, uint i, bool use_pred, 
+CliffordSimulator::rowsum(uint h, uint i, uint64_t t) {
+    auto rs1 = 0;
+    auto rs2 = r_table[h][t] ^ r_table[i][t];
+    for (uint j = 0; j < n_qubits; j++) {
+        uint kh = n_qubits*h + i;
+        uint ki = n_qubits*i + j;
+
+        auto x1 = x_table[ki][t];
+        auto x2 = x_table[kh][t];
+        auto z1 = z_table[ki][t];
+        auto z2 = z_table[kh][t];
+        
+        auto g1 = (~x1 & z1 & x2)
+                    | (x1 & ~z1 & z2) | (x1 & z1 & (x2 ^ z2));
+        auto g2 = (~x1 & z1 & x2 & x2) 
+                    | (x1 & ~z1 & x2 & z2)
+                    | (x1 & z1 & x2 & ~z2);
+        rs2 ^= (rs1 & g1) ^ g2;
+        rs1 ^= g1;
+        // Update X and Z
+        x_table[kh][t] ^= x1;
+        z_table[kh][t] ^= z1;
+    }
+    r_table[h][t] = rs2;
+}
+
+void
+CliffordSimulator::browsum(uint h, uint i, bool use_pred, 
         stim::simd_bits_range_ref pred) 
 {
     // 2n + 1 and 2n + 2 correspond to the 1s and 2s place in a 
@@ -407,23 +435,35 @@ CliffordSimulator::rowsum(uint h, uint i, bool use_pred,
             // | 11 | 10 |  -1   |  --> sgn
             // | 11 | 11 |   0   |
             // |----|----|-------|
-            stim::simd_word gsum_mag(0, 0);
-            stim::simd_word gsum_sgn(0, 0);
+            //
+            // I'll be honest, I completely forgot what the hell I did here.
+            // But whatever me wrote this was a genius because it works!
+            //  --> Well, it'd be awkward if it does not actually work...
+            //
+            // I'm assuming that gsum_mag and gsum_sgn track the value of
+            // the rowsum, and we can implement Z_4 arithmetic using bitwise
+            // operations. I'm sure it's more obvious once you sit down with
+            // pen and paper.
+
+            stim::simd_word gmag(0, 0);
+            stim::simd_word gsgn(0, 0);
             
-            gsum_mag ^= (~x1 & z1 & x2)
+            gmag ^= (~x1 & z1 & x2)
                         | (x1 & ~z1 & z2) | (x1 & z1 & (x2 ^ z2));
-            gsum_sgn ^= (~x1 & z1 & x2 & x2) 
+            gsgn ^= (~x1 & z1 & x2 & x2) 
                         | (x1 & ~z1 & x2 & z2)
                         | (x1 & z1 & x2 & ~z2);
             // Perform the modular addition and save the results in
             // the scratch storage
-            scr2 ^= (en_p & p) & ((scr1 & gsum_mag) ^ gsum_sgn);
-            scr1 ^= (en_p & p) & gsum_mag;
+            scr2 ^= (en_p & p) & ((scr1 & gmag) ^ gsgn);
+            scr1 ^= (en_p & p) & gmag;
             // Update x2 and z2
             x2 ^= (en_p & p) & x1;
             z2 ^= (en_p & p) & z1;
         });
-    }
+    }   // After all the iterations, row 2n+1 and 2n+2 should have 
+        // the value of the rowsum.
+
     // Now, in locations where row 2n+2 == 0, we need to set rh = 0. Otherwise,
     // we set it to 1. This is as simple as just moving row 2n+2 to rh.
     r_table[h].for_each_word(r_table[2*n_qubits+2], pred,

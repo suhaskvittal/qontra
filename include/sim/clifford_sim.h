@@ -95,8 +95,10 @@ public:
     uint64_t                shots;
 private:
     void    init_tables(void);
-    void    rowsum(uint h, uint i, bool use_pred, stim::simd_bits_range_ref pred);
-                // Conditions the rowsum based on the predicate.
+    void    rowsum(uint h, uint i, uint64_t t); // Only executes rowsum on one trial.
+    void    browsum(uint h, uint i, bool use_pred, stim::simd_bits_range_ref pred);
+                // Performs rowsum on all trials at the same time, and 
+                // conditions the update based on the predicate.
 
     stim::simd_bit_table    x_table;    // Has an extra row for scratch space.
     stim::simd_bit_table    z_table;

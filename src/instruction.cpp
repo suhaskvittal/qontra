@@ -35,9 +35,6 @@ from_stim_circuit(const stim::Circuit& circ, schedule_t& sch) {
         for (auto target : op.target_data.targets) {
             uint32_t x = target.data;
             uint32_t v = x & stim::TARGET_VALUE_MASK;
-            if (x & stim::TARGET_RECORD_BIT) {
-                v++;
-            }
             operands.push_back(v);
         }
         // Convert stim instruction to ISA instruction

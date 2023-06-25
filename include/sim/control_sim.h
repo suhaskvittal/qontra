@@ -41,8 +41,8 @@ public:
 
     struct params_t {
         // Simulation parameters
-        uint64_t    kill_batch_after_time_elapsed = 1000L * 1'000'000'000L; 
-                                            // In nanoseconds, halts
+        uint64_t    kill_batch_after_time_elapsed = 10; 
+                                            // In seconds, halts
                                             // the simulator after this
                                             // much walltime has elapsed.
         uint        verbose = 0;

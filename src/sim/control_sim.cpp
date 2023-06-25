@@ -135,7 +135,7 @@ ControlSimulator::run(uint64_t shots) {
                 std::cout << "\tTime elapsed since batch start: " 
                     << rt*1e-9 << "\n";
             }
-            if (rt > params.kill_batch_after_time_elapsed) {
+            if (rt*1e-9 > params.kill_batch_after_time_elapsed) {
                 __n_trials_killed += trial_done.popcnt();
                 trial_done.clear();
             }
@@ -293,7 +293,7 @@ ControlSimulator::QEX() {
             if (stall_pipeline) continue;
         }
         // These instructions operate on a trial by trial basis.
-        if (inst.name == "decode" && !flag_canonical_circuit) {
+        if (inst.name == "decode" && decoder != nullptr) {
             syndrome_t s(events_t[t]);
             auto res = decoder->decode_error(s);
             uint64_t exec_time = (uint64_t)res.exec_time;
@@ -407,7 +407,7 @@ ControlSimulator::QEX() {
             if (flag_canonical_circuit) {
                 std::vector<uint> stim_operands;
                 for (uint i = 1; i < inst.operands.size(); i++) {
-                    stim_operands.push_back((inst.operands[i]-1)
+                    stim_operands.push_back(inst.operands[i]
                                                 | stim::TARGET_RECORD_BIT);
                 }
                 canonical_circuit.append_op("DETECTOR", stim_operands);
@@ -424,11 +424,11 @@ ControlSimulator::QEX() {
             if (flag_canonical_circuit) {
                 std::vector<uint> stim_operands;
                 for (uint i = 1; i < inst.operands.size(); i++) {
-                    stim_operands.push_back((inst.operands[i]-1)
+                    stim_operands.push_back(inst.operands[i]
                                                 | stim::TARGET_RECORD_BIT);
                 }
                 canonical_circuit.append_op("OBSERVABLE_INCLUDE", 
-                        stim_operands, inst.operands[0]);
+                        stim_operands, k);
             }
         } else if (inst.name == "xorfr") {
             const uint i = inst.operands[0];
