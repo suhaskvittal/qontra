@@ -53,10 +53,10 @@ public:
         TimeTable   timing;
         ErrorTable  errors;
 
-        uint64_t    apply_periodic_errors_at_t = 1000;
+        uint64_t    apply_periodic_errors_at_t = 800;
                                             // Apply state errors on all qubits
                                             // as frequently as shown.
-        bool        simulate_periodic_as_dpo_and_dph = true;
+        bool        simulate_periodic_as_dpo_and_dph = false;
                                             // If false, we just do depolarizing
                                             // errors instead.
     };

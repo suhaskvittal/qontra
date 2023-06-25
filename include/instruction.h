@@ -26,7 +26,8 @@ const std::vector<std::string> ISA{
     "reset",
     "nop",          // Essentially a delay operation
     // Control processor instructions.
-    "decode",       // Tells decoder to decode syndrome.
+    "decode",       // Tells decoder to decode syndrome and places the resulting
+                    // Pauli frame at the offset specified by the operand.
     "brdb",         // Jumps to instruction if decoder is busy (still decoding)
     "dfence",       // Waits until decoder finishes.
     "event",        // Creates a detection event and writes to an event history
@@ -37,6 +38,7 @@ const std::vector<std::string> ISA{
     "obs",          // Computes observable by XORing operands (after the first) 
                     // in the record. Observable is placed in a buffer at the
                     // location specified by the first operand.
+    "xorfr",        // Xors the Pauli frame into the specified obs buffer location.
     "savem",        // The bitstring in the observable buffer is record in a 
                     // probability histogram.
     // Virtual instruction

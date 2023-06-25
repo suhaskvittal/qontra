@@ -19,7 +19,7 @@ ControlSimulator::ControlSimulator(uint n_qubits, const schedule_t& program)
     // Simulation structures
     decoder(nullptr),
     csim(n_qubits, G_SHOTS_PER_BATCH),
-    pauli_frames(G_SHOTS_PER_BATCH, 128),
+    pauli_frames(128, G_SHOTS_PER_BATCH),
     event_history(4096, G_SHOTS_PER_BATCH),
     obs_buffer(128, G_SHOTS_PER_BATCH),
     obs_buffer_max_written(0),
@@ -127,6 +127,7 @@ ControlSimulator::run(uint64_t shots) {
             t_since_last_periodic_error -= tt;
             if (t_since_last_periodic_error <= 0) {
                 apply_periodic_error();
+                t_since_last_periodic_error = params.apply_periodic_errors_at_t;
             }
             // Check if we need to abort any trials.
             auto rt = timer.clk_end();
@@ -274,16 +275,23 @@ ControlSimulator::QEX() {
     for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
         if (qex_stall[t] || !id_qex_valid[t])   continue;
         auto inst = program[id_pc[t].u64[0]];
-        // Check if any operands are busy. If so, stall the pipeline.
-        bool stall_pipeline = false;
-        for (uint x : inst.operands) {
-            if (qex_qubit_busy[t].u64[x] > 0) {
-                qex_stall[t] = 1;
-                qex_rt_valid[t] = 0;
-                stall_pipeline = true;
+        // If the instruction requires interacting with any qubits,
+        // check if any operands are busy. If so, stall the pipeline.
+        if (inst.name != "decode" && inst.name != "brdb"
+            && inst.name != "dfence" && inst.name != "event"
+            && inst.name != "xorfr" && inst.name != "savem"
+            && inst.name != "done")
+        {
+            bool stall_pipeline = false;
+            for (uint x : inst.operands) {
+                if (qex_qubit_busy[t].u64[x] > 0) {
+                    qex_stall[t] = 1;
+                    qex_rt_valid[t] = 0;
+                    stall_pipeline = true;
+                }
             }
+            if (stall_pipeline) continue;
         }
-        if (stall_pipeline) continue;
         // These instructions operate on a trial by trial basis.
         if (inst.name == "decode" && !flag_canonical_circuit) {
             syndrome_t s(events_t[t]);
@@ -294,8 +302,9 @@ ControlSimulator::QEX() {
             // But this is fine.
             decoder_busy[t].u64[0] += exec_time;
             // Update Pauli frames
+            uint offset = inst.operands[0];
             for (uint i = 0; i < res.corr.size(); i++) {
-                pauli_frames[t][i] ^= res.corr[i];
+                pauli_frames[i+offset][t] ^= res.corr[i];
             }
         } else if (inst.name == "brdb") {
             if (decoder_busy[t].not_zero()) {
@@ -421,6 +430,10 @@ ControlSimulator::QEX() {
                 canonical_circuit.append_op("OBSERVABLE_INCLUDE", 
                         stim_operands, inst.operands[0]);
             }
+        } else if (inst.name == "xorfr") {
+            const uint i = inst.operands[0];
+            const uint j = inst.operands[1];
+            obs_buffer[j] ^= pauli_frames[i];
         }
 
         // After operation errors:
@@ -441,12 +454,19 @@ ControlSimulator::QEX() {
                 if (inst.name == "event") {
                     const uint k = inst.operands[0];
                     event_history[k][t] = 0;
+                } else if (inst.name == "obs") {
+                    const uint k = inst.operands[0];
+                    obs_buffer[k][t] = 0;
+                } else if (inst.name == "xorfr") {
+                    const uint k1 = inst.operands[0];
+                    const uint k2 = inst.operands[1];
+                    obs_buffer[k2][t] ^= pauli_frames[k1][t];
                 } else {
                     csim.rollback_at_trial(t);
                 }
                 continue;
             }
-            if (inst.name == "CX") {
+            if (inst.name == "cx") {
                 for (uint i = 0; i < inst.operands.size(); i += 2) {
                     uint x = inst.operands[i];
                     uint y = inst.operands[i+1];

@@ -20,7 +20,8 @@ int main(int argc, char* argv[]) {
     auto circ = stim::generate_surface_code_circuit(circ_params).circuit;
 
     const uint n = from_stim_circuit(circ, prog);
-    prog.push_back({"decode", {}, {}});
+    prog.push_back({"decode", {0}, {}});
+    prog.push_back({"xorfr", {0, 0}, {}});
     prog.push_back({"savem", {}, {}});
     prog.push_back({"done", {}, {}});
     /*
@@ -45,10 +46,13 @@ int main(int argc, char* argv[]) {
     sim.build_canonical_circuit();
 
     stim::Circuit error_model = sim.get_canonical_circuit();
-    std::cout << error_model.str() << "\n";
     decoder::MWPMDecoder mwpm(error_model);
 
     sim.load_decoder(&mwpm);
+    
+    // Check expected LER.
+    auto mxp_res = memory_experiment(&mwpm, 1L << 16);
+    std::cout << "Expected LER = " << mxp_res.logical_error_rate << "\n";
 
     sim.params.verbose = 0;
 
