@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(QONTRA_FILES
     # Top-Level
     src/experiments.cpp
+    src/instruction.cpp
     # Decoders
     src/decoder/mwpm.cpp
     # Parsing

@@ -57,7 +57,7 @@ struct Instruction {
         bool first = true;
         for (uint op : operands) {
             if (first)  out += "\t";
-            else        out += ",";
+            else        out += ", ";
             out += std::to_string(op);
             first = false;
         }
@@ -75,14 +75,16 @@ struct Instruction {
 
 typedef std::vector<Instruction>    schedule_t;
 
-inline std::string
-to_text(const schedule_t& sch) {
-    std::string out;
-    for (const auto& inst : sch) {
-        out += inst.str() + "\n";
-    }
-    return out;
-}
+// Utility functions:
+// 
+// schedule_to_text converts a schedule to a string (as the name suggests).
+// from_stim_circuit translates a stim circuit to a schedule. This removes any
+//  error signatures (set these in the simulator) and other operations such
+//  as coordinate declarations. The output is the max number of qubits in the
+//  circuit.
+
+std::string     schedule_to_text(const schedule_t&);
+uint            from_stim_circuit(const stim::Circuit&, schedule_t&);
 
 }   // qontra
 

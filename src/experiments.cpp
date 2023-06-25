@@ -5,10 +5,6 @@
 
 #include "experiments.h"
 
-#define SQR(x)              (x)*(x)
-#define MEAN(s, n)          ((fp_t)(s))/((fp_t)(n))
-#define STD(m, ss, n)       ( ((fp_t)(ss))/((fp_t)(n)) - SQR(m) )
-
 namespace qontra {
 
 namespace experiments {

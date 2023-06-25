@@ -29,47 +29,15 @@ namespace qontra {
 
 class ControlSimulator {
 public:
-    ControlSimulator(uint n_qubits,
-                    decoder::Decoder* dec,
-                    const schedule_t& program)
-        // Stats
-        :latency(experiments::G_SHOTS_PER_BATCH, 64),
-        sim_time(0),
-        // Simulation state tracking
-        decoder_busy(experiments::G_SHOTS_PER_BATCH, 64),
-        trial_done(experiments::G_SHOTS_PER_BATCH),
-        // Simulation structures
-        decoder(dec),
-        csim(n_qubits, experiments::G_SHOTS_PER_BATCH),
-        pauli_frames(experiments::G_SHOTS_PER_BATCH, 128),
-        event_history(4096, experiments::G_SHOTS_PER_BATCH),
-        obs_buffer(128, experiments::G_SHOTS_PER_BATCH),
-        obs_buffer_max_written(0),
-        // Microarchitecture
-        program(program),
-        pc(experiments::G_SHOTS_PER_BATCH, 64),
-        // IF io
-        if_stall(experiments::G_SHOTS_PER_BATCH),
-        if_pc(experiments::G_SHOTS_PER_BATCH, 64),
-        if_id_valid(experiments::G_SHOTS_PER_BATCH),
-        // ID io
-        id_stall(experiments::G_SHOTS_PER_BATCH),
-        id_pc(experiments::G_SHOTS_PER_BATCH, 64),
-        id_qex_valid(experiments::G_SHOTS_PER_BATCH),
-        // QEX io
-        qex_stall(experiments::G_SHOTS_PER_BATCH),
-        qex_rt_valid(experiments::G_SHOTS_PER_BATCH),
-        qex_pc(experiments::G_SHOTS_PER_BATCH, 64),
-        qex_qubit_busy(experiments::G_SHOTS_PER_BATCH, 64*n_qubits),
-        // RT io
-        rt_stall(experiments::G_SHOTS_PER_BATCH),
-        // Other
-        n_qubits(n_qubits),
-        rng(0)
-    {}
+    ControlSimulator(uint n_qubits, const schedule_t&);
 
     void run(uint64_t shots);
     void clear();
+
+    void            build_canonical_circuit(void);
+
+    stim::Circuit   get_canonical_circuit(void) { return canonical_circuit; }
+    void            load_decoder(decoder::Decoder* dec) { decoder = dec; }
 
     struct params_t {
         // Simulation parameters
@@ -152,6 +120,9 @@ private:
 
     const uint      n_qubits;
     std::mt19937_64 rng;
+
+    bool            flag_canonical_circuit;
+    stim::Circuit   canonical_circuit;
 };
 
 }   // qontra

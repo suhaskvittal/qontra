@@ -9,6 +9,45 @@ namespace qontra {
 
 using namespace experiments;
 
+ControlSimulator::ControlSimulator(uint n_qubits, const schedule_t& program)
+    // Stats
+    :latency(G_SHOTS_PER_BATCH, 64),
+    sim_time(0),
+    // Simulation state tracking
+    decoder_busy(G_SHOTS_PER_BATCH, 64),
+    trial_done(G_SHOTS_PER_BATCH),
+    // Simulation structures
+    decoder(nullptr),
+    csim(n_qubits, G_SHOTS_PER_BATCH),
+    pauli_frames(G_SHOTS_PER_BATCH, 128),
+    event_history(4096, G_SHOTS_PER_BATCH),
+    obs_buffer(128, G_SHOTS_PER_BATCH),
+    obs_buffer_max_written(0),
+    // Microarchitecture
+    program(program),
+    pc(G_SHOTS_PER_BATCH, 64),
+    // IF io
+    if_stall(G_SHOTS_PER_BATCH),
+    if_pc(G_SHOTS_PER_BATCH, 64),
+    if_id_valid(G_SHOTS_PER_BATCH),
+    // ID io
+    id_stall(G_SHOTS_PER_BATCH),
+    id_pc(G_SHOTS_PER_BATCH, 64),
+    id_qex_valid(G_SHOTS_PER_BATCH),
+    // QEX io
+    qex_stall(G_SHOTS_PER_BATCH),
+    qex_rt_valid(G_SHOTS_PER_BATCH),
+    qex_pc(G_SHOTS_PER_BATCH, 64),
+    qex_qubit_busy(G_SHOTS_PER_BATCH, 64*n_qubits),
+    // RT io
+    rt_stall(G_SHOTS_PER_BATCH),
+    // Other
+    n_qubits(n_qubits),
+    rng(0),
+    flag_canonical_circuit(false),
+    canonical_circuit()
+{}
+
 void
 ControlSimulator::run(uint64_t shots) {
     int world_rank = 0, world_size = 1;
@@ -42,31 +81,7 @@ ControlSimulator::run(uint64_t shots) {
             trial_done.invert_bits();
         }
         // Reset structures.
-        decoder_busy.clear();
-
-        csim.reset_sim();
-        csim.shots = shots_in_curr_batch;
-        pauli_frames.clear();
-        event_history.clear();
-        obs_buffer.clear();
-        obs_buffer_max_written = 0;
-
-        latency.clear();
-
-        pc.clear();
-        
-        if_stall.clear();
-        if_id_valid.clear();
-        if_pc.clear();
-        id_stall.clear();
-        id_qex_valid.clear();
-        id_pc.clear();
-        qex_stall.clear();
-        qex_rt_valid.clear();
-        qex_pc.clear();
-        qex_qubit_busy.clear();
-        rt_stall.clear();
-
+        clear();
         // Start simulation
         timer.clk_start();
 
@@ -159,6 +174,43 @@ ControlSimulator::run(uint64_t shots) {
 }
 
 void
+ControlSimulator::clear() {
+    decoder_busy.clear();
+
+    csim.reset_sim();
+    csim.shots = shots_in_curr_batch;
+    pauli_frames.clear();
+    event_history.clear();
+    obs_buffer.clear();
+    obs_buffer_max_written = 0;
+
+    latency.clear();
+
+    pc.clear();
+    
+    if_stall.clear();
+    if_id_valid.clear();
+    if_pc.clear();
+    id_stall.clear();
+    id_qex_valid.clear();
+    id_pc.clear();
+    qex_stall.clear();
+    qex_rt_valid.clear();
+    qex_pc.clear();
+    qex_qubit_busy.clear();
+    rt_stall.clear();
+}
+
+void
+ControlSimulator::build_canonical_circuit() {
+    // Build canonical circuit by running through the simulator
+    // once through the program.
+    flag_canonical_circuit = true;
+    this->run(1);
+    flag_canonical_circuit = false;
+}
+
+void
 ControlSimulator::IF() {
     if (params.verbose) {
         std::cout << "\t[ IF ]\n";
@@ -233,7 +285,7 @@ ControlSimulator::QEX() {
         }
         if (stall_pipeline) continue;
         // These instructions operate on a trial by trial basis.
-        if (inst.name == "decode") {
+        if (inst.name == "decode" && !flag_canonical_circuit) {
             syndrome_t s(events_t[t]);
             auto res = decoder->decode_error(s);
             uint64_t exec_time = (uint64_t)res.exec_time;
@@ -302,24 +354,54 @@ ControlSimulator::QEX() {
 
         if (inst.name == "h") {
             csim.H(inst.operands);
+            if (flag_canonical_circuit) {
+                canonical_circuit.append_op("H", inst.operands);
+            }
         } else if (inst.name == "x") {
             csim.X(inst.operands);
+            if (flag_canonical_circuit) {
+                canonical_circuit.append_op("X", inst.operands);
+            }
         } else if (inst.name == "z") {
             csim.Z(inst.operands);
+            if (flag_canonical_circuit) {
+                canonical_circuit.append_op("Z", inst.operands);
+            }
         } else if (inst.name == "s") {
             csim.S(inst.operands);
+            if (flag_canonical_circuit) {
+                canonical_circuit.append_op("S", inst.operands);
+            }
         } else if (inst.name == "cx") {
             csim.CX(inst.operands);
+            if (flag_canonical_circuit) {
+                canonical_circuit.append_op("CX", inst.operands);
+            }
         } else if (inst.name == "mrc" || inst.name == "mnrc") {
             csim.M(inst.operands, inst.name == "mrc");
+            if (flag_canonical_circuit && inst.name == "mrc") {
+                canonical_circuit.append_op("M", inst.operands);
+            }
         } else if (inst.name == "reset") {
             csim.R(inst.operands);
+            if (flag_canonical_circuit) {
+                canonical_circuit.append_op("R", inst.operands);
+            }
         } else if (inst.name == "event") {
             const uint k = inst.operands[0];
             event_history[k].clear();
             const uint len = csim.get_record_size();
             for (uint i = 1; i < inst.operands.size(); i++) {
                 event_history[k] ^= csim.record_table[len - inst.operands[i]];
+            }
+
+            if (flag_canonical_circuit) {
+                std::vector<uint> stim_operands;
+                for (uint i = 1; i < inst.operands.size(); i++) {
+                    stim_operands.push_back((inst.operands[i]-1)
+                                                | stim::TARGET_RECORD_BIT);
+                }
+                canonical_circuit.append_op("DETECTOR", stim_operands);
             }
         } else if (inst.name == "obs") {
             const uint k = inst.operands[0];
@@ -329,6 +411,16 @@ ControlSimulator::QEX() {
                 obs_buffer[k] ^= csim.record_table[len - inst.operands[i]];
             }
             if (k+1 > obs_buffer_max_written) obs_buffer_max_written = k+1;
+
+            if (flag_canonical_circuit) {
+                std::vector<uint> stim_operands;
+                for (uint i = 1; i < inst.operands.size(); i++) {
+                    stim_operands.push_back((inst.operands[i]-1)
+                                                | stim::TARGET_RECORD_BIT);
+                }
+                canonical_circuit.append_op("OBSERVABLE_INCLUDE", 
+                        stim_operands, inst.operands[0]);
+            }
         }
 
         // After operation errors:
@@ -381,7 +473,7 @@ ControlSimulator::RT() {
 
 void
 ControlSimulator::apply_gate_error(Instruction& inst) {
-    if (inst.name == "CX") {
+    if (inst.name == "cx") {
         std::vector<fp_t>   dp2;
         std::vector<fp_t>   li;
         std::vector<fp_t>   lt;
@@ -392,6 +484,18 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
             dp2.push_back(params.errors.op2q[inst.name][x_y]);
             li.push_back(params.errors.op2q_leakage_injection[inst.name][x_y]);
             lt.push_back(params.errors.op2q_leakage_transport[inst.name][x_y]);
+
+            if (flag_canonical_circuit) {
+                canonical_circuit.append_op("L_TRANSPORT", 
+                            {x, y},
+                            params.errors.op2q_leakage_transport[inst.name][x_y]);
+                canonical_circuit.append_op("L_ERROR", 
+                            {x, y},
+                            params.errors.op2q_leakage_injection[inst.name][x_y]);
+                canonical_circuit.append_op("DEPOLARIZE2", 
+                            {x, y},
+                            params.errors.op2q[inst.name][x_y]);
+            }
         }
         csim.eLT(inst.operands, lt);
         csim.eLI(inst.operands, li);
@@ -403,6 +507,15 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
         std::vector<fp_t> e;
         for (uint x : inst.operands) {
             e.push_back(params.errors.op1q[key][x]);
+            if (flag_canonical_circuit) {
+                if (key == "m" || key == "reset") {
+                    canonical_circuit.append_op("X_ERROR", 
+                            {x}, params.errors.op1q[key][x]);
+                } else {
+                    canonical_circuit.append_op("DEPOLARIZE1", 
+                            {x}, params.errors.op1q[key][x]);
+                }
+            }
         }
         if (key == "m" || key == "reset") {
             csim.eX(inst.operands, e);
@@ -416,7 +529,9 @@ void
 ControlSimulator::apply_periodic_error() {
     const fp_t t = params.apply_periodic_errors_at_t;
     std::vector<uint> q;
-    if (params.simulate_periodic_as_dpo_and_dph) {
+    if (params.simulate_periodic_as_dpo_and_dph 
+        && !flag_canonical_circuit) 
+    {
         std::vector<fp_t> e1, e2;
         for (uint i = 0; i < n_qubits; i++) {
             q.push_back(i);
@@ -431,8 +546,13 @@ ControlSimulator::apply_periodic_error() {
         std::vector<fp_t> e;
         for (uint i = 0; i < n_qubits; i++) {
             fp_t mt = 0.5 * (params.timing.t1[i] + params.timing.t2[i]);
+            fp_t x = 1 - exp(-t / mt);
             q.push_back(i);
-            e.push_back(1 - exp(-t / mt));
+            e.push_back(x);
+
+            if (flag_canonical_circuit) {
+                canonical_circuit.append_op("DEPOLARIZE1", {i}, x);
+            }
         }
         csim.eDP1(q, e);
     }
