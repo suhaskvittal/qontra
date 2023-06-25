@@ -39,28 +39,51 @@ int yylex( );
 
 program: 
         /* empty string */
-        | program INST operands EOL
+        | instruction program
+;
+
+instruction:
+           INST EOL
 {
     struct __asm_inst_t inst;
-    memmove(inst.name, $2, 8);
-    memmove(inst.operands.data, $3.data, $3.size);
-    inst.operands.size = $3.size;
+    memcpy(inst.name, $1, 8);
+    inst.operands.size = 0;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
+}
+           | INST ARG EOL
+{
+    struct __asm_inst_t inst;
+    memcpy(inst.name, $1, 8);
+    inst.operands.data[0] = $2;
+    inst.operands.size = 1;
+    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+}
+           | INST ARG SEP operands EOL
+{
+    struct __asm_inst_t inst;
+    memcpy(inst.name, $1, 8);
+    inst.operands.data[0] = $2;
+    memcpy(inst.operands.data+1, $4.data, $4.size*sizeof(uint32_t));
+    inst.operands.size = 1 + $4.size;
+    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+
 }
 ;
 
 operands:
         ARG
-{ 
+{
     struct __asm_operand_t x;
     x.data[0] = $1;
     x.size = 1;
     $$ = x;
 }
-        | operands SEP ARG
-{ 
-    struct __asm_operand_t x = $1;
-    x.data[x.size++] = $3;
+        | ARG SEP operands
+{
+    struct __asm_operand_t x;
+    x.data[0] = $1;
+    memcpy(x.data+1, $3.data, $3.size*sizeof(uint32_t));
+    x.size = 1 + $3.size;
     $$ = x;
 }
 ;

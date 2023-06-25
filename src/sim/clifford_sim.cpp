@@ -22,10 +22,13 @@ CliffordSimulator::H(std::vector<uint> operands) {
             [&](auto& r, auto& x, auto& z, auto& l)
             {
                 r ^= x & z & ~l;
+                /*
                 stim::simd_word tmp = z;
                 z = (z & l) | (x & ~l);
                 x = (x & l) | (tmp & ~l);
+                */
             });
+            x_table[k].swap_with(z_table[k]);
         }
     }
 }

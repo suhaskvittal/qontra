@@ -102,7 +102,8 @@ enum yysymbol_kind_t
   YYSYMBOL_EOL = 6,                        /* EOL  */
   YYSYMBOL_YYACCEPT = 7,                   /* $accept  */
   YYSYMBOL_program = 8,                    /* program  */
-  YYSYMBOL_operands = 9                    /* operands  */
+  YYSYMBOL_instruction = 9,                /* instruction  */
+  YYSYMBOL_operands = 10                   /* operands  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -428,18 +429,18 @@ union yyalloc
 #endif /* !YYCOPY_NEEDED */
 
 /* YYFINAL -- State number of the termination state.  */
-#define YYFINAL  2
+#define YYFINAL  6
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   6
+#define YYLAST   11
 
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  7
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  3
+#define YYNNTS  4
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  5
+#define YYNRULES  8
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  9
+#define YYNSTATES  15
 
 /* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   261
@@ -489,7 +490,7 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int8 yyrline[] =
 {
-       0,    40,    40,    42,    53,    60
+       0,    40,    40,    42,    46,    53,    61,    74,    81
 };
 #endif
 
@@ -506,7 +507,7 @@ static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
 static const char *const yytname[] =
 {
   "\"end of file\"", "error", "\"invalid token\"", "INST", "SEP", "ARG",
-  "EOL", "$accept", "program", "operands", YY_NULLPTR
+  "EOL", "$accept", "program", "instruction", "operands", YY_NULLPTR
 };
 
 static const char *
@@ -530,7 +531,8 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-      -5,     0,    -5,    -4,    -5,    -2,     1,    -5,    -5
+       2,    -2,     1,     2,    -4,    -5,    -5,    -5,     3,    -5,
+       5,     0,     3,    -5,    -5
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -538,19 +540,20 @@ static const yytype_int8 yypact[] =
    means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
-       2,     0,     1,     0,     4,     0,     0,     3,     5
+       2,     0,     0,     2,     0,     4,     1,     3,     0,     5,
+       7,     0,     0,     6,     8
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-      -5,    -5,    -5
+      -5,     4,    -5,    -1
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,     1,     5
+       0,     2,     3,    11
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -558,31 +561,34 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-       2,     4,     6,     3,     7,     0,     8
+       8,     6,     9,     4,     5,     1,    13,     7,    10,    12,
+       0,    14
 };
 
 static const yytype_int8 yycheck[] =
 {
-       0,     5,     4,     3,     6,    -1,     5
+       4,     0,     6,     5,     6,     3,     6,     3,     5,     4,
+      -1,    12
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
    state STATE-NUM.  */
 static const yytype_int8 yystos[] =
 {
-       0,     8,     0,     3,     5,     9,     4,     6,     5
+       0,     3,     8,     9,     5,     6,     0,     8,     4,     6,
+       5,    10,     4,     6,    10
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,     7,     8,     8,     9,     9
+       0,     7,     8,     8,     9,     9,     9,    10,    10
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     0,     4,     1,     3
+       0,     2,     0,     2,     2,     3,     5,     1,     3
 };
 
 
@@ -1045,41 +1051,68 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
-  case 3: /* program: program INST operands EOL  */
-#line 43 "parser.y"
+  case 4: /* instruction: INST EOL  */
+#line 47 "parser.y"
 {
     struct __asm_inst_t inst;
-    memmove(inst.name, (yyvsp[-2].name), 8);
-    memmove(inst.operands.data, (yyvsp[-1].operands).data, (yyvsp[-1].operands).size);
-    inst.operands.size = (yyvsp[-1].operands).size;
+    memcpy(inst.name, (yyvsp[-1].name), 8);
+    inst.operands.size = 0;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-#line 1058 "parser.tab.c"
+#line 1063 "parser.tab.c"
     break;
 
-  case 4: /* operands: ARG  */
+  case 5: /* instruction: INST ARG EOL  */
 #line 54 "parser.y"
-{ 
+{
+    struct __asm_inst_t inst;
+    memcpy(inst.name, (yyvsp[-2].name), 8);
+    inst.operands.data[0] = (yyvsp[-1].arg);
+    inst.operands.size = 1;
+    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+}
+#line 1075 "parser.tab.c"
+    break;
+
+  case 6: /* instruction: INST ARG SEP operands EOL  */
+#line 62 "parser.y"
+{
+    struct __asm_inst_t inst;
+    memcpy(inst.name, (yyvsp[-4].name), 8);
+    inst.operands.data[0] = (yyvsp[-3].arg);
+    memcpy(inst.operands.data+1, (yyvsp[-1].operands).data, (yyvsp[-1].operands).size*sizeof(uint32_t));
+    inst.operands.size = 1 + (yyvsp[-1].operands).size;
+    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+
+}
+#line 1089 "parser.tab.c"
+    break;
+
+  case 7: /* operands: ARG  */
+#line 75 "parser.y"
+{
     struct __asm_operand_t x;
     x.data[0] = (yyvsp[0].arg);
     x.size = 1;
     (yyval.operands) = x;
 }
-#line 1069 "parser.tab.c"
+#line 1100 "parser.tab.c"
     break;
 
-  case 5: /* operands: operands SEP ARG  */
-#line 61 "parser.y"
-{ 
-    struct __asm_operand_t x = (yyvsp[-2].operands);
-    x.data[x.size++] = (yyvsp[0].arg);
+  case 8: /* operands: ARG SEP operands  */
+#line 82 "parser.y"
+{
+    struct __asm_operand_t x;
+    x.data[0] = (yyvsp[-2].arg);
+    memcpy(x.data+1, (yyvsp[0].operands).data, (yyvsp[0].operands).size*sizeof(uint32_t));
+    x.size = 1 + (yyvsp[0].operands).size;
     (yyval.operands) = x;
 }
-#line 1079 "parser.tab.c"
+#line 1112 "parser.tab.c"
     break;
 
 
-#line 1083 "parser.tab.c"
+#line 1116 "parser.tab.c"
 
       default: break;
     }
@@ -1272,7 +1305,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 68 "parser.y"
+#line 91 "parser.y"
 
 
 void

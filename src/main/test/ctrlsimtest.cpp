@@ -37,6 +37,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << schedule_to_text(prog) << "\n";
+    std::cout << n << " qubits\n";
 
     experiments::G_USE_MPI = false;
     experiments::G_SHOTS_PER_BATCH = 128;

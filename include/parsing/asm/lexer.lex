@@ -19,7 +19,10 @@
 
 %%
 
-\d+         { yylval.arg = (uint32_t) atoi(yytext); return ARG; }
+[0-9]+      { 
+                yylval.arg = (uint32_t) atoi(yytext); 
+                return ARG; 
+            }
 [A-Za-z]+   { 
                 memcpy(yylval.name, yytext, 8); 
                 // Force lower case.
@@ -32,7 +35,7 @@
             }
 [ \t]       { /* ignore whitespace */ }
 ,           { return SEP; }
-;           { return EOL; }
+\n          { return EOL; }
 
 %%
 
