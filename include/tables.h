@@ -94,8 +94,8 @@ populate(
         TimeTable& timing,
         const ErrorAndTiming& params)
 {
-    const std::vector<std::string> g1q{"H", "X", "S", "Z", "R"};
-    const std::vector<std::string> g2q{"CX"};
+    const std::vector<std::string> g1q{"h", "x", "s", "z", "reset"};
+    const std::vector<std::string> g2q{"cx"};
 
     set_all_1q(n_qubits, params.t1, timing.t1);
     set_all_1q(n_qubits, params.t2, timing.t2);
@@ -104,8 +104,8 @@ populate(
         set_all_1q(n_qubits, params.t_g1q, timing.op1q[g]);
     }
     // Set measurement characteristics independently.
-    set_all_1q(n_qubits, params.e_ro, errors.op1q["M"]);
-    set_all_1q(n_qubits, params.t_ro, timing.op1q["M"]);
+    set_all_1q(n_qubits, params.e_ro, errors.op1q["m"]);
+    set_all_1q(n_qubits, params.t_ro, timing.op1q["m"]);
     for (auto g : g2q) {
         set_all_2q(n_qubits, params.e_g2q, errors.op2q[g]);
         set_all_2q(n_qubits, params.t_g2q, timing.op2q[g]);

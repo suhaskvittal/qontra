@@ -16,28 +16,29 @@
 namespace qontra {
 
 const std::vector<std::string> ISA{
-    "H",
-    "X",
-    "Z",
-    "CX",
-    "S",
-    "Mnrc", // Does not record measurement
-    "Mrc",  // Records measurement and places it into a buffer
-    "R",
-    "NOP",          // Essentially a delay operation
+    "h",
+    "x",
+    "z",
+    "cx",
+    "s",
+    "mnrc", // Does not record measurement
+    "mrc",  // Records measurement and places it into a buffer
+    "reset",
+    "nop",          // Essentially a delay operation
     // Control processor instructions.
-    "DECODE",       // Tells decoder to decode syndrome.
-    "BRDECBUSY",    // Jumps to instruction if decoder is busy (still decoding)
-    "FENCEDEC",     // Waits until the decoder finishes.
-    "RECORDXOR",    // XORs two entries in the record. Note that operands are
-                    // offsets from the end of the array (i.e. 3 means the third
-                    // most recent record). First entry is XORd into the second.
-    "OBS",          // Computes observable by XORing corresponding results in the
+    "decode",       // Tells decoder to decode syndrome.
+    "brdb",         // Jumps to instruction if decoder is busy (still decoding)
+    "dfence",       // Waits until decoder finishes.
+    "event",        // Creates a detection event and writes to an event history
+                    // buffer. The operands' (which are lookback indices into the
+                    // measurement record) corresponding entries are XORd to create
+                    // the event.
+    "obs",          // Computes observable by XORing corresponding results in the
                     // record. Measurement outcome is placed in a buffer.
-    "SAVEMEAS",     // The bitstring in the observable buffer is record in a 
+    "savem",        // The bitstring in the observable buffer is record in a 
                     // probability histogram.
     // Virtual instruction
-    "DONE",         // Tells the simulator we are done (virtual instruction)
+    "done",         // Tells the simulator we are done (virtual instruction)
 };
 
 struct Instruction {

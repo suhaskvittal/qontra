@@ -78,6 +78,7 @@ public:
         uint        verbose = 0;
         // Control system configuration
         fp_t        clock_frequency = 250e6;
+        bool        decoder_is_ideal = true;    // Decoder only takes 1ns to run.
         // Configuration of quantum computer
         TimeTable   timing;
         ErrorTable  errors;

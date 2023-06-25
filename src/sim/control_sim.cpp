@@ -160,8 +160,6 @@ ControlSimulator::IF() {
     for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
         if (!trial_done[t]) continue;
         if (if_stall[t])    continue;
-        // Check if the instruction = DONE.
-        auto& inst = program[pc[t].u64[0]];
         // Otherwise, update the PC and do any IO.
         if_pc[t].u64[0] = pc[t].u64[0];
         pc[t].u64[0]++;
@@ -221,7 +219,7 @@ ControlSimulator::QEX() {
         }
         if (stall_pipeline) continue;
         // These instructions operate on a trial by trial basis.
-        if (inst.name == "DECODE") {
+        if (inst.name == "decode") {
             syndrome_t s(syndromes[t]);
             auto res = decoder->decode_error(s);
             uint64_t exec_time = (uint64_t)res.exec_time;
@@ -233,33 +231,33 @@ ControlSimulator::QEX() {
             for (uint i = 0; i < res.corr.size(); i++) {
                 pauli_frames[t][i] ^= res.corr[i];
             }
-        } else if (inst.name == "BRDECBUSY") {
+        } else if (inst.name == "brdb") {
             if (decoder_busy[t].not_zero()) {
                 // Set PC and invalidate ID.
                 id_qex_valid[t] = 0;
                 pc[t].u64[0] = inst.operands[0];
             }
-        } else if (inst.name == "FENCEDEC") {
+        } else if (inst.name == "dfence") {
             if (decoder_busy[t].not_zero()) {
                 id_stall[t] = 1;
                 qex_rt_valid[t] = 0;
             }
-        } else if (inst.name == "RECORDXOR") {
+        } else if (inst.name == "event") {
             uint src = inst.operands[0];
             uint dst = inst.operands[1];
             csim.xor_record_with(src, dst);
-        } else if (inst.name == "OBS") {
+        } else if (inst.name == "obs") {
             uint8_t obs = 0;
             uint len = csim.get_record_size();
             for (uint offset : inst.operands) {
                 obs ^= csim.record_table[len-offset][t];
             }
             obs_buffer[t][obs_buffer_size[t].u64[0]++] = obs;
-        } else if (inst.name == "SAVEMEAS") {
+        } else if (inst.name == "savem") {
             vlw_t x = to_vlw(obs_buffer[t], obs_buffer_size[t].u64[0]);
             prob_histograms[x]++;
             obs_buffer[t].clear();
-        } else if (inst.name == "DONE") {
+        } else if (inst.name == "done") {
             trial_done[t] = 0;
         } else {
             // These should be instructions that benefit from operating
@@ -290,27 +288,27 @@ ControlSimulator::QEX() {
         //
         // Before operation errors:
         const std::set<std::string> apply_error_before{
-            "Mrc",
-            "Mnrc"
+            "mrc",
+            "mnrc"
         };
 
         if (apply_error_before.count(inst.name)) {
             apply_gate_error(inst);
         }
 
-        if (inst.name == "H") {
+        if (inst.name == "h") {
             csim.H(inst.operands);
-        } else if (inst.name == "X") {
+        } else if (inst.name == "x") {
             csim.X(inst.operands);
-        } else if (inst.name == "Z") {
+        } else if (inst.name == "z") {
             csim.Z(inst.operands);
-        } else if (inst.name == "S") {
+        } else if (inst.name == "s") {
             csim.S(inst.operands);
-        } else if (inst.name == "CX") {
+        } else if (inst.name == "cx") {
             csim.CX(inst.operands);
-        } else if (inst.name == "Mrc" || inst.name == "Mnrc") {
-            csim.M(inst.operands, inst.name == "Mrc");
-        } else if (inst.name == "R") {
+        } else if (inst.name == "mrc" || inst.name == "mnrc") {
+            csim.M(inst.operands, inst.name == "mrc");
+        } else if (inst.name == "reset") {
             csim.R(inst.operands);
         }
 
@@ -344,9 +342,9 @@ ControlSimulator::QEX() {
                             fp_t tt = params.timing.op1q[inst.name][x];
                             qex_qubit_busy[t].u64[x] = tt;
                         }
-                    } else if (inst.name == "Mrc" || inst.name == "Mnrc") {
+                    } else if (inst.name == "mrc" || inst.name == "mnrc") {
                         for (uint x : inst.operands) {
-                            fp_t tt = params.timing.op1q["M"][x];
+                            fp_t tt = params.timing.op1q["m"][x];
                             qex_qubit_busy[t].u64[x] = tt;
                         }
                     }
@@ -379,13 +377,13 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
         csim.eDP2(inst.operands, dp2);
     } else {
         std::string key = inst.name;
-        if (inst.name == "Mrc" || inst.name == "Mnrc")  key = "M";
+        if (inst.name == "mrc" || inst.name == "mnrc")  key = "m";
         if (!params.errors.op1q.count(key)) return;
         std::vector<fp_t> e;
         for (uint x : inst.operands) {
             e.push_back(params.errors.op1q[key][x]);
         }
-        if (key == "M" || key == "R") {
+        if (key == "m" || key == "reset") {
             csim.eX(inst.operands, e);
         } else {
             csim.eDP1(inst.operands, e);
