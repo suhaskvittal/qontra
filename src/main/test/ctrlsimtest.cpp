@@ -27,11 +27,13 @@ int main(int argc, char* argv[]) {
 
         cmd_parser.get_uint32("size", n);
     } else {
-        stim::CircuitGenParameters circ_params(1, 3, "rotated_memory_z");
+        stim::CircuitGenParameters circ_params(3, 3, "rotated_memory_z");
         auto circ = stim::generate_surface_code_circuit(circ_params).circuit;
 
         n = from_stim_circuit(circ, prog);
 
+        prog.push_back({"decode", {0}, {}});
+        prog.push_back({"xorfr", {0, 0}, {}});
         prog.push_back({"savem", {}, {}});
         prog.push_back({"done", {}, {}});
     }
@@ -40,10 +42,9 @@ int main(int argc, char* argv[]) {
     std::cout << n << " qubits\n";
 
     experiments::G_USE_MPI = false;
-    experiments::G_SHOTS_PER_BATCH = 128;
+    experiments::G_SHOTS_PER_BATCH = 1024;
 
     ControlSimulator sim(n, prog);
-    /*
     tables::ErrorAndTiming params;
     tables::populate(n, sim.params.errors, sim.params.timing, params);
     sim.build_canonical_circuit();
@@ -56,11 +57,10 @@ int main(int argc, char* argv[]) {
     // Check expected LER.
     auto mxp_res = memory_experiment(&mwpm, 1L << 16);
     std::cout << "Expected LER = " << mxp_res.logical_error_rate << "\n";
-    */
 
     sim.params.verbose = 0;
 
-    sim.run(1L << 8);
+    sim.run(1L << 20);
     std::cout << "Probability histogram:\n";
     for (auto pair : sim.prob_histograms) {
         std::cout << "\t" << std::hex;

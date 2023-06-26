@@ -22,13 +22,10 @@ CliffordSimulator::H(std::vector<uint> operands) {
             [&](auto& r, auto& x, auto& z, auto& l)
             {
                 r ^= x & z & ~l;
-                /*
                 stim::simd_word tmp = z;
                 z = (z & l) | (x & ~l);
                 x = (x & l) | (tmp & ~l);
-                */
             });
-            x_table[k].swap_with(z_table[k]);
         }
     }
 }
@@ -377,7 +374,7 @@ CliffordSimulator::rowsum(uint h, uint i, uint64_t t) {
     auto rs1 = 0;
     auto rs2 = r_table[h][t] ^ r_table[i][t];
     for (uint j = 0; j < n_qubits; j++) {
-        uint kh = n_qubits*h + i;
+        uint kh = n_qubits*h + j;
         uint ki = n_qubits*i + j;
 
         auto x1 = x_table[ki][t];
