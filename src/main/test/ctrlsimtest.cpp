@@ -4,6 +4,7 @@
  * */
 
 #include "decoder/mwpm.h"
+#include "instruction.h"
 #include "parsing/cmd.h"
 #include "sim/control_sim.h"
 

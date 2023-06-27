@@ -56,13 +56,15 @@ __reduce:
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
     }
-    if (check_size_violation(ir)) {
-        if (params.verbose) std::cout << "[ merge ] ---------------------\n";
-        if (merge(ir))  goto __reduce;
-    }
-    if (check_connectivity_violation(ir)) {
-        if (params.verbose) std::cout << "[ split ] ---------------------\n";
-        if (split(ir))  goto __reduce;
+    if (rounds_without_progress > 0) {
+        if (check_size_violation(ir)) {
+            if (params.verbose) std::cout << "[ merge ] ---------------------\n";
+            if (merge(ir))  goto __reduce;
+        }
+        if (check_connectivity_violation(ir)) {
+            if (params.verbose) std::cout << "[ split ] ---------------------\n";
+            if (split(ir))  goto __reduce;
+        }
     }
 __schedule:
     if (params.verbose) {
@@ -71,7 +73,7 @@ __schedule:
     xform_schedule(ir);
     if (params.verbose) {
         std::cout << "\t#ops = " << ir->schedule.size() << "\n";
-        std::cout << "\tdepth = " << ir->dependency_graph->get_depth() << "\n";
+//      std::cout << "\tdepth = " << ir->dependency_graph->get_depth() << "\n";
 
         std::cout << "[ score ] ---------------------\n";
     }
@@ -874,9 +876,8 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
         // Check if the connection is complex.
         auto impl = arch->get_physical_edges(pv, pw);
         d3d_map_out << id_to_num[pv->id];
-        for (auto f : impl) {
-            auto py = (proc3d::vertex_t*)f->dst;
-            d3d_map_out << "," << py->id;
+        if (impl.size() > 1) {
+            d3d_map_out << ",L" << impl[1]->processor_layer;
         }
         d3d_map_out << "," << id_to_num[pw->id] << "\n";
     }

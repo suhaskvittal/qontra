@@ -5,6 +5,18 @@ project(QontraSim VERSION 0.1)
 # Declare CPP Version
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+find_package(FLEX REQUIRED)
+find_package(BISON REQUIRED)
+
+BISON_TARGET(ASMParser ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.y 
+    ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.tab.c
+    DEFINES_FILE ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.tab.h)
+FLEX_TARGET(ASMLexer ${CMAKE_SOURCE_DIR}/include/parsing/asm/lexer.lex 
+    ${CMAKE_SOURCE_DIR}/include/parsing/asm/lex.yy.c
+    DEFINES_FILE ${CMAKE_SOURCE_DIR}/include/parsing/asm/lex.tab.h)
+ADD_FLEX_BISON_DEPENDENCY(ASMLexer ASMParser)
+
 # Declare executable.
 set(QONTRA_FILES
     # Top-Level
@@ -14,8 +26,9 @@ set(QONTRA_FILES
     src/decoder/mwpm.cpp
     # Parsing
     src/parsing/cmd.cpp
-    include/parsing/asm/parser.tab.c
-    include/parsing/asm/lex.yy.c
+    src/parsing/asm/common.cpp
+    ${BISON_ASMParser_OUTPUTS}
+    ${FLEX_ASMLexer_OUTPUTS}
     # Graphs
     src/graph/decoding_graph.cpp 
     src/graph/coupling_graph.cpp
@@ -31,11 +44,12 @@ add_library(qontra ${QONTRA_FILES})
 add_executable(memory src/main/memory_experiment.cpp)
 add_executable(circuit src/main/build_circuit.cpp)
 
-### TESTING ###
-add_executable(ctrl src/main/test/ctrlsimtest.cpp)
-
 ### Protean ###
 add_executable(protean_main src/main/protean/main.cpp)
+
+### TESTING ###
+add_executable(ctrl src/main/test/ctrlsimtest.cpp)
+add_executable(hello src/main/test/hello_world.cpp)
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
     target_compile_options(qontra PUBLIC -O3 -lemon -fno-strict-aliasing)
@@ -45,9 +59,6 @@ endif()
 
 find_package(MPI REQUIRED)
 find_package(LEMON REQUIRED)
-
-find_package(FLEX REQUIRED)
-find_package(BISON REQUIRED)
 
 # I don't know why I have to include /usr/local/include...
 target_include_directories(qontra PUBLIC
@@ -68,5 +79,5 @@ target_link_libraries(qontra PUBLIC ${FLEX_LIBRARIES})
 target_link_libraries(memory PRIVATE qontra)
 target_link_libraries(circuit PRIVATE qontra)
 target_link_libraries(ctrl PRIVATE qontra)
-
 target_link_libraries(protean_main PRIVATE qontra)
+target_link_libraries(hello PRIVATE qontra)

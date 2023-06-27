@@ -35,8 +35,8 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_YY_PARSER_TAB_H_INCLUDED
-# define YY_YY_PARSER_TAB_H_INCLUDED
+#ifndef YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
+# define YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -45,13 +45,29 @@
 extern int yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 10 "parser.y"
+#line 10 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 
 
-#include "parsing/asm/common.h"
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+struct __asm_operand_t {
+    uint32_t    data[31];
+    uint32_t    size;
+};
+
+struct __asm_inst_t {   // Each instruction is 128B.
+    char                    name[8];    // 8 B
+    struct __asm_operand_t  operands;   // 120 B
+};
+
+// 512 KB for the program (4K instrutions * 128B).
+extern struct __asm_inst_t  ASMParserSchedule[4096];
+extern uint32_t             ASMParserScheduleLen;
 
 
-#line 55 "parser.tab.h"
+#line 71 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -74,13 +90,13 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 25 "parser.y"
+#line 42 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 
     uint32_t                arg;
     char                    name[8];
     struct __asm_operand_t  operands;
 
-#line 84 "parser.tab.h"
+#line 100 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -95,15 +111,16 @@ extern YYSTYPE yylval;
 int yyparse (void);
 
 /* "%code provides" blocks.  */
-#line 16 "parser.y"
+#line 32 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 
 
-void    yyerror(char const*);
-int     yyparse( );
+int yylex();
 
-int yylex( );
+void        asm_yystart(FILE*);
+extern int  yyparse();
+void        yyerror(char const*);
 
 
-#line 108 "parser.tab.h"
+#line 125 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
 
-#endif /* !YY_YY_PARSER_TAB_H_INCLUDED  */
+#endif /* !YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED  */

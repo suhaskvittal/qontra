@@ -5,11 +5,10 @@
     Lexer for ASM specified in ISA (see instruction.h)
 */
 
-%option noyywrap
+%option noyywrap noinput nounput
 
 %{
 
-#include "parsing/asm/common.h"
 #include "parsing/asm/parser.tab.h"
 
 #include <stdlib.h>

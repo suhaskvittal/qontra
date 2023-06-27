@@ -5,10 +5,9 @@
 
 #include "instruction.h"
 
-struct __asm_inst_t     ASMParserSchedule[4096];
-uint32_t                ASMParserScheduleLen = 0;
-
 namespace qontra {
+
+void    __magic__() {}
 
 std::string
 schedule_to_text(const schedule_t& sch) {
@@ -76,7 +75,7 @@ schedule_t
 from_file(std::string fname) {
     FILE* fin = fopen(fname.c_str(), "r");
     asm_yystart(fin);
-    asm_yyparse();
+    yyparse();
     fclose(fin);
     // Convert C-like schedule to C++.
     schedule_t sch;

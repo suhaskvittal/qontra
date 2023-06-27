@@ -27,8 +27,6 @@ Processor3D::add_edge(proc3d::edge_t* e) {
         main_processor.add_edge(e, will_be_planar);
         coupling_to_edges[e] = std::vector<proc3d::edge_t*>{e};
     } else {
-        std::cout << "Number of edges: " << main_processor.get_edges().size()
-            << ", tracking planarity = " << main_processor.tracking_planarity() << "\n";
         std::set<uint> open_layers;
         for (uint i = 0; i < get_thickness(); i++)  open_layers.insert(i);
         for (auto tsv : vertex_to_tsv_junctions[src]) {
@@ -129,6 +127,7 @@ Processor3D::delete_vertex(proc3d::vertex_t* v) {
 
 void
 Processor3D::delete_edge(proc3d::edge_t* e) {
+    if (!contains(e))   return;
     if (e == nullptr)   return;
 
     auto impl = coupling_to_edges[e];
@@ -148,9 +147,9 @@ Processor3D::delete_edge(proc3d::edge_t* e) {
             if (*it == (vertex_t*)vert2->src)   it = dst_tsv_j.erase(it);
             else                                it++;
         }
-        processor_layers[horiz->processor_layer].delete_vertex((vertex_t*)vert1->dst);
-        processor_layers[horiz->processor_layer].delete_vertex((vertex_t*)vert2->src);
-        processor_layers[horiz->processor_layer].delete_edge(horiz);
+        processor_layers[horiz->processor_layer-1].delete_vertex((vertex_t*)vert1->dst);
+        processor_layers[horiz->processor_layer-1].delete_vertex((vertex_t*)vert2->src);
+        processor_layers[horiz->processor_layer-1].delete_edge(horiz);
 
         if (dealloc_on_delete) {
             delete vert1;

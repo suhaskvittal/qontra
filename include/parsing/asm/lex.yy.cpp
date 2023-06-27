@@ -1,6 +1,6 @@
-#line 1 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
+#line 1 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.cpp"
 
-#line 3 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
+#line 3 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.cpp"
 
 #define  YY_INT_ALIGNED short int
 
@@ -455,13 +455,15 @@ char *yytext;
 #define YY_NO_INPUT 1
 #line 11 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 
-#include "parsing/asm/parser.tab.h"
-
 #include <stdlib.h>
 #include <string.h>
 
-#line 463 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
-#line 464 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
+#include "parsing/asm/parser.tab.h"
+
+extern int yylex();
+
+#line 465 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.cpp"
+#line 466 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.cpp"
 
 #define INITIAL 0
 
@@ -676,10 +678,10 @@ YY_DECL
 		}
 
 	{
-#line 19 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
+#line 21 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 
 
-#line 682 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
+#line 684 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.cpp"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -738,7 +740,7 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 21 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
+#line 23 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { 
                 yylval.arg = (uint32_t) atoi(yytext); 
                 return ARG; 
@@ -746,7 +748,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 25 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
+#line 27 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { 
                 memcpy(yylval.name, yytext, 8); 
                 // Force lower case.
@@ -760,26 +762,26 @@ YY_RULE_SETUP
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 35 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
+#line 37 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { /* ignore whitespace */ }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 36 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
+#line 38 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { return SEP; }
 	YY_BREAK
 case 5:
 /* rule 5 can match eol */
 YY_RULE_SETUP
-#line 37 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
+#line 39 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { return EOL; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 39 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
+#line 41 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 ECHO;
 	YY_BREAK
-#line 782 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
+#line 784 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.cpp"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -1747,7 +1749,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 39 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
+#line 41 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 
 
 void asm_yystart(FILE* fin) {

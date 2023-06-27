@@ -25,6 +25,7 @@ using namespace graph;
 using namespace protean;
 
 int main(int argc, char* argv[]) {
+    __magic__();
     CmdParser parser(argc, argv);
 
     std::string help = "Arguments list:\n";
@@ -83,12 +84,13 @@ help_exit:
     // Define the cost function here.
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
-        return (fp_t)ir->arch->get_mean_connectivity();
+        return (fp_t)ir->arch->get_mean_connectivity() + 0.01*ir->arch->get_vertices().size();
     };
 
     // Define any constraints here.
     compiler::constraint_t con;
     con.max_connectivity = 4;
+    con.max_mean_connectivity = 3.5;
 
     // Declare compiler and run it.
     Compiler compiler(con, cf);
@@ -101,7 +103,7 @@ help_exit:
     std::cout << "Number of qubits = " << res->arch->get_vertices().size() << "\n";
     std::cout << "Connectivity = " << res->arch->get_mean_connectivity() << "\n";
     std::cout << "Number of ops = " << res->schedule.size() << "\n";
-    std::cout << "Schedule depth = " << res->dependency_graph->get_depth() << "\n";
+//  std::cout << "Schedule depth = " << res->dependency_graph->get_depth() << "\n";
 
     write_ir_to_folder(res, folder_out);
 
