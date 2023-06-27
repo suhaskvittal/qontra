@@ -76,7 +76,7 @@ schedule_t
 from_file(std::string fname) {
     FILE* fin = fopen(fname.c_str(), "r");
     asm_yystart(fin);
-    yyparse();
+    asm_yyparse();
     fclose(fin);
     // Convert C-like schedule to C++.
     schedule_t sch;

@@ -111,7 +111,10 @@ public:
 
     void            set_seed(uint64_t s) { rng.seed(s); }
 
-    compiler::ir_t* run(graph::TannerGraph*);
+    // The compiler takes in a Tanner graph, which defines the QEC code,
+    // and an idealized syndrome extraction schedule. The schedule should
+    // NOT contain any gauge qubits.
+    compiler::ir_t* run(graph::TannerGraph*, const schedule_t& ideal_sch);
 
     params_t    params;
 private:
@@ -142,6 +145,8 @@ private:
     //                  a data qubit, then create a gauge qubit.
     //      Jump to (3).
     //
+    //  (5) Xform-Schedule  -- transforms the ideal schedule to fit on the architecture.
+    //
     //  (5) Micro-Schedule  -- schedules the operations for each check.
     //  (6) Macro-Schedule  -- schedules the order of computing each check such that depth is
     //                          minimized.
@@ -167,8 +172,7 @@ private:
     void    reduce(compiler::ir_t*);
     bool    merge(compiler::ir_t*);
     bool    split(compiler::ir_t*);
-    void    micro_schedule(compiler::ir_t*);
-    void    macro_schedule(compiler::ir_t*);
+    void    xform_schedule(compiler::ir_t*);
     void    schedule(compiler::ir_t*);
     void    score(compiler::ir_t*);
     bool    induce(compiler::ir_t*);

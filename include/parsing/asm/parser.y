@@ -11,10 +11,12 @@
 
 #include "parsing/asm/common.h"
 
-
 }
 
 %code provides {
+
+void    yyerror(char const*);
+int     yyparse( );
 
 int yylex( );
 
@@ -93,5 +95,18 @@ operands:
 void
 yyerror(const char* msg) {
     fprintf(stderr, "asm parsing error: %s\n", msg);
+}
+
+/*
+    Wrapping functions because yy renaming did not work :(
+*/
+void
+asm_yyerror(const char* msg) {
+    return yyerror(msg);
+}
+
+int
+asm_yyparse() {
+    return yyparse();
 }
 

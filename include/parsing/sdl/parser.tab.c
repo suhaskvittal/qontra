@@ -66,6 +66,21 @@
 
 
 
+/* First part of user prologue.  */
+#line 11 "parser.y"
+
+
+#include "parsing/sdl/common.h"
+
+char                SDLParserDeclarations[8][4096];
+struct __sdl_mus_t  SDLParserSchedules[4096];
+uint32_t            SDLParserScheduleSize = 0;
+uint16_t            SDLGroupDependences[16];
+
+#define __SDL_ERROR(x)  sdl_yyerror(x)
+
+
+#line 84 "parser.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -96,14 +111,19 @@ enum yysymbol_kind_t
   YYSYMBOL_YYEOF = 0,                      /* "end of file"  */
   YYSYMBOL_YYerror = 1,                    /* error  */
   YYSYMBOL_YYUNDEF = 2,                    /* "invalid token"  */
-  YYSYMBOL_INST = 3,                       /* INST  */
-  YYSYMBOL_SEP = 4,                        /* SEP  */
-  YYSYMBOL_ARG = 5,                        /* ARG  */
-  YYSYMBOL_EOL = 6,                        /* EOL  */
-  YYSYMBOL_YYACCEPT = 7,                   /* $accept  */
-  YYSYMBOL_program = 8,                    /* program  */
-  YYSYMBOL_instruction = 9,                /* instruction  */
-  YYSYMBOL_operands = 10                   /* operands  */
+  YYSYMBOL_DECL = 3,                       /* DECL  */
+  YYSYMBOL_MUS = 4,                        /* MUS  */
+  YYSYMBOL_INST = 5,                       /* INST  */
+  YYSYMBOL_CHECK = 6,                      /* CHECK  */
+  YYSYMBOL_ID = 7,                         /* ID  */
+  YYSYMBOL_SEP = 8,                        /* SEP  */
+  YYSYMBOL_EOL = 9,                        /* EOL  */
+  YYSYMBOL_END = 10,                       /* END  */
+  YYSYMBOL_YYACCEPT = 11,                  /* $accept  */
+  YYSYMBOL_program = 12,                   /* program  */
+  YYSYMBOL_instruction = 13,               /* instruction  */
+  YYSYMBOL_body = 14,                      /* body  */
+  YYSYMBOL_operands = 15                   /* operands  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -429,21 +449,21 @@ union yyalloc
 #endif /* !YYCOPY_NEEDED */
 
 /* YYFINAL -- State number of the termination state.  */
-#define YYFINAL  6
+#define YYFINAL  9
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   11
+#define YYLAST   32
 
 /* YYNTOKENS -- Number of terminals.  */
-#define YYNTOKENS  7
+#define YYNTOKENS  11
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  4
+#define YYNNTS  5
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  8
+#define YYNRULES  10
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  15
+#define YYNSTATES  25
 
 /* YYMAXUTOK -- Last valid token kind.  */
-#define YYMAXUTOK   261
+#define YYMAXUTOK   265
 
 
 /* YYTRANSLATE(TOKEN-NUM) -- Symbol number corresponding to TOKEN-NUM
@@ -483,14 +503,15 @@ static const yytype_int8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     1,     2,     3,     4,
-       5,     6
+       5,     6,     7,     8,     9,    10
 };
 
 #if YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int8 yyrline[] =
 {
-       0,    42,    42,    44,    48,    55,    63,    76,    83
+       0,    48,    48,    49,    53,    58,    65,    82,    93,   102,
+     110
 };
 #endif
 
@@ -506,8 +527,9 @@ static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
 {
-  "\"end of file\"", "error", "\"invalid token\"", "INST", "SEP", "ARG",
-  "EOL", "$accept", "program", "instruction", "operands", YY_NULLPTR
+  "\"end of file\"", "error", "\"invalid token\"", "DECL", "MUS", "INST",
+  "CHECK", "ID", "SEP", "EOL", "END", "$accept", "program", "instruction",
+  "body", "operands", YY_NULLPTR
 };
 
 static const char *
@@ -517,7 +539,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-5)
+#define YYPACT_NINF (-7)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -531,8 +553,9 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-       2,    -2,     1,     2,    -4,    -5,    -5,    -5,     3,    -5,
-       5,     0,     3,    -5,    -5
+      -2,     0,    -3,     1,     7,     2,     4,     5,     8,    -7,
+      -2,     3,    -5,     6,    -7,    -7,     9,    -7,    -7,    11,
+      -7,    -5,     6,    -7,    -7
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -540,20 +563,21 @@ static const yytype_int8 yypact[] =
    means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
-       2,     0,     0,     2,     0,     4,     1,     3,     0,     5,
-       7,     0,     0,     6,     8
+       2,     0,     0,     0,     0,     0,     0,     0,     0,     1,
+       2,     0,     0,     0,     3,     4,     0,     8,     5,    10,
+       6,     0,     0,     7,     9
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-      -5,     4,    -5,    -1
+      -7,    -1,    -7,    -6,    10
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,     2,     3,    11
+       0,     4,     5,    18,    20
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -561,34 +585,41 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-       8,     6,     9,     4,     5,     1,    13,     7,    10,    12,
-       0,    14
+      16,     1,     2,     3,     7,    17,     6,     9,     8,    14,
+      15,    10,    11,    19,    12,    23,    13,     0,    21,    22,
+       0,     0,     0,     0,     0,     0,     0,     0,     0,     0,
+       0,     0,    24
 };
 
 static const yytype_int8 yycheck[] =
 {
-       4,     0,     6,     5,     6,     3,     6,     3,     5,     4,
-      -1,    12
+       5,     3,     4,     5,     7,    10,     6,     0,     7,    10,
+       7,     9,     8,     7,     9,    21,     8,    -1,     9,     8,
+      -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
+      -1,    -1,    22
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
    state STATE-NUM.  */
 static const yytype_int8 yystos[] =
 {
-       0,     3,     8,     9,     5,     6,     0,     8,     4,     6,
-       5,    10,     4,     6,    10
+       0,     3,     4,     5,    12,    13,     6,     7,     7,     0,
+       9,     8,     9,     8,    12,     7,     5,    10,    14,     7,
+      15,     9,     8,    14,    15
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,     7,     8,     8,     9,     9,     9,    10,    10
+       0,    11,    12,    12,    13,    13,    13,    14,    14,    15,
+      15
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     0,     2,     2,     3,     5,     1,     3
+       0,     2,     0,     3,     4,     4,     4,     3,     1,     3,
+       1
 };
 
 
@@ -1051,68 +1082,94 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
-  case 4: /* instruction: INST EOL  */
-#line 49 "parser.y"
+  case 4: /* instruction: DECL CHECK SEP ID  */
+#line 54 "parser.y"
 {
-    struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-1].name), 8);
-    inst.operands.size = 0;
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+    int len = strlen((yyvsp[-2].text));
+    memcpy(SDLParserDeclaration[(yyvsp[0].id)], (yyvsp[-2].text), len+1);
 }
-#line 1063 "parser.tab.c"
+#line 1092 "parser.tab.c"
     break;
 
-  case 5: /* instruction: INST ARG EOL  */
-#line 56 "parser.y"
+  case 5: /* instruction: MUS ID EOL body  */
+#line 59 "parser.y"
 {
-    struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-2].name), 8);
-    inst.operands.data[0] = (yyvsp[-1].arg);
-    inst.operands.size = 1;
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+    for (int i = 0; i < (yyvsp[0].body).size; i++) {
+        SDLParserSchedules[(yyvsp[-2].id)].sch.inst[i] = (yyvsp[0].body).inst[i];
+    } 
+    SDLParserSchedules[(yyvsp[-2].id)].sch.size = (yyvsp[0].body).size;
 }
-#line 1075 "parser.tab.c"
+#line 1103 "parser.tab.c"
     break;
 
-  case 6: /* instruction: INST ARG SEP operands EOL  */
-#line 64 "parser.y"
+  case 6: /* instruction: INST ID SEP operands  */
+#line 66 "parser.y"
 {
-    struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-4].name), 8);
-    inst.operands.data[0] = (yyvsp[-3].arg);
-    memcpy(inst.operands.data+1, (yyvsp[-1].operands).data, (yyvsp[-1].operands).size*sizeof(uint32_t));
-    inst.operands.size = 1 + (yyvsp[-1].operands).size;
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
-
+    if (strcmp((yyvsp[-3].text), "group")) {
+        uint32_t grp = (yyvsp[-2].id);
+        for (int i = 0; i < (yyvsp[0].operands).size; i++) {
+            uint32_t id = (yyvsp[0].operands).data[i];
+            SDLParserSchedules[id].group = grp;
+        }
+    } else if (strcmp((yyvsp[-3].text), "order")) {
+        uint32_t x = (yyvsp[-2].id);
+        uint32_t y = (yyvsp[0].operands).data[0];
+        SDLGroupDependences[x] |= (1 << y);
+    }
 }
-#line 1089 "parser.tab.c"
+#line 1121 "parser.tab.c"
     break;
 
-  case 7: /* operands: ARG  */
-#line 77 "parser.y"
+  case 7: /* body: INST EOL body  */
+#line 83 "parser.y"
 {
-    struct __asm_operand_t x;
-    x.data[0] = (yyvsp[0].arg);
-    x.size = 1;
-    (yyval.operands) = x;
+    struct __sdl_body_t x;
+    int len = strlen((yyvsp[-2].text));
+    x.inst[0] = malloc(sizeof(char) * (len+1));
+    memcpy(x.inst[0], (yyvsp[-2].text), len+1);
+    // Copy body ($3) to x.
+    memcpy(x.inst + 1, (yyvsp[0].body).inst, sizeof(char*) * (yyvsp[0].body).size);
+    x.size = 1 + (yyvsp[0].body).size;
+    (yyval.body) = x;
 }
-#line 1100 "parser.tab.c"
+#line 1136 "parser.tab.c"
     break;
 
-  case 8: /* operands: ARG SEP operands  */
-#line 84 "parser.y"
+  case 8: /* body: END  */
+#line 94 "parser.y"
 {
-    struct __asm_operand_t x;
-    x.data[0] = (yyvsp[-2].arg);
-    memcpy(x.data+1, (yyvsp[0].operands).data, (yyvsp[0].operands).size*sizeof(uint32_t));
+    struct __sdl_body_t x;
+    x.size = 0;
+    (yyval.body) = x;
+}
+#line 1146 "parser.tab.c"
+    break;
+
+  case 9: /* operands: ID SEP operands  */
+#line 103 "parser.y"
+{
+    struct __sdl_operand_t x;
+    x.data[0] = (yyvsp[-2].id);
+    memcpy(x.data + 1, (yyvsp[0].operands).data, (yyvsp[0].operands).size);
     x.size = 1 + (yyvsp[0].operands).size;
     (yyval.operands) = x;
 }
-#line 1112 "parser.tab.c"
+#line 1158 "parser.tab.c"
+    break;
+
+  case 10: /* operands: ID  */
+#line 111 "parser.y"
+{
+    struct __sdl_operand_t x;
+    x.data[0] = (yyvsp[0].id);
+    x.size = 1;
+    (yyval.operands) = x;
+}
+#line 1169 "parser.tab.c"
     break;
 
 
-#line 1116 "parser.tab.c"
+#line 1173 "parser.tab.c"
 
       default: break;
     }
@@ -1305,24 +1362,5 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 93 "parser.y"
-
-
-void
-yyerror(const char* msg) {
-    fprintf(stderr, "asm parsing error: %s\n", msg);
-}
-
-/*
-    Wrapping functions because yy renaming did not work :(
-*/
-void
-asm_yyerror(const char* msg) {
-    return yyerror(msg);
-}
-
-int
-asm_yyparse() {
-    return yyparse();
-}
+#line 119 "parser.y"
 

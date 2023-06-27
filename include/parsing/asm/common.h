@@ -1,12 +1,17 @@
-#ifndef ASM_PARSER_COMMON_h
-#define ASM_PARSER_COMMON_h
+/*
+ *  author: Suhas Vittal
+ *  date:   25 June 2023
+ * */
+
+#ifndef ASM_COMMON_h
+#define ASM_COMMON_h
 
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 struct __asm_operand_t {
-    uint32_t    data[30];
+    uint32_t    data[31];
     uint32_t    size;
 };
 
@@ -29,8 +34,8 @@ extern int  asm_yyparse();
 void        asm_yyerror(char const*);
 */
 void        asm_yystart(FILE*);
-extern int  yyparse();
-void        yyerror(char const*);
+int         asm_yyparse();
+void        asm_yyerror(char const*);
 
 #ifdef  __cplusplus
 }   // extern "C"

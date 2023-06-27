@@ -49,8 +49,6 @@ find_package(LEMON REQUIRED)
 find_package(FLEX REQUIRED)
 find_package(BISON REQUIRED)
 
-message(${MPI_INCLUDE_PATH})
-
 # I don't know why I have to include /usr/local/include...
 target_include_directories(qontra PUBLIC
     "include" 

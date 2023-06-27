@@ -44,14 +44,6 @@
 #if YYDEBUG
 extern int yydebug;
 #endif
-/* "%code requires" blocks.  */
-#line 10 "parser.y"
-
-
-#include "parsing/asm/common.h"
-
-
-#line 55 "parser.tab.h"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -62,10 +54,14 @@ extern int yydebug;
     YYEOF = 0,                     /* "end of file"  */
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
-    INST = 258,                    /* INST  */
-    SEP = 259,                     /* SEP  */
-    ARG = 260,                     /* ARG  */
-    EOL = 261                      /* EOL  */
+    DECL = 258,                    /* DECL  */
+    MUS = 259,                     /* MUS  */
+    INST = 260,                    /* INST  */
+    CHECK = 261,                   /* CHECK  */
+    ID = 262,                      /* ID  */
+    SEP = 263,                     /* SEP  */
+    EOL = 264,                     /* EOL  */
+    END = 265                      /* END  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -74,13 +70,14 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 25 "parser.y"
+#line 24 "parser.y"
 
-    uint32_t                arg;
-    char                    name[8];
-    struct __asm_operand_t  operands;
+    uint32_t                id;
+    char                    text[128];
+    struct __sdl_operand_t  operands;
+    struct __sdl_body_t     body;
 
-#line 84 "parser.tab.h"
+#line 81 "parser.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -94,16 +91,5 @@ extern YYSTYPE yylval;
 
 int yyparse (void);
 
-/* "%code provides" blocks.  */
-#line 16 "parser.y"
-
-
-void    yyerror(char const*);
-int     yyparse( );
-
-int yylex( );
-
-
-#line 108 "parser.tab.h"
 
 #endif /* !YY_YY_PARSER_TAB_H_INCLUDED  */
