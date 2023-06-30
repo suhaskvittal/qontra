@@ -1,5 +1,4 @@
-/* 
- * author: Suhas Vittal 
+/* author: Suhas Vittal 
  * date:   31 May 2023 
  * */
 
@@ -8,7 +7,7 @@
 namespace qontra {
 namespace protean {
 
-#define DISABLE_ERRORS
+static uint MIDDLEMAN_INDEX = 0;
 
 #define PRINT_V(id)  (id >> 30) << "|" << ((id >> 24) & 0x3f) << "|" << (id & 0x00ff'ffff)
 
@@ -37,6 +36,7 @@ __place:
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
+        std::cout << "\tthickness = " << ir->arch->get_thickness() << "\n";
         std::cout << "[ unify ] ---------------------\n";
     }
     unify(ir);
@@ -46,6 +46,7 @@ __reduce:
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
+        std::cout << "\tthickness = " << ir->arch->get_thickness() << "\n";
         std::cout << "[ reduce ] ---------------------\n";
     }
     reduce(ir);
@@ -55,6 +56,7 @@ __reduce:
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
+        std::cout << "\tthickness = " << ir->arch->get_thickness() << "\n";
     }
     if (rounds_without_progress > 0) {
         if (check_size_violation(ir)) {
@@ -64,6 +66,10 @@ __reduce:
         if (check_connectivity_violation(ir)) {
             if (params.verbose) std::cout << "[ split ] ---------------------\n";
             if (split(ir))  goto __reduce;
+        }
+        if (check_thickness_violation(ir)) {
+            if (params.verbose) std::cout << "[ flatten ] ------------------------\n";
+            if (flatten(ir))    goto __reduce;
         }
     }
 __schedule:
@@ -289,6 +295,8 @@ Compiler::unify(ir_t* curr_ir) {
             }
         }
     }
+    // Reallocate edges on the processor.
+    curr_ir->arch->reallocate_edges();
 }
 
 void
@@ -335,6 +343,7 @@ Compiler::reduce(ir_t* curr_ir) {
         bool any_nondata_neighbors = false;
         for (auto pw : pv_adj) {
             auto tw = tanner_graph->get_vertex(pw->id);
+            if (tw == nullptr)  continue;
             if (tw->qubit_type != tanner::vertex_t::DATA)   any_nondata_neighbors = true;
         }
         if (!any_nondata_neighbors) {
@@ -364,6 +373,7 @@ reduce_do_not_remove_nondata:
 
         for (auto pw : pv_adj) {
             auto tw = tanner_graph->get_vertex(pw->id);
+            if (tw == nullptr)  continue;
             if (tw->qubit_type == tanner::vertex_t::DATA)   continue;
             uint pw_deg = arch->get_degree(pw);
             if (pw_deg <= 2)    continue;
@@ -430,6 +440,7 @@ reduce_do_not_remove_nondata:
         deallocated.insert(pv);
     }
     for (auto pv : deallocated) arch->delete_vertex(pv);
+    arch->reallocate_edges();
     for (auto e : new_edges)    arch->add_edge(e);
 }
 
@@ -481,8 +492,6 @@ Compiler::merge(ir_t* curr_ir) {
 
 bool
 Compiler::split(ir_t* curr_ir) {
-    static uint MIDDLEMAN_INDEX = 0;
-
     Processor3D* arch = curr_ir->arch;
     
     uint max_degree = 0;
@@ -498,7 +507,9 @@ Compiler::split(ir_t* curr_ir) {
 
     // Create the partner qubit
     proc3d::vertex_t* dup = new proc3d::vertex_t;
-    dup->id = ((target->id & 0x00ff'ffff) << 6) | MIDDLEMAN_INDEX++ | (tanner::vertex_t::GAUGE << 30);
+    dup->id = ((target->id & 0x00ff'ffff) << 6) 
+                | MIDDLEMAN_INDEX++ 
+                | (tanner::vertex_t::GAUGE << 30);
     arch->add_vertex(dup);
     auto target_dup = new proc3d::edge_t;
     target_dup->src = target;
@@ -525,6 +536,44 @@ Compiler::split(ir_t* curr_ir) {
     return true;
 }
 
+bool
+Compiler::flatten(ir_t* curr_ir) {
+    Processor3D* arch = curr_ir->arch;
+    proc3d::edge_t* violator = nullptr;
+    for (auto e : arch->get_edges()) {
+        auto impl = arch->get_physical_edges(e);
+        if (impl.size() > 1) {
+            uint layer = impl[1]->processor_layer;
+            if (layer > constraints.max_thickness) {
+                violator = e;
+                break;
+            }
+        }
+    }
+    if (violator == nullptr)    return false;
+
+    proc3d::vertex_t* src = (proc3d::vertex_t*)violator->src;
+    proc3d::vertex_t* dst = (proc3d::vertex_t*)violator->dst;
+    proc3d::vertex_t* mm = new proc3d::vertex_t;
+    mm->id = ((src->id & 0x00ff'ffff) << 6)
+                | MIDDLEMAN_INDEX++
+                | (tanner::vertex_t::GAUGE << 30);
+    arch->add_vertex(mm);
+    curr_ir->qubit_to_roles[mm] = std::vector<tanner::vertex_t*>();
+    
+    auto src_mm = new proc3d::edge_t;
+    src_mm->src = src;
+    src_mm->dst = mm;
+    auto mm_dst = new proc3d::edge_t;
+    mm_dst->src = mm;
+    mm_dst->dst = dst;
+
+    arch->delete_edge(violator);
+    arch->add_edge(src_mm);
+    arch->add_edge(mm_dst);
+    return true;
+}
+
 void
 Compiler::xform_schedule(ir_t* curr_ir) {
 }
@@ -532,6 +581,7 @@ Compiler::xform_schedule(ir_t* curr_ir) {
 
 void
 Compiler::score(ir_t* curr_ir) {
+    curr_ir->arch->reallocate_edges();
     // Check if constraints are maintained.
     curr_ir->valid = !check_connectivity_violation(curr_ir)
                 && !check_size_violation(curr_ir)

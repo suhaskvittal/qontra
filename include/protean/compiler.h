@@ -127,6 +127,10 @@ private:
     bool check_size_violation(compiler::ir_t* ir) {
         return ir->arch->get_vertices().size() > constraints.max_qubits;
     }
+
+    bool check_thickness_violation(compiler::ir_t* ir) {
+        return ir->arch->get_thickness() > constraints.max_thickness;
+    }
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
     //                      Place is not guaranteed to obey constraints. Instead, future passes
@@ -143,6 +147,11 @@ private:
     //  If constraints.max_connectivity is violated:
     //      (b) Split: Find the most connected qubit and split it into two. If the qubit is a 
     //                  a data qubit, then create a gauge qubit.
+    //      Jump to (3).
+    //  If constraints.max_thickness is violated:
+    //      (c) Flatten: Find a link in a layer above max_thickness. Create a new qubit(s)
+    //                      next to the offending physical qubit(s) and move the link
+    //                      to that qubit(s).
     //      Jump to (3).
     //
     //  (5) Xform-Schedule  -- transforms the ideal schedule to fit on the architecture.
@@ -172,6 +181,7 @@ private:
     void    reduce(compiler::ir_t*);
     bool    merge(compiler::ir_t*);
     bool    split(compiler::ir_t*);
+    bool    flatten(compiler::ir_t*);
     void    xform_schedule(compiler::ir_t*);
     void    schedule(compiler::ir_t*);
     void    score(compiler::ir_t*);
