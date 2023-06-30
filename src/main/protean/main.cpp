@@ -25,7 +25,6 @@ using namespace graph;
 using namespace protean;
 
 int main(int argc, char* argv[]) {
-    __magic__();
     CmdParser parser(argc, argv);
 
     std::string help = "Arguments list:\n";

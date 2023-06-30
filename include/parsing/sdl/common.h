@@ -22,12 +22,22 @@ struct __sdl_body_t {
 struct __sdl_mus_t {
     struct __sdl_body_t sch;
     uint32_t            group = -1;
-}
+};
 
 extern char                 SDLParserDeclarations[8][4096];
 extern struct __sdl_mus_t   SDLParserSchedules[4096];
 extern uint32_t             SDLParserScheduleSize;
 extern uint16_t             SDLGroupDependences[16];    // Array of bitvectors
-                                                        // [x][y] = 1 if x precedes y
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void    sdl_yystart(FILE*);
+int     sdl_yyparse();    
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // SDL_COMMON_h

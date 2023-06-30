@@ -17,7 +17,7 @@
                      end
         (3) Schedule micro schedules to occur together
                 i.e. group  0, 27, 28, 29
-                     group  <group>, <check-id>, <check-id>, ...
+                     group  <group>, <qubit>, <qubit>, ...
         (4) Schedule micro schedules to occur after another
                 i.e. order  0, 1
                      order  <group-before>, <group-after>
@@ -64,3 +64,7 @@
 \n                  { return EOL; }
 
 %%
+
+void sdl_yystart(FILE* fin) {
+    yyrestart(fin);
+}

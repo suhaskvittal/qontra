@@ -8,18 +8,22 @@
 
 %require "3.2"
 
-%{
+%code requires {
 
 #include "parsing/sdl/common.h"
 
-char                SDLParserDeclarations[8][4096];
-struct __sdl_mus_t  SDLParserSchedules[4096];
-uint32_t            SDLParserScheduleSize = 0;
-uint16_t            SDLGroupDependences[16];
-
 #define __SDL_ERROR(x)  sdl_yyerror(x)
+                                                        // [x][y] = 1 if x precedes y
+}
 
-%}
+%code provides {
+
+int yylex();
+
+extern int  yyparse();
+void        yyerror(char const*);
+
+}
 
 %union {
     uint32_t                id;
@@ -117,3 +121,11 @@ operands:
 ;
 
 %%
+
+void yyparse(const char* msg) {
+    fprintf(stderr, msg);
+}
+
+int sdl_yyparse() {
+    return yyparse();
+}

@@ -490,7 +490,7 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int8 yyrline[] =
 {
-       0,    59,    59,    61,    65,    72,    80,    93,   100
+       0,    46,    46,    48,    52,    59,    67,    80,    87
 };
 #endif
 
@@ -1052,7 +1052,7 @@ yyreduce:
   switch (yyn)
     {
   case 4: /* instruction: INST EOL  */
-#line 66 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 53 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-1].name), 8);
@@ -1063,7 +1063,7 @@ yyreduce:
     break;
 
   case 5: /* instruction: INST ARG EOL  */
-#line 73 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 60 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-2].name), 8);
@@ -1075,7 +1075,7 @@ yyreduce:
     break;
 
   case 6: /* instruction: INST ARG SEP operands EOL  */
-#line 81 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 68 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-4].name), 8);
@@ -1089,7 +1089,7 @@ yyreduce:
     break;
 
   case 7: /* operands: ARG  */
-#line 94 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 81 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.data[0] = (yyvsp[0].arg);
@@ -1100,7 +1100,7 @@ yyreduce:
     break;
 
   case 8: /* operands: ARG SEP operands  */
-#line 101 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 88 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.data[0] = (yyvsp[-2].arg);
@@ -1305,7 +1305,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 110 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 97 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 
 
 void
@@ -1316,10 +1316,6 @@ yyerror(const char* msg) {
 /*
     Wrapping functions because yy renaming did not work :(
 */
-void
-asm_yyerror(const char* msg) {
-    return yyerror(msg);
-}
 
 int
 asm_yyparse() {

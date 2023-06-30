@@ -1,6 +1,5 @@
-# Declare CMAKE version
+# Declare CMAKE version 
 cmake_minimum_required(VERSION 3.20.2)
-#2a4e7ca86be5b659c7227ed05c2faaf0c287e807 Declare Project and Version number
 project(QontraSim VERSION 0.1)
 # Declare CPP Version
 set(CMAKE_CXX_STANDARD 17)
@@ -26,9 +25,6 @@ set(QONTRA_FILES
     src/decoder/mwpm.cpp
     # Parsing
     src/parsing/cmd.cpp
-    src/parsing/asm/common.cpp
-    ${BISON_ASMParser_OUTPUTS}
-    ${FLEX_ASMLexer_OUTPUTS}
     # Graphs
     src/graph/decoding_graph.cpp 
     src/graph/coupling_graph.cpp
@@ -40,6 +36,14 @@ set(QONTRA_FILES
     src/sim/clifford_sim.cpp
     src/sim/control_sim.cpp
     )
+# I've a had a lot of trouble with Bison/Flex files. Only
+# include them if you need them.
+set(ASM_FILES
+    src/parsing/asm.cpp
+    ${BISON_ASMParser_OUTPUTS}
+    ${FLEX_ASMLexer_OUTPUTS}
+    )
+
 add_library(qontra ${QONTRA_FILES})
 add_executable(memory src/main/memory_experiment.cpp)
 add_executable(circuit src/main/build_circuit.cpp)
@@ -48,7 +52,7 @@ add_executable(circuit src/main/build_circuit.cpp)
 add_executable(protean_main src/main/protean/main.cpp)
 
 ### TESTING ###
-add_executable(ctrl src/main/test/ctrlsimtest.cpp)
+add_executable(ctrl src/main/test/ctrlsimtest.cpp ${ASM_FILES})
 add_executable(hello src/main/test/hello_world.cpp)
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
@@ -64,7 +68,6 @@ find_package(LEMON REQUIRED)
 target_include_directories(qontra PUBLIC
     "include" 
     ${MPI_INCLUDE_PATH} 
-    ${FLEX_INCLUDE_DIRS}
     "/usr/local/include")
 
 add_subdirectory(stim)
@@ -73,8 +76,6 @@ add_subdirectory(blossom5)
 target_link_libraries(qontra PUBLIC libstim)
 target_link_libraries(qontra PUBLIC libblossom5)
 target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
-target_link_libraries(qontra PUBLIC ${BISON_LIBRARIES})
-target_link_libraries(qontra PUBLIC ${FLEX_LIBRARIES})
 
 target_link_libraries(memory PRIVATE qontra)
 target_link_libraries(circuit PRIVATE qontra)
