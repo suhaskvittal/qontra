@@ -7,8 +7,6 @@
 #define INSTRUCTION_h
 
 #include "defs.h"
-#include "parsing/asm/common.h"
-#include "parsing/asm/parser.tab.h"
 
 #include <stim.h>
 

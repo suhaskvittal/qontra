@@ -1,5 +1,4 @@
-/* 
- * author: Suhas Vittal 
+/* author: Suhas Vittal 
  * date:   31 May 2023 
  * */
 
@@ -8,7 +7,7 @@
 namespace qontra {
 namespace protean {
 
-#define DISABLE_ERRORS
+static uint MIDDLEMAN_INDEX = 0;
 
 #define PRINT_V(id)  (id >> 30) << "|" << ((id >> 24) & 0x3f) << "|" << (id & 0x00ff'ffff)
 
@@ -16,7 +15,7 @@ using namespace graph;
 using namespace compiler;
 
 ir_t*
-Compiler::run(TannerGraph* tanner_graph) {
+Compiler::run(TannerGraph* tanner_graph, const schedule_t& ideal_sch) {
     // Set state variables to initial values.
     compile_round = 0;
 
@@ -26,6 +25,7 @@ Compiler::run(TannerGraph* tanner_graph) {
     ir_t* ir = new ir_t;
     ir->curr_spec = tanner_graph;
     ir->arch = new Processor3D;
+    ir->schedule = ideal_sch;
 __place:
     if (params.verbose) {
         std::cout << "[ place ] ---------------------\n";
@@ -36,16 +36,17 @@ __place:
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
+        std::cout << "\tthickness = " << ir->arch->get_thickness() << "\n";
         std::cout << "[ unify ] ---------------------\n";
     }
     unify(ir);
-    /*
 __reduce:
     if (params.verbose) {
         std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
+        std::cout << "\tthickness = " << ir->arch->get_thickness() << "\n";
         std::cout << "[ reduce ] ---------------------\n";
     }
     reduce(ir);
@@ -55,25 +56,30 @@ __reduce:
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
+        std::cout << "\tthickness = " << ir->arch->get_thickness() << "\n";
     }
-    if (check_size_violation(ir)) {
-        if (params.verbose) std::cout << "[ merge ] ---------------------\n";
-        if (merge(ir))  goto __reduce;
+    if (rounds_without_progress > 0) {
+        if (check_size_violation(ir)) {
+            if (params.verbose) std::cout << "[ merge ] ---------------------\n";
+            if (merge(ir))  goto __reduce;
+        }
+        if (check_connectivity_violation(ir)) {
+            if (params.verbose) std::cout << "[ split ] ---------------------\n";
+            if (split(ir))  goto __reduce;
+        }
+        if (check_thickness_violation(ir)) {
+            if (params.verbose) std::cout << "[ flatten ] ------------------------\n";
+            if (flatten(ir))    goto __reduce;
+        }
     }
-    if (check_connectivity_violation(ir)) {
-        if (params.verbose) std::cout << "[ split ] ---------------------\n";
-        if (split(ir))  goto __reduce;
-    }
-    */
 __schedule:
     if (params.verbose) {
         std::cout << "[ schedule ] ---------------------\n";
     }
-    micro_schedule(ir);
-    macro_schedule(ir);
+    xform_schedule(ir);
     if (params.verbose) {
         std::cout << "\t#ops = " << ir->schedule.size() << "\n";
-        std::cout << "\tdepth = " << ir->dependency_graph->get_depth() << "\n";
+//      std::cout << "\tdepth = " << ir->dependency_graph->get_depth() << "\n";
 
         std::cout << "[ score ] ---------------------\n";
     }
@@ -103,6 +109,7 @@ __schedule:
     ir_t* new_ir = new ir_t;
     new_ir->curr_spec = ir->curr_spec;
     new_ir->arch = new Processor3D;
+    new_ir->schedule = ideal_sch;
     // Perform transformations on Tanner graph.
     compile_round++;
     if (params.verbose)      std::cout << "[ induce ] ---------------------\n";
@@ -288,6 +295,8 @@ Compiler::unify(ir_t* curr_ir) {
             }
         }
     }
+    // Reallocate edges on the processor.
+    curr_ir->arch->reallocate_edges();
 }
 
 void
@@ -334,6 +343,7 @@ Compiler::reduce(ir_t* curr_ir) {
         bool any_nondata_neighbors = false;
         for (auto pw : pv_adj) {
             auto tw = tanner_graph->get_vertex(pw->id);
+            if (tw == nullptr)  continue;
             if (tw->qubit_type != tanner::vertex_t::DATA)   any_nondata_neighbors = true;
         }
         if (!any_nondata_neighbors) {
@@ -363,6 +373,7 @@ reduce_do_not_remove_nondata:
 
         for (auto pw : pv_adj) {
             auto tw = tanner_graph->get_vertex(pw->id);
+            if (tw == nullptr)  continue;
             if (tw->qubit_type == tanner::vertex_t::DATA)   continue;
             uint pw_deg = arch->get_degree(pw);
             if (pw_deg <= 2)    continue;
@@ -429,6 +440,7 @@ reduce_do_not_remove_nondata:
         deallocated.insert(pv);
     }
     for (auto pv : deallocated) arch->delete_vertex(pv);
+    arch->reallocate_edges();
     for (auto e : new_edges)    arch->add_edge(e);
 }
 
@@ -480,8 +492,6 @@ Compiler::merge(ir_t* curr_ir) {
 
 bool
 Compiler::split(ir_t* curr_ir) {
-    static uint MIDDLEMAN_INDEX = 0;
-
     Processor3D* arch = curr_ir->arch;
     
     uint max_degree = 0;
@@ -497,7 +507,9 @@ Compiler::split(ir_t* curr_ir) {
 
     // Create the partner qubit
     proc3d::vertex_t* dup = new proc3d::vertex_t;
-    dup->id = ((target->id & 0x00ff'ffff) << 6) | MIDDLEMAN_INDEX++ | (tanner::vertex_t::GAUGE << 30);
+    dup->id = ((target->id & 0x00ff'ffff) << 6) 
+                | MIDDLEMAN_INDEX++ 
+                | (tanner::vertex_t::GAUGE << 30);
     arch->add_vertex(dup);
     auto target_dup = new proc3d::edge_t;
     target_dup->src = target;
@@ -523,6 +535,455 @@ Compiler::split(ir_t* curr_ir) {
     for (auto e : new_edges)    arch->add_edge(e);
     return true;
 }
+
+bool
+Compiler::flatten(ir_t* curr_ir) {
+    Processor3D* arch = curr_ir->arch;
+    proc3d::edge_t* violator = nullptr;
+    for (auto e : arch->get_edges()) {
+        auto impl = arch->get_physical_edges(e);
+        if (impl.size() > 1) {
+            uint layer = impl[1]->processor_layer;
+            if (layer > constraints.max_thickness) {
+                violator = e;
+                break;
+            }
+        }
+    }
+    if (violator == nullptr)    return false;
+
+    proc3d::vertex_t* src = (proc3d::vertex_t*)violator->src;
+    proc3d::vertex_t* dst = (proc3d::vertex_t*)violator->dst;
+    proc3d::vertex_t* mm = new proc3d::vertex_t;
+    mm->id = ((src->id & 0x00ff'ffff) << 6)
+                | MIDDLEMAN_INDEX++
+                | (tanner::vertex_t::GAUGE << 30);
+    arch->add_vertex(mm);
+    curr_ir->qubit_to_roles[mm] = std::vector<tanner::vertex_t*>();
+    
+    auto src_mm = new proc3d::edge_t;
+    src_mm->src = src;
+    src_mm->dst = mm;
+    auto mm_dst = new proc3d::edge_t;
+    mm_dst->src = mm;
+    mm_dst->dst = dst;
+
+    arch->delete_edge(violator);
+    arch->add_edge(src_mm);
+    arch->add_edge(mm_dst);
+    return true;
+}
+
+void
+Compiler::xform_schedule(ir_t* curr_ir) {
+}
+
+
+void
+Compiler::score(ir_t* curr_ir) {
+    curr_ir->arch->reallocate_edges();
+    // Check if constraints are maintained.
+    curr_ir->valid = !check_connectivity_violation(curr_ir)
+                && !check_size_violation(curr_ir)
+                && curr_ir->arch->get_thickness() <= constraints.max_thickness;
+    // If constraints are maintained, score the IR.
+    if (curr_ir->valid)  curr_ir->score = objective(curr_ir);
+}
+
+bool
+Compiler::induce(ir_t* curr_ir) {
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    auto vertices = tanner_graph->get_vertices();
+
+    bool any_change = false;
+    
+    uint new_max_cw = max_induced_check_weight;
+    for (uint i = 0; i < vertices.size(); i++) {
+        auto tv = vertices[i];
+        if (tv->qubit_type == tanner::vertex_t::DATA
+            || tanner_graph->get_degree(tv) > max_induced_check_weight)  continue;
+        for (uint j = i+1; j < vertices.size(); j++) {
+            auto tw = vertices[j];
+            if (tw->qubit_type == tanner::vertex_t::DATA
+                || tanner_graph->get_degree(tw) > max_induced_check_weight)  continue;
+            auto ti = tanner_graph->induce_predecessor(tv, tw);
+            if (ti != nullptr) {
+                uint d = tanner_graph->get_degree(ti);
+                if (d < new_max_cw) new_max_cw = d;
+                any_change = true;
+                if (params.verbose) {
+                    std::cout << "\tInduced gauge " << PRINT_V(ti->id)
+                                << " on " << PRINT_V(tv->id) << " and " << PRINT_V(tw->id)
+                                << " succeeded.\n";
+                }
+            }
+        }
+    }
+    max_induced_check_weight = new_max_cw;
+
+    return any_change;
+}
+
+bool
+Compiler::sparsen(ir_t* curr_ir) {
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    auto vertices = tanner_graph->get_vertices();
+
+    uint max_degree = 0;
+    tanner::vertex_t* target = nullptr;
+    // Get maximum degree vertex in tanner graph.
+    for (auto tv : vertices) {
+        if (tv->qubit_type == tanner::vertex_t::DATA
+            || curr_ir->sparsen_visited_set.count(tv))  continue;
+        uint d = tanner_graph->get_degree(tv);
+        if (d > max_degree) {
+            target = tv;
+            max_degree = d;
+        }
+    }
+    if (target == nullptr)  return false;
+    auto target_adj = tanner_graph->get_neighbors(target);
+    for (uint i = 1; i < target_adj.size()-1; i += 2) {
+        // We leave up to a degree of 3 (as leaving a degree of 2 will simply
+        // result in reduction in the "reduce" pass).
+        auto tx = target_adj[i-1];
+        auto ty = target_adj[i];
+        std::vector<tanner::vertex_t*> tg_adj{tx, ty};
+        if (tanner_graph->has_copy_in_gauges(tg_adj)) continue;
+        // Create a new gauge qubit.
+        tanner::vertex_t* tg = new tanner::vertex_t;
+        uint index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
+        tg->id = (index) | (tanner::vertex_t::GAUGE << 30);
+        tg->qubit_type = tanner::vertex_t::GAUGE;
+        tanner_graph->add_vertex(tg);
+        // Add corresponding edges.
+        tanner::edge_t* tx_tg = new tanner::edge_t;
+        tx_tg->src = (void*)tx;
+        tx_tg->dst = (void*)tg;
+        tanner_graph->add_edge(tx_tg);
+
+        tanner::edge_t* ty_tg = new tanner::edge_t;
+        ty_tg->src = (void*)ty;
+        ty_tg->dst = (void*)tg;
+        tanner_graph->add_edge(ty_tg);
+        
+        if (params.verbose) {
+            std::cout << "\t( " << PRINT_V(target->id) << " ) Added new gauge between " 
+                            << PRINT_V(tx->id) << " and "
+                            << PRINT_V(ty->id) << "\n";
+        }
+    }
+    return true;
+}
+
+void
+print_connectivity(Processor3D* arch) {
+    std::cout << "Connections:\n";
+    for (auto v : arch->get_vertices()) {
+        std::cout << "\tQubit " << PRINT_V(v->id) << ":\t";
+        for (auto w : arch->get_neighbors(v)) {
+            std::cout << " " << PRINT_V(w->id);
+            if (w->is_tsv_junction())   std::cout << "(V)";
+        }
+        std::cout << "\n";
+    }
+}
+
+void
+print_schedule(const schedule_t& sched) {
+    std::cout << "Schedule:\n";
+    for (auto op : sched) {
+        std::cout << "\t" << op.name;
+        for (uint x : op.operands) {
+            std::cout << " " << PRINT_V(x);
+        }
+        std::cout << "\n";
+    }
+}
+
+stim::Circuit
+build_stim_circuit(
+        compiler::ir_t* ir, 
+        uint rounds, 
+        const std::vector<uint>& obs, 
+        bool is_memory_x,
+        ErrorTable& errors,
+        TimeTable& times) 
+{
+    auto tanner_graph = ir->curr_spec;
+    auto arch = ir->arch;
+    auto dependency_graph = ir->dependency_graph;
+    // First assign data qubits, then assign other qubits.    
+    // This will keep the numbering consistent with the spec provided by the user.
+    uint k = 0;
+    std::map<uint, uint> id_to_num;
+    for (auto v : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
+        id_to_num[v->id] = v->id;   // Note that data qubits have the same ID as
+                                    // in the physical architecture.
+        if (v->id > k)  k = v->id;
+    }
+    const uint n_data = k+1;
+    for (auto v : arch->get_vertices()) {
+        if (ir->is_data(v)) continue;
+        id_to_num[v->id] = ++k;
+    }
+    const uint n_nondata = k - n_data;
+    const uint n = k;
+
+    // Print out ID mapping (debug)
+    for (auto pair : id_to_num) {
+        std::cout << PRINT_V(pair.first) << " --> " << pair.second << "\n";
+    }
+
+    stim::Circuit circuit;
+    // Add initialization for memory experiment.
+    for (auto v : arch->get_vertices()) {
+        uint i = id_to_num[v->id];
+        circuit.append_op("R", {i});
+#ifndef DISABLE_ERRORS
+        circuit.append_op("X_ERROR", {i}, errors.op1q["R"][v->id]); 
+#endif
+        if (is_memory_x && i < n_data) {
+            circuit.append_op("H", {i});
+#ifndef DISABLE_ERRORS
+            circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][v->id]); 
+#endif
+        }
+    }
+    // Add syndrome extraction rounds to circuit. 
+    // Note that the schedule is one round.
+    fp_t prev_round_length = 0.0;
+    uint prev_round_meas = 0;
+    for (uint r = 0; r < rounds; r++) {
+        circuit.append_op("TICK", {});
+        // Apply decoherence on data qubits.
+        for (uint i = 0; i < n_data; i++) {
+            fp_t e = 1.0 - exp(-prev_round_length / times.t1[i]);
+#ifndef DISABLE_ERRORS
+            circuit.append_op("DEPOLARIZE1", {i}, e);
+#endif
+        }
+        // Schedule operations by depth in the circuit.
+        prev_round_length = 0.0;
+
+        uint this_round_meas = 0;
+        std::vector<uint> meas_events;
+        for (uint d = 1; d <= dependency_graph->get_depth(); d++) {
+            circuit.append_op("TICK", {});
+
+            auto ops = dependency_graph->get_vertices_at_depth(d);
+            fp_t layer_length = 0.0;
+            for (auto v : ops) {
+                Instruction* inst = v->inst_p;
+                if (inst->name == "NOP")    continue;
+
+                std::vector<uint> operands = inst->operands;
+                // Add operation and add errors depending on which operation it is.
+                fp_t max_opt = 0;
+                if (inst->name == "CX") {
+                    for (uint j = 0; j < operands.size(); j += 2) {
+                        uint x1 = operands[j];
+                        uint x2 = operands[j+1];
+                        auto x1_x2 = std::make_pair(x1, x2);
+
+                        uint i1 = id_to_num[x1];
+                        uint i2 = id_to_num[x2];
+
+                        circuit.append_op(inst->name, {i1, i2});
+#ifndef DISABLE_ERRORS
+                        circuit.append_op("L_TRANSPORT", {i1, i2},
+                                errors.op2q_leakage_transport["CX"][x1_x2]);
+                        circuit.append_op("L_ERROR", {i1, i2},
+                                errors.op2q_leakage_injection["CX"][x1_x2]);
+                        circuit.append_op("DEPOLARIZE2", {i1, i2},
+                                errors.op2q["CX"][x1_x2]);
+#endif
+                        // To implement crosstalk, we will just apply depolarizing
+                        // errors on nearby qubits.
+                        /*
+                        auto pv1 = arch->get_vertex(x1);
+                        auto pv2 = arch->get_vertex(x2);
+                        for (auto pw : arch->get_neighbors(pv1)) {
+                            if (pw == pv2)  continue;
+                            uint iw = id_to_num[pw->id];
+                            circuit.append_op("DEPOLARIZE1", {iw}, 
+                                    errors.op2q_crosstalk["CX"][x1_x2]);
+                        }
+                        for (auto pw : arch->get_neighbors(pv2)) {
+                            if (pw == pv1)  continue;
+                            uint iw = id_to_num[pw->id];
+                            circuit.append_op("DEPOLARIZE1", {iw}, 
+                                    errors.op2q_crosstalk["CX"][x1_x2]);
+                        }
+                        fp_t t = times.op2q["CX"][x1_x2];
+                        if (t > max_opt)    max_opt = t;
+                        */
+                    }
+                } else {
+                    for (uint x : operands) {
+                        uint i = id_to_num[x];
+                        if (inst->name == "Mrc" || inst->name == "Mnrc") {
+#ifndef DISABLE_ERRORS
+                            circuit.append_op("X_ERROR", {i}, errors.op1q["Mrc"][x]);
+#endif
+                            circuit.append_op("M", {i});
+
+                            // If this measuring the same check as the memory experiment
+                            // targets, then mark it as a recorded detection event.
+                            if (inst->is_measuring_x_check == is_memory_x) {
+                                meas_events.push_back(this_round_meas);
+                            }
+                            this_round_meas++;
+                        } else if (inst->name == "R") {
+                            circuit.append_op(inst->name, {i});
+#ifndef DISABLE_ERRORS
+                            circuit.append_op("X_ERROR", {i}, errors.op1q["R"][x]);
+#endif
+                        } else {
+                            circuit.append_op(inst->name, {i});
+#ifndef DISABLE_ERRORS
+                            circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][x]);
+#endif
+                        }
+                        fp_t t = times.op1q[inst->name][x];
+                        if (t > max_opt)    max_opt = t;
+                    }
+                }
+                if (layer_length < max_opt) layer_length = max_opt;
+            }
+            prev_round_length += layer_length;
+        }
+        // Add error detection events.
+        if (r == 0) {
+            for (uint m : meas_events) {
+                circuit.append_op("DETECTOR", 
+                        { (this_round_meas - m) | stim::TARGET_RECORD_BIT });
+            }
+        } else {
+            for (uint m : meas_events) {
+                circuit.append_op("DETECTOR", 
+                    { (this_round_meas - m) | stim::TARGET_RECORD_BIT,
+                        (this_round_meas - m + prev_round_meas) | stim::TARGET_RECORD_BIT });
+            }
+        }
+        prev_round_meas = this_round_meas;
+    }
+    // Finally, measure all the data qubits.
+    for (uint i = 0; i < n_data; i++) {
+        // Don't have any errors -- makes life easier.
+        if (is_memory_x) {
+            circuit.append_op("H", {i});
+        }
+        circuit.append_op("M", {i});
+    }
+    // Record observable.
+    std::vector<uint> obs_inc;
+    for (uint i : obs) {
+        obs_inc.push_back((n_data - i) | stim::TARGET_RECORD_BIT);
+    }
+    std::sort(obs_inc.begin(), obs_inc.end());
+    circuit.append_op("OBSERVABLE_INCLUDE", obs_inc, 0);
+    return circuit;
+}
+
+void
+write_ir_to_folder(ir_t* ir, std::string folder_name) {
+    std::filesystem::path folder(folder_name);
+    safe_create_directory(folder);
+    std::filesystem::path arch_folder = folder/"arch";
+    safe_create_directory(arch_folder);
+    // Write spec.txt
+    std::filesystem::path spec = folder/"spec.txt";
+    std::ofstream spec_out(spec);
+
+    TannerGraph* tanner_graph = ir->curr_spec;
+    for (auto tv : tanner_graph->get_vertices()) {
+        if (tv->qubit_type == tanner::vertex_t::DATA)   continue;
+        spec_out << "GXZ"[tv->qubit_type-1] << (tv->id & 0x00ff'ffff);
+        for (auto tw : tanner_graph->get_neighbors(tv)) {
+            spec_out << "," << tw->id;
+        }
+        spec_out << "\n";
+    }
+    // Write arch/coupling files.
+    std::filesystem::path flat_map = arch_folder/"flat_map.txt";
+    std::filesystem::path d3d_map = arch_folder/"3d_map.txt";
+
+    std::ofstream flat_map_out(flat_map);
+    std::ofstream d3d_map_out(d3d_map);
+    
+    Processor3D* arch = ir->arch;
+    // First, organize the qubits into more appropriate ids.
+    std::map<uint, uint> id_to_num;
+    uint k = 0;
+    for (auto v : arch->get_vertices())  id_to_num[v->id] = k++;
+    // Now, write the architecture.
+    for (auto e : arch->get_edges()) {
+        auto pv = (proc3d::vertex_t*)e->src;
+        auto pw = (proc3d::vertex_t*)e->dst;
+        // Flat map is pretty straightforward.
+        flat_map_out << id_to_num[pv->id] << "," << id_to_num[pw->id] << "\n";
+        // Check if the connection is complex.
+        auto impl = arch->get_physical_edges(pv, pw);
+        d3d_map_out << id_to_num[pv->id];
+        if (impl.size() > 1) {
+            d3d_map_out << ",L" << impl[1]->processor_layer;
+        }
+        d3d_map_out << "," << id_to_num[pw->id] << "\n";
+    }
+    // Write Tanner vertex to physical qubit mapping.
+    std::filesystem::path labels = folder/"labels.txt";
+    std::ofstream label_out(labels);
+
+    auto& role_to_qubit = ir->role_to_qubit;
+    for (auto pair : role_to_qubit) {
+        auto tv = pair.first;
+        auto pv = pair.second;
+        label_out << "DGXZ"[tv->qubit_type];
+        label_out << (tv->id & 0x00ff'ffff) << "," << id_to_num[pv->id] << "\n";
+    }
+    // Also write data qubits
+    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
+        label_out << "D" << (tv->id & 0x00ff'ffff) << "," << id_to_num[tv->id] << "\n";
+    }
+    // Write schedule of operations
+    std::filesystem::path sched = folder/"schedule.qasm";
+    std::ofstream sched_out(sched);
+
+    uint cbit = 0;
+    std::string sched_str;
+    for (auto inst : ir->schedule) {
+        if (inst.name == "NOP") continue;
+        if (inst.name == "Mrc") {
+            sched_str += "measure q[" + std::to_string(id_to_num[inst.operands[0]]) 
+                + "] -> c[" + std::to_string(cbit++) + "];\n";
+        } else {
+            std::string opname;
+            if (inst.name == "R")   opname = "reset";
+            else {
+                for (auto x : inst.name)    opname.push_back(std::tolower(x));
+            }
+            uint ops_per_call = opname == "cx" ? 2 : 1;
+            for (uint i = 0; i < inst.operands.size(); i += ops_per_call) {
+                sched_str += opname + " q[" + std::to_string(id_to_num[inst.operands[i]]) + "]";
+                if (ops_per_call == 2) {
+                    sched_str += ",q[" + std::to_string(id_to_num[inst.operands[i+1]]) + "]";
+                }
+                sched_str += ";\n";
+            }
+        }
+    }
+    sched_out << "OPENQASM 2.0;\n"
+                << "include \"qelib1.inc\";\n"
+                << "qreg q[" << arch->get_vertices().size() << "];\n"
+                << "creg c[" << cbit << "];\n"
+                << sched_str;
+}
+
+}   // protean
+}   // qontra
+
+/*
 
 void
 Compiler::micro_schedule(ir_t* curr_ir) {
@@ -872,406 +1333,4 @@ Compiler::macro_schedule(ir_t* curr_ir) {
     curr_ir->schedule = curr_ir->dependency_graph->to_schedule();
 }
 
-void
-Compiler::score(ir_t* curr_ir) {
-    // Check if constraints are maintained.
-    curr_ir->valid = !check_connectivity_violation(curr_ir)
-                && !check_size_violation(curr_ir)
-                && curr_ir->arch->get_thickness() <= constraints.max_thickness;
-    // If constraints are maintained, score the IR.
-    if (curr_ir->valid)  curr_ir->score = objective(curr_ir);
-}
-
-bool
-Compiler::induce(ir_t* curr_ir) {
-    TannerGraph* tanner_graph = curr_ir->curr_spec;
-    auto vertices = tanner_graph->get_vertices();
-
-    bool any_change = false;
-    
-    uint new_max_cw = max_induced_check_weight;
-    for (uint i = 0; i < vertices.size(); i++) {
-        auto tv = vertices[i];
-        if (tv->qubit_type == tanner::vertex_t::DATA
-            || tanner_graph->get_degree(tv) > max_induced_check_weight)  continue;
-        for (uint j = i+1; j < vertices.size(); j++) {
-            auto tw = vertices[j];
-            if (tw->qubit_type == tanner::vertex_t::DATA
-                || tanner_graph->get_degree(tw) > max_induced_check_weight)  continue;
-            auto ti = tanner_graph->induce_predecessor(tv, tw);
-            if (ti != nullptr) {
-                uint d = tanner_graph->get_degree(ti);
-                if (d < new_max_cw) new_max_cw = d;
-                any_change = true;
-                if (params.verbose) {
-                    std::cout << "\tInduced gauge " << PRINT_V(ti->id)
-                                << " on " << PRINT_V(tv->id) << " and " << PRINT_V(tw->id)
-                                << " succeeded.\n";
-                }
-            }
-        }
-    }
-    max_induced_check_weight = new_max_cw;
-
-    return any_change;
-}
-
-bool
-Compiler::sparsen(ir_t* curr_ir) {
-    TannerGraph* tanner_graph = curr_ir->curr_spec;
-    auto vertices = tanner_graph->get_vertices();
-
-    uint max_degree = 0;
-    tanner::vertex_t* target = nullptr;
-    // Get maximum degree vertex in tanner graph.
-    for (auto tv : vertices) {
-        if (tv->qubit_type == tanner::vertex_t::DATA
-            || curr_ir->sparsen_visited_set.count(tv))  continue;
-        uint d = tanner_graph->get_degree(tv);
-        if (d > max_degree) {
-            target = tv;
-            max_degree = d;
-        }
-    }
-    if (target == nullptr)  return false;
-    auto target_adj = tanner_graph->get_neighbors(target);
-    for (uint i = 1; i < target_adj.size()-1; i += 2) {
-        // We leave up to a degree of 3 (as leaving a degree of 2 will simply
-        // result in reduction in the "reduce" pass).
-        auto tx = target_adj[i-1];
-        auto ty = target_adj[i];
-        std::vector<tanner::vertex_t*> tg_adj{tx, ty};
-        if (tanner_graph->has_copy_in_gauges(tg_adj)) continue;
-        // Create a new gauge qubit.
-        tanner::vertex_t* tg = new tanner::vertex_t;
-        uint index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
-        tg->id = (index) | (tanner::vertex_t::GAUGE << 30);
-        tg->qubit_type = tanner::vertex_t::GAUGE;
-        tanner_graph->add_vertex(tg);
-        // Add corresponding edges.
-        tanner::edge_t* tx_tg = new tanner::edge_t;
-        tx_tg->src = (void*)tx;
-        tx_tg->dst = (void*)tg;
-        tanner_graph->add_edge(tx_tg);
-
-        tanner::edge_t* ty_tg = new tanner::edge_t;
-        ty_tg->src = (void*)ty;
-        ty_tg->dst = (void*)tg;
-        tanner_graph->add_edge(ty_tg);
-        
-        if (params.verbose) {
-            std::cout << "\t( " << PRINT_V(target->id) << " ) Added new gauge between " 
-                            << PRINT_V(tx->id) << " and "
-                            << PRINT_V(ty->id) << "\n";
-        }
-    }
-    return true;
-}
-
-void
-print_connectivity(Processor3D* arch) {
-    std::cout << "Connections:\n";
-    for (auto v : arch->get_vertices()) {
-        std::cout << "\tQubit " << PRINT_V(v->id) << ":\t";
-        for (auto w : arch->get_neighbors(v)) {
-            std::cout << " " << PRINT_V(w->id);
-            if (w->is_tsv_junction())   std::cout << "(V)";
-        }
-        std::cout << "\n";
-    }
-}
-
-void
-print_schedule(const schedule_t& sched) {
-    std::cout << "Schedule:\n";
-    for (auto op : sched) {
-        std::cout << "\t" << op.name;
-        for (uint x : op.operands) {
-            std::cout << " " << PRINT_V(x);
-        }
-        std::cout << "\n";
-    }
-}
-
-stim::Circuit
-build_stim_circuit(
-        compiler::ir_t* ir, 
-        uint rounds, 
-        const std::vector<uint>& obs, 
-        bool is_memory_x,
-        ErrorTable& errors,
-        TimeTable& times) 
-{
-    auto tanner_graph = ir->curr_spec;
-    auto arch = ir->arch;
-    auto dependency_graph = ir->dependency_graph;
-    // First assign data qubits, then assign other qubits.    
-    // This will keep the numbering consistent with the spec provided by the user.
-    uint k = 0;
-    std::map<uint, uint> id_to_num;
-    for (auto v : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
-        id_to_num[v->id] = v->id;   // Note that data qubits have the same ID as
-                                    // in the physical architecture.
-        if (v->id > k)  k = v->id;
-    }
-    const uint n_data = k+1;
-    for (auto v : arch->get_vertices()) {
-        if (ir->is_data(v)) continue;
-        id_to_num[v->id] = ++k;
-    }
-    const uint n_nondata = k - n_data;
-    const uint n = k;
-
-    // Print out ID mapping (debug)
-    for (auto pair : id_to_num) {
-        std::cout << PRINT_V(pair.first) << " --> " << pair.second << "\n";
-    }
-
-    stim::Circuit circuit;
-    // Add initialization for memory experiment.
-    for (auto v : arch->get_vertices()) {
-        uint i = id_to_num[v->id];
-        circuit.append_op("R", {i});
-#ifndef DISABLE_ERRORS
-        circuit.append_op("X_ERROR", {i}, errors.op1q["R"][v->id]); 
-#endif
-        if (is_memory_x && i < n_data) {
-            circuit.append_op("H", {i});
-#ifndef DISABLE_ERRORS
-            circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][v->id]); 
-#endif
-        }
-    }
-    // Add syndrome extraction rounds to circuit. 
-    // Note that the schedule is one round.
-    fp_t prev_round_length = 0.0;
-    uint prev_round_meas = 0;
-    for (uint r = 0; r < rounds; r++) {
-        circuit.append_op("TICK", {});
-        // Apply decoherence on data qubits.
-        for (uint i = 0; i < n_data; i++) {
-            fp_t e = 1.0 - exp(-prev_round_length / times.t1[i]);
-#ifndef DISABLE_ERRORS
-            circuit.append_op("DEPOLARIZE1", {i}, e);
-#endif
-        }
-        // Schedule operations by depth in the circuit.
-        prev_round_length = 0.0;
-
-        uint this_round_meas = 0;
-        std::vector<uint> meas_events;
-        for (uint d = 1; d <= dependency_graph->get_depth(); d++) {
-            circuit.append_op("TICK", {});
-
-            auto ops = dependency_graph->get_vertices_at_depth(d);
-            fp_t layer_length = 0.0;
-            for (auto v : ops) {
-                Instruction* inst = v->inst_p;
-                if (inst->name == "NOP")    continue;
-
-                std::vector<uint> operands = inst->operands;
-                // Add operation and add errors depending on which operation it is.
-                fp_t max_opt = 0;
-                if (inst->name == "CX") {
-                    for (uint j = 0; j < operands.size(); j += 2) {
-                        uint x1 = operands[j];
-                        uint x2 = operands[j+1];
-                        auto x1_x2 = std::make_pair(x1, x2);
-
-                        uint i1 = id_to_num[x1];
-                        uint i2 = id_to_num[x2];
-
-                        circuit.append_op(inst->name, {i1, i2});
-#ifndef DISABLE_ERRORS
-                        circuit.append_op("L_TRANSPORT", {i1, i2},
-                                errors.op2q_leakage_transport["CX"][x1_x2]);
-                        circuit.append_op("L_ERROR", {i1, i2},
-                                errors.op2q_leakage_injection["CX"][x1_x2]);
-                        circuit.append_op("DEPOLARIZE2", {i1, i2},
-                                errors.op2q["CX"][x1_x2]);
-#endif
-                        // To implement crosstalk, we will just apply depolarizing
-                        // errors on nearby qubits.
-                        /*
-                        auto pv1 = arch->get_vertex(x1);
-                        auto pv2 = arch->get_vertex(x2);
-                        for (auto pw : arch->get_neighbors(pv1)) {
-                            if (pw == pv2)  continue;
-                            uint iw = id_to_num[pw->id];
-                            circuit.append_op("DEPOLARIZE1", {iw}, 
-                                    errors.op2q_crosstalk["CX"][x1_x2]);
-                        }
-                        for (auto pw : arch->get_neighbors(pv2)) {
-                            if (pw == pv1)  continue;
-                            uint iw = id_to_num[pw->id];
-                            circuit.append_op("DEPOLARIZE1", {iw}, 
-                                    errors.op2q_crosstalk["CX"][x1_x2]);
-                        }
-                        fp_t t = times.op2q["CX"][x1_x2];
-                        if (t > max_opt)    max_opt = t;
-                        */
-                    }
-                } else {
-                    for (uint x : operands) {
-                        uint i = id_to_num[x];
-                        if (inst->name == "Mrc" || inst->name == "Mnrc") {
-#ifndef DISABLE_ERRORS
-                            circuit.append_op("X_ERROR", {i}, errors.op1q["Mrc"][x]);
-#endif
-                            circuit.append_op("M", {i});
-
-                            // If this measuring the same check as the memory experiment
-                            // targets, then mark it as a recorded detection event.
-                            if (inst->is_measuring_x_check == is_memory_x) {
-                                meas_events.push_back(this_round_meas);
-                            }
-                            this_round_meas++;
-                        } else if (inst->name == "R") {
-                            circuit.append_op(inst->name, {i});
-#ifndef DISABLE_ERRORS
-                            circuit.append_op("X_ERROR", {i}, errors.op1q["R"][x]);
-#endif
-                        } else {
-                            circuit.append_op(inst->name, {i});
-#ifndef DISABLE_ERRORS
-                            circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][x]);
-#endif
-                        }
-                        fp_t t = times.op1q[inst->name][x];
-                        if (t > max_opt)    max_opt = t;
-                    }
-                }
-                if (layer_length < max_opt) layer_length = max_opt;
-            }
-            prev_round_length += layer_length;
-        }
-        // Add error detection events.
-        if (r == 0) {
-            for (uint m : meas_events) {
-                circuit.append_op("DETECTOR", 
-                        { (this_round_meas - m) | stim::TARGET_RECORD_BIT });
-            }
-        } else {
-            for (uint m : meas_events) {
-                circuit.append_op("DETECTOR", 
-                    { (this_round_meas - m) | stim::TARGET_RECORD_BIT,
-                        (this_round_meas - m + prev_round_meas) | stim::TARGET_RECORD_BIT });
-            }
-        }
-        prev_round_meas = this_round_meas;
-    }
-    // Finally, measure all the data qubits.
-    for (uint i = 0; i < n_data; i++) {
-        // Don't have any errors -- makes life easier.
-        if (is_memory_x) {
-            circuit.append_op("H", {i});
-        }
-        circuit.append_op("M", {i});
-    }
-    // Record observable.
-    std::vector<uint> obs_inc;
-    for (uint i : obs) {
-        obs_inc.push_back((n_data - i) | stim::TARGET_RECORD_BIT);
-    }
-    std::sort(obs_inc.begin(), obs_inc.end());
-    circuit.append_op("OBSERVABLE_INCLUDE", obs_inc, 0);
-    return circuit;
-}
-
-void
-write_ir_to_folder(ir_t* ir, std::string folder_name) {
-    std::filesystem::path folder(folder_name);
-    safe_create_directory(folder);
-    std::filesystem::path arch_folder = folder/"arch";
-    safe_create_directory(arch_folder);
-    // Write spec.txt
-    std::filesystem::path spec = folder/"spec.txt";
-    std::ofstream spec_out(spec);
-
-    TannerGraph* tanner_graph = ir->curr_spec;
-    for (auto tv : tanner_graph->get_vertices()) {
-        if (tv->qubit_type == tanner::vertex_t::DATA)   continue;
-        spec_out << "GXZ"[tv->qubit_type-1] << (tv->id & 0x00ff'ffff);
-        for (auto tw : tanner_graph->get_neighbors(tv)) {
-            spec_out << "," << tw->id;
-        }
-        spec_out << "\n";
-    }
-    // Write arch/coupling files.
-    std::filesystem::path flat_map = arch_folder/"flat_map.txt";
-    std::filesystem::path d3d_map = arch_folder/"3d_map.txt";
-
-    std::ofstream flat_map_out(flat_map);
-    std::ofstream d3d_map_out(d3d_map);
-    
-    Processor3D* arch = ir->arch;
-    // First, organize the qubits into more appropriate ids.
-    std::map<uint, uint> id_to_num;
-    uint k = 0;
-    for (auto v : arch->get_vertices())  id_to_num[v->id] = k++;
-    // Now, write the architecture.
-    for (auto e : arch->get_edges()) {
-        auto pv = (proc3d::vertex_t*)e->src;
-        auto pw = (proc3d::vertex_t*)e->dst;
-        // Flat map is pretty straightforward.
-        flat_map_out << id_to_num[pv->id] << "," << id_to_num[pw->id] << "\n";
-        // Check if the connection is complex.
-        auto impl = arch->get_physical_edges(pv, pw);
-        d3d_map_out << id_to_num[pv->id];
-        for (auto f : impl) {
-            auto py = (proc3d::vertex_t*)f->dst;
-            d3d_map_out << "," << py->id;
-        }
-        d3d_map_out << "," << id_to_num[pw->id] << "\n";
-    }
-    // Write Tanner vertex to physical qubit mapping.
-    std::filesystem::path labels = folder/"labels.txt";
-    std::ofstream label_out(labels);
-
-    auto& role_to_qubit = ir->role_to_qubit;
-    for (auto pair : role_to_qubit) {
-        auto tv = pair.first;
-        auto pv = pair.second;
-        label_out << "DGXZ"[tv->qubit_type];
-        label_out << (tv->id & 0x00ff'ffff) << "," << id_to_num[pv->id] << "\n";
-    }
-    // Also write data qubits
-    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
-        label_out << "D" << (tv->id & 0x00ff'ffff) << "," << id_to_num[tv->id] << "\n";
-    }
-    // Write schedule of operations
-    std::filesystem::path sched = folder/"schedule.qasm";
-    std::ofstream sched_out(sched);
-
-    uint cbit = 0;
-    std::string sched_str;
-    for (auto inst : ir->schedule) {
-        if (inst.name == "NOP") continue;
-        if (inst.name == "Mrc") {
-            sched_str += "measure q[" + std::to_string(id_to_num[inst.operands[0]]) 
-                + "] -> c[" + std::to_string(cbit++) + "];\n";
-        } else {
-            std::string opname;
-            if (inst.name == "R")   opname = "reset";
-            else {
-                for (auto x : inst.name)    opname.push_back(std::tolower(x));
-            }
-            uint ops_per_call = opname == "cx" ? 2 : 1;
-            for (uint i = 0; i < inst.operands.size(); i += ops_per_call) {
-                sched_str += opname + " q[" + std::to_string(id_to_num[inst.operands[i]]) + "]";
-                if (ops_per_call == 2) {
-                    sched_str += ",q[" + std::to_string(id_to_num[inst.operands[i+1]]) + "]";
-                }
-                sched_str += ";\n";
-            }
-        }
-    }
-    sched_out << "OPENQASM 2.0;\n"
-                << "include \"qelib1.inc\";\n"
-                << "qreg q[" << arch->get_vertices().size() << "];\n"
-                << "creg c[" << cbit << "];\n"
-                << sched_str;
-}
-
-}   // protean
-}   // qontra
+*/

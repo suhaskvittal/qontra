@@ -1,5 +1,6 @@
+#line 1 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 
-#line 2 "lex.yy.c"
+#line 3 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -444,23 +445,23 @@ int yy_flex_debug = 0;
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
 char *yytext;
-#line 1 "lexer.lex"
+#line 1 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 /*
     author: Suhas Vittal
     date:   25 June 2023
 
     Lexer for ASM specified in ISA (see instruction.h)
 */
-#line 11 "lexer.lex"
+#define YY_NO_INPUT 1
+#line 11 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 
-#include "parsing/asm/common.h"
 #include "parsing/asm/parser.tab.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#line 462 "lex.yy.c"
-#line 463 "lex.yy.c"
+#line 463 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
+#line 464 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 
 #define INITIAL 0
 
@@ -520,8 +521,6 @@ extern int yywrap ( void );
 #endif
 
 #ifndef YY_NO_UNPUT
-    
-    static void yyunput ( int c, char *buf_ptr  );
     
 #endif
 
@@ -677,10 +676,10 @@ YY_DECL
 		}
 
 	{
-#line 20 "lexer.lex"
+#line 19 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 
 
-#line 683 "lex.yy.c"
+#line 682 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -739,7 +738,7 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 22 "lexer.lex"
+#line 21 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { 
                 yylval.arg = (uint32_t) atoi(yytext); 
                 return ARG; 
@@ -747,7 +746,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 26 "lexer.lex"
+#line 25 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { 
                 memcpy(yylval.name, yytext, 8); 
                 // Force lower case.
@@ -761,26 +760,26 @@ YY_RULE_SETUP
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 36 "lexer.lex"
+#line 35 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { /* ignore whitespace */ }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 37 "lexer.lex"
+#line 36 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { return SEP; }
 	YY_BREAK
 case 5:
 /* rule 5 can match eol */
 YY_RULE_SETUP
-#line 38 "lexer.lex"
+#line 37 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { return EOL; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 40 "lexer.lex"
+#line 39 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 ECHO;
 	YY_BREAK
-#line 783 "lex.yy.c"
+#line 782 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -1115,43 +1114,6 @@ static int yy_get_next_buffer (void)
 }
 
 #ifndef YY_NO_UNPUT
-
-    static void yyunput (int c, char * yy_bp )
-{
-	char *yy_cp;
-    
-    yy_cp = (yy_c_buf_p);
-
-	/* undo effects of setting up yytext */
-	*yy_cp = (yy_hold_char);
-
-	if ( yy_cp < YY_CURRENT_BUFFER_LVALUE->yy_ch_buf + 2 )
-		{ /* need to shift things up to make room */
-		/* +2 for EOB chars. */
-		int number_to_move = (yy_n_chars) + 2;
-		char *dest = &YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[
-					YY_CURRENT_BUFFER_LVALUE->yy_buf_size + 2];
-		char *source =
-				&YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[number_to_move];
-
-		while ( source > YY_CURRENT_BUFFER_LVALUE->yy_ch_buf )
-			*--dest = *--source;
-
-		yy_cp += (int) (dest - source);
-		yy_bp += (int) (dest - source);
-		YY_CURRENT_BUFFER_LVALUE->yy_n_chars =
-			(yy_n_chars) = (int) YY_CURRENT_BUFFER_LVALUE->yy_buf_size;
-
-		if ( yy_cp < YY_CURRENT_BUFFER_LVALUE->yy_ch_buf + 2 )
-			YY_FATAL_ERROR( "flex scanner push-back overflow" );
-		}
-
-	*--yy_cp = (char) c;
-
-	(yytext_ptr) = yy_bp;
-	(yy_hold_char) = *yy_cp;
-	(yy_c_buf_p) = yy_cp;
-}
 
 #endif
 
@@ -1785,7 +1747,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 40 "lexer.lex"
+#line 39 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 
 
 void asm_yystart(FILE* fin) {

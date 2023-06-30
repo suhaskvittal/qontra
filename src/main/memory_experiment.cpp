@@ -9,6 +9,7 @@
 #include "decoder/mwpm.h"
 #include "defs.h"
 #include "experiments.h"
+#include "instruction.h"
 #include "parsing/cmd.h"
 
 #include <stim.h>

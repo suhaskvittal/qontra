@@ -4,6 +4,7 @@
  * */
 
 #include "decoder/mwpm.h"
+#include "instruction.h"
 #include "parsing/cmd.h"
 #include "sim/control_sim.h"
 
@@ -27,7 +28,7 @@ int main(int argc, char* argv[]) {
 
         cmd_parser.get_uint32("size", n);
     } else {
-        stim::CircuitGenParameters circ_params(3, 3, "rotated_memory_z");
+        stim::CircuitGenParameters circ_params(7, 7, "rotated_memory_z");
         auto circ = stim::generate_surface_code_circuit(circ_params).circuit;
 
         n = from_stim_circuit(circ, prog);
@@ -42,7 +43,7 @@ int main(int argc, char* argv[]) {
     std::cout << n << " qubits\n";
 
     experiments::G_USE_MPI = false;
-    experiments::G_SHOTS_PER_BATCH = 1024;
+    experiments::G_SHOTS_PER_BATCH = 128;
 
     ControlSimulator sim(n, prog);
     tables::ErrorAndTiming params;
@@ -55,12 +56,12 @@ int main(int argc, char* argv[]) {
     sim.load_decoder(&mwpm);
     
     // Check expected LER.
-    auto mxp_res = memory_experiment(&mwpm, 1L << 16);
+    auto mxp_res = memory_experiment(&mwpm, 1L << 12);
     std::cout << "Expected LER = " << mxp_res.logical_error_rate << "\n";
 
     sim.params.verbose = 0;
 
-    sim.run(1L << 20);
+    sim.run(1L << 12);
     std::cout << "Probability histogram:\n";
     for (auto pair : sim.prob_histograms) {
         std::cout << "\t" << std::hex;

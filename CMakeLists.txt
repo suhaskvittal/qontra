@@ -1,10 +1,21 @@
-# Declare CMAKE version
+# Declare CMAKE version 
 cmake_minimum_required(VERSION 3.20.2)
-#2a4e7ca86be5b659c7227ed05c2faaf0c287e807 Declare Project and Version number
 project(QontraSim VERSION 0.1)
 # Declare CPP Version
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+find_package(FLEX REQUIRED)
+find_package(BISON REQUIRED)
+
+BISON_TARGET(ASMParser ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.y 
+    ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.tab.c
+    DEFINES_FILE ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.tab.h)
+FLEX_TARGET(ASMLexer ${CMAKE_SOURCE_DIR}/include/parsing/asm/lexer.lex 
+    ${CMAKE_SOURCE_DIR}/include/parsing/asm/lex.yy.c
+    DEFINES_FILE ${CMAKE_SOURCE_DIR}/include/parsing/asm/lex.tab.h)
+ADD_FLEX_BISON_DEPENDENCY(ASMLexer ASMParser)
+
 # Declare executable.
 set(QONTRA_FILES
     # Top-Level
@@ -14,8 +25,6 @@ set(QONTRA_FILES
     src/decoder/mwpm.cpp
     # Parsing
     src/parsing/cmd.cpp
-    include/parsing/asm/parser.tab.c
-    include/parsing/asm/lex.yy.c
     # Graphs
     src/graph/decoding_graph.cpp 
     src/graph/coupling_graph.cpp
@@ -27,15 +36,24 @@ set(QONTRA_FILES
     src/sim/clifford_sim.cpp
     src/sim/control_sim.cpp
     )
+# I've a had a lot of trouble with Bison/Flex files. Only
+# include them if you need them.
+set(ASM_FILES
+    src/parsing/asm.cpp
+    ${BISON_ASMParser_OUTPUTS}
+    ${FLEX_ASMLexer_OUTPUTS}
+    )
+
 add_library(qontra ${QONTRA_FILES})
 add_executable(memory src/main/memory_experiment.cpp)
 add_executable(circuit src/main/build_circuit.cpp)
 
-### TESTING ###
-add_executable(ctrl src/main/test/ctrlsimtest.cpp)
-
 ### Protean ###
 add_executable(protean_main src/main/protean/main.cpp)
+
+### TESTING ###
+add_executable(ctrl src/main/test/ctrlsimtest.cpp ${ASM_FILES})
+add_executable(hello src/main/test/hello_world.cpp)
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
     target_compile_options(qontra PUBLIC -O3 -lemon -fno-strict-aliasing)
@@ -46,16 +64,10 @@ endif()
 find_package(MPI REQUIRED)
 find_package(LEMON REQUIRED)
 
-find_package(FLEX REQUIRED)
-find_package(BISON REQUIRED)
-
-message(${MPI_INCLUDE_PATH})
-
 # I don't know why I have to include /usr/local/include...
 target_include_directories(qontra PUBLIC
     "include" 
     ${MPI_INCLUDE_PATH} 
-    ${FLEX_INCLUDE_DIRS}
     "/usr/local/include")
 
 add_subdirectory(stim)
@@ -64,11 +76,9 @@ add_subdirectory(blossom5)
 target_link_libraries(qontra PUBLIC libstim)
 target_link_libraries(qontra PUBLIC libblossom5)
 target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
-target_link_libraries(qontra PUBLIC ${BISON_LIBRARIES})
-target_link_libraries(qontra PUBLIC ${FLEX_LIBRARIES})
 
 target_link_libraries(memory PRIVATE qontra)
 target_link_libraries(circuit PRIVATE qontra)
 target_link_libraries(ctrl PRIVATE qontra)
-
 target_link_libraries(protean_main PRIVATE qontra)
+target_link_libraries(hello PRIVATE qontra)

@@ -111,7 +111,10 @@ public:
 
     void            set_seed(uint64_t s) { rng.seed(s); }
 
-    compiler::ir_t* run(graph::TannerGraph*);
+    // The compiler takes in a Tanner graph, which defines the QEC code,
+    // and an idealized syndrome extraction schedule. The schedule should
+    // NOT contain any gauge qubits.
+    compiler::ir_t* run(graph::TannerGraph*, const schedule_t& ideal_sch);
 
     params_t    params;
 private:
@@ -123,6 +126,10 @@ private:
 
     bool check_size_violation(compiler::ir_t* ir) {
         return ir->arch->get_vertices().size() > constraints.max_qubits;
+    }
+
+    bool check_thickness_violation(compiler::ir_t* ir) {
+        return ir->arch->get_thickness() > constraints.max_thickness;
     }
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
@@ -141,6 +148,13 @@ private:
     //      (b) Split: Find the most connected qubit and split it into two. If the qubit is a 
     //                  a data qubit, then create a gauge qubit.
     //      Jump to (3).
+    //  If constraints.max_thickness is violated:
+    //      (c) Flatten: Find a link in a layer above max_thickness. Create a new qubit(s)
+    //                      next to the offending physical qubit(s) and move the link
+    //                      to that qubit(s).
+    //      Jump to (3).
+    //
+    //  (5) Xform-Schedule  -- transforms the ideal schedule to fit on the architecture.
     //
     //  (5) Micro-Schedule  -- schedules the operations for each check.
     //  (6) Macro-Schedule  -- schedules the order of computing each check such that depth is
@@ -167,8 +181,8 @@ private:
     void    reduce(compiler::ir_t*);
     bool    merge(compiler::ir_t*);
     bool    split(compiler::ir_t*);
-    void    micro_schedule(compiler::ir_t*);
-    void    macro_schedule(compiler::ir_t*);
+    bool    flatten(compiler::ir_t*);
+    void    xform_schedule(compiler::ir_t*);
     void    schedule(compiler::ir_t*);
     void    score(compiler::ir_t*);
     bool    induce(compiler::ir_t*);

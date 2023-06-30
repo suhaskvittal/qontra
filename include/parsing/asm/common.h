@@ -1,12 +1,17 @@
-#ifndef ASM_PARSER_COMMON_h
-#define ASM_PARSER_COMMON_h
+/*
+ *  author: Suhas Vittal
+ *  date:   25 June 2023
+ * */
+
+#ifndef ASM_PARSER_LEXER_COMMON_h
+#define ASM_PARSER_LEXER_COMMON_h
 
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 struct __asm_operand_t {
-    uint32_t    data[30];
+    uint32_t    data[31];
     uint32_t    size;
 };
 
@@ -19,21 +24,15 @@ struct __asm_inst_t {   // Each instruction is 128B.
 extern struct __asm_inst_t  ASMParserSchedule[4096];
 extern uint32_t             ASMParserScheduleLen;
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
-/*
-void        asm_yystart(FILE*);
-extern int  asm_yyparse();
-void        asm_yyerror(char const*);
-*/
-void        asm_yystart(FILE*);
-extern int  yyparse();
-void        yyerror(char const*);
+void asm_yystart(FILE*);
+int  asm_yyparse();
 
-#ifdef  __cplusplus
-}   // extern "C"
+#ifdef __cplusplus
+}
 #endif
 
 #endif  // ASM_PARSER_COMMON_h

@@ -490,7 +490,7 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int8 yyrline[] =
 {
-       0,    40,    40,    42,    46,    53,    61,    74,    81
+       0,    46,    46,    48,    52,    59,    67,    80,    87
 };
 #endif
 
@@ -1052,18 +1052,18 @@ yyreduce:
   switch (yyn)
     {
   case 4: /* instruction: INST EOL  */
-#line 47 "parser.y"
+#line 53 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-1].name), 8);
     inst.operands.size = 0;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-#line 1063 "parser.tab.c"
+#line 1063 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
   case 5: /* instruction: INST ARG EOL  */
-#line 54 "parser.y"
+#line 60 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-2].name), 8);
@@ -1071,11 +1071,11 @@ yyreduce:
     inst.operands.size = 1;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-#line 1075 "parser.tab.c"
+#line 1075 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
   case 6: /* instruction: INST ARG SEP operands EOL  */
-#line 62 "parser.y"
+#line 68 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-4].name), 8);
@@ -1085,22 +1085,22 @@ yyreduce:
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 
 }
-#line 1089 "parser.tab.c"
+#line 1089 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
   case 7: /* operands: ARG  */
-#line 75 "parser.y"
+#line 81 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.data[0] = (yyvsp[0].arg);
     x.size = 1;
     (yyval.operands) = x;
 }
-#line 1100 "parser.tab.c"
+#line 1100 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
   case 8: /* operands: ARG SEP operands  */
-#line 82 "parser.y"
+#line 88 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.data[0] = (yyvsp[-2].arg);
@@ -1108,11 +1108,11 @@ yyreduce:
     x.size = 1 + (yyvsp[0].operands).size;
     (yyval.operands) = x;
 }
-#line 1112 "parser.tab.c"
+#line 1112 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
 
-#line 1116 "parser.tab.c"
+#line 1116 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
 
       default: break;
     }
@@ -1305,11 +1305,20 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 91 "parser.y"
+#line 97 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 
 
 void
 yyerror(const char* msg) {
     fprintf(stderr, "asm parsing error: %s\n", msg);
+}
+
+/*
+    Wrapping functions because yy renaming did not work :(
+*/
+
+int
+asm_yyparse() {
+    return yyparse();
 }
 
