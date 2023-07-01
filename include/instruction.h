@@ -34,9 +34,9 @@ const std::vector<std::string> ISA{
     "jmp"           // Jumps to address unconditionally
     "brdb",         // Jumps to address if decoder is busy (still decoding)
     // Event speculation instructions
-    "brfspc",       // Jumps to address if all events in list have been
+    "braspc",       // Jumps to address if all events in list have been
                     // speculated.
-    "brnspc",       // Jumps to address if event has not been speculated.
+    "brospc",       // Jumps to address if single event has been speculated.
     // Ordering instructions
     "dfence",       // Waits until decoder finishes.
     // Tracking instructions
@@ -51,6 +51,8 @@ const std::vector<std::string> ISA{
     "xorfr",        // Xors the Pauli frame into the specified obs buffer location.
     "savem",        // The bitstring in the observable buffer is record in a 
                     // probability histogram.
+    "hshift",       // Shifts event history by the specified operand (oldest "k"
+                    // events are removed).
     // Virtual instruction
     "done",         // Tells the simulator we are done (virtual instruction)
 };

@@ -29,20 +29,16 @@ namespace qontra {
 
 class ControlSimulator {
 public:
-    ControlSimulator(uint n_qubits, const schedule_t&);
-    ~ControlSimulator() {
-        delete qsim;
-    }
+    ControlSimulator(uint n_qubits, const schedule_t&, StateSimulator*);
 
     void run(uint64_t shots);
     void clear();
 
     void            build_canonical_circuit(void);
-
     stim::Circuit   get_canonical_circuit(void) { return canonical_circuit; }
 
-    void            load_simulator(StateSimulator* ss) { qsim = ss; }
-    void            load_decoder(decoder::Decoder* dec) { decoder = dec; }
+    void    load_simulator(StateSimulator* ss) { delete qsim; qsim = ss; }
+    void    load_decoder(decoder::Decoder* dec) { decoder = dec; }
 
     struct params_t {
         // Simulation parameters

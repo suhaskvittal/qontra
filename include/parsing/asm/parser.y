@@ -24,6 +24,8 @@ int yylex();
 extern int  yyparse();
 void        yyerror(char const*);
 
+int64_t     get_label_pc(const char*);
+
 }
 
 %union {
@@ -32,47 +34,73 @@ void        yyerror(char const*);
     struct __asm_operand_t  operands;
 }
 
-%token INST
+%token ID
 %token SEP
 %token ARG
 %token EOL
 
 %type<arg>      ARG
 %type<operands> operands
-%type<name>     INST
+%type<name>     ID
 
 %%
 
 program: 
         /* empty string */
         | instruction program
+{ 
+    pc++; 
+}
+        | ID ':' program
+{
+    struct __asm_label_t x;
+    memcpy(x.name, $1, IDLEN);
+    x.pc = pc;
+    ASMLabelArray[ASMLabelCount++] = x;
+}
+        | EOL program
 ;
 
 instruction:
-           INST EOL
+           ID EOL
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, 12);
+    memcpy(inst.name, $1, IDLEN);
     inst.operands.size = 0;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-           | INST ARG EOL
+           | ID ID EOL
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, 12);
-    inst.operands.data[0] = $2;
+    memcpy(inst.name, $1, IDLEN);
+
+    int64_t lpc = get_label_pc($2);
+    if (lpc < 0)    YYABORT;
+    inst.operands.data[0] = lpc;
+
     inst.operands.size = 1;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-           | INST ARG SEP operands EOL
+           | ID ID operands EOL
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, 12);
-    inst.operands.data[0] = $2;
-    memcpy(inst.operands.data+1, $4.data, $4.size*sizeof(uint32_t));
-    inst.operands.size = 1 + $4.size;
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+    memcpy(inst.name, $1, IDLEN);
 
+    int64_t lpc = get_label_pc($2);
+    if (lpc < 0)    YYABORT;
+    inst.operands.data[0] = lpc;
+
+    memcpy(inst.operands.data+1, $3.data, $3.size*sizeof(uint32_t));
+    inst.operands.size = 1 + $3.size;
+    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+}
+           | ID operands EOL
+{
+    struct __asm_inst_t inst;
+    memcpy(inst.name, $1, IDLEN);
+    memcpy(inst.operands.data, $2.data, $2.size*sizeof(uint32_t));
+    inst.operands.size = $2.size;
+    ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
 ;
 
@@ -99,6 +127,16 @@ operands:
 void
 yyerror(const char* msg) {
     fprintf(stderr, "asm parsing error: %s\n", msg);
+}
+
+int64_t
+get_label_pc(const char* name) {
+    for (int i = 0; i < ASMLabelCount; i++) {
+        if (strcmp(name, ASMLabelArray[i].name) == 0) {
+            return ASMLabelArray[i].pc;
+        }
+    }
+    return -1;
 }
 
 /*

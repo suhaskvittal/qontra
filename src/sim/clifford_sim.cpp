@@ -472,6 +472,7 @@ CliffordSimulator::browsum(uint h, uint i, bool use_pred,
 
 void
 CliffordSimulator::snapshot() {
+    StateSimulator::snapshot();
     x_table_cpy = stim::simd_bit_table(x_table);
     z_table_cpy = stim::simd_bit_table(z_table);
     r_table_cpy = stim::simd_bit_table(r_table);
@@ -480,6 +481,7 @@ CliffordSimulator::snapshot() {
 
 void
 CliffordSimulator::rollback_at_trial(uint64_t t) {
+    StateSimulator::rollback_at_trial(t);
     for (uint i = 0; i < x_width; i++)  x_table[i][t] = x_table_cpy[i][t];
     for (uint i = 0; i < z_width; i++)  z_table[i][t] = z_table_cpy[i][t];
     for (uint i = 0; i < r_width; i++)  r_table[i][t] = r_table_cpy[i][t];

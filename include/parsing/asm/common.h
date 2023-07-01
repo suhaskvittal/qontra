@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <string.h>
 
+const extern int    IDLEN;
+
 struct __asm_operand_t {
     uint32_t    data[28];
     uint32_t    size;
@@ -20,9 +22,18 @@ struct __asm_inst_t {   // Each instruction is 128B.
     struct __asm_operand_t  operands;   // 116 B
 };
 
+struct __asm_label_t {
+    char        name[12];
+    uint64_t    pc;
+};
+
 // 512 KB for the program (4K instrutions * 128B).
 extern struct __asm_inst_t  ASMParserSchedule[4096];
 extern uint32_t             ASMParserScheduleLen;
+extern struct __asm_label_t ASMLabelArray[4096];
+extern uint32_t             ASMLabelCount;
+
+extern uint64_t     pc;
 
 #ifdef __cplusplus
 extern "C" {

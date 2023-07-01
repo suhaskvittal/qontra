@@ -96,14 +96,15 @@ enum yysymbol_kind_t
   YYSYMBOL_YYEOF = 0,                      /* "end of file"  */
   YYSYMBOL_YYerror = 1,                    /* error  */
   YYSYMBOL_YYUNDEF = 2,                    /* "invalid token"  */
-  YYSYMBOL_INST = 3,                       /* INST  */
+  YYSYMBOL_ID = 3,                         /* ID  */
   YYSYMBOL_SEP = 4,                        /* SEP  */
   YYSYMBOL_ARG = 5,                        /* ARG  */
   YYSYMBOL_EOL = 6,                        /* EOL  */
-  YYSYMBOL_YYACCEPT = 7,                   /* $accept  */
-  YYSYMBOL_program = 8,                    /* program  */
-  YYSYMBOL_instruction = 9,                /* instruction  */
-  YYSYMBOL_operands = 10                   /* operands  */
+  YYSYMBOL_7_ = 7,                         /* ':'  */
+  YYSYMBOL_YYACCEPT = 8,                   /* $accept  */
+  YYSYMBOL_program = 9,                    /* program  */
+  YYSYMBOL_instruction = 10,               /* instruction  */
+  YYSYMBOL_operands = 11                   /* operands  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -429,18 +430,18 @@ union yyalloc
 #endif /* !YYCOPY_NEEDED */
 
 /* YYFINAL -- State number of the termination state.  */
-#define YYFINAL  6
+#define YYFINAL  11
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   11
+#define YYLAST   17
 
 /* YYNTOKENS -- Number of terminals.  */
-#define YYNTOKENS  7
+#define YYNTOKENS  8
 /* YYNNTS -- Number of nonterminals.  */
 #define YYNNTS  4
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  8
+#define YYNRULES  11
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  15
+#define YYNSTATES  20
 
 /* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   261
@@ -462,7 +463,7 @@ static const yytype_int8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
+       2,     2,     2,     2,     2,     2,     2,     2,     7,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -490,7 +491,8 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int8 yyrline[] =
 {
-       0,    46,    46,    48,    52,    59,    67,    80,    87
+       0,    48,    48,    50,    54,    61,    65,    72,    84,    97,
+     108,   115
 };
 #endif
 
@@ -506,8 +508,8 @@ static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
 {
-  "\"end of file\"", "error", "\"invalid token\"", "INST", "SEP", "ARG",
-  "EOL", "$accept", "program", "instruction", "operands", YY_NULLPTR
+  "\"end of file\"", "error", "\"invalid token\"", "ID", "SEP", "ARG",
+  "EOL", "':'", "$accept", "program", "instruction", "operands", YY_NULLPTR
 };
 
 static const char *
@@ -517,7 +519,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-5)
+#define YYPACT_NINF (-6)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -531,8 +533,8 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-       2,    -2,     1,     2,    -4,    -5,    -5,    -5,     3,    -5,
-       5,     0,     3,    -5,    -5
+       2,     6,     2,     4,     2,     9,    -2,    -6,     2,     0,
+      -6,    -6,    -6,    -6,    10,    12,    -6,    -6,    -6,    -6
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -540,20 +542,20 @@ static const yytype_int8 yypact[] =
    means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
-       2,     0,     0,     2,     0,     4,     1,     3,     0,     5,
-       7,     0,     0,     6,     8
+       2,     0,     2,     0,     2,     0,    10,     6,     2,     0,
+       5,     1,     3,     7,     0,     0,     4,     9,     8,    11
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-      -5,     4,    -5,    -1
+      -6,    -1,    -6,    -5
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,     2,     3,    11
+       0,     3,     4,     9
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -561,34 +563,36 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-       8,     6,     9,     4,     5,     1,    13,     7,    10,    12,
-       0,    14
+      14,    10,    15,    12,    11,     1,    17,    16,     2,     5,
+      19,     6,     7,     8,     6,    13,    18,     6
 };
 
 static const yytype_int8 yycheck[] =
 {
-       4,     0,     6,     5,     6,     3,     6,     3,     5,     4,
-      -1,    12
+       5,     2,     4,     4,     0,     3,     6,     8,     6,     3,
+      15,     5,     6,     7,     5,     6,     6,     5
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
    state STATE-NUM.  */
 static const yytype_int8 yystos[] =
 {
-       0,     3,     8,     9,     5,     6,     0,     8,     4,     6,
-       5,    10,     4,     6,    10
+       0,     3,     6,     9,    10,     3,     5,     6,     7,    11,
+       9,     0,     9,     6,    11,     4,     9,     6,     6,    11
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,     7,     8,     8,     9,     9,     9,    10,    10
+       0,     8,     9,     9,     9,     9,    10,    10,    10,    10,
+      11,    11
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     0,     2,     2,     3,     5,     1,     3
+       0,     2,     0,     2,     3,     2,     2,     3,     4,     3,
+       1,     3
 };
 
 
@@ -1051,56 +1055,94 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
-  case 4: /* instruction: INST EOL  */
-#line 53 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
-{
-    struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-1].name), 12);
-    inst.operands.size = 0;
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+  case 3: /* program: instruction program  */
+#line 51 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+{ 
+    pc++; 
 }
-#line 1063 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
+#line 1064 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
-  case 5: /* instruction: INST ARG EOL  */
-#line 60 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+  case 4: /* program: ID ':' program  */
+#line 55 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
-    struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-2].name), 12);
-    inst.operands.data[0] = (yyvsp[-1].arg);
-    inst.operands.size = 1;
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+    struct __asm_label_t x;
+    memcpy(x.name, (yyvsp[-2].name), IDLEN);
+    x.pc = pc;
+    ASMLabelArray[ASMLabelCount++] = x;
 }
 #line 1075 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
-  case 6: /* instruction: INST ARG SEP operands EOL  */
-#line 68 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+  case 6: /* instruction: ID EOL  */
+#line 66 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-4].name), 12);
-    inst.operands.data[0] = (yyvsp[-3].arg);
+    memcpy(inst.name, (yyvsp[-1].name), IDLEN);
+    inst.operands.size = 0;
+    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+}
+#line 1086 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
+    break;
+
+  case 7: /* instruction: ID ID EOL  */
+#line 73 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+{
+    struct __asm_inst_t inst;
+    memcpy(inst.name, (yyvsp[-2].name), IDLEN);
+
+    int64_t lpc = get_label_pc((yyvsp[-1].name));
+    if (lpc < 0)    YYABORT;
+    inst.operands.data[0] = lpc;
+
+    inst.operands.size = 1;
+    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+}
+#line 1102 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
+    break;
+
+  case 8: /* instruction: ID ID operands EOL  */
+#line 85 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+{
+    struct __asm_inst_t inst;
+    memcpy(inst.name, (yyvsp[-3].name), IDLEN);
+
+    int64_t lpc = get_label_pc((yyvsp[-2].name));
+    if (lpc < 0)    YYABORT;
+    inst.operands.data[0] = lpc;
+
     memcpy(inst.operands.data+1, (yyvsp[-1].operands).data, (yyvsp[-1].operands).size*sizeof(uint32_t));
     inst.operands.size = 1 + (yyvsp[-1].operands).size;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
-
 }
-#line 1089 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
+#line 1119 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
-  case 7: /* operands: ARG  */
-#line 81 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+  case 9: /* instruction: ID operands EOL  */
+#line 98 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+{
+    struct __asm_inst_t inst;
+    memcpy(inst.name, (yyvsp[-2].name), IDLEN);
+    memcpy(inst.operands.data, (yyvsp[-1].operands).data, (yyvsp[-1].operands).size*sizeof(uint32_t));
+    inst.operands.size = (yyvsp[-1].operands).size;
+    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+}
+#line 1131 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
+    break;
+
+  case 10: /* operands: ARG  */
+#line 109 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.data[0] = (yyvsp[0].arg);
     x.size = 1;
     (yyval.operands) = x;
 }
-#line 1100 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
+#line 1142 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
-  case 8: /* operands: ARG SEP operands  */
-#line 88 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+  case 11: /* operands: ARG SEP operands  */
+#line 116 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.data[0] = (yyvsp[-2].arg);
@@ -1108,11 +1150,11 @@ yyreduce:
     x.size = 1 + (yyvsp[0].operands).size;
     (yyval.operands) = x;
 }
-#line 1112 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
+#line 1154 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
 
-#line 1116 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
+#line 1158 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
 
       default: break;
     }
@@ -1305,12 +1347,22 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 97 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+#line 125 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 
 
 void
 yyerror(const char* msg) {
     fprintf(stderr, "asm parsing error: %s\n", msg);
+}
+
+int64_t
+get_label_pc(const char* name) {
+    for (int i = 0; i < ASMLabelCount; i++) {
+        if (strcmp(name, ASMLabelArray[i].name) == 0) {
+            return ASMLabelArray[i].pc;
+        }
+    }
+    return -1;
 }
 
 /*

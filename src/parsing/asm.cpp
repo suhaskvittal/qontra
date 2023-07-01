@@ -8,6 +8,12 @@
 
 struct __asm_inst_t     ASMParserSchedule[4096];
 uint32_t                ASMParserScheduleLen = 0;
+struct __asm_label_t    ASMLabelArray[4096];
+uint32_t                ASMLabelCount = 0;
+
+uint64_t    pc = 0;
+
+const int   IDLEN = 12;
 
 namespace qontra {
 

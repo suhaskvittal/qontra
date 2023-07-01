@@ -30,14 +30,18 @@
                         yylval.name[i] += 'a' - 'A';
                     }
                 }
-                return INST; 
+                return ID; 
             }
 [ \t]       { /* ignore whitespace */ }
 ,           { return SEP; }
+:           { return ':'; }
 \n          { return EOL; }
 
 %%
 
 void asm_yystart(FILE* fin) {
+    ASMParserScheduleLen = 0;
+    ASMLabelCount = 0;
+    pc = 0;
     yyrestart(fin);
 }

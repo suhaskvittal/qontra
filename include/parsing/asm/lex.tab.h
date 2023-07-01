@@ -2,9 +2,9 @@
 #define yyHEADER_H 1
 #define yyIN_HEADER 1
 
-#line 5 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.tab.h"
+#line 5 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lex.tab.h"
 
-#line 7 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.tab.h"
+#line 7 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lex.tab.h"
 
 #define  YY_INT_ALIGNED short int
 
@@ -469,9 +469,9 @@ extern int yylex (void);
 #undef yyTABLES_NAME
 #endif
 
-#line 39 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
+#line 40 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
 
 
-#line 475 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.tab.h"
+#line 475 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lex.tab.h"
 #undef yyIN_HEADER
 #endif /* yyHEADER_H */

@@ -38,8 +38,10 @@ public:
     StateSimulator(uint n, uint64_t max_shots)
         :n_qubits(n),
         max_shots(max_shots),
-        record_offset(0),
         record_table(statesim::G_RECORD_SPACE_SIZE, max_shots),
+        record_offset(0),
+        record_table_cpy(statesim::G_RECORD_SPACE_SIZE, max_shots),
+        record_offset_cpy(0),
         rng(0)
     {}
 
@@ -70,9 +72,9 @@ public:
     void    reduce_record_by(uint64_t);
     void    shift_record_by(uint64_t);
 
-    virtual void    snapshot(void) =0;
+    virtual void    snapshot(void);
                             // Saves the current state of the simulator.
-    virtual void    rollback_at_trial(uint64_t) =0;
+    virtual void    rollback_at_trial(uint64_t);
                             // Rolls back the state to the snapshot
 
     uint64_t    get_record_size(void) { return record_offset; }
@@ -81,6 +83,9 @@ public:
     uint64_t                shots;
 protected:
     uint64_t record_offset;
+
+    stim::simd_bit_table    record_table_cpy;
+    uint64_t                record_offset_cpy;
 
     std::mt19937_64 rng;
 

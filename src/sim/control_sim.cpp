@@ -9,7 +9,10 @@ namespace qontra {
 
 using namespace experiments;
 
-ControlSimulator::ControlSimulator(uint n_qubits, const schedule_t& prog)
+ControlSimulator::ControlSimulator(
+        uint n_qubits, 
+        const schedule_t& prog,
+        StateSimulator* qsim)
     // Stats
     :latency(G_SHOTS_PER_BATCH, 64),
     sim_time(0),
@@ -18,7 +21,7 @@ ControlSimulator::ControlSimulator(uint n_qubits, const schedule_t& prog)
     trial_done(G_SHOTS_PER_BATCH),
     // Simulation structures
     decoder(nullptr),
-    qsim(new FrameSimulator(n_qubits, G_SHOTS_PER_BATCH)),
+    qsim(qsim),
     pauli_frames(128, G_SHOTS_PER_BATCH),
     event_history(4096, G_SHOTS_PER_BATCH),
     obs_buffer(128, G_SHOTS_PER_BATCH),
@@ -303,7 +306,11 @@ ControlSimulator::QEX() {
             }
         }
         if (stall_pipeline) continue;
+
         // These instructions operate on a trial by trial basis.
+        uint64_t    br_pc;
+        bool        br_taken = false;
+
         if (inst.name == "decode" && decoder != nullptr) {
             syndrome_t s(events_t[t]);
             auto res = decoder->decode_error(s);
@@ -317,12 +324,16 @@ ControlSimulator::QEX() {
             for (uint i = 0; i < res.corr.size(); i++) {
                 pauli_frames[i+offset][t] ^= res.corr[i];
             }
+        } else if (inst.name == "jmp") {
+            br_pc = inst.operands[0];
+            br_taken = true;
         } else if (inst.name == "brdb") {
-            if (decoder_busy[t].not_zero()) {
-                // Set PC and invalidate ID.
-                id_qex_valid[t] = 0;
-                pc[t].u64[0] = inst.operands[0];
-            }
+            br_pc = inst.operands[0];
+            br_taken = decoder_busy[t].not_zero();
+        } else if (inst.name == "braspc") {
+            br_pc = inst.operands[0];
+        } else if (inst.name == "brospc") {
+            br_pc = inst.operands[0];
         } else if (inst.name == "dfence") {
             if (decoder_busy[t].not_zero()) {
                 id_stall[t] = 1;
@@ -341,6 +352,12 @@ ControlSimulator::QEX() {
             // the changes for any trials that did not want to execute the
             // gate.
             instruction_to_trials[inst].insert(t);
+        }
+
+        if (br_taken) {
+            if_id_valid[t] = 0;
+            id_qex_valid[t] = 0;
+            pc[t].u64[0] = br_pc;
         }
     }
     // Now execute the instructions in instruction_to_trials.
@@ -445,6 +462,9 @@ ControlSimulator::QEX() {
             const uint i = inst.operands[0];
             const uint j = inst.operands[1];
             obs_buffer[j] ^= pauli_frames[i];
+        } else if (inst.name == "hshift") {
+            const uint x = inst.operands[0];
+            qsim->shift_record_by(x);
         }
 
         // After operation errors:

@@ -45,7 +45,9 @@ int main(int argc, char* argv[]) {
 
     experiments::G_SHOTS_PER_BATCH = 1 << 12;
 
-    ControlSimulator sim(n, prog);
+    FrameSimulator fsim(n, experiments::G_SHOTS_PER_BATCH);
+
+    ControlSimulator sim(n, prog, &fsim);
     tables::ErrorAndTiming params;
     tables::populate(n, sim.params.errors, sim.params.timing, params);
     sim.build_canonical_circuit();
