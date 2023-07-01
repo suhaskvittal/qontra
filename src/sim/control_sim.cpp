@@ -167,7 +167,7 @@ ControlSimulator::run(uint64_t shots) {
         MPI_Allreduce(&__latency_sqr_sum, &latency_sqr_sum, 1, MPI_UNSIGNED_LONG,
                     MPI_SUM, MPI_COMM_WORLD);
         MPI_Allreduce(&__sim_time, &sim_time, 1, MPI_UNSIGNED_LONG,
-                    MPI_SUM, MPI_COMM_WORLD);
+                    MPI_MAX, MPI_COMM_WORLD);
     } else {
         n_trials_killed = __n_trials_killed;
         latency_max = __latency_max;

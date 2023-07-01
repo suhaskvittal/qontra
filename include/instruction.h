@@ -30,8 +30,16 @@ const std::vector<std::string> ISA{
     // Control processor instructions.
     "decode",       // Tells decoder to decode syndrome and places the resulting
                     // Pauli frame at the offset specified by the operand.
-    "brdb",         // Jumps to instruction if decoder is busy (still decoding)
+    // Jumps + Branches + Conditions
+    "jmp"           // Jumps to address unconditionally
+    "brdb",         // Jumps to address if decoder is busy (still decoding)
+    // Event speculation instructions
+    "brfspc",       // Jumps to address if all events in list have been
+                    // speculated.
+    "brnspc",       // Jumps to address if event has not been speculated.
+    // Ordering instructions
     "dfence",       // Waits until decoder finishes.
+    // Tracking instructions
     "event",        // Creates a detection event and writes to an event history
                     // buffer. The first operand indicates the event index (0
                     // to 4095), and the remaining operands' (which are lookback 
