@@ -11,13 +11,13 @@
 #include <string.h>
 
 struct __asm_operand_t {
-    uint32_t    data[31];
+    uint32_t    data[28];
     uint32_t    size;
 };
 
 struct __asm_inst_t {   // Each instruction is 128B.
-    char                    name[8];    // 8 B
-    struct __asm_operand_t  operands;   // 120 B
+    char                    name[12];   // 12 B
+    struct __asm_operand_t  operands;   // 116 B
 };
 
 // 512 KB for the program (4K instrutions * 128B).

@@ -35,8 +35,8 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
-# define YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
+#ifndef YY_YY_USERS_SVITTAL_DOCUMENTS_RESEARCH_QUANTUM_FTQC_QUARCH_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
+# define YY_YY_USERS_SVITTAL_DOCUMENTS_RESEARCH_QUANTUM_FTQC_QUARCH_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -45,7 +45,7 @@
 extern int yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 10 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 10 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 
 
 #include "parsing/asm/common.h"
@@ -55,7 +55,7 @@ extern int yydebug;
 #include <string.h>
 
 
-#line 59 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
+#line 59 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.h"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -78,13 +78,13 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 29 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 29 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 
     uint32_t                arg;
-    char                    name[8];
+    char                    name[12];
     struct __asm_operand_t  operands;
 
-#line 88 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
+#line 88 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -99,7 +99,7 @@ extern YYSTYPE yylval;
 int yyparse (void);
 
 /* "%code provides" blocks.  */
-#line 20 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 20 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 
 
 int yylex();
@@ -108,6 +108,6 @@ extern int  yyparse();
 void        yyerror(char const*);
 
 
-#line 112 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
+#line 112 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.h"
 
-#endif /* !YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED  */
+#endif /* !YY_YY_USERS_SVITTAL_DOCUMENTS_RESEARCH_QUANTUM_FTQC_QUARCH_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED  */

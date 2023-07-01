@@ -66,7 +66,54 @@ from_stim_circuit(const stim::Circuit& circ, schedule_t& sch) {
         }
     };
     circ.for_each_operation(cb);
+    sch = relabel_operands(sch);
+    sch = divide_instructions(sch);
     return max_qubit+1; // The qubits were 0-indexed.
+}
+
+schedule_t
+relabel_operands(const schedule_t& sch) {
+    schedule_t new_sch;
+
+    std::map<uint, uint> operand_map;
+    uint k = 0;
+    for (const auto& inst : sch) {
+        Instruction new_inst;
+        new_inst.name = inst.name;
+        if (HAS_QUBIT_OPERANDS.count(inst.name)) {
+            for (uint i : inst.operands) {
+                if (!operand_map.count(i))  operand_map[i] = k++;
+                uint x = operand_map[i];
+                new_inst.operands.push_back(x);
+            }
+        } else {
+            new_inst.operands = inst.operands;
+        }
+        new_sch.push_back(new_inst);
+    }
+
+    return new_sch;
+}
+
+schedule_t
+divide_instructions(const schedule_t& sch) {
+    schedule_t new_sch;
+
+    const uint max_operands = 28;    // Change if you modify
+                                     // struct __asm_operand_t;
+    for (const auto& inst : sch) {
+        uint offset = 0;
+        do {
+            Instruction new_inst;
+            new_inst.name = inst.name;
+            for (uint i = 0; i < max_operands; i++) {
+                if (offset >= inst.operands.size()) break;
+                new_inst.operands.push_back(inst.operands[offset++]);
+            }
+            new_sch.push_back(new_inst);
+        } while (offset < inst.operands.size());
+    }
+    return new_sch;
 }
 
 }   // qontra

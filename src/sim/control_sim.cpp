@@ -9,7 +9,7 @@ namespace qontra {
 
 using namespace experiments;
 
-ControlSimulator::ControlSimulator(uint n_qubits, const schedule_t& program)
+ControlSimulator::ControlSimulator(uint n_qubits, const schedule_t& prog)
     // Stats
     :latency(G_SHOTS_PER_BATCH, 64),
     sim_time(0),
@@ -24,7 +24,7 @@ ControlSimulator::ControlSimulator(uint n_qubits, const schedule_t& program)
     obs_buffer(128, G_SHOTS_PER_BATCH),
     obs_buffer_max_written(0),
     // Microarchitecture
-    program(program),
+    program(),
     pc(G_SHOTS_PER_BATCH, 64),
     // IF io
     if_stall(G_SHOTS_PER_BATCH),
@@ -46,7 +46,12 @@ ControlSimulator::ControlSimulator(uint n_qubits, const schedule_t& program)
     rng(0),
     flag_canonical_circuit(false),
     canonical_circuit()
-{}
+{
+    program.fill({"nop", {}, {}});
+    for (uint i = 0; i < prog.size(); i++) {
+        program[i] = prog[i];
+    }
+}
 
 void
 ControlSimulator::run(uint64_t shots) {
@@ -277,21 +282,27 @@ ControlSimulator::QEX() {
         auto inst = program[id_pc[t].u64[0]];
         // If the instruction requires interacting with any qubits,
         // check if any operands are busy. If so, stall the pipeline.
-        if (inst.name != "decode" && inst.name != "brdb"
-            && inst.name != "dfence" && inst.name != "event"
-            && inst.name != "xorfr" && inst.name != "savem"
-            && inst.name != "done")
-        {
-            bool stall_pipeline = false;
+        bool stall_pipeline = false;
+        if (HAS_QUBIT_OPERANDS.count(inst.name)) {
             for (uint x : inst.operands) {
                 if (qex_qubit_busy[t].u64[x] > 0) {
                     qex_stall[t] = 1;
                     qex_rt_valid[t] = 0;
                     stall_pipeline = true;
+                    break;
                 }
             }
-            if (stall_pipeline) continue;
+        } else if (IS_FENCE.count(inst.name)) {
+            for (uint x = 0; x < n_qubits; x++) {
+                if (qex_qubit_busy[t].u64[x] > 0) {
+                    qex_stall[t] = 1;
+                    qex_rt_valid[t] = 0;
+                    stall_pipeline = true;
+                    break;
+                }
+            }
         }
+        if (stall_pipeline) continue;
         // These instructions operate on a trial by trial basis.
         if (inst.name == "decode" && decoder != nullptr) {
             syndrome_t s(events_t[t]);

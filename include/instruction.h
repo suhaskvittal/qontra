@@ -47,6 +47,27 @@ const std::vector<std::string> ISA{
     "done",         // Tells the simulator we are done (virtual instruction)
 };
 
+// These instructions interact with the physical qubits.
+const std::set<std::string> HAS_QUBIT_OPERANDS{
+    "h",
+    "x",
+    "z",
+    "cx",
+    "s",
+    "mnrc",
+    "mrc",
+    "reset",
+    "nop"
+};
+
+// These instructions should wait until all qubit operations
+// have finished. This is typically if they rely on measurements
+// finishing.
+const std::set<std::string> IS_FENCE{
+    "event",
+    "obs"
+};
+
 struct Instruction {
     std::string name;
     std::vector<uint> operands;
@@ -89,6 +110,11 @@ typedef std::vector<Instruction>    schedule_t;
 
 std::string     schedule_to_text(const schedule_t&);
 uint            from_stim_circuit(const stim::Circuit&, schedule_t&);
+
+schedule_t      relabel_operands(const schedule_t&);
+schedule_t      divide_instructions(const schedule_t&);
+
+
 schedule_t      from_file(std::string fname);
 
 }   // qontra

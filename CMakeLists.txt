@@ -47,6 +47,7 @@ set(ASM_FILES
 add_library(qontra ${QONTRA_FILES})
 add_executable(memory src/main/memory_experiment.cpp)
 add_executable(circuit src/main/build_circuit.cpp)
+add_executable(stim2asm src/main/stim_to_asm.cpp ${ASM_FILES})
 
 ### Protean ###
 add_executable(protean_main src/main/protean/main.cpp)
@@ -79,6 +80,9 @@ target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
 
 target_link_libraries(memory PRIVATE qontra)
 target_link_libraries(circuit PRIVATE qontra)
+target_link_libraries(stim2asm PRIVATE qontra)
+
 target_link_libraries(ctrl PRIVATE qontra)
-target_link_libraries(protean_main PRIVATE qontra)
 target_link_libraries(hello PRIVATE qontra)
+
+target_link_libraries(protean_main PRIVATE qontra)

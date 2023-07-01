@@ -28,7 +28,7 @@ void        yyerror(char const*);
 
 %union {
     uint32_t                arg;
-    char                    name[8];
+    char                    name[12];
     struct __asm_operand_t  operands;
 }
 
@@ -52,14 +52,14 @@ instruction:
            INST EOL
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, 8);
+    memcpy(inst.name, $1, 12);
     inst.operands.size = 0;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
            | INST ARG EOL
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, 8);
+    memcpy(inst.name, $1, 12);
     inst.operands.data[0] = $2;
     inst.operands.size = 1;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
@@ -67,7 +67,7 @@ instruction:
            | INST ARG SEP operands EOL
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, 8);
+    memcpy(inst.name, $1, 12);
     inst.operands.data[0] = $2;
     memcpy(inst.operands.data+1, $4.data, $4.size*sizeof(uint32_t));
     inst.operands.size = 1 + $4.size;

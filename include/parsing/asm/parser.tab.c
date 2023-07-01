@@ -1052,55 +1052,55 @@ yyreduce:
   switch (yyn)
     {
   case 4: /* instruction: INST EOL  */
-#line 53 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 53 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-1].name), 8);
+    memcpy(inst.name, (yyvsp[-1].name), 12);
     inst.operands.size = 0;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-#line 1063 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1063 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
   case 5: /* instruction: INST ARG EOL  */
-#line 60 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 60 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-2].name), 8);
+    memcpy(inst.name, (yyvsp[-2].name), 12);
     inst.operands.data[0] = (yyvsp[-1].arg);
     inst.operands.size = 1;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-#line 1075 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1075 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
   case 6: /* instruction: INST ARG SEP operands EOL  */
-#line 68 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 68 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-4].name), 8);
+    memcpy(inst.name, (yyvsp[-4].name), 12);
     inst.operands.data[0] = (yyvsp[-3].arg);
     memcpy(inst.operands.data+1, (yyvsp[-1].operands).data, (yyvsp[-1].operands).size*sizeof(uint32_t));
     inst.operands.size = 1 + (yyvsp[-1].operands).size;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 
 }
-#line 1089 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1089 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
   case 7: /* operands: ARG  */
-#line 81 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 81 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.data[0] = (yyvsp[0].arg);
     x.size = 1;
     (yyval.operands) = x;
 }
-#line 1100 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1100 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
   case 8: /* operands: ARG SEP operands  */
-#line 88 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 88 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.data[0] = (yyvsp[-2].arg);
@@ -1108,11 +1108,11 @@ yyreduce:
     x.size = 1 + (yyvsp[0].operands).size;
     (yyval.operands) = x;
 }
-#line 1112 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1112 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
 
-#line 1116 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1116 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
 
       default: break;
     }
@@ -1305,7 +1305,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 97 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 97 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 
 
 void

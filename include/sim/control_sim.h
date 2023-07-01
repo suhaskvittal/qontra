@@ -75,6 +75,8 @@ public:
 
     uint64_t    sim_time;
 private:
+    typedef std::array<Instruction, 4096>   imem;
+
     void        IF(void);   // Instruction fetch
     void        ID(void);   // Instruction decode
     void        QEX(void);  // Quantum instruction execution
@@ -99,7 +101,7 @@ private:
     stim::simd_bit_table    obs_buffer;
     uint64_t                obs_buffer_max_written;
     // Microarchitecture
-    schedule_t              program;    // Program should remain constant
+    imem                    program;    // Program should remain constant
     stim::simd_bit_table    pc;
 
     // IF io
