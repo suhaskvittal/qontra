@@ -18,7 +18,7 @@ ControlSimulator::ControlSimulator(uint n_qubits, const schedule_t& prog)
     trial_done(G_SHOTS_PER_BATCH),
     // Simulation structures
     decoder(nullptr),
-    csim(n_qubits, G_SHOTS_PER_BATCH),
+    qsim(new FrameSimulator(n_qubits, G_SHOTS_PER_BATCH)),
     pauli_frames(128, G_SHOTS_PER_BATCH),
     event_history(4096, G_SHOTS_PER_BATCH),
     obs_buffer(128, G_SHOTS_PER_BATCH),
@@ -183,8 +183,8 @@ void
 ControlSimulator::clear() {
     decoder_busy.clear();
 
-    csim.reset_sim();
-    csim.shots = shots_in_curr_batch;
+    qsim->reset_sim();
+    qsim->shots = shots_in_curr_batch;
     pauli_frames.clear();
     event_history.clear();
     obs_buffer.clear();
@@ -359,7 +359,7 @@ ControlSimulator::QEX() {
             std::cout << "\n";
         }
         // Create snapshot of Clifford simulator state.
-        csim.snapshot();
+        qsim->snapshot();
         // Execute the operation, alongside any errors.
         //
         // Before operation errors:
@@ -373,46 +373,46 @@ ControlSimulator::QEX() {
         }
 
         if (inst.name == "h") {
-            csim.H(inst.operands);
+            qsim->H(inst.operands);
             if (flag_canonical_circuit) {
                 canonical_circuit.append_op("H", inst.operands);
             }
         } else if (inst.name == "x") {
-            csim.X(inst.operands);
+            qsim->X(inst.operands);
             if (flag_canonical_circuit) {
                 canonical_circuit.append_op("X", inst.operands);
             }
         } else if (inst.name == "z") {
-            csim.Z(inst.operands);
+            qsim->Z(inst.operands);
             if (flag_canonical_circuit) {
                 canonical_circuit.append_op("Z", inst.operands);
             }
         } else if (inst.name == "s") {
-            csim.S(inst.operands);
+            qsim->S(inst.operands);
             if (flag_canonical_circuit) {
                 canonical_circuit.append_op("S", inst.operands);
             }
         } else if (inst.name == "cx") {
-            csim.CX(inst.operands);
+            qsim->CX(inst.operands);
             if (flag_canonical_circuit) {
                 canonical_circuit.append_op("CX", inst.operands);
             }
         } else if (inst.name == "mrc" || inst.name == "mnrc") {
-            csim.M(inst.operands, inst.name == "mrc");
+            qsim->M(inst.operands, inst.name == "mrc");
             if (flag_canonical_circuit && inst.name == "mrc") {
                 canonical_circuit.append_op("M", inst.operands);
             }
         } else if (inst.name == "reset") {
-            csim.R(inst.operands);
+            qsim->R(inst.operands);
             if (flag_canonical_circuit) {
                 canonical_circuit.append_op("R", inst.operands);
             }
         } else if (inst.name == "event") {
             const uint k = inst.operands[0];
             event_history[k].clear();
-            const uint len = csim.get_record_size();
+            const uint len = qsim->get_record_size();
             for (uint i = 1; i < inst.operands.size(); i++) {
-                event_history[k] ^= csim.record_table[len - inst.operands[i]];
+                event_history[k] ^= qsim->record_table[len - inst.operands[i]];
             }
 
             if (flag_canonical_circuit) {
@@ -426,9 +426,9 @@ ControlSimulator::QEX() {
         } else if (inst.name == "obs") {
             const uint k = inst.operands[0];
             obs_buffer[k].clear();
-            const uint len = csim.get_record_size();
+            const uint len = qsim->get_record_size();
             for (uint i = 1; i < inst.operands.size(); i++) {
-                obs_buffer[k] ^= csim.record_table[len - inst.operands[i]];
+                obs_buffer[k] ^= qsim->record_table[len - inst.operands[i]];
             }
             if (k+1 > obs_buffer_max_written) obs_buffer_max_written = k+1;
 
@@ -473,7 +473,7 @@ ControlSimulator::QEX() {
                     const uint k2 = inst.operands[1];
                     obs_buffer[k2][t] ^= pauli_frames[k1][t];
                 } else {
-                    csim.rollback_at_trial(t);
+                    qsim->rollback_at_trial(t);
                 }
                 continue;
             }
@@ -528,9 +528,9 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
                             params.errors.op2q[inst.name][x_y]);
             }
         }
-        csim.eLT(inst.operands, lt);
-        csim.eLI(inst.operands, li);
-        csim.eDP2(inst.operands, dp2);
+        qsim->eLT(inst.operands, lt);
+        qsim->eLI(inst.operands, li);
+        qsim->eDP2(inst.operands, dp2);
     } else {
         std::string key = inst.name;
         if (inst.name == "mrc" || inst.name == "mnrc")  key = "m";
@@ -549,9 +549,9 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
             }
         }
         if (key == "m" || key == "reset") {
-            csim.eX(inst.operands, e);
+            qsim->eX(inst.operands, e);
         } else {
-            csim.eDP1(inst.operands, e);
+            qsim->eDP1(inst.operands, e);
         }
     }
 }
@@ -571,8 +571,8 @@ ControlSimulator::apply_periodic_error() {
             e1.push_back(x);
             e2.push_back(y);
         }
-        csim.eDPO(q, e1);
-        csim.eDPH(q, e2);
+        qsim->eDPO(q, e1);
+        qsim->eDPH(q, e2);
     } else {
         std::vector<fp_t> e;
         for (uint i = 0; i < n_qubits; i++) {
@@ -585,7 +585,7 @@ ControlSimulator::apply_periodic_error() {
                 canonical_circuit.append_op("DEPOLARIZE1", {i}, x);
             }
         }
-        csim.eDP1(q, e);
+        qsim->eDP1(q, e);
     }
 }
 

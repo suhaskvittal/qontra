@@ -8,10 +8,8 @@
 #ifndef CLIFFORD_SIM_h
 #define CLIFFORD_SIM_h
 
-#include "defs.h"
 #include "sim/state_sim.h"
 
-#include <random>
 #include <vector>
 
 #include <stim.h>
@@ -42,7 +40,7 @@ public:
         init_tables();
     }
 
-    void reset_sim(void) {
+    void reset_sim(void) override {
         StateSimulator::reset_sim();
 
         x_table.clear();

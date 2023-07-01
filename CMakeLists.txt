@@ -16,7 +16,6 @@ FLEX_TARGET(ASMLexer ${CMAKE_SOURCE_DIR}/include/parsing/asm/lexer.lex
     DEFINES_FILE ${CMAKE_SOURCE_DIR}/include/parsing/asm/lex.tab.h)
 ADD_FLEX_BISON_DEPENDENCY(ASMLexer ASMParser)
 
-# Declare executable.
 set(QONTRA_FILES
     # Top-Level
     src/experiments.cpp
@@ -33,9 +32,10 @@ set(QONTRA_FILES
     src/protean/compiler.cpp
     src/protean/proc3d.cpp
     # Simulation
-    src/sim/state_sim.cpp
     src/sim/clifford_sim.cpp
     src/sim/control_sim.cpp
+    src/sim/frame_sim.cpp
+    src/sim/state_sim.cpp
     )
 # I've a had a lot of trouble with Bison/Flex files. Only
 # include them if you need them.

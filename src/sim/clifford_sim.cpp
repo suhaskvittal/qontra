@@ -242,10 +242,10 @@ CliffordSimulator::eDPO(std::vector<uint> operands, std::vector<fp_t> rates) {
 
 void
 CliffordSimulator::eDPH(std::vector<uint> operands, std::vector<fp_t> rates) {
-    // I believe that properly simulating dephasing errors requires a density
-    // matrix simulator, so to a first order approximation, we will just
+    // I believe that properly simulating dephasing errors requires a state
+    // vector simulator, so to a first order approximation, we will just
     // perform a "Hadamard error" so we rotate the qubit by 90 deg. This
-    // leaves it in a quantum superposition of its "opposing" state.
+    // results in a uniform superposition in the current basis.
     //  i.e. |+> --> |0> = |+> + |->    (ignoring the constant for readability)
     //       |0> --> |+> = |0> + |1>
     for (uint i = 0; i < operands.size(); i++) {
@@ -271,9 +271,9 @@ CliffordSimulator::eDP1(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
+            auto p = rng() & 3;
             for (uint ii = 0; ii < 2*n_qubits; ii++) {
                 uint k = n_qubits*ii + j;
-                auto p = rng() & 3;
                 r_table[ii][t] ^= ((z_table[k][t]) & (p & 1))
                                     & ((x_table[k][t]) & (p & 2))
                                     & ~leak_table[j][t];
@@ -290,10 +290,10 @@ CliffordSimulator::eDP2(std::vector<uint> operands, std::vector<fp_t> rates) {
 
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) {
+            auto p = rng() & 15;
             for (uint ii = 0; ii < 2*n_qubits; ii++) {
                 uint k1 = n_qubits*ii + j1;
                 uint k2 = n_qubits*ii + j2;
-                auto p = rng() & 15;
                 r_table[ii][t] ^= ((z_table[k1][t]) & (p & 1))
                                     & ((x_table[k1][t]) & (p & 2))
                                     & ~leak_table[j1][t];
@@ -328,10 +328,10 @@ CliffordSimulator::eLI(std::vector<uint> operands, std::vector<fp_t> rates) {
 
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) {
-            auto p = rng() & 2;
+            auto p = rng() % 3;
             // Either leak (or unleak) one or both qubits.
-            leak_table[j1][t] ^= ~(p & 1);
-            leak_table[j2][t] ^= (p > 0);
+            leak_table[j1][t] ^= (p == 0) || (p == 2);
+            leak_table[j2][t] ^= (p == 1) || (p == 2);
         });
     }
 }
@@ -344,7 +344,6 @@ CliffordSimulator::eLT(std::vector<uint> operands, std::vector<fp_t> rates) {
 
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) {
-            auto p = rng() & 2;
             leak_table[j1][t] |= leak_table[j2][t];
             leak_table[j2][t] |= leak_table[j1][t];
         });

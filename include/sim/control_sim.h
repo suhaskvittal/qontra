@@ -10,7 +10,7 @@
 #include "defs.h"
 #include "experiments.h"
 #include "instruction.h"
-#include "sim/clifford_sim.h"
+#include "sim/frame_sim.h"
 #include "tables.h"
 
 #include <functional>
@@ -30,6 +30,9 @@ namespace qontra {
 class ControlSimulator {
 public:
     ControlSimulator(uint n_qubits, const schedule_t&);
+    ~ControlSimulator() {
+        delete qsim;
+    }
 
     void run(uint64_t shots);
     void clear();
@@ -37,6 +40,8 @@ public:
     void            build_canonical_circuit(void);
 
     stim::Circuit   get_canonical_circuit(void) { return canonical_circuit; }
+
+    void            load_simulator(StateSimulator* ss) { qsim = ss; }
     void            load_decoder(decoder::Decoder* dec) { decoder = dec; }
 
     struct params_t {
@@ -95,7 +100,7 @@ private:
     stim::simd_bits         trial_done; // Active-low: if 1, then not finished.
     // Simulation structures:
     decoder::Decoder*       decoder; // Should return XZ frame changes
-    CliffordSimulator       csim;
+    StateSimulator*         qsim;
     stim::simd_bit_table    pauli_frames;
     stim::simd_bit_table    event_history;
     stim::simd_bit_table    obs_buffer;
