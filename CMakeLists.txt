@@ -33,6 +33,7 @@ set(QONTRA_FILES
     src/protean/compiler.cpp
     src/protean/proc3d.cpp
     # Simulation
+    src/sim/state_sim.cpp
     src/sim/clifford_sim.cpp
     src/sim/control_sim.cpp
     )
