@@ -54,7 +54,9 @@ const std::vector<std::string> ISA{
     "hshift",       // Shifts event history by the specified operand (oldest "k"
                     // events are removed).
     // Virtual instruction
-    "done",         // Tells the simulator we are done (virtual instruction)
+    "done",         // Tells the simulator we are done
+    "ffstart",      // Tells the simulator to start fast-forwarding
+    "ffend"         // Tells the simulator to stop fast-forwarding
 };
 
 // These instructions interact with the physical qubits.
@@ -76,6 +78,12 @@ const std::set<std::string> HAS_QUBIT_OPERANDS{
 const std::set<std::string> IS_FENCE{
     "event",
     "obs"
+};
+
+// These instructions have nothing to be done during the QEX stage.
+const std::set<std::string> IS_NOP_LIKE{
+    "ffstart",
+    "ffend"
 };
 
 struct Instruction {

@@ -37,7 +37,7 @@ public:
     void            build_canonical_circuit(void);
     stim::Circuit   get_canonical_circuit(void) { return canonical_circuit; }
 
-    void    load_simulator(StateSimulator* ss) { delete qsim; qsim = ss; }
+    void    load_simulator(StateSimulator* ss) { qsim = ss; }
     void    load_decoder(decoder::Decoder* dec) { decoder = dec; }
 
     struct params_t {
@@ -47,6 +47,16 @@ public:
                                             // the simulator after this
                                             // much walltime has elapsed.
         uint        verbose = 0;
+        // Fast-forwarding parameters
+        //      Fast-forwarding the simulator makes all instructions take
+        //      1 cycle and have no execution latency (i.e. a measurement
+        //      now takes 0ns). This is best used for quick simulations.
+        //
+        //      Fast-forwarding can be integrated into the simulation via
+        //      virtual instructions ffstart and ffend (see instruction.h).
+        bool        enable_fast_forwarding = true;
+        uint64_t    ff_apply_periodic_errors_at_t = 250;
+        uint64_t    ff_periodic_error_assume_time_elapsed = 1000;
         // Control system configuration
         fp_t        clock_frequency = 250e6;
         bool        decoder_is_ideal = true;    // Decoder only takes 1ns to run.
@@ -86,7 +96,7 @@ private:
     typedef std::function<void(std::vector<uint>, std::vector<fp_t>)>   ef_t;
 
     void        apply_gate_error(Instruction&);
-    void        apply_periodic_error(void);
+    void        apply_periodic_error(fp_t t);
 
     uint64_t    shots_in_curr_batch;
     Timer       timer;
@@ -126,6 +136,9 @@ private:
 
     bool            flag_canonical_circuit;
     stim::Circuit   canonical_circuit;
+
+    bool            is_fast_forwarding;
+    bool            apply_pending_errors;
 };
 
 }   // qontra

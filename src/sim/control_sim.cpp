@@ -48,7 +48,9 @@ ControlSimulator::ControlSimulator(
     n_qubits(n_qubits),
     rng(0),
     flag_canonical_circuit(false),
-    canonical_circuit()
+    canonical_circuit(),
+    is_fast_forwarding(false),
+    apply_pending_errors(false)
 {
     program.fill({"nop", {}, {}});
     for (uint i = 0; i < prog.size(); i++) {
@@ -105,8 +107,7 @@ ControlSimulator::run(uint64_t shots) {
                     << latency[0].u64[0] << ") = " 
                     << pc[0].u64[0] << "\t"
                     << "@ " << program[pc[0].u64[0]].str() << "\n";
-                std::cout << "\tNo. of trials done: " << 
-                    (shots_in_curr_batch - trial_done.popcnt()) << "\n";
+                std::cout << "\tIs fast-forwarding: " << is_fast_forwarding << "\n";
             }
             RT();
             QEX();
@@ -117,26 +118,64 @@ ControlSimulator::run(uint64_t shots) {
             uint64_t tt = (uint64_t)((1.0/params.clock_frequency) * 1e9);
             for (uint64_t i = 0; i < shots_in_curr_batch; i++) {
                 if (!trial_done[i]) continue;
-                latency[i].u64[0] += tt;
+                // Do not count timing statistics due to fastforwarding.
+                if (!is_fast_forwarding) {
+                    latency[i].u64[0] += tt;
+                }
 
-                if (decoder_busy[i].u64[0] <= tt) {
+                if (decoder_busy[i].u64[0] <= tt || is_fast_forwarding) {
                     decoder_busy[i].u64[0] = 0;
                 } else {
                     decoder_busy[i].u64[0] -= tt;;
                 }
                 for (uint64_t q = 0; q < n_qubits; q++) {
-                    if (qex_qubit_busy[i].u64[q] <= tt) {
+                    if (qex_qubit_busy[i].u64[q] <= tt
+                        || is_fast_forwarding) 
+                    {
                         qex_qubit_busy[i].u64[q] = 0;
                     } else {
                         qex_qubit_busy[i].u64[q] -= tt;
                     }
                 }
             }
+
+            // Apply any periodic errors if necessary.
             t_since_last_periodic_error -= tt;
             if (t_since_last_periodic_error <= 0) {
-                apply_periodic_error();
-                t_since_last_periodic_error = params.apply_periodic_errors_at_t;
+                if (is_fast_forwarding) {
+                    apply_periodic_error(
+                            params.ff_periodic_error_assume_time_elapsed);
+                    t_since_last_periodic_error = 
+                            params.ff_apply_periodic_errors_at_t;
+                } else {
+                    apply_periodic_error(params.apply_periodic_errors_at_t);
+                    t_since_last_periodic_error = 
+                            params.apply_periodic_errors_at_t;
+                }
+            } else if (apply_pending_errors) {
+                // This is a transitionary period between FF and non-FF (or
+                // vice versa).
+                if (t_since_last_periodic_error < 0) {
+                    t_since_last_periodic_error = 0;
+                }
+                uint64_t delta;
+                if (is_fast_forwarding) {
+                    delta = params.apply_periodic_errors_at_t
+                                - t_since_last_periodic_error;
+                    delta *= params.ff_periodic_error_assume_time_elapsed
+                                / params.ff_apply_periodic_errors_at_t;
+                    t_since_last_periodic_error = 
+                            params.apply_periodic_errors_at_t;
+                } else {
+                    delta = params.ff_periodic_error_assume_time_elapsed 
+                                - t_since_last_periodic_error;
+                    t_since_last_periodic_error = 
+                            params.ff_apply_periodic_errors_at_t;
+                }
+                apply_periodic_error(delta);
             }
+            apply_pending_errors = false;
+
             // Check if we need to abort any trials.
             auto rt = timer.clk_end();
             if (params.verbose) {
@@ -234,6 +273,19 @@ ControlSimulator::IF() {
         if (if_stall[t])    continue;
         // Otherwise, update the PC and do any IO.
         if_pc[t].u64[0] = pc[t].u64[0];
+
+        // Check if this is a fastforwarding instruction.
+        auto& inst = program[pc[t].u64[0]];
+        if (params.enable_fast_forwarding && !flag_canonical_circuit) {
+            if (inst.name == "ffstart") {
+                // Apply any pending periodic errors.
+                apply_pending_errors = true;
+                is_fast_forwarding = true;
+            } else if (inst.name == "ffend") {
+                apply_pending_errors = true;
+                is_fast_forwarding = false;
+            }
+        }
         pc[t].u64[0]++;
     }
 }
@@ -283,6 +335,9 @@ ControlSimulator::QEX() {
     for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
         if (qex_stall[t] || !id_qex_valid[t])   continue;
         auto inst = program[id_pc[t].u64[0]];
+
+        if (IS_NOP_LIKE.count(inst.name))    continue;
+
         // If the instruction requires interacting with any qubits,
         // check if any operands are busy. If so, stall the pipeline.
         bool stall_pipeline = false;
@@ -318,7 +373,9 @@ ControlSimulator::QEX() {
             // Decoder may get backlogged if it does not complete on time.
             //
             // But this is fine.
-            decoder_busy[t].u64[0] += exec_time;
+            if (!params.decoder_is_ideal) {
+                decoder_busy[t].u64[0] += exec_time;
+            }
             // Update Pauli frames
             uint offset = inst.operands[0];
             for (uint i = 0; i < res.corr.size(); i++) {
@@ -336,7 +393,7 @@ ControlSimulator::QEX() {
             br_pc = inst.operands[0];
         } else if (inst.name == "dfence") {
             if (decoder_busy[t].not_zero()) {
-                id_stall[t] = 1;
+                qex_stall[t] = 1;
                 qex_rt_valid[t] = 0;
             }
         } else if (inst.name == "savem") {
@@ -497,6 +554,8 @@ ControlSimulator::QEX() {
                 }
                 continue;
             }
+            // Do not do any latency updates if we are fast forwarding.
+            if (is_fast_forwarding) continue;
             if (inst.name == "cx") {
                 for (uint i = 0; i < inst.operands.size(); i += 2) {
                     uint x = inst.operands[i];
@@ -577,8 +636,7 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
 }
 
 void
-ControlSimulator::apply_periodic_error() {
-    const fp_t t = params.apply_periodic_errors_at_t;
+ControlSimulator::apply_periodic_error(fp_t t) {
     std::vector<uint> q;
     if (params.simulate_periodic_as_dpo_and_dph 
         && !flag_canonical_circuit) 
