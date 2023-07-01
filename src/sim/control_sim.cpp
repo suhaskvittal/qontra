@@ -79,6 +79,7 @@ ControlSimulator::run(uint64_t shots) {
     rng.seed(G_BASE_SEED + world_rank);
 
     trial_done.clear();
+
     uint64_t shots_left = shots;
     while (shots_left) {
         shots_in_curr_batch = shots_left < G_SHOTS_PER_BATCH 
@@ -96,8 +97,7 @@ ControlSimulator::run(uint64_t shots) {
         timer.clk_start();
 
         if (params.verbose) {
-            std::cout << "[ BATCH shots = "
-                << shots_in_curr_batch << " ]\n";
+            std::cout << "[ BATCH shots = " << shots_in_curr_batch << " ]\n";
         }
         
         int64_t t_since_last_periodic_error = params.apply_periodic_errors_at_t;
@@ -446,6 +446,8 @@ ControlSimulator::QEX() {
             apply_gate_error(inst);
         }
 
+        stim::simd_bit_table event_history_cpy(event_history);
+
         if (inst.name == "h") {
             qsim->H(inst.operands);
             if (flag_canonical_circuit) {
@@ -522,6 +524,11 @@ ControlSimulator::QEX() {
         } else if (inst.name == "hshift") {
             const uint x = inst.operands[0];
             qsim->shift_record_by(x);
+            // Shift event history as well.
+            for (uint i = 0; i < 4096; i++) {
+                if (i < x)  event_history[i].clear();
+                else        event_history[i].swap_with(event_history[i-x]);
+            }
         }
 
         // After operation errors:
@@ -549,6 +556,11 @@ ControlSimulator::QEX() {
                     const uint k1 = inst.operands[0];
                     const uint k2 = inst.operands[1];
                     obs_buffer[k2][t] ^= pauli_frames[k1][t];
+                } else if (inst.name == "hshift") {
+                    for (uint i = 0; i < 4096; i++) {
+                        event_history[i][t] = event_history_cpy[i][t];
+                    }
+                    qsim->rollback_at_trial(t);
                 } else {
                     qsim->rollback_at_trial(t);
                 }

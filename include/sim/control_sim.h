@@ -19,6 +19,7 @@
 #include <random>
 
 #include <math.h>
+#include <stdio.h>
 
 namespace qontra {
 
@@ -40,7 +41,7 @@ public:
     void    load_simulator(StateSimulator* ss) { qsim = ss; }
     void    load_decoder(decoder::Decoder* dec) { decoder = dec; }
 
-    struct params_t {
+    struct {
         // Simulation parameters
         uint64_t    kill_batch_after_time_elapsed = 10; 
                                             // In seconds, halts
@@ -70,8 +71,16 @@ public:
         bool        simulate_periodic_as_dpo_and_dph = false;
                                             // If false, we just do depolarizing
                                             // errors instead.
-    };
-    params_t params;
+        // Saving syndrome data
+        bool                save_syndromes_to_file = false;
+        std::string         syndrome_output_folder; 
+                                        // Syndromes are saved in Stim's
+                                        // .dets file format. One file is
+                                        // created for each batch.
+        std::vector<uint>   save_pauli_frames{0};
+                                        // A list of Pauli frame indices to
+                                        // save.
+    } params;
     // Stats: add any new stats if necessary.
     stim::simd_bit_table                latency;
                                         // Latency is a 64-bit integer: 
