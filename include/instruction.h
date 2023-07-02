@@ -86,6 +86,13 @@ const std::set<std::string> IS_NOP_LIKE{
     "ffend"
 };
 
+const std::set<std::string> ARE_JMP_OR_BR{
+    "jmp",
+    "brdb",
+    "braspc",
+    "brospc"
+};
+
 struct Instruction {
     std::string name;
     std::vector<uint> operands;

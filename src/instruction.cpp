@@ -11,7 +11,7 @@ std::string
 schedule_to_text(const schedule_t& sch) {
     std::string out;
     for (const auto& inst : sch) {
-        out += inst.str() + "\n";
+        out += inst.str() + ";\n";
     }
     return out;
 }
@@ -92,27 +92,6 @@ relabel_operands(const schedule_t& sch) {
         new_sch.push_back(new_inst);
     }
 
-    return new_sch;
-}
-
-schedule_t
-divide_instructions(const schedule_t& sch) {
-    schedule_t new_sch;
-
-    const uint max_operands = 28;    // Change if you modify
-                                     // struct __asm_operand_t;
-    for (const auto& inst : sch) {
-        uint offset = 0;
-        do {
-            Instruction new_inst;
-            new_inst.name = inst.name;
-            for (uint i = 0; i < max_operands; i++) {
-                if (offset >= inst.operands.size()) break;
-                new_inst.operands.push_back(inst.operands[offset++]);
-            }
-            new_sch.push_back(new_inst);
-        } while (offset < inst.operands.size());
-    }
     return new_sch;
 }
 

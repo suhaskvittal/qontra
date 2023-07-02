@@ -14,34 +14,45 @@
 #include <stdlib.h>
 #include <string.h>
 
+void    force_lowercase(char*, int);
+
 %}
 
 %%
 
+#.+?\n      { /* this is a comment */ }
+
 [0-9]+      { 
                 yylval.arg = (uint32_t) atoi(yytext); 
-                return ARG; 
+                return NUM; 
             }
-[A-Za-z]+   { 
-                memcpy(yylval.name, yytext, 8); 
-                // Force lower case.
-                for (int i = 0; i < yyleng; i++) {
-                    if (yylval.name[i] < 'a') {
-                        yylval.name[i] += 'a' - 'A';
-                    }
-                }
+[A-Za-z]+   {
+                memcpy(yylval.name, yytext, 24);
+                force_lowercase(yylval.name, yyleng);
+                return INST;
+            }
+[A-Za-z_0-9]+  { 
+                memcpy(yylval.name, yytext, 24); 
                 return ID; 
             }
 [ \t]       { /* ignore whitespace */ }
-,           { return SEP; }
 :           { return ':'; }
-\n          { return EOL; }
+;           { return ';'; }
+,           { return SEP; }
+\n          { BEGIN(INITIAL); return EOL; }
 
 %%
 
+void force_lowercase(char* text, int len) {
+    for (int i = 0; i < len; i++) {
+        if (text[i] < 'a') {
+            text[i] += 'a' - 'A';
+        }
+    }
+}
+
 void asm_yystart(FILE* fin) {
-    ASMParserScheduleLen = 0;
-    ASMLabelCount = 0;
-    pc = 0;
+    // Reset parser.
+    reset_parser();
     yyrestart(fin);
 }

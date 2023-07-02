@@ -66,10 +66,11 @@ extern int yydebug;
     YYEOF = 0,                     /* "end of file"  */
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
-    ID = 258,                      /* ID  */
-    SEP = 259,                     /* SEP  */
-    ARG = 260,                     /* ARG  */
-    EOL = 261                      /* EOL  */
+    INST = 258,                    /* INST  */
+    ID = 259,                      /* ID  */
+    NUM = 260,                     /* NUM  */
+    SEP = 261,                     /* SEP  */
+    EOL = 262                      /* EOL  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -78,13 +79,13 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 31 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
+#line 29 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 
     uint32_t                arg;
-    char                    name[12];
+    char                    name[24];
     struct __asm_operand_t  operands;
 
-#line 88 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.h"
+#line 89 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -107,9 +108,7 @@ int yylex();
 extern int  yyparse();
 void        yyerror(char const*);
 
-int64_t     get_label_pc(const char*);
 
-
-#line 114 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.h"
+#line 113 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.h"
 
 #endif /* !YY_YY_USERS_SVITTAL_DOCUMENTS_RESEARCH_QUANTUM_FTQC_QUARCH_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED  */
