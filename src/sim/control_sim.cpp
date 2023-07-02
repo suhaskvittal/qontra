@@ -325,8 +325,8 @@ ControlSimulator::QEX() {
     // accessing the contents of these structures each trial (assuming
     // that most trials are at the same point in the program). So,
     // this should maximize cache accesses.
-    stim::simd_bit_table events_t = event_history.transposed();
-    stim::simd_bit_table obs_t = obs_buffer.transposed();
+    stim::simd_bit_table events_tp = event_history.transposed();
+    stim::simd_bit_table obs_tp = obs_buffer.transposed();
 
     // As we can execute quantum instructions in a batch, track
     // which instructions are being executed in which trials.
@@ -367,7 +367,7 @@ ControlSimulator::QEX() {
         bool        br_taken = false;
 
         if (inst.name == "decode" && decoder != nullptr) {
-            syndrome_t s(events_t[t]);
+            syndrome_t s(events_tp[t]);
             auto res = decoder->decode_error(s);
             uint64_t exec_time = (uint64_t)res.exec_time;
             // Decoder may get backlogged if it does not complete on time.
@@ -397,7 +397,7 @@ ControlSimulator::QEX() {
                 qex_rt_valid[t] = 0;
             }
         } else if (inst.name == "savem") {
-            vlw_t x = to_vlw(obs_t[t], obs_buffer_max_written);
+            vlw_t x = to_vlw(obs_tp[t], obs_buffer_max_written);
             prob_histograms[x]++;
         } else if (inst.name == "done") {
             trial_done[t] = 0;
@@ -446,7 +446,9 @@ ControlSimulator::QEX() {
             apply_gate_error(inst);
         }
 
-        stim::simd_bit_table event_history_cpy(event_history);
+        stim::simd_bit_table    event_history_cpy(event_history);
+        stim::simd_bits         sig_m_spec_cpy;
+        stim::simd_bits         val_m_spec_cpy;
 
         if (inst.name == "h") {
             qsim->H(inst.operands);
@@ -498,6 +500,21 @@ ControlSimulator::QEX() {
                                                 | stim::TARGET_RECORD_BIT);
                 }
                 canonical_circuit.append_op("DETECTOR", stim_operands);
+                continue;
+            }
+            // Do not execute the below if we are building a canonical
+            // circuit.
+            if (params.speculate_measurements && inst.operands.size() == 3) {
+                const uint m1 = inst.operands[1];
+                const uint m2 = inst.operands[2];
+                sig_m_spec.clear();
+                val_m_spec.clear();
+                event_history[k].for_each_word(
+                    sig_m_spec, val_m_spec,
+                [&] (auto& h, auto& sig, auto& val)
+                {
+                    sig = ~h;
+                });
             }
         } else if (inst.name == "obs") {
             const uint k = inst.operands[0];

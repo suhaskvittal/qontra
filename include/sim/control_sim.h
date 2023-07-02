@@ -61,10 +61,12 @@ public:
         // Control system configuration
         fp_t        clock_frequency = 250e6;
         bool        decoder_is_ideal = true;    // Decoder only takes 1ns to run.
+        
+        bool        speculate_measurements = true;
+
         // Configuration of quantum computer
         TimeTable   timing;
         ErrorTable  errors;
-
         uint64_t    apply_periodic_errors_at_t = 800;
                                             // Apply state errors on all qubits
                                             // as frequently as shown.
@@ -127,11 +129,9 @@ private:
     //
     //  Data structures for Selective Syndrome Extraction
     //
-    stim::simd_bits         sig_m_spec;     // Active if the measurement was
+    stim::simd_bit_table    sig_m_spec;     // Active if the measurement was
                                             // speculated.
-    stim::simd_bits         val_m_spec;`    // Value of speculated measurement.
-    stim::simd_bit_table    stride_register;
-                                            // Predicts place to record.
+    stim::simd_bit_table    val_m_spec;`    // Value of speculated measurement.
 
     // IF io
     stim::simd_bits         if_stall;
