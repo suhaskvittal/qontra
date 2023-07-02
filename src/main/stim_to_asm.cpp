@@ -29,6 +29,8 @@ int main(int argc, char* argv[]) {
     help += "\tEither pass in a Stim file (--stim) or the code distance (--d)";
     help += " and number of rounds (--r).\n";
     help += "\tPass in (-x) or (-z) to declare the memory experiment.\n";
+    help += "\tPass in (-both) to create a memory experiment including events";
+    help += " for both X and Z stabilizers.\n";
     help += "\tError rates do not matter.\n";
 
     bool help_requested = parser.option_set("h");
@@ -40,6 +42,8 @@ help_exit:
 
     std::string output_file;
     if (!parser.get_string("output", output_file))  goto help_exit;
+    
+    bool both_stabilizers = parser.option_set("both");
     
     if (parser.option_set("stim")) {
         std::string stim_file;
@@ -55,6 +59,7 @@ help_exit:
         bool is_memory_x = parser.option_set("x");
         std::string task = is_memory_x ? "rotated_memory_x" : "rotated_memory_z";
         stim::CircuitGenParameters circ_params(r, d, task);
+        circ_params.both_stabilizers = both_stabilizers;
         circuit = generate_surface_code_circuit(circ_params).circuit;
     }
     from_stim_circuit(circuit, prog);
@@ -63,3 +68,4 @@ help_exit:
     std::ofstream out(output_file);
     out << schedule_to_text(prog);
 }
+
