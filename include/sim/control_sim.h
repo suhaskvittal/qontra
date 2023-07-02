@@ -124,6 +124,15 @@ private:
     imem                    program;    // Program should remain constant
     stim::simd_bit_table    pc;
 
+    //
+    //  Data structures for Selective Syndrome Extraction
+    //
+    stim::simd_bits         sig_m_spec;     // Active if the measurement was
+                                            // speculated.
+    stim::simd_bits         val_m_spec;`    // Value of speculated measurement.
+    stim::simd_bit_table    stride_register;
+                                            // Predicts place to record.
+
     // IF io
     stim::simd_bits         if_stall;
     stim::simd_bits         if_id_valid;
