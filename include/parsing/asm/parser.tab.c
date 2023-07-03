@@ -434,7 +434,7 @@ union yyalloc
 /* YYFINAL -- State number of the termination state.  */
 #define YYFINAL  12
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   19
+#define YYLAST   18
 
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  10
@@ -443,7 +443,7 @@ union yyalloc
 /* YYNRULES -- Number of rules.  */
 #define YYNRULES  11
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  21
+#define YYNSTATES  22
 
 /* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   262
@@ -522,7 +522,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-7)
+#define YYPACT_NINF (-6)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -536,9 +536,9 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-       2,     8,     1,     2,     9,     2,    -3,     6,    -7,    10,
-       2,    -7,    -7,    -7,    -7,    11,    14,    -7,    -7,    -7,
-      -7
+       0,     1,    -5,     0,    12,     0,     3,     7,    -6,     9,
+       0,    -6,    -6,    -6,    -6,    13,    13,    -6,    -6,    10,
+      -6,    -6
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -547,14 +547,14 @@ static const yytype_int8 yypact[] =
 static const yytype_int8 yydefact[] =
 {
        2,     0,     0,     2,     0,     2,     0,    10,     6,     0,
-       2,     5,     1,     3,     7,     0,     0,     9,     4,     8,
-      11
+       2,     5,     1,     3,     7,     0,     0,     9,     4,     0,
+      11,     8
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-      -7,    -2,    -7,    -6
+      -6,    -3,    -6,    -2
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
@@ -568,14 +568,14 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-      15,    11,     7,    13,    14,     1,     2,    10,    18,    12,
-      20,     3,     6,     7,    16,     8,     0,    17,    19,     7
+      11,    10,    13,     1,     2,     6,     7,    18,     8,     3,
+      14,    15,    12,    19,    20,    16,    17,    21,     7
 };
 
 static const yytype_int8 yycheck[] =
 {
-       6,     3,     5,     5,     7,     3,     4,     6,    10,     0,
-      16,     9,     4,     5,     8,     7,    -1,     7,     7,     5
+       3,     6,     5,     3,     4,     4,     5,    10,     7,     9,
+       7,     8,     0,    15,    16,     8,     7,     7,     5
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
@@ -583,8 +583,8 @@ static const yytype_int8 yycheck[] =
 static const yytype_int8 yystos[] =
 {
        0,     3,     4,     9,    11,    12,     4,     5,     7,    13,
-       6,    11,     0,    11,     7,    13,     8,     7,    11,     7,
-      13
+       6,    11,     0,    11,     7,     8,     8,     7,    11,    13,
+      13,     7
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
@@ -597,7 +597,7 @@ static const yytype_int8 yyr1[] =
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     0,     2,     3,     2,     2,     3,     4,     3,
+       0,     2,     0,     2,     3,     2,     2,     3,     5,     3,
        1,     3
 };
 
@@ -1106,15 +1106,15 @@ yyreduce:
 #line 1107 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.tab.c"
     break;
 
-  case 8: /* instruction: INST ID operands ';'  */
+  case 8: /* instruction: INST ID SEP operands ';'  */
 #line 94 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, (yyvsp[-3].name), IDLEN);
+    memcpy(inst.name, (yyvsp[-4].name), IDLEN);
 
-    int label = get_label_id((yyvsp[-2].name));
+    int label = get_label_id((yyvsp[-3].name));
     if (label < 0) {
-        label = record_label((yyvsp[-2].name));    
+        label = record_label((yyvsp[-3].name));    
     }
     inst.operands.size = 1 + (yyvsp[-1].operands).size;
     inst.operands.data = malloc(inst.operands.size * sizeof(uint32_t));

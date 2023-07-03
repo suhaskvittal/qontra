@@ -13,6 +13,7 @@
 #include "sim/frame_sim.h"
 #include "tables.h"
 
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <vector>
@@ -131,7 +132,7 @@ private:
     //
     stim::simd_bit_table    sig_m_spec;     // Active if the measurement was
                                             // speculated.
-    stim::simd_bit_table    val_m_spec;`    // Value of speculated measurement.
+    stim::simd_bit_table    val_m_spec;     // Value of speculated measurement.
 
     // IF io
     stim::simd_bits         if_stall;

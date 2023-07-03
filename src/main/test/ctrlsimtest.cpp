@@ -70,6 +70,7 @@ int main(int argc, char* argv[]) {
     sim.load_decoder(mwpm);
 
     sim.params.verbose = parser.option_set("v") && (world_rank == 0);
+    sim.params.kill_batch_after_time_elapsed = 1000;
 
     sim.run(shots);
     if (world_rank == 0) {

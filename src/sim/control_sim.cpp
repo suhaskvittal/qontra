@@ -29,6 +29,9 @@ ControlSimulator::ControlSimulator(
     // Microarchitecture
     program(),
     pc(G_SHOTS_PER_BATCH, 64),
+    // Selective Syndrome Extraction
+    sig_m_spec(4096, G_SHOTS_PER_BATCH),
+    val_m_spec(4096, G_SHOTS_PER_BATCH),
     // IF io
     if_stall(G_SHOTS_PER_BATCH),
     if_pc(G_SHOTS_PER_BATCH, 64),
@@ -193,6 +196,11 @@ ControlSimulator::run(uint64_t shots) {
             }
             if (rt*1e-9 > params.kill_batch_after_time_elapsed) {
                 __n_trials_killed += trial_done.popcnt();
+                std::cout << "[ ALERT ] Killed "
+                        << trial_done.popcnt() << 
+                        " since walltime of " 
+                        << rt*1e-9
+                        << "s has been exceeded.\n";
                 trial_done.clear();
             }
         }
@@ -387,6 +395,14 @@ ControlSimulator::QEX() {
             br_taken = decoder_busy[t].not_zero();
         } else if (inst.name == "braspc") {
             br_pc = inst.operands[0];
+            bool all_speculated = true;
+            for (uint i = 1; i < inst.operands.size(); i++) {
+                uint j = inst.operands[i];
+                all_speculated &= sig_m_spec[j][t];
+                // Premptively place the results.
+                qsim->record_table[j][t] = val_m_spec[j][t];
+            }
+            br_taken = all_speculated;
         } else if (inst.name == "brospc") {
             br_pc = inst.operands[0];
         } else if (inst.name == "dfence") {
@@ -409,7 +425,7 @@ ControlSimulator::QEX() {
             instruction_to_trials[inst].insert(t);
         }
 
-        if (br_taken) {
+        if (br_taken && !is_building_canonical_circuit) {
             if_id_valid[t] = 0;
             id_qex_valid[t] = 0;
             pc[t].u64[0] = br_pc;
@@ -445,8 +461,8 @@ ControlSimulator::QEX() {
         }
 
         stim::simd_bit_table    event_history_cpy(event_history);
-        stim::simd_bits         sig_m_spec_cpy;
-        stim::simd_bits         val_m_spec_cpy;
+        stim::simd_bit_table    sig_m_spec_cpy(sig_m_spec);
+        stim::simd_bit_table    val_m_spec_cpy(val_m_spec);
 
         if (inst.name == "h") {
             qsim->H(inst.operands);
@@ -510,16 +526,23 @@ ControlSimulator::QEX() {
             // Do not execute the below if we are building a canonical
             // circuit.
             if (params.speculate_measurements && inst.operands.size() == 3) {
-                const uint m1 = inst.operands[1];
-                const uint m2 = inst.operands[2];
-                sig_m_spec.clear();
-                val_m_spec.clear();
-                event_history[k].for_each_word(
-                    sig_m_spec, val_m_spec,
-                [&] (auto& h, auto& sig, auto& val)
-                {
-                    sig = ~h;
-                });
+                uint m1 = inst.operands[1];
+                uint m2 = inst.operands[2];
+                if (m1 > m2)    std::swap(m1, m2);
+                // We are assuming that a future event will have the
+                // same "stride" as this event.
+                uint delta = m2 - m1;
+                uint m3 = m2 + delta;
+
+                // If the event is 0, then speculate that the next
+                // measurement will remain the same.
+                sig_m_spec[m3].clear();
+                val_m_spec[m3].clear();
+
+                sig_m_spec[m3] |= event_history[k];
+                sig_m_spec[m3].invert_bits();
+
+                val_m_spec[m3] |= qsim->record_table[m2];
             }
         } else if (inst.name == "obs") {
             const uint k = inst.operands[0];
@@ -546,10 +569,17 @@ ControlSimulator::QEX() {
         } else if (inst.name == "hshift") {
             const uint x = inst.operands[0];
             qsim->shift_record_by(x);
-            // Shift event history as well.
+            // Shift event history and speculation data as well.
             for (uint i = 0; i < 4096; i++) {
-                if (i < x)  event_history[i].clear();
-                else        event_history[i].swap_with(event_history[i-x]);
+                if (i < x) {
+                    event_history[i].clear();
+                    sig_m_spec[i].clear();
+                    val_m_spec[i].clear();
+                } else {
+                    event_history[i].swap_with(event_history[i-x]);
+                    sig_m_spec[i].swap_with(sig_m_spec[i-x]);
+                    val_m_spec[i].swap_with(val_m_spec[i-x]);
+                }
             }
 
             if (is_building_canonical_circuit) {
@@ -578,7 +608,18 @@ ControlSimulator::QEX() {
                 // Undo any changes
                 if (inst.name == "event") {
                     const uint k = inst.operands[0];
-                    event_history[k][t] = 0;
+                    event_history[k][t] = event_history_cpy[k][t];
+                    if (params.speculate_measurements 
+                            && inst.operands.size() == 3) 
+                    {
+                        uint m1 = inst.operands[1];
+                        uint m2 = inst.operands[2];
+                        if (m1 > m2)    std::swap(m1, m2);
+                        uint delta = m2 - m1;
+                        uint m3 = m2 + delta;
+                        sig_m_spec[m3][t] = sig_m_spec_cpy[m3][t];
+                        val_m_spec[m3][t] = val_m_spec_cpy[m3][t];
+                    }
                 } else if (inst.name == "obs") {
                     const uint k = inst.operands[0];
                     obs_buffer[k][t] = 0;
