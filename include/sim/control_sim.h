@@ -35,8 +35,8 @@ public:
     void run(uint64_t shots);
     void clear();
 
-    void            build_canonical_circuit(void);
-    stim::Circuit   get_canonical_circuit(void) { return canonical_circuit; }
+    void            build_error_model();
+    stim::Circuit   get_error_model(void) { return canonical_circuit; }
 
     void    load_simulator(StateSimulator* ss) { qsim = ss; }
     void    load_decoder(decoder::Decoder* dec) { decoder = dec; }
@@ -152,11 +152,15 @@ private:
     const uint      n_qubits;
     std::mt19937_64 rng;
 
-    bool            flag_canonical_circuit;
-    stim::Circuit   canonical_circuit;
-
-    bool            is_fast_forwarding;
-    bool            apply_pending_errors;
+    // Canonical circuit structures.
+    bool                    is_building_canonical_circuit;
+    stim::Circuit           canonical_circuit;
+    std::map<uint, uint>    measurement_order_to_loc;
+    uint                    measurement_count;
+    
+    // Fast forwarding structures.
+    bool    is_fast_forwarding;
+    bool    apply_pending_errors;
 };
 
 }   // qontra

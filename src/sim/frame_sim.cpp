@@ -50,7 +50,7 @@ FrameSimulator::CX(std::vector<uint> operands) {
 }
 
 void
-FrameSimulator::M(std::vector<uint> operands, bool record) {
+FrameSimulator::M(std::vector<uint> operands, int record) {
     for (uint i : operands) {
         x_table[i].for_each_word(leak_table[i], 
         [&] (auto& x, auto& l)
@@ -59,9 +59,9 @@ FrameSimulator::M(std::vector<uint> operands, bool record) {
             x = (x & ~l) | (r & l);
         });
         z_table[i].randomize(z_table[i].num_bits_padded(), rng);
-        if (record) {
-            record_table[record_offset].clear();
-            record_table[record_offset++] |= x_table[i];
+        if (record >= 0) {
+            record_table[record].clear();
+            record_table[record++] |= x_table[i];
         }
     }
 }

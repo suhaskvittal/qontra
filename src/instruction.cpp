@@ -7,6 +7,17 @@
 
 namespace qontra {
 
+std::vector<uint>
+Instruction::get_qubit_operands() {
+    if (ONLY_HAS_QUBIT_OPERANDS.count(name)) {
+        return operands;
+    } else if (name == "mrc") {
+        return std::vector<uint>(operands.begin()+1, operands.end());
+    } else {
+        return std::vector<uint>();
+    }
+}
+
 std::string
 schedule_to_text(const schedule_t& sch) {
     std::string out;
@@ -16,11 +27,12 @@ schedule_to_text(const schedule_t& sch) {
     return out;
 }
 
-uint
-from_stim_circuit(const stim::Circuit& circ, schedule_t& sch) {
-    uint max_qubit = 0;
+schedule_t
+schedule_from_stim(const stim::Circuit& circ) {
+    schedule_t sch;
 
-    uint64_t ectr = 0;  // Event and observable counters.
+    uint64_t mctr = 0;  // Measurement, event, and observable counters.
+    uint64_t ectr = 0;
     uint64_t octr = 0;
     auto cb = [&] (const stim::Operation& op)
     {
@@ -29,14 +41,22 @@ from_stim_circuit(const stim::Circuit& circ, schedule_t& sch) {
         std::vector<uint> operands;
         // Parse operands:
         //  We need to handle detector and observable instructions
-        //  differently, as they are a record lookback (like us!).
-        if (opname == "DETECTOR")           operands.push_back(ectr++);
-        if (opname == "OBSERVABLE_INCLUDE") operands.push_back(octr++);
+        //  differently, as they are a record lookback.
+        //
+        //  We also need to handle measurement instructions as well.
+        if (opname == "DETECTOR")               operands.push_back(ectr++);
+        if (opname == "OBSERVABLE_INCLUDE")     operands.push_back(octr++);
+        if (opname == "M" || opname == "MR")    operands.push_back(mctr);
         for (auto target : op.target_data.targets) {
             uint32_t x = target.data;
             uint32_t v = x & stim::TARGET_VALUE_MASK;
-            operands.push_back(v);
+            if (opname == "DETECTOR" || opname == "OBSERVABLE_INCLUDE") {
+                operands.push_back(mctr - v);
+            } else {
+                operands.push_back(v);
+            }
         }
+        if (opname == "M" || opname == "MR")    mctr += operands.size()-1;
         // Convert stim instruction to ISA instruction
         std::string name;
         if (opname == "X")                  name = "x";
@@ -51,24 +71,16 @@ from_stim_circuit(const stim::Circuit& circ, schedule_t& sch) {
             name = "obs";
         } else if (opname == "MR") {
             sch.push_back({"mrc", operands, {}});
+            operands.erase(operands.begin());
             name = "reset";
         } else                              name = "nop";
         if (name == "nop")  return;
         
         sch.push_back({name, operands, {}});
-        // Update max_qubit.
-        const std::set<std::string> gates{"x", "z", "cx", "h", "reset", "s",
-                                        "mrc"};
-        if (gates.count(name)) {
-            for (uint x : operands) {
-                if (x > max_qubit)  max_qubit = x;
-            }
-        }
     };
     circ.for_each_operation(cb);
     sch = relabel_operands(sch);
-    sch = divide_instructions(sch);
-    return max_qubit+1; // The qubits were 0-indexed.
+    return sch;
 }
 
 schedule_t
@@ -80,8 +92,16 @@ relabel_operands(const schedule_t& sch) {
     for (const auto& inst : sch) {
         Instruction new_inst;
         new_inst.name = inst.name;
-        if (HAS_QUBIT_OPERANDS.count(inst.name)) {
+        if (ONLY_HAS_QUBIT_OPERANDS.count(inst.name)) {
             for (uint i : inst.operands) {
+                if (!operand_map.count(i))  operand_map[i] = k++;
+                uint x = operand_map[i];
+                new_inst.operands.push_back(x);
+            }
+        } else if (inst.name == "mrc") {
+            new_inst.operands.push_back(inst.operands[0]);
+            for (uint j = 1; j < inst.operands.size(); j++) {
+                uint i = inst.operands[j];
                 if (!operand_map.count(i))  operand_map[i] = k++;
                 uint x = operand_map[i];
                 new_inst.operands.push_back(x);

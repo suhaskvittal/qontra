@@ -15,13 +15,13 @@ const extern int    IDLEN;
 const extern int    MAX_OPERANDS;
 
 struct __asm_operand_t {
-    uint32_t    data[25];
+    uint32_t*   data;
     uint32_t    size;
 };
 
-struct __asm_inst_t {   // Each instruction is 128B.
-    char                    name[24];   // 24 B
-    struct __asm_operand_t  operands;   // 104 B
+struct __asm_inst_t {
+    char                    name[24];
+    struct __asm_operand_t  operands;
 };
 
 // 512 KB for the program (4K instrutions * 128B).
