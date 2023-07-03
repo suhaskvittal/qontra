@@ -85,9 +85,9 @@ instruction:
     if (label < 0) {
         label = record_label($2);    
     }
-    inst.operands.data[0] = label;
-
     inst.operands.size = 1;
+    inst.operands.data = malloc(1 * sizeof(uint32_t));
+    inst.operands.data[0] = label;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
            | INST ID operands ';'
@@ -99,17 +99,18 @@ instruction:
     if (label < 0) {
         label = record_label($2);    
     }
-    inst.operands.data[0] = label;
-
-    memcpy(inst.operands.data+1, $3.data, $3.size*sizeof(uint32_t));
     inst.operands.size = 1 + $3.size;
+    inst.operands.data = malloc(inst.operands.size * sizeof(uint32_t));
+    inst.operands.data[0] = label;
+    memmove(inst.operands.data+1, $3.data, $3.size*sizeof(uint32_t));
+    free($3.data);
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
            | INST operands ';'
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, $1, IDLEN);
-    memcpy(inst.operands.data, $2.data, $2.size*sizeof(uint32_t));
+    inst.operands.data = $2.data;
     inst.operands.size = $2.size;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
@@ -119,6 +120,7 @@ operands:
         NUM
 {
     struct __asm_operand_t x;
+    x.data = malloc(1 * sizeof(uint32_t));
     x.data[0] = $1;
     x.size = 1;
     $$ = x;
@@ -126,9 +128,11 @@ operands:
         | NUM SEP operands
 {
     struct __asm_operand_t x;
-    x.data[0] = $1;
-    memcpy(x.data+1, $3.data, $3.size*sizeof(uint32_t));
     x.size = 1 + $3.size;
+    x.data = malloc(x.size * sizeof(uint32_t));
+    x.data[0] = $1;
+    memmove(x.data+1, $3.data, $3.size*sizeof(uint32_t));
+    free($3.data);
     $$ = x;
 }
 ;

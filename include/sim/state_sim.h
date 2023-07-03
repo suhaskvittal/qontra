@@ -39,9 +39,7 @@ public:
         :n_qubits(n),
         max_shots(max_shots),
         record_table(statesim::G_RECORD_SPACE_SIZE, max_shots),
-        record_offset(0),
         record_table_cpy(statesim::G_RECORD_SPACE_SIZE, max_shots),
-        record_offset_cpy(0),
         rng(0)
     {}
 
@@ -49,7 +47,6 @@ public:
 
     virtual void    reset_sim(void) {
         record_table.clear();
-        record_offset = 0;
     }
 
     virtual void    H(std::vector<uint>) =0;
@@ -57,7 +54,7 @@ public:
     virtual void    Z(std::vector<uint>) =0;
     virtual void    S(std::vector<uint>) =0;
     virtual void    CX(std::vector<uint>) =0;
-    virtual void    M(std::vector<uint>, bool record=true) =0;
+    virtual void    M(std::vector<uint>, int record=-1) =0;
     virtual void    R(std::vector<uint>) =0;
 
     virtual void    eDPO(std::vector<uint>, std::vector<fp_t>) =0;
@@ -69,7 +66,6 @@ public:
     virtual void    eLI(std::vector<uint>, std::vector<fp_t>) =0;
     virtual void    eLT(std::vector<uint>, std::vector<fp_t>) =0;
 
-    void    reduce_record_by(uint64_t);
     void    shift_record_by(uint64_t);
 
     virtual void    snapshot(void);
@@ -77,15 +73,10 @@ public:
     virtual void    rollback_at_trial(uint64_t);
                             // Rolls back the state to the snapshot
 
-    uint64_t    get_record_size(void) { return record_offset; }
-    
     stim::simd_bit_table    record_table;
     uint64_t                shots;
 protected:
-    uint64_t record_offset;
-
     stim::simd_bit_table    record_table_cpy;
-    uint64_t                record_offset_cpy;
 
     std::mt19937_64 rng;
 

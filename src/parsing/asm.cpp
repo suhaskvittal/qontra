@@ -79,26 +79,7 @@ get_label_pc(int id) {
 namespace qontra {
 
 schedule_t
-divide_instructions(const schedule_t& sch) {
-    schedule_t new_sch;
-
-    for (const auto& inst : sch) {
-        uint offset = 0;
-        do {
-            Instruction new_inst;
-            new_inst.name = inst.name;
-            for (uint i = 0; i < MAX_OPERANDS; i++) {
-                if (offset >= inst.operands.size()) break;
-                new_inst.operands.push_back(inst.operands[offset++]);
-            }
-            new_sch.push_back(new_inst);
-        } while (offset < inst.operands.size());
-    }
-    return new_sch;
-}
-
-schedule_t
-from_file(std::string fname) {
+schedule_from_file(std::string fname) {
     FILE* fin = fopen(fname.c_str(), "r");
     asm_yystart(fin);
     asm_yyparse();

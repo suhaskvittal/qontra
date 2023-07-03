@@ -47,8 +47,6 @@ ControlSimulator::ControlSimulator(
     // Other
     n_qubits(n_qubits),
     rng(0),
-    flag_canonical_circuit(false),
-    canonical_circuit(),
     is_fast_forwarding(false),
     apply_pending_errors(false)
 {
@@ -57,6 +55,17 @@ ControlSimulator::ControlSimulator(
         program[i] = prog[i];
     }
 }
+
+void
+ControlSimulator::build_error_model() {
+    measurement_order_to_loc.clear();
+    measurement_count = 0;
+
+    is_building_canonical_circuit = true;
+    run(1);
+    is_building_canonical_circuit = false;
+}
+
 
 void
 ControlSimulator::run(uint64_t shots) {
@@ -250,15 +259,6 @@ ControlSimulator::clear() {
 }
 
 void
-ControlSimulator::build_canonical_circuit() {
-    // Build canonical circuit by running through the simulator
-    // once through the program.
-    flag_canonical_circuit = true;
-    this->run(1);
-    flag_canonical_circuit = false;
-}
-
-void
 ControlSimulator::IF() {
     if (params.verbose) {
         std::cout << "\t[ IF ]\n";
@@ -276,7 +276,7 @@ ControlSimulator::IF() {
 
         // Check if this is a fastforwarding instruction.
         auto& inst = program[pc[t].u64[0]];
-        if (params.enable_fast_forwarding && !flag_canonical_circuit) {
+        if (params.enable_fast_forwarding && !is_building_canonical_circuit) {
             if (inst.name == "ffstart") {
                 // Apply any pending periodic errors.
                 apply_pending_errors = true;
@@ -305,9 +305,6 @@ ControlSimulator::ID() {
         // Check if the instruction is excluded from this trial.
         // If so, invalidate the pipeline latch.
         auto inst = program[id_pc[t].u64[0]];
-        if (inst.exclude_trials.count(t)) {
-            id_qex_valid[t] = 0;
-        }
     }
 }
 
@@ -341,8 +338,9 @@ ControlSimulator::QEX() {
         // If the instruction requires interacting with any qubits,
         // check if any operands are busy. If so, stall the pipeline.
         bool stall_pipeline = false;
-        if (HAS_QUBIT_OPERANDS.count(inst.name)) {
-            for (uint x : inst.operands) {
+        auto qubit_operands = inst.get_qubit_operands();
+        if (IS_FENCE.count(inst.name)) {
+            for (uint x = 0; x < n_qubits; x++) {
                 if (qex_qubit_busy[t].u64[x] > 0) {
                     qex_stall[t] = 1;
                     qex_rt_valid[t] = 0;
@@ -350,8 +348,8 @@ ControlSimulator::QEX() {
                     break;
                 }
             }
-        } else if (IS_FENCE.count(inst.name)) {
-            for (uint x = 0; x < n_qubits; x++) {
+        } else {
+            for (auto x : qubit_operands) {
                 if (qex_qubit_busy[t].u64[x] > 0) {
                     qex_stall[t] = 1;
                     qex_rt_valid[t] = 0;
@@ -450,51 +448,58 @@ ControlSimulator::QEX() {
 
         if (inst.name == "h") {
             qsim->H(inst.operands);
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("H", inst.operands);
             }
         } else if (inst.name == "x") {
             qsim->X(inst.operands);
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("X", inst.operands);
             }
         } else if (inst.name == "z") {
             qsim->Z(inst.operands);
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("Z", inst.operands);
             }
         } else if (inst.name == "s") {
             qsim->S(inst.operands);
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("S", inst.operands);
             }
         } else if (inst.name == "cx") {
             qsim->CX(inst.operands);
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("CX", inst.operands);
             }
-        } else if (inst.name == "mrc" || inst.name == "mnrc") {
-            qsim->M(inst.operands, inst.name == "mrc");
-            if (flag_canonical_circuit && inst.name == "mrc") {
-                canonical_circuit.append_op("M", inst.operands);
+        } else if (inst.name == "mrc") {
+            auto qubits = inst.get_qubit_operands();
+            qsim->M(qubits, inst.operands[0]);
+            if (is_building_canonical_circuit) {
+                for (uint i = 0; i < inst.operands.size()-1; i++) {
+                    measurement_order_to_loc[inst.operands[0]+i] = 
+                        measurement_count++;
+                }
+                canonical_circuit.append_op("M", qubits);
             }
+        } else if (inst.name == "mnrc") {
+            qsim->M(inst.operands, -1);
         } else if (inst.name == "reset") {
             qsim->R(inst.operands);
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("R", inst.operands);
             }
         } else if (inst.name == "event") {
             const uint k = inst.operands[0];
             event_history[k].clear();
-            const uint len = qsim->get_record_size();
             for (uint i = 1; i < inst.operands.size(); i++) {
-                event_history[k] ^= qsim->record_table[len - inst.operands[i]];
+                event_history[k] ^= qsim->record_table[inst.operands[i]];
             }
 
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 std::vector<uint> stim_operands;
                 for (uint i = 1; i < inst.operands.size(); i++) {
-                    stim_operands.push_back(inst.operands[i]
+                    uint j = measurement_order_to_loc[inst.operands[i]];
+                    stim_operands.push_back((measurement_count - j)
                                                 | stim::TARGET_RECORD_BIT);
                 }
                 canonical_circuit.append_op("DETECTOR", stim_operands);
@@ -502,16 +507,16 @@ ControlSimulator::QEX() {
         } else if (inst.name == "obs") {
             const uint k = inst.operands[0];
             obs_buffer[k].clear();
-            const uint len = qsim->get_record_size();
             for (uint i = 1; i < inst.operands.size(); i++) {
-                obs_buffer[k] ^= qsim->record_table[len - inst.operands[i]];
+                obs_buffer[k] ^= qsim->record_table[inst.operands[i]];
             }
             if (k+1 > obs_buffer_max_written) obs_buffer_max_written = k+1;
 
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 std::vector<uint> stim_operands;
                 for (uint i = 1; i < inst.operands.size(); i++) {
-                    stim_operands.push_back(inst.operands[i]
+                    uint j = measurement_order_to_loc[inst.operands[i]];
+                    stim_operands.push_back((measurement_count - j)
                                                 | stim::TARGET_RECORD_BIT);
                 }
                 canonical_circuit.append_op("OBSERVABLE_INCLUDE", 
@@ -528,6 +533,14 @@ ControlSimulator::QEX() {
             for (uint i = 0; i < 4096; i++) {
                 if (i < x)  event_history[i].clear();
                 else        event_history[i].swap_with(event_history[i-x]);
+            }
+
+            if (is_building_canonical_circuit) {
+                std::map<uint, uint> new_mmap;
+                for (auto pair : measurement_order_to_loc) {
+                    if (pair.first < x) continue;
+                    measurement_order_to_loc[pair.first-x] = pair.second;
+                }
             }
         }
 
@@ -578,9 +591,10 @@ ControlSimulator::QEX() {
                 }
             } else {
                 std::string key = inst.name;
+                std::vector<uint> operands = inst.get_qubit_operands();
                 if (key == "mrc" || key == "mnrc")  key = "m";
-                if (!params.timing.op1q.count(inst.name))   continue;
-                for (uint x : inst.operands) {
+                if (!params.timing.op1q.count(key))   continue;
+                for (uint x : operands) {
                     fp_t tt = params.timing.op1q[key][x];
                     qex_qubit_busy[t].u64[x] = tt;
                 }
@@ -606,8 +620,8 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
             dp2.push_back(params.errors.op2q[inst.name][x_y]);
             li.push_back(params.errors.op2q_leakage_injection[inst.name][x_y]);
             lt.push_back(params.errors.op2q_leakage_transport[inst.name][x_y]);
-
-            if (flag_canonical_circuit) {
+            
+            if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("L_TRANSPORT", 
                             {x, y},
                             params.errors.op2q_leakage_transport[inst.name][x_y]);
@@ -624,12 +638,14 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
         qsim->eDP2(inst.operands, dp2);
     } else {
         std::string key = inst.name;
+        std::vector<uint> operands = inst.get_qubit_operands();
         if (inst.name == "mrc" || inst.name == "mnrc")  key = "m";
         if (!params.errors.op1q.count(key)) return;
+
         std::vector<fp_t> e;
-        for (uint x : inst.operands) {
+        for (uint x : operands) {
             e.push_back(params.errors.op1q[key][x]);
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 if (key == "m" || key == "reset") {
                     canonical_circuit.append_op("X_ERROR", 
                             {x}, params.errors.op1q[key][x]);
@@ -639,10 +655,11 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
                 }
             }
         }
+
         if (key == "m" || key == "reset") {
-            qsim->eX(inst.operands, e);
+            qsim->eX(operands, e);
         } else {
-            qsim->eDP1(inst.operands, e);
+            qsim->eDP1(operands, e);
         }
     }
 }
@@ -650,9 +667,8 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
 void
 ControlSimulator::apply_periodic_error(fp_t t) {
     std::vector<uint> q;
-    if (params.simulate_periodic_as_dpo_and_dph 
-        && !flag_canonical_circuit) 
-    {
+    if (params.simulate_periodic_as_dpo_and_dph
+        && !is_building_canonical_circuit) {
         std::vector<fp_t> e1, e2;
         for (uint i = 0; i < n_qubits; i++) {
             q.push_back(i);
@@ -671,7 +687,7 @@ ControlSimulator::apply_periodic_error(fp_t t) {
             q.push_back(i);
             e.push_back(x);
 
-            if (flag_canonical_circuit) {
+            if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("DEPOLARIZE1", {i}, x);
             }
         }

@@ -55,7 +55,7 @@ public:
     void    Z(std::vector<uint>) override;
     void    S(std::vector<uint>) override;
     void    CX(std::vector<uint>) override;
-    void    M(std::vector<uint>, bool record=true) override;
+    void    M(std::vector<uint>, int record=-1) override;
     void    R(std::vector<uint>) override;
 
     void    eDPO(std::vector<uint>, std::vector<fp_t>) override;

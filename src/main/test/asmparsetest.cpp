@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
     std::string filename;
     if (!parser.get_string("asm", filename)) return -1;
 
-    schedule_t sch = from_file(filename);
+    schedule_t sch = schedule_from_file(filename);
     std::cout << schedule_to_text(sch) << "\n";
     return 0;
 }

@@ -62,7 +62,7 @@ help_exit:
         circ_params.both_stabilizers = both_stabilizers;
         circuit = generate_surface_code_circuit(circ_params).circuit;
     }
-    from_stim_circuit(circuit, prog);
+    prog = schedule_from_stim(circuit);
     prog.push_back({"done", {}, {}});
     // Now write the new program to the output file
     std::ofstream out(output_file);

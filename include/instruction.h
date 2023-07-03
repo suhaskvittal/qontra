@@ -7,6 +7,7 @@
 #define INSTRUCTION_h
 
 #include "defs.h"
+#include "tables.h"
 
 #include <stim.h>
 
@@ -59,15 +60,13 @@ const std::vector<std::string> ISA{
     "ffend"         // Tells the simulator to stop fast-forwarding
 };
 
-// These instructions interact with the physical qubits.
-const std::set<std::string> HAS_QUBIT_OPERANDS{
+const std::set<std::string> ONLY_HAS_QUBIT_OPERANDS{
     "h",
     "x",
     "z",
     "cx",
     "s",
     "mnrc",
-    "mrc",
     "reset",
     "nop"
 };
@@ -97,10 +96,10 @@ struct Instruction {
     std::string name;
     std::vector<uint> operands;
 
-    std::set<uint64_t> exclude_trials;
-
     // Extra metadata
     bool    is_measuring_x_check;
+
+    std::vector<uint>   get_qubit_operands(void);
 
     std::string str(void) const {
         std::string out = name;
@@ -127,20 +126,22 @@ typedef std::vector<Instruction>    schedule_t;
 
 // Utility functions:
 // 
-// schedule_to_text converts a schedule to a string (as the name suggests).
-// from_stim_circuit translates a stim circuit to a schedule. This removes any
+// schedule_to_text converts a schedule to a string (as the name suggests). The
+//  string is valid ASM used by the control processor (and thus can be saved to
+//  a file).
+// schedule_from_stim translates a stim circuit to a schedule. This removes any
 //  error signatures (set these in the simulator) and other operations such
 //  as coordinate declarations. The output is the max number of qubits in the
 //  circuit.
+// to_canonical_circuit translates a schedule to a stim circuit. As many operations
+//  in the ISA have no equivalent (see mnrc, branch/jmps, and others), this is
+//  really only useful for building a decoder.
 
 std::string     schedule_to_text(const schedule_t&);
-uint            from_stim_circuit(const stim::Circuit&, schedule_t&);
 
+schedule_t      schedule_from_stim(const stim::Circuit&);
 schedule_t      relabel_operands(const schedule_t&);
-schedule_t      divide_instructions(const schedule_t&);
-
-
-schedule_t      from_file(std::string fname);
+schedule_t      schedule_from_file(std::string fname);
 
 }   // qontra
 

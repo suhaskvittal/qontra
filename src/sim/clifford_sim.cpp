@@ -108,7 +108,7 @@ CliffordSimulator::CX(std::vector<uint> operands) {
 }
 
 void
-CliffordSimulator::M(std::vector<uint> operands, bool record) {
+CliffordSimulator::M(std::vector<uint> operands, int record) {
     for (uint j : operands) {
         // Clear scratch space
         for (uint i = 2*n_qubits*n_qubits; i < x_width; i++)    x_table[i].clear();
@@ -187,9 +187,9 @@ CliffordSimulator::M(std::vector<uint> operands, bool record) {
             r_table[2*n_qubits][t] = r_table[ii][t];
         }
 
-        if (record) {
-            record_table[record_offset].clear();
-            record_table[record_offset++].swap_with(r_table[2*n_qubits]);
+        if (record >= 0) {
+            record_table[record].clear();
+            record_table[record++].swap_with(r_table[2*n_qubits]);
         }
     }
 }
@@ -201,20 +201,19 @@ CliffordSimulator::R(std::vector<uint> operands) {
         leak_table[j].clear();
     }
     // Implement as a measure + X gate.
-    uint64_t r = record_offset;
-    M(operands, true);
-    while (record_offset > r) {
-        uint j = operands[record_offset-r-1];
+    stim::simd_bits record_0_cpy(record_table[0]);
+    for (uint j : operands) {
+        M({j}, 0);
         for (uint i = 0; i < 2*n_qubits; i++) {
             uint k = i*n_qubits + j;
             r_table[i].for_each_word(
-                z_table[k], record_table[record_offset-1],
+                z_table[k], record_table[0],
             [&](auto& r, auto& z, auto& rec) {
                 r ^= z & rec;
             });
         }
-        record_table[--record_offset].clear();
     }
+    record_table[0].swap_with(record_0_cpy);
 }
 
 void

@@ -12,23 +12,16 @@ namespace statesim {
 }
 
 void
-StateSimulator::reduce_record_by(uint64_t s) {
-    record_offset -= s;
-}
-
-void
 StateSimulator::shift_record_by(uint64_t offset) {
-    for (uint64_t i = 0; i < record_offset; i++) {
-        record_table[i].clear();
-        record_table[i].swap_with(record_table[i + offset]);
+    for (uint64_t i = 0; i < statesim::G_RECORD_SPACE_SIZE; i++) {
+        if (i < offset) record_table[i].clear();
+        else            record_table[i].swap_with(record_table[i-offset]);
     }
-    record_offset -= offset;
 }
 
 void
 StateSimulator::snapshot() {
     record_table_cpy = stim::simd_bit_table(record_table);
-    record_offset_cpy = record_offset;
 }
 
 void
