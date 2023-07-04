@@ -43,6 +43,7 @@ ControlSimulator::ControlSimulator(
     // Microarchitecture
     program(),
     pc(G_SHOTS_PER_BATCH, 64),
+    qubit_locks(G_SHOTS_PER_BATCH, n_qubits),
     // Selective Syndrome Extraction
     sig_m_spec(4096, G_SHOTS_PER_BATCH),
     val_m_spec(4096, G_SHOTS_PER_BATCH),
@@ -355,6 +356,7 @@ ControlSimulator::clear() {
     latency.clear();
 
     pc.clear();
+    qubit_locks.clear();
     
     if_stall.clear();
     if_id_valid.clear();
@@ -446,11 +448,13 @@ ControlSimulator::QEX() {
 
         if (IS_NOP_LIKE.count(inst.name))    continue;
 
+        auto qubit_operands = inst.get_qubit_operands();
         // If the instruction requires interacting with any qubits,
         // check if any operands are busy. If so, stall the pipeline.
         bool stall_pipeline = false;
-        auto qubit_operands = inst.get_qubit_operands();
-        if (IS_FENCE.count(inst.name)) {
+        if (is_building_canonical_circuit && IS_LOCKING.count(inst.name)) {
+            continue;
+        } else if (IS_FENCE.count(inst.name)) {
             for (uint x = 0; x < n_qubits; x++) {
                 if (qex_qubit_busy[t].u64[x] > 0) {
                     qex_stall[t] = 1;
@@ -508,13 +512,21 @@ ControlSimulator::QEX() {
                 }
                 trace_index++;
             }
+        } else if (inst.name == "lockq") {
+            for (uint i : inst.operands) {
+                qubit_locks[t][i] = 1;
+            }
+        } else if (inst.name == "unlockq") {
+            for (uint i : inst.operands) {
+                qubit_locks[t][i] = 0;
+            }
         } else if (inst.name == "jmp") {
             br_pc = inst.operands[0];
             br_taken = true;
         } else if (inst.name == "brdb") {
             br_pc = inst.operands[0];
             br_taken = decoder_busy[t].not_zero();
-        } else if (inst.name == "braspc") {
+        } else if (inst.name == "brifmspc") {
             br_pc = inst.operands[0];
             bool all_speculated = true;
             for (uint i = 1; i < inst.operands.size(); i++) {
@@ -524,8 +536,14 @@ ControlSimulator::QEX() {
                 qsim->record_table[j][t] = val_m_spec[j][t];
             }
             br_taken = all_speculated;
-        } else if (inst.name == "brospc") {
-            br_pc = inst.operands[0];
+        } else if (inst.name == "lockqifmspc") {
+            bool all_speculated = true;
+            for (uint i = 1; i < inst.operands.size(); i++) {
+                uint j = inst.operands[i];
+                all_speculated &= sig_m_spec[j][t];
+            }
+            // Lock the qubit operand.
+            qubit_locks[t][inst.operands[0]] = all_speculated;
         } else if (inst.name == "dfence") {
             if (decoder_busy[t].not_zero()) {
                 qex_stall[t] = 1;

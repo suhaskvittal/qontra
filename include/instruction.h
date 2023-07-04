@@ -31,13 +31,18 @@ const std::vector<std::string> ISA{
     // Control processor instructions.
     "decode",       // Tells decoder to decode syndrome and places the resulting
                     // Pauli frame at the offset specified by the operand.
+    // Qubit locking instructions. If a qubit is locked, any operation that
+    // interacts with it physically is treated as a nop.
+    "lockq",
+    "unlockq",
     // Jumps + Branches + Conditions
     "jmp"           // Jumps to address unconditionally
     "brdb",         // Jumps to address if decoder is busy (still decoding)
     // Event speculation instructions
-    "braspc",       // Jumps to address if all events in list have been
+    "brifmspc",     // Jumps to address if all measurements in list have been
                     // speculated.
-    "brospc",       // Jumps to address if single event has been speculated.
+    "lockqifmspc",  // Prevents operations on the qubit operand if all measurements
+                    // in the list have been speculated.
     // Ordering instructions
     "dfence",       // Waits until decoder finishes.
     // Tracking instructions
@@ -88,8 +93,13 @@ const std::set<std::string> IS_NOP_LIKE{
 const std::set<std::string> ARE_JMP_OR_BR{
     "jmp",
     "brdb",
-    "braspc",
-    "brospc"
+    "brifmspc",
+};
+
+const std::set<std::string> IS_LOCKING{
+    "lockq",
+    "unlockq",
+    "lockqifmspc"
 };
 
 struct Instruction {
