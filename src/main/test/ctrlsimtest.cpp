@@ -71,6 +71,12 @@ int main(int argc, char* argv[]) {
 
     sim.params.verbose = parser.option_set("v") && (world_rank == 0);
 
+    std::string trace_folder;
+    if (parser.get_string("trace-folder", trace_folder)) {
+        sim.params.save_syndromes_to_file = true;
+        sim.params.syndrome_output_folder = trace_folder;
+    }
+
     sim.run(shots);
     if (world_rank == 0) {
         std::cout << "Probability histogram:\n";

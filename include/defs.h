@@ -24,7 +24,7 @@ typedef uint32_t uint;
 
 typedef uint64_t                addr_t;
 typedef std::vector<uint64_t>   vlw_t;
-typedef stim::simd_bits syndrome_t;
+typedef stim::simd_bits         syndrome_t;
 
 const fp_t KB = 1024.0;
 const fp_t MB = KB*1024.0;
