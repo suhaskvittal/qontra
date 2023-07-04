@@ -14,6 +14,7 @@
 #include "tables.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <vector>
@@ -28,6 +29,14 @@ namespace qontra {
 // of the control architecture, mainly:
 //  (1) Instruction scheduling of QUANTUM instructions.
 //  (2) Decoding and tracking of Pauli frames
+
+namespace ctrlsim {
+
+extern uint64_t     EVENT_HISTORY_SIZE; // Default is 1024*8 (1KB)
+extern uint64_t     OBS_BUFFER_SIZE;    // Default is 128.
+extern uint64_t     TRACES_PER_SHOT;    // Default is 1.
+
+}
 
 class ControlSimulator {
 public:
@@ -44,7 +53,7 @@ public:
 
     struct {
         // Simulation parameters
-        uint64_t    kill_batch_after_time_elapsed = 10; 
+        uint64_t    kill_batch_after_time_elapsed = 1000; 
                                             // In seconds, halts
                                             // the simulator after this
                                             // much walltime has elapsed.
@@ -80,8 +89,8 @@ public:
                                         // Syndromes are saved in Stim's
                                         // .dets file format. One file is
                                         // created for each batch.
-        std::vector<uint>   save_pauli_frames{0};
-                                        // A list of Pauli frame indices to
+        std::vector<uint>   save_observables{0};
+                                        // A list of observable indices to
                                         // save.
     } params;
     // Stats: add any new stats if necessary.
@@ -117,12 +126,17 @@ private:
     stim::simd_bit_table    decoder_busy;
     stim::simd_bits         trial_done; // Active-low: if 1, then not finished.
     // Simulation structures:
-    decoder::Decoder*       decoder; // Should return XZ frame changes
+    decoder::Decoder*       decoder;
     StateSimulator*         qsim;
     stim::simd_bit_table    pauli_frames;
     stim::simd_bit_table    event_history;
     stim::simd_bit_table    obs_buffer;
     uint64_t                obs_buffer_max_written;
+
+    stim::simd_bit_table    event_trace;    // Stores events to be written
+                                            // if specified in the params.
+    stim::simd_bit_table    event_trace_index;
+    uint64_t                event_trace_max_written;
     // Microarchitecture
     imem                    program;    // Program should remain constant
     stim::simd_bit_table    pc;

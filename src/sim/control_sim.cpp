@@ -7,7 +7,18 @@
 
 namespace qontra {
 
+namespace ctrlsim {
+
+uint64_t    EVENT_HISTORY_SIZE = 1024*8;
+uint64_t    OBS_BUFFER_SIZE = 128;
+uint64_t    TRACES_PER_SHOT = 1;
+
+}
+
 using namespace experiments;
+using namespace ctrlsim;
+
+#define N_TRACES (G_SHOTS_PER_BATCH*TRACES_PER_SHOT)
 
 ControlSimulator::ControlSimulator(
         uint n_qubits, 
@@ -22,10 +33,13 @@ ControlSimulator::ControlSimulator(
     // Simulation structures
     decoder(nullptr),
     qsim(qsim),
-    pauli_frames(128, G_SHOTS_PER_BATCH),
-    event_history(4096, G_SHOTS_PER_BATCH),
-    obs_buffer(128, G_SHOTS_PER_BATCH),
+    pauli_frames(OBS_BUFFER_SIZE, G_SHOTS_PER_BATCH),
+    event_history(EVENT_HISTORY_SIZE, G_SHOTS_PER_BATCH),
+    obs_buffer(OBS_BUFFER_SIZE, G_SHOTS_PER_BATCH),
     obs_buffer_max_written(0),
+    event_trace(N_TRACES, EVENT_HISTORY_SIZE+OBS_BUFFER_SIZE),
+    event_trace_index(G_SHOTS_PER_BATCH, 64),
+    event_trace_max_written(0),
     // Microarchitecture
     program(),
     pc(G_SHOTS_PER_BATCH, 64),
@@ -49,7 +63,6 @@ ControlSimulator::ControlSimulator(
     rt_stall(G_SHOTS_PER_BATCH),
     // Other
     n_qubits(n_qubits),
-    rng(0),
     is_fast_forwarding(false),
     apply_pending_errors(false)
 {
@@ -64,9 +77,14 @@ ControlSimulator::build_error_model() {
     measurement_order_to_loc.clear();
     measurement_count = 0;
 
+    bool use_mpi = G_USE_MPI;
+    G_USE_MPI = false;
+
     is_building_canonical_circuit = true;
     run(1);
     is_building_canonical_circuit = false;
+
+    G_USE_MPI = use_mpi;
 }
 
 
@@ -88,11 +106,21 @@ ControlSimulator::run(uint64_t shots) {
     uint64_t latency_sum, __latency_sum = 0;
     uint64_t latency_sqr_sum, __latency_sqr_sum = 0;
 
-    rng.seed(G_BASE_SEED + world_rank);
+    qsim->set_seed(G_BASE_SEED + world_rank);
 
     trial_done.clear();
 
-    uint64_t shots_left = shots;
+    uint64_t shots_left = local_shots;
+    uint bno = world_rank;   // Batch number
+
+    if (params.save_syndromes_to_file && world_rank == 0) {
+        // Delete the folder and create it again to create a fresh trace
+        // folder.
+        std::filesystem::path folder_path(params.syndrome_output_folder);
+        std::filesystem::remove_all(folder_path);
+        safe_create_directory(folder_path);
+    }
+
     while (shots_left) {
         shots_in_curr_batch = shots_left < G_SHOTS_PER_BATCH 
                                 ? shots_left : G_SHOTS_PER_BATCH;
@@ -195,6 +223,9 @@ ControlSimulator::run(uint64_t shots) {
                     << rt*1e-9 << "\n";
             }
             if (rt*1e-9 > params.kill_batch_after_time_elapsed) {
+                std::cout << "Killed " << trial_done.popcnt()
+                        << " trials because walltime exceeded "
+                        << rt*1e-9 << "s.\n";
                 __n_trials_killed += trial_done.popcnt();
                 std::cout << "[ ALERT ] Killed "
                         << trial_done.popcnt() << 
@@ -213,7 +244,32 @@ ControlSimulator::run(uint64_t shots) {
         }
         auto rt = timer.clk_end();
         __sim_time += rt;
+        // Save syndrome trace if requested.
+        if (params.save_syndromes_to_file) {
+            std::string filename = "batch_" + std::to_string(bno) + ".dets";
+            std::string output_path = params.syndrome_output_folder 
+                                    + "/" + filename;
+
+            FILE* fout = fopen(output_path.c_str(), "w");
+            const uint trace_width = event_trace_max_written
+                                    + params.save_observables.size();
+            stim::simd_bits ref(trace_width);   // Because Stim
+                                                // decides we need
+                                                // this for some
+                                                // reason.
+            stim::write_table_data(fout, 
+                            shots_in_curr_batch*TRACES_PER_SHOT,
+                            trace_width,
+                            ref,
+                            event_trace,
+                            stim::SampleFormat::SAMPLE_FORMAT_DETS,
+                            'D',
+                            'L',
+                            event_trace_max_written);
+            fclose(fout);
+        }
         shots_left -= shots_in_curr_batch;
+        bno += world_size;
     }
 
     if (G_USE_MPI) {
@@ -227,6 +283,49 @@ ControlSimulator::run(uint64_t shots) {
                     MPI_SUM, MPI_COMM_WORLD);
         MPI_Allreduce(&__sim_time, &sim_time, 1, MPI_UNSIGNED_LONG,
                     MPI_MAX, MPI_COMM_WORLD);
+        // Accumulate probability histograms. This will be a bit hard.
+        std::map<vlw_t, uint64_t> local_ph(prob_histograms);
+        for (uint r = 0; r < world_size; r++) {
+            if (world_rank == r) {
+                for (auto pair : local_ph) {
+                    // Transmit which vlw_t is being sent.
+                    vlw_t x = pair.first;
+                    const uint xw = x.size();
+                    const uint64_t count = pair.second;
+                    for (uint s = 0; s < world_size; s++) {
+                        if (s == r) continue;
+                        // Transmit size of vlw_t first.
+                        MPI_Bsend(&xw, 1, MPI_UNSIGNED, s, 0, MPI_COMM_WORLD);
+                        // Now, transmit the vlw_t.
+                        MPI_Bsend(&x[0], xw, MPI_UNSIGNED_LONG, s, 1, MPI_COMM_WORLD);
+                        // Finally, transmit the count.
+                        MPI_Bsend(&count, 1, MPI_UNSIGNED_LONG, s, 2, MPI_COMM_WORLD);
+                    }
+                }
+                for (uint s = 0; s < world_size; s++) {
+                    if (s == r) continue;
+                    // Finally, transmit that we are done.
+                    uint done = 0;
+                    MPI_Bsend(&done, 1, MPI_UNSIGNED, s, 0, MPI_COMM_WORLD);
+                }
+            } else {
+                while (true) {
+                    uint xw;
+                    MPI_Recv(&xw, 1, MPI_UNSIGNED, r, 0, 
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    if (!xw)    break;
+                    vlw_t x(xw);
+                    MPI_Recv(&x[0], xw, MPI_UNSIGNED_LONG, r, 1,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    uint64_t count;
+                    MPI_Recv(&count, 1, MPI_UNSIGNED_LONG, r, 2,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    if (!prob_histograms.count(x))  prob_histograms[x] = 0;
+                    prob_histograms[x] += count;
+                }
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
     } else {
         n_trials_killed = __n_trials_killed;
         latency_max = __latency_max;
@@ -248,6 +347,10 @@ ControlSimulator::clear() {
     event_history.clear();
     obs_buffer.clear();
     obs_buffer_max_written = 0;
+
+    event_trace.clear();
+    event_trace_index.clear();
+    event_trace_max_written = 0;
 
     latency.clear();
 
@@ -369,23 +472,41 @@ ControlSimulator::QEX() {
         if (stall_pipeline) continue;
 
         // These instructions operate on a trial by trial basis.
+        // 
+        // See instruction.h for details about what these instructions
+        // do.
         uint64_t    br_pc;
         bool        br_taken = false;
 
-        if (inst.name == "decode" && decoder != nullptr) {
+        if (inst.name == "decode") {
             syndrome_t s(events_tp[t]);
-            auto res = decoder->decode_error(s);
-            uint64_t exec_time = (uint64_t)res.exec_time;
-            // Decoder may get backlogged if it does not complete on time.
-            //
-            // But this is fine.
-            if (!params.decoder_is_ideal) {
-                decoder_busy[t].u64[0] += exec_time;
+            if (decoder != nullptr) {
+                auto res = decoder->decode_error(s);
+                uint64_t exec_time = (uint64_t)res.exec_time;
+                // Decoder may get backlogged if it does not complete on time.
+                //
+                // But this is fine.
+                if (!params.decoder_is_ideal) {
+                    decoder_busy[t].u64[0] += exec_time;
+                }
+                // Update Pauli frames
+                uint offset = inst.operands[0];
+                for (uint i = 0; i < res.corr.size(); i++) {
+                    pauli_frames[i+offset][t] ^= res.corr[i];
+                }
             }
-            // Update Pauli frames
-            uint offset = inst.operands[0];
-            for (uint i = 0; i < res.corr.size(); i++) {
-                pauli_frames[i+offset][t] ^= res.corr[i];
+
+            if (params.save_syndromes_to_file) {
+                // Write syndrome to event_trace.
+                uint64_t& trace_index = event_trace_index[t].u64[0];
+                uint64_t i = t*TRACES_PER_SHOT + trace_index;
+                event_trace[i].clear();
+                event_trace[i] |= s;
+                for (uint j = 0; j < params.save_observables.size(); j++) {
+                    uint obs = params.save_observables[j];
+                    event_trace[i][event_trace_max_written+j] = obs_tp[t][j];
+                }
+                trace_index++;
             }
         } else if (inst.name == "jmp") {
             br_pc = inst.operands[0];
@@ -510,8 +631,10 @@ ControlSimulator::QEX() {
             const uint k = inst.operands[0];
             event_history[k].clear();
             for (uint i = 1; i < inst.operands.size(); i++) {
-                event_history[k] ^= qsim->record_table[inst.operands[i]];
+                uint j = inst.operands[i];
+                event_history[k] ^= qsim->record_table[j];
             }
+            if (k+1 > event_trace_max_written) event_trace_max_written = k+1;
 
             if (is_building_canonical_circuit) {
                 std::vector<uint> stim_operands;
