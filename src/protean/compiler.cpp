@@ -7,7 +7,7 @@
 namespace qontra {
 namespace protean {
 
-static uint64_t MIDDLEMAN_INDEX = 0;
+static uint64_t MIDDLEMAN_INDEX = 1;
 
 #define TYPE_OFFSET     62
 #define GEN_OFFSET      40
@@ -127,7 +127,7 @@ __schedule:
     }
 
     if (params.verbose)      std::cout << "[ sparsen ] ---------------------\n";
-    sparsen(ir);
+    sparsen(new_ir);
     if (best_result != ir) delete ir;
     ir = new_ir;
     goto __place;
@@ -565,8 +565,9 @@ Compiler::flatten(ir_t* curr_ir) {
     mm->id = ((src->id & ID_MASK) << GEN_OFFSET)
                 | MIDDLEMAN_INDEX++
                 | (tanner::vertex_t::GAUGE << TYPE_OFFSET);
-    if (!arch->add_vertex(mm))  std::cout << "PROBLEMO!!!\n";
     curr_ir->qubit_to_roles[mm] = std::vector<tanner::vertex_t*>();
+
+    std::cout << "src = " << PRINT_V(src->id) << ", gauge = " << PRINT_V(mm->id) << "\n";
     
     auto src_mm = new proc3d::edge_t;
     src_mm->src = src;
@@ -683,31 +684,6 @@ Compiler::sparsen(ir_t* curr_ir) {
     return true;
 }
 
-void
-print_connectivity(Processor3D* arch) {
-    std::cout << "Connections:\n";
-    for (auto v : arch->get_vertices()) {
-        std::cout << "\tQubit " << PRINT_V(v->id) << ":\t";
-        for (auto w : arch->get_neighbors(v)) {
-            std::cout << " " << PRINT_V(w->id);
-            if (w->is_tsv_junction())   std::cout << "(V)";
-        }
-        std::cout << "\n";
-    }
-}
-
-void
-print_schedule(const schedule_t& sched) {
-    std::cout << "Schedule:\n";
-    for (auto op : sched) {
-        std::cout << "\t" << op.name;
-        for (uint x : op.operands) {
-            std::cout << " " << PRINT_V(x);
-        }
-        std::cout << "\n";
-    }
-}
-
 stim::Circuit
 build_stim_circuit(
         compiler::ir_t* ir, 
@@ -736,11 +712,6 @@ build_stim_circuit(
     }
     const uint n_nondata = k - n_data;
     const uint n = k;
-
-    // Print out ID mapping (debug)
-    for (auto pair : id_to_num) {
-        std::cout << PRINT_V(pair.first) << " --> " << pair.second << "\n";
-    }
 
     stim::Circuit circuit;
     // Add initialization for memory experiment.

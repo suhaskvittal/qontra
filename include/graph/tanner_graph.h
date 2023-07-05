@@ -121,8 +121,8 @@ private:
     std::vector<tanner::vertex_t*>  x_parity_checks;
     std::vector<tanner::vertex_t*>  z_parity_checks;
 
-    uint induced_gauge_index;
-    const static uint INDUCED_GAUGE_INDEX_FLAG = 1 << 24;
+    uint64_t induced_gauge_index;
+    const static uint64_t INDUCED_GAUGE_INDEX_FLAG = 1L << 40;
 };
 
 namespace io {

@@ -97,6 +97,9 @@ public:
     add_edge(E_t* e) {              // O(1) operation
         auto src = (V_t*)e->src;
         auto dst = (V_t*)e->dst;
+        if (src == dst) {
+            std::cout << "DONKEY!\n"; 
+        }
         if (!contains(src) || !contains(dst))   return false;
         if (contains(src, dst))                 return false;
         edges.push_back(e);
@@ -112,7 +115,7 @@ public:
     }
 
     virtual V_t*
-    get_vertex(uint id) {        // O(1) operation
+    get_vertex(uint64_t id) {        // O(1) operation
         if (!id_to_vertex.count(id))    return nullptr;
         return id_to_vertex[id];
     }
@@ -217,7 +220,7 @@ protected:
 
     TwoLevelMap<V_t*, V_t*, E_t*>       adjacency_matrix;
     std::map<V_t*, std::vector<V_t*>>   adjacency_lists;
-    std::map<uint, V_t*>                id_to_vertex;
+    std::map<uint64_t, V_t*>            id_to_vertex;
 
     bool    graph_has_changed;  // Tracks if the graph has changed. May be useful
                                 // for subclasses that need to track state.
