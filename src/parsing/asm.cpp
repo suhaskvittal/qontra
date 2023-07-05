@@ -5,6 +5,7 @@
 
 #include "instruction.h"
 #include "parsing/asm/common.h"
+#include "parsing/asm/helper.h"
 
 #include <map>
 #include <string>
@@ -17,7 +18,6 @@ uint32_t                ASMParserScheduleLen = 0;
 uint64_t    pc = 0;
 
 const int   IDLEN = 24;
-const int   MAX_OPERANDS = 25;
 
 // The below data should be hidden from other files.
 // For example, if we are using C++ types.
@@ -84,6 +84,18 @@ schedule_from_file(std::string fname) {
     asm_yystart(fin);
     asm_yyparse();
     fclose(fin);
+    return schedule_after_parse();
+}
+
+schedule_t
+schedule_from_text(std::string text) {
+    asm_yystart(text.c_str());
+    asm_yyparse();
+    return schedule_after_parse();
+}
+
+schedule_t
+schedule_after_parse() {
     // Convert C-like schedule to C++.
     schedule_t sch;
 

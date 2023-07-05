@@ -11,9 +11,10 @@
 %code requires {
 
 #include "parsing/sdl/common.h"
+#include "parsing/sdl/helper.h"
 
 #define __SDL_ERROR(x)  sdl_yyerror(x)
-                                                        // [x][y] = 1 if x precedes y
+
 }
 
 %code provides {
@@ -27,95 +28,84 @@ void        yyerror(char const*);
 
 %union {
     uint32_t                id;
-    char                    text[128];
-    struct __sdl_operand_t  operands;
-    struct __sdl_body_t     body;
+    char                    check[24];
+    struct __sdl_asm_body   asm;
+    struct __sdl_ordering   ord;
 }
 
-%token DECL
-%token MUS
-%token INST
-%token CHECK
-%token ID
-%token SEP
-%token EOL
-%token END
+/*
+    Tokens:
+        DECL = decl (check declaration operation)
+        CHECK = a string such as X0 or Z14
 
-%type<id>       ID
-%type<text>     CHECK
-%type<text>     INST
-%type<body>     body
-%type<operands> operands
+        NUM = any number
+
+        MUS = mus (micro-schedule operation)
+        ASM = any string: this will be interpreted as ASM
+        END = end
+
+        ORD = order (dependency declaration)
+
+        SEP = ,
+        EOL = \n
+*/
+
+%token  DECL
+%token  CHECK 
+%token  NUM
+
+%token  MUS
+%token  ASM  
+%token  END
+
+%token  ORD
+
+%token  SEP 
+%token  EOL
+
+%token  ';'
+%token  ':'
+
+%type<id>       NUM
+%type<check>    CHECK
+%type<asm>      ASM
+%type<ord>      ordering
 
 %%
 
 program:    /* empty string */
-       | instruction EOL program
+       | DECL CHECK SEP NUM ';' program
+{
+    if (declare($4, $2) < 0)    YYABORT;
+}
+       | MUS NUM ':' ASM END ';' program
+{
+    if (assign_schedule($2, $4))    YYABORT;
+}
+       | ORD NUM SEP ordering ';' program
+{
+    add_dependency($2, $4);
+}
+       | EOL program
 ;
 
-instruction:
-           DECL CHECK SEP ID
+ordering:
+        NUM SEP ordering
 {
-    int len = strlen($2);
-    memcpy(SDLParserDeclaration[$4], $2, len+1);
-}
-           | MUS ID EOL body
-{
-    for (int i = 0; i < $4.size; i++) {
-        SDLParserSchedules[$2].sch.inst[i] = $4.inst[i];
-    } 
-    SDLParserSchedules[$2].sch.size = $4.size;
-}
-           | INST ID SEP operands
-{
-    if (strcmp($1, "group")) {
-        uint32_t grp = $2;
-        for (int i = 0; i < $4.size; i++) {
-            uint32_t id = $4.data[i];
-            SDLParserSchedules[id].group = grp;
-        }
-    } else if (strcmp($1, "order")) {
-        uint32_t x = $2;
-        uint32_t y = $4.data[0];
-        SDLGroupDependences[x] |= (1 << y);
-    }
-}
-;
-
-body:
-    INST EOL body
-{
-    struct __sdl_body_t x;
-    int len = strlen($1);
-    x.inst[0] = malloc(sizeof(char) * (len+1));
-    memcpy(x.inst[0], $1, len+1);
-    // Copy body ($3) to x.
-    memcpy(x.inst + 1, $3.inst, sizeof(char*) * $3.size);
+    struct __sdl_ordering x;
     x.size = 1 + $3.size;
+    x.dep = malloc(x.size * sizeof(uint32_t));
+    x.dep[0] = $1;
+    memmove(x.dependents + 1, $3.dep, $3.size);
+    free($3.dep);
     $$ = x;
 }
-    | END
+        | NUM
 {
-    struct __sdl_body_t x;
-    x.size = 0;
-    $$ = x;
-}
-;
-
-operands:
-        ID SEP operands
-{
-    struct __sdl_operand_t x;
-    x.data[0] = $1;
-    memcpy(x.data + 1, $3.data, $3.size);
-    x.size = 1 + $3.size;
-    $$ = x;
-}
-        | ID
-{
-    struct __sdl_operand_t x;
-    x.data[0] = $1;
+    struct __sdl_ordering x;
     x.size = 1;
+    x.dep = malloc(1 * sizeof(uint32_t));
+    x.dep[0] = $1;
     $$ = x;
 }
 ;

@@ -52,7 +52,12 @@ void force_lowercase(char* text, int len) {
 }
 
 void asm_yystart(FILE* fin) {
-    // Reset parser.
     reset_parser();
     yyrestart(fin);
 }
+
+void asm_yystart(char* text) {
+    reset_parser();
+    yy_scan_string(text);
+}
+

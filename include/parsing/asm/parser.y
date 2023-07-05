@@ -10,6 +10,7 @@
 %code requires {
 
 #include "parsing/asm/common.h"
+#include "parisng/asm/helper.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -150,6 +151,12 @@ yyerror(const char* msg) {
 
 int
 asm_yyparse() {
-    return yyparse();
+    int parse_out = yyparse();
+    // Free any heap-allocated memory.
+    for (int i = 0; i < ASMParserScheduleLen; i++) {
+        struct __asm_inst_t* inst = &ASMParserSchedule[i];
+        if (inst->size) free(inst->data);
+    }
+    return parse_out;
 }
 
