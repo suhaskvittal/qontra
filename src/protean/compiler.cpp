@@ -7,9 +7,16 @@
 namespace qontra {
 namespace protean {
 
-static uint MIDDLEMAN_INDEX = 0;
+static uint64_t MIDDLEMAN_INDEX = 0;
 
-#define PRINT_V(id)  (id >> 30) << "|" << ((id >> 24) & 0x3f) << "|" << (id & 0x00ff'ffff)
+#define TYPE_OFFSET     62
+#define GEN_OFFSET      40
+#define GEN_MASK        ((1L << 22)-1L)
+#define ID_MASK        ((1L << 32)-1L)
+
+#define PRINT_V(id)  (id >> TYPE_OFFSET) << "|"\
+                        << ((id >> GEN_OFFSET) & GEN_MASK)\
+                        << "|" << (id & ID_MASK)
 
 using namespace graph;
 using namespace compiler;
@@ -507,9 +514,9 @@ Compiler::split(ir_t* curr_ir) {
 
     // Create the partner qubit
     proc3d::vertex_t* dup = new proc3d::vertex_t;
-    dup->id = ((target->id & 0x00ff'ffff) << 6) 
+    dup->id = ((target->id & ID_MASK) << GEN_OFFSET) 
                 | MIDDLEMAN_INDEX++ 
-                | (tanner::vertex_t::GAUGE << 30);
+                | (tanner::vertex_t::GAUGE << TYPE_OFFSET);
     arch->add_vertex(dup);
     auto target_dup = new proc3d::edge_t;
     target_dup->src = target;
@@ -555,10 +562,10 @@ Compiler::flatten(ir_t* curr_ir) {
     proc3d::vertex_t* src = (proc3d::vertex_t*)violator->src;
     proc3d::vertex_t* dst = (proc3d::vertex_t*)violator->dst;
     proc3d::vertex_t* mm = new proc3d::vertex_t;
-    mm->id = ((src->id & 0x00ff'ffff) << 6)
+    mm->id = ((src->id & ID_MASK) << GEN_OFFSET)
                 | MIDDLEMAN_INDEX++
-                | (tanner::vertex_t::GAUGE << 30);
-    arch->add_vertex(mm);
+                | (tanner::vertex_t::GAUGE << TYPE_OFFSET);
+    if (!arch->add_vertex(mm))  std::cout << "PROBLEMO!!!\n";
     curr_ir->qubit_to_roles[mm] = std::vector<tanner::vertex_t*>();
     
     auto src_mm = new proc3d::edge_t;
@@ -652,8 +659,8 @@ Compiler::sparsen(ir_t* curr_ir) {
         if (tanner_graph->has_copy_in_gauges(tg_adj)) continue;
         // Create a new gauge qubit.
         tanner::vertex_t* tg = new tanner::vertex_t;
-        uint index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
-        tg->id = (index) | (tanner::vertex_t::GAUGE << 30);
+        uint64_t index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
+        tg->id = (index) | (tanner::vertex_t::GAUGE << TYPE_OFFSET);
         tg->qubit_type = tanner::vertex_t::GAUGE;
         tanner_graph->add_vertex(tg);
         // Add corresponding edges.

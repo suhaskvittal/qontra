@@ -22,12 +22,12 @@ namespace graph {
 namespace tanner {
 
 struct vertex_t : graph::base::vertex_t {
-    uint8_t qubit_type; // 00 = Data, 01 = Gauge, 11 = X parity, 10 = Z parity
+    uint64_t qubit_type; // 00 = Data, 01 = Gauge, 11 = X parity, 10 = Z parity
 
-    const static uint8_t DATA =     0x0;
-    const static uint8_t GAUGE =    0x1;
-    const static uint8_t XPARITY =  0x2;
-    const static uint8_t ZPARITY =  0x3;
+    const static uint64_t DATA =    0x0;
+    const static uint64_t GAUGE =   0x1;
+    const static uint64_t XPARITY = 0x2;
+    const static uint64_t ZPARITY = 0x3;
 };
 
 struct edge_t : graph::base::edge_t {

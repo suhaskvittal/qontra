@@ -29,7 +29,7 @@ namespace base {
 // should subclass base::vertex_t and
 // base::edge_t
 struct vertex_t {
-    uint id;
+    uint64_t id;
 };
 
 struct edge_t {
