@@ -89,7 +89,7 @@ help_exit:
 
     // Define any constraints here.
     compiler::constraint_t con;
-    con.max_connectivity = 3;
+    con.max_connectivity = 4;
     con.max_thickness = 1;
 
     // Declare compiler and run it.
@@ -101,6 +101,7 @@ help_exit:
     // Print out some simple stats and write to the output folder.
     std::cout << "Cost = " << cf(res) << ", valid = " << res->valid << "\n";
     std::cout << "Number of qubits = " << res->arch->get_vertices().size() << "\n";
+    std::cout << "Number of couplings = " << res->arch->get_edges().size() << "\n";
     std::cout << "Connectivity = " << res->arch->get_mean_connectivity() << "\n";
     std::cout << "Number of ops = " << res->schedule.size() << "\n";
     std::cout << "Thickness = " << res->arch->get_thickness() << "\n";

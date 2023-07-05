@@ -81,7 +81,7 @@ namespace qontra {
 schedule_t
 schedule_from_file(std::string fname) {
     FILE* fin = fopen(fname.c_str(), "r");
-    asm_yystart(fin);
+    asm_yystart_file(fin);
     asm_yyparse();
     fclose(fin);
     return schedule_after_parse();
@@ -89,7 +89,7 @@ schedule_from_file(std::string fname) {
 
 schedule_t
 schedule_from_text(std::string text) {
-    asm_yystart(text.c_str());
+    asm_yystart_str(text.c_str());
     asm_yyparse();
     return schedule_after_parse();
 }

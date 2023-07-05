@@ -10,7 +10,7 @@
 %code requires {
 
 #include "parsing/asm/common.h"
-#include "parisng/asm/helper.h"
+#include "parsing/asm/helper.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -155,7 +155,7 @@ asm_yyparse() {
     // Free any heap-allocated memory.
     for (int i = 0; i < ASMParserScheduleLen; i++) {
         struct __asm_inst_t* inst = &ASMParserSchedule[i];
-        if (inst->size) free(inst->data);
+        if (inst->operands.size) free(inst->operands.data);
     }
     return parse_out;
 }

@@ -32,7 +32,6 @@ __place:
     }
     place(ir);
     if (params.verbose) {
-        std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
@@ -42,7 +41,6 @@ __place:
     unify(ir);
 __reduce:
     if (params.verbose) {
-        std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
@@ -52,12 +50,12 @@ __reduce:
     reduce(ir);
     // Check if we need to call merge or split
     if (params.verbose) {
-        std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
         std::cout << "\tthickness = " << ir->arch->get_thickness() << "\n";
     }
+__constraints:
     if (rounds_without_progress > 0) {
         if (check_size_violation(ir)) {
             if (params.verbose) std::cout << "[ merge ] ---------------------\n";
@@ -83,6 +81,7 @@ __schedule:
 
         std::cout << "[ score ] ---------------------\n";
     }
+__score:
     score(ir);
     if (params.verbose) {
         std::cout << "\tcost = " << ir->score << ", valid = " << ir->valid << "\n";
@@ -119,11 +118,16 @@ __schedule:
         goto __place;
     }
 
+    delete new_ir;
+
     if (params.verbose)      std::cout << "[ sparsen ] ---------------------\n";
-    sparsen(ir);
-    if (best_result != ir) delete ir;
-    ir = new_ir;
-    goto __place;
+    if (sparsen(ir)) {
+        goto __place;
+    }
+
+    if (params.verbose)      std::cout << "[ raise ] -----------------------\n";
+    raise(ir);
+    goto __constraints;
 }
 
 void
@@ -674,6 +678,25 @@ Compiler::sparsen(ir_t* curr_ir) {
         }
     }
     return true;
+}
+
+void
+Compiler::raise(ir_t* curr_ir) {
+    Processor3D* arch = curr_ir->arch;
+    auto cpl_length_table = arch->get_coupling_lengths();
+    std::vector<proc3d::edge_t*> in_plane_edges;
+    for (auto e : arch->get_edges()) {
+        if (!arch->has_complex_coupling(e)) in_plane_edges.push_back(e);
+    }
+
+    auto cmp = [&] (proc3d::edge_t* e1, proc3d::edge_t* e2) {
+        return cpl_length_table[e1] > cpl_length_table[e2];
+    };
+    auto longest_coupling = *(std::min_element(
+                                    in_plane_edges.begin(),
+                                    in_plane_edges.end(),
+                                    cmp));
+    arch->force_out_of_plane(longest_coupling);
 }
 
 void

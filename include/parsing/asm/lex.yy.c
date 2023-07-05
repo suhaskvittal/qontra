@@ -1,6 +1,6 @@
-#line 1 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lex.yy.c"
+#line 1 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 
-#line 3 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lex.yy.c"
+#line 3 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -449,7 +449,7 @@ int yy_flex_debug = 0;
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
 char *yytext;
-#line 1 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 1 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 /*
     author: Suhas Vittal
     date:   25 June 2023
@@ -457,7 +457,7 @@ char *yytext;
     Lexer for ASM specified in ISA (see instruction.h)
 */
 #define YY_NO_INPUT 1
-#line 11 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 11 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 
 #include "parsing/asm/parser.tab.h"
 
@@ -466,8 +466,8 @@ char *yytext;
 
 void    force_lowercase(char*, int);
 
-#line 469 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lex.yy.c"
-#line 470 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lex.yy.c"
+#line 469 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
+#line 470 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 
 #define INITIAL 0
 
@@ -682,10 +682,10 @@ YY_DECL
 		}
 
 	{
-#line 21 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 21 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 
 
-#line 688 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lex.yy.c"
+#line 688 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -745,12 +745,12 @@ do_action:	/* This label is used only to access EOF actions. */
 case 1:
 /* rule 1 can match eol */
 YY_RULE_SETUP
-#line 23 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 23 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { /* this is a comment */ }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 25 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 25 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { 
                 yylval.arg = (uint32_t) atoi(yytext); 
                 return NUM; 
@@ -758,7 +758,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 29 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 29 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 {
                 memcpy(yylval.name, yytext, 24);
                 force_lowercase(yylval.name, yyleng);
@@ -767,7 +767,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 34 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 34 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { 
                 memcpy(yylval.name, yytext, 24); 
                 return ID; 
@@ -775,36 +775,36 @@ YY_RULE_SETUP
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 38 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 38 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { /* ignore whitespace */ }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 39 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 39 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { return ':'; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 40 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 40 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { return ';'; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 41 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 41 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { return SEP; }
 	YY_BREAK
 case 9:
 /* rule 9 can match eol */
 YY_RULE_SETUP
-#line 42 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 42 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 { BEGIN(INITIAL); return EOL; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 44 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 44 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 ECHO;
 	YY_BREAK
-#line 807 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lex.yy.c"
+#line 807 "/Users/svittal/Documents/qontra/include/parsing/asm/lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -1772,7 +1772,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 44 "/Users/svittal/Documents/research/quantum/ftqc/quarch/include/parsing/asm/lexer.lex"
+#line 44 "/Users/svittal/Documents/qontra/include/parsing/asm/lexer.lex"
 
 
 void force_lowercase(char* text, int len) {
@@ -1783,9 +1783,14 @@ void force_lowercase(char* text, int len) {
     }
 }
 
-void asm_yystart(FILE* fin) {
-    // Reset parser.
+void asm_yystart_file(FILE* fin) {
     reset_parser();
     yyrestart(fin);
 }
+
+void asm_yystart_str(const char* text) {
+    reset_parser();
+    yy_scan_string(text);
+}
+
 
