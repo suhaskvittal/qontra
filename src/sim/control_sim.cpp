@@ -585,7 +585,7 @@ ControlSimulator::QEX() {
             }
             std::cout << "\n";
         }
-        // Create snapshot of Clifford simulator state.
+        // Create snapshot of state simulator state.
         qsim->snapshot();
         // Execute the operation, alongside any errors.
         //
@@ -680,8 +680,12 @@ ControlSimulator::QEX() {
                 sig_m_spec[m3].clear();
                 val_m_spec[m3].clear();
 
-                sig_m_spec[m3] |= event_history[k];
-                sig_m_spec[m3].invert_bits();
+                sig_m_spec[m3].for_each_word(
+                        event_history[k],
+                        [&] (auto& spc1, auto& ev)
+                        {
+                            spc1 = ~ev;
+                        });
 
                 val_m_spec[m3] |= qsim->record_table[m2];
             }
