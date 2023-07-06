@@ -7,6 +7,8 @@
 
 %require "3.2"
 
+%define api.prefix {asm_yy}
+
 %code requires {
 
 #include "parsing/asm/common.h"
@@ -64,7 +66,7 @@ program:
 }
         | ID ':' program
 {
-    set_label_pc($1, pc);
+    asm_set_label_pc($1, pc);
 }
         | EOL program
 ;
@@ -82,9 +84,9 @@ instruction:
     struct __asm_inst_t inst;
     memcpy(inst.name, $1, IDLEN);
 
-    int label = get_label_id($2);
+    int label = asm_get_label_id($2);
     if (label < 0) {
-        label = record_label($2);    
+        label = asm_record_label($2);    
     }
     inst.operands.size = 1;
     inst.operands.data = malloc(1 * sizeof(uint32_t));
@@ -96,9 +98,9 @@ instruction:
     struct __asm_inst_t inst;
     memcpy(inst.name, $1, IDLEN);
 
-    int label = get_label_id($2);
+    int label = asm_get_label_id($2);
     if (label < 0) {
-        label = record_label($2);    
+        label = asm_record_label($2);    
     }
     inst.operands.size = 1 + $3.size;
     inst.operands.data = malloc(inst.operands.size * sizeof(uint32_t));
@@ -141,7 +143,7 @@ operands:
 %%
 
 void
-yyerror(const char* msg) {
+asm_yyerror(const char* msg) {
     fprintf(stderr, "asm parsing error: %s\n", msg);
 }
 
@@ -150,8 +152,8 @@ yyerror(const char* msg) {
 */
 
 int
-asm_yyparse() {
-    int parse_out = yyparse();
+asm_yyparse_safe() {
+    int parse_out = asm_yyparse();
     // Free any heap-allocated memory.
     for (int i = 0; i < ASMParserScheduleLen; i++) {
         struct __asm_inst_t* inst = &ASMParserSchedule[i];

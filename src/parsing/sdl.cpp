@@ -23,12 +23,12 @@ static std::map<uint32_t, std::vector<uint32_t>>
                                         check_dependents;
 
 void
-reset_parser() {
+sdl_reset_parser() {
 
 }
 
 int
-declare(uint32_t id, char* check_str) {
+sdl_declare(uint32_t id, char* check_str) {
     // Convert check string to a integer.
     bool is_x_check = check_str[0] == 'X';
     int n = atoi(check_str+1);
@@ -47,14 +47,17 @@ declare(uint32_t id, char* check_str) {
 }
 
 int
-assign_schedule(uint32_t id, struct __sdl_asm_body prog) {
+sdl_assign_schedule(uint32_t id, struct __sdl_asm_body prog) {
     uint32_t check = id_to_check[id];
+    if (check_to_schedule.count(check)) return -1;
     schedule_t sch = schedule_from_text(std::string(prog.text));
     check_to_schedule[check] = sch;
+    free(prog.text);
+    return 0;
 }
 
 void
-add_dependency(uint32_t id, struct __sdl_ordering ord) {
+sdl_add_dependency(uint32_t id, struct __sdl_ordering ord) {
     std::vector<uint32_t> dep(ord.dep, ord.dep + ord.size);
     check_dependents[id] = dep;
     free(ord.dep);

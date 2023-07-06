@@ -35,17 +35,25 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_SDL_PARSER_TAB_H_INCLUDED
-# define YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_SDL_PARSER_TAB_H_INCLUDED
+#ifndef YY_SDL_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_SDL_PARSER_TAB_H_INCLUDED
+# define YY_SDL_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_SDL_PARSER_TAB_H_INCLUDED
 /* Debug traces.  */
-#ifndef YYDEBUG
-# define YYDEBUG 0
-#endif
+#ifndef SDL_YYDEBUG
+# if defined YYDEBUG
 #if YYDEBUG
-extern int yydebug;
+#   define SDL_YYDEBUG 1
+#  else
+#   define SDL_YYDEBUG 0
+#  endif
+# else /* ! defined YYDEBUG */
+#  define SDL_YYDEBUG 0
+# endif /* ! defined YYDEBUG */
+#endif  /* ! defined SDL_YYDEBUG */
+#if SDL_YYDEBUG
+extern int sdl_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 11 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 13 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 
 
 #include "parsing/sdl/common.h"
@@ -54,17 +62,17 @@ extern int yydebug;
 #define __SDL_ERROR(x)  sdl_yyerror(x)
 
 
-#line 58 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
+#line 66 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
 
 /* Token kinds.  */
-#ifndef YYTOKENTYPE
-# define YYTOKENTYPE
-  enum yytokentype
+#ifndef SDL_YYTOKENTYPE
+# define SDL_YYTOKENTYPE
+  enum sdl_yytokentype
   {
-    YYEMPTY = -2,
-    YYEOF = 0,                     /* "end of file"  */
-    YYerror = 256,                 /* error  */
-    YYUNDEF = 257,                 /* "invalid token"  */
+    SDL_YYEMPTY = -2,
+    SDL_YYEOF = 0,                 /* "end of file"  */
+    SDL_YYerror = 256,             /* error  */
+    SDL_YYUNDEF = 257,             /* "invalid token"  */
     DECL = 258,                    /* DECL  */
     CHECK = 259,                   /* CHECK  */
     NUM = 260,                     /* NUM  */
@@ -75,36 +83,36 @@ extern int yydebug;
     SEP = 265,                     /* SEP  */
     EOL = 266                      /* EOL  */
   };
-  typedef enum yytokentype yytoken_kind_t;
+  typedef enum sdl_yytokentype sdl_yytoken_kind_t;
 #endif
 
 /* Value type.  */
-#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
-union YYSTYPE
+#if ! defined SDL_YYSTYPE && ! defined SDL_YYSTYPE_IS_DECLARED
+union SDL_YYSTYPE
 {
-#line 29 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 31 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 
     uint32_t                id;
     char                    check[24];
     struct __sdl_asm_body   prog;
     struct __sdl_ordering   ord;
 
-#line 93 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
+#line 101 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
 
 };
-typedef union YYSTYPE YYSTYPE;
-# define YYSTYPE_IS_TRIVIAL 1
-# define YYSTYPE_IS_DECLARED 1
+typedef union SDL_YYSTYPE SDL_YYSTYPE;
+# define SDL_YYSTYPE_IS_TRIVIAL 1
+# define SDL_YYSTYPE_IS_DECLARED 1
 #endif
 
 
-extern YYSTYPE yylval;
+extern SDL_YYSTYPE sdl_yylval;
 
 
-int yyparse (void);
+int sdl_yyparse (void);
 
 /* "%code provides" blocks.  */
-#line 20 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 22 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 
 
 int yylex();
@@ -113,6 +121,6 @@ extern int  yyparse();
 void        yyerror(char const*);
 
 
-#line 117 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
+#line 125 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
 
-#endif /* !YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_SDL_PARSER_TAB_H_INCLUDED  */
+#endif /* !YY_SDL_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_SDL_PARSER_TAB_H_INCLUDED  */

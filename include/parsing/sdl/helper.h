@@ -23,11 +23,11 @@ struct __sdl_ordering {
     uint32_t    size;
 };
 
-void    reset_parser(void);
+void    sdl_reset_parser(void);
 
-int     declare(uint32_t id, char* check_str);
-int     assign_schedule(uint32_t check_id, struct __sdl_asm_body);
-void    add_dependency(uint32_t, struct __sdl_ordering);
+int     sdl_declare(uint32_t id, char* check_str);
+int     sdl_assign_schedule(uint32_t check_id, struct __sdl_asm_body);
+void    sdl_add_dependency(uint32_t, struct __sdl_ordering);
 
 #ifdef __cplusplus
 }

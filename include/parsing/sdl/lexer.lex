@@ -21,12 +21,15 @@
 */
 
 %option noyywrap
+%option prefix="sdl_yy"
 
 %x ASM
 
 %{
 
 #include "parsing/sdl/parser.tab.h"
+
+#define yylval sdl_yylval
 
 %}
 
@@ -59,6 +62,7 @@
 
 %%
 
-void sdl_yystart(FILE* fin) {
-    yyrestart(fin);
+void sdl_yystart_file(FILE* fin) {
+    sdl_reset_parser();
+    sdl_yyrestart(fin);
 }

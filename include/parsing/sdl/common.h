@@ -12,8 +12,8 @@
 extern "C" {
 #endif
 
-void    sdl_yystart(FILE*);
-int     sdl_yyparse();    
+void    sdl_yystart_file(FILE*);
+int     sdl_yyparse_safe();    
 
 #ifdef __cplusplus
 }

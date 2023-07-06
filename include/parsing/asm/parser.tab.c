@@ -63,8 +63,16 @@
 /* Pull parsers.  */
 #define YYPULL 1
 
-
-
+/* Substitute the type names.  */
+#define YYSTYPE         ASM_YYSTYPE
+/* Substitute the variable and function names.  */
+#define yyparse         asm_yyparse
+#define yylex           asm_yylex
+#define yyerror         asm_yyerror
+#define yydebug         asm_yydebug
+#define yynerrs         asm_yynerrs
+#define yylval          asm_yylval
+#define yychar          asm_yychar
 
 
 # ifndef YY_CAST
@@ -373,7 +381,7 @@ void free (void *); /* INFRINGES ON USER NAME SPACE */
 
 #if (! defined yyoverflow \
      && (! defined __cplusplus \
-         || (defined YYSTYPE_IS_TRIVIAL && YYSTYPE_IS_TRIVIAL)))
+         || (defined ASM_YYSTYPE_IS_TRIVIAL && ASM_YYSTYPE_IS_TRIVIAL)))
 
 /* A type that is properly aligned for any stack member.  */
 union yyalloc
@@ -489,19 +497,19 @@ static const yytype_int8 yytranslate[] =
        5,     8,     9
 };
 
-#if YYDEBUG
+#if ASM_YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,    59,    59,    61,    65,    69,    73,    80,    94,   110,
-     121,   129
+       0,    61,    61,    63,    67,    71,    75,    82,    96,   112,
+     123,   131
 };
 #endif
 
 /** Accessing symbol of state STATE.  */
 #define YY_ACCESSING_SYMBOL(State) YY_CAST (yysymbol_kind_t, yystos[State])
 
-#if YYDEBUG || 0
+#if ASM_YYDEBUG || 0
 /* The user-facing name of the symbol whose (internal) number is
    YYSYMBOL.  No bounds checking.  */
 static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
@@ -605,7 +613,7 @@ static const yytype_int8 yyr2[] =
 enum { YYENOMEM = -2 };
 
 #define yyerrok         (yyerrstatus = 0)
-#define yyclearin       (yychar = YYEMPTY)
+#define yyclearin       (yychar = ASM_YYEMPTY)
 
 #define YYACCEPT        goto yyacceptlab
 #define YYABORT         goto yyabortlab
@@ -617,7 +625,7 @@ enum { YYENOMEM = -2 };
 
 #define YYBACKUP(Token, Value)                                    \
   do                                                              \
-    if (yychar == YYEMPTY)                                        \
+    if (yychar == ASM_YYEMPTY)                                        \
       {                                                           \
         yychar = (Token);                                         \
         yylval = (Value);                                         \
@@ -633,12 +641,12 @@ enum { YYENOMEM = -2 };
   while (0)
 
 /* Backward compatibility with an undocumented macro.
-   Use YYerror or YYUNDEF. */
-#define YYERRCODE YYUNDEF
+   Use ASM_YYerror or ASM_YYUNDEF. */
+#define YYERRCODE ASM_YYUNDEF
 
 
 /* Enable debugging if requested.  */
-#if YYDEBUG
+#if ASM_YYDEBUG
 
 # ifndef YYFPRINTF
 #  include <stdio.h> /* INFRINGES ON USER NAME SPACE */
@@ -756,12 +764,12 @@ do {                                    \
 /* Nonzero means print parse trace.  It is left uninitialized so that
    multiple parsers can coexist.  */
 int yydebug;
-#else /* !YYDEBUG */
+#else /* !ASM_YYDEBUG */
 # define YYDPRINTF(Args) ((void) 0)
 # define YY_SYMBOL_PRINT(Title, Kind, Value, Location)
 # define YY_STACK_PRINT(Bottom, Top)
 # define YY_REDUCE_PRINT(Rule)
-#endif /* !YYDEBUG */
+#endif /* !ASM_YYDEBUG */
 
 
 /* YYINITDEPTH -- initial size of the parser's stacks.  */
@@ -861,7 +869,7 @@ yyparse (void)
 
   YYDPRINTF ((stderr, "Starting parse\n"));
 
-  yychar = YYEMPTY; /* Cause a token to be read.  */
+  yychar = ASM_YYEMPTY; /* Cause a token to be read.  */
 
   goto yysetstate;
 
@@ -971,25 +979,25 @@ yybackup:
   /* Not known => get a lookahead token if don't already have one.  */
 
   /* YYCHAR is either empty, or end-of-input, or a valid lookahead.  */
-  if (yychar == YYEMPTY)
+  if (yychar == ASM_YYEMPTY)
     {
       YYDPRINTF ((stderr, "Reading a token\n"));
       yychar = yylex ();
     }
 
-  if (yychar <= YYEOF)
+  if (yychar <= ASM_YYEOF)
     {
-      yychar = YYEOF;
+      yychar = ASM_YYEOF;
       yytoken = YYSYMBOL_YYEOF;
       YYDPRINTF ((stderr, "Now at end of input.\n"));
     }
-  else if (yychar == YYerror)
+  else if (yychar == ASM_YYerror)
     {
       /* The scanner already issued an error message, process directly
          to error recovery.  But do not keep the error token as
          lookahead, it is too special and may lead us to an endless
          loop in error recovery. */
-      yychar = YYUNDEF;
+      yychar = ASM_YYUNDEF;
       yytoken = YYSYMBOL_YYerror;
       goto yyerrlab1;
     }
@@ -1026,7 +1034,7 @@ yybackup:
   YY_IGNORE_MAYBE_UNINITIALIZED_END
 
   /* Discard the shifted token.  */
-  yychar = YYEMPTY;
+  yychar = ASM_YYEMPTY;
   goto yynewstate;
 
 
@@ -1062,59 +1070,59 @@ yyreduce:
   switch (yyn)
     {
   case 3: /* program: instruction program  */
-#line 62 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 64 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 { 
     pc++; 
-}
-#line 1070 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
-    break;
-
-  case 4: /* program: ID ':' program  */
-#line 66 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
-{
-    set_label_pc((yyvsp[-2].name), pc);
 }
 #line 1078 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
+  case 4: /* program: ID ':' program  */
+#line 68 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+{
+    asm_set_label_pc((yyvsp[-2].name), pc);
+}
+#line 1086 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+    break;
+
   case 6: /* instruction: INST ';'  */
-#line 74 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 76 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-1].name), IDLEN);
     inst.operands.size = 0;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-#line 1089 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1097 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
   case 7: /* instruction: INST ID ';'  */
-#line 81 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 83 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-2].name), IDLEN);
 
-    int label = get_label_id((yyvsp[-1].name));
+    int label = asm_get_label_id((yyvsp[-1].name));
     if (label < 0) {
-        label = record_label((yyvsp[-1].name));    
+        label = asm_record_label((yyvsp[-1].name));    
     }
     inst.operands.size = 1;
     inst.operands.data = malloc(1 * sizeof(uint32_t));
     inst.operands.data[0] = label;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-#line 1107 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1115 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
   case 8: /* instruction: INST ID operands ';'  */
-#line 95 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 97 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-3].name), IDLEN);
 
-    int label = get_label_id((yyvsp[-2].name));
+    int label = asm_get_label_id((yyvsp[-2].name));
     if (label < 0) {
-        label = record_label((yyvsp[-2].name));    
+        label = asm_record_label((yyvsp[-2].name));    
     }
     inst.operands.size = 1 + (yyvsp[-1].operands).size;
     inst.operands.data = malloc(inst.operands.size * sizeof(uint32_t));
@@ -1123,11 +1131,11 @@ yyreduce:
     free((yyvsp[-1].operands).data);
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-#line 1127 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1135 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
   case 9: /* instruction: INST operands ';'  */
-#line 111 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 113 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, (yyvsp[-2].name), IDLEN);
@@ -1135,11 +1143,11 @@ yyreduce:
     inst.operands.size = (yyvsp[-1].operands).size;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-#line 1139 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1147 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
   case 10: /* operands: NUM  */
-#line 122 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 124 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.data = malloc(1 * sizeof(uint32_t));
@@ -1147,11 +1155,11 @@ yyreduce:
     x.size = 1;
     (yyval.operands) = x;
 }
-#line 1151 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1159 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
   case 11: /* operands: NUM SEP operands  */
-#line 130 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 132 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 {
     struct __asm_operand_t x;
     x.size = 1 + (yyvsp[0].operands).size;
@@ -1161,11 +1169,11 @@ yyreduce:
     free((yyvsp[0].operands).data);
     (yyval.operands) = x;
 }
-#line 1165 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1173 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
     break;
 
 
-#line 1169 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
+#line 1177 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.c"
 
       default: break;
     }
@@ -1207,7 +1215,7 @@ yyreduce:
 yyerrlab:
   /* Make sure we have latest lookahead translation.  See comments at
      user semantic actions for why this is necessary.  */
-  yytoken = yychar == YYEMPTY ? YYSYMBOL_YYEMPTY : YYTRANSLATE (yychar);
+  yytoken = yychar == ASM_YYEMPTY ? YYSYMBOL_YYEMPTY : YYTRANSLATE (yychar);
   /* If not already recovering from an error, report this error.  */
   if (!yyerrstatus)
     {
@@ -1220,17 +1228,17 @@ yyerrlab:
       /* If just tried and failed to reuse lookahead token after an
          error, discard it.  */
 
-      if (yychar <= YYEOF)
+      if (yychar <= ASM_YYEOF)
         {
           /* Return failure if at end of input.  */
-          if (yychar == YYEOF)
+          if (yychar == ASM_YYEOF)
             YYABORT;
         }
       else
         {
           yydestruct ("Error: discarding",
                       yytoken, &yylval);
-          yychar = YYEMPTY;
+          yychar = ASM_YYEMPTY;
         }
     }
 
@@ -1332,7 +1340,7 @@ yyexhaustedlab:
 | yyreturnlab -- parsing is finished, clean up and return.  |
 `----------------------------------------------------------*/
 yyreturnlab:
-  if (yychar != YYEMPTY)
+  if (yychar != ASM_YYEMPTY)
     {
       /* Make sure we have latest lookahead translation.  See comments at
          user semantic actions for why this is necessary.  */
@@ -1358,11 +1366,11 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 141 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 143 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 
 
 void
-yyerror(const char* msg) {
+asm_yyerror(const char* msg) {
     fprintf(stderr, "asm parsing error: %s\n", msg);
 }
 
@@ -1371,8 +1379,8 @@ yyerror(const char* msg) {
 */
 
 int
-asm_yyparse() {
-    int parse_out = yyparse();
+asm_yyparse_safe() {
+    int parse_out = asm_yyparse();
     // Free any heap-allocated memory.
     for (int i = 0; i < ASMParserScheduleLen; i++) {
         struct __asm_inst_t* inst = &ASMParserSchedule[i];

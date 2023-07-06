@@ -14,7 +14,7 @@ extern "C" {
 
 void asm_yystart_file(FILE*);
 void asm_yystart_str(const char*);
-int  asm_yyparse();
+int  asm_yyparse_safe();
 
 #ifdef __cplusplus
 }

@@ -33,13 +33,13 @@ extern uint32_t             ASMParserScheduleLen;
 
 extern uint64_t     pc;
 
-void        reset_parser(void);
+void        asm_reset_parser(void);
 
-void        clear_labels(void);
-void        set_label_pc(char const*, uint64_t);
-int         get_label_id(char const*);
-int         record_label(char const*);
-uint64_t    get_label_pc(int);
+void        asm_clear_labels(void);
+void        asm_set_label_pc(char const*, uint64_t);
+int         asm_get_label_id(char const*);
+int         asm_record_label(char const*);
+uint64_t    asm_get_label_pc(int);
 
 #ifdef __cplusplus
 }

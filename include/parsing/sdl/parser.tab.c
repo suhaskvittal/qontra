@@ -63,8 +63,16 @@
 /* Pull parsers.  */
 #define YYPULL 1
 
-
-
+/* Substitute the type names.  */
+#define YYSTYPE         SDL_YYSTYPE
+/* Substitute the variable and function names.  */
+#define yyparse         sdl_yyparse
+#define yylex           sdl_yylex
+#define yyerror         sdl_yyerror
+#define yydebug         sdl_yydebug
+#define yynerrs         sdl_yynerrs
+#define yylval          sdl_yylval
+#define yychar          sdl_yychar
 
 
 # ifndef YY_CAST
@@ -376,7 +384,7 @@ void free (void *); /* INFRINGES ON USER NAME SPACE */
 
 #if (! defined yyoverflow \
      && (! defined __cplusplus \
-         || (defined YYSTYPE_IS_TRIVIAL && YYSTYPE_IS_TRIVIAL)))
+         || (defined SDL_YYSTYPE_IS_TRIVIAL && SDL_YYSTYPE_IS_TRIVIAL)))
 
 /* A type that is properly aligned for any stack member.  */
 union yyalloc
@@ -492,18 +500,18 @@ static const yytype_int8 yytranslate[] =
        5,     6,     7,     8,     9,    10,    11
 };
 
-#if YYDEBUG
+#if SDL_YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int8 yyrline[] =
 {
-       0,    76,    76,    77,    81,    85,    89,    93,   103
+       0,    78,    78,    79,    83,    87,    91,    95,   105
 };
 #endif
 
 /** Accessing symbol of state STATE.  */
 #define YY_ACCESSING_SYMBOL(State) YY_CAST (yysymbol_kind_t, yystos[State])
 
-#if YYDEBUG || 0
+#if SDL_YYDEBUG || 0
 /* The user-facing name of the symbol whose (internal) number is
    YYSYMBOL.  No bounds checking.  */
 static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
@@ -607,7 +615,7 @@ static const yytype_int8 yyr2[] =
 enum { YYENOMEM = -2 };
 
 #define yyerrok         (yyerrstatus = 0)
-#define yyclearin       (yychar = YYEMPTY)
+#define yyclearin       (yychar = SDL_YYEMPTY)
 
 #define YYACCEPT        goto yyacceptlab
 #define YYABORT         goto yyabortlab
@@ -619,7 +627,7 @@ enum { YYENOMEM = -2 };
 
 #define YYBACKUP(Token, Value)                                    \
   do                                                              \
-    if (yychar == YYEMPTY)                                        \
+    if (yychar == SDL_YYEMPTY)                                        \
       {                                                           \
         yychar = (Token);                                         \
         yylval = (Value);                                         \
@@ -635,12 +643,12 @@ enum { YYENOMEM = -2 };
   while (0)
 
 /* Backward compatibility with an undocumented macro.
-   Use YYerror or YYUNDEF. */
-#define YYERRCODE YYUNDEF
+   Use SDL_YYerror or SDL_YYUNDEF. */
+#define YYERRCODE SDL_YYUNDEF
 
 
 /* Enable debugging if requested.  */
-#if YYDEBUG
+#if SDL_YYDEBUG
 
 # ifndef YYFPRINTF
 #  include <stdio.h> /* INFRINGES ON USER NAME SPACE */
@@ -758,12 +766,12 @@ do {                                    \
 /* Nonzero means print parse trace.  It is left uninitialized so that
    multiple parsers can coexist.  */
 int yydebug;
-#else /* !YYDEBUG */
+#else /* !SDL_YYDEBUG */
 # define YYDPRINTF(Args) ((void) 0)
 # define YY_SYMBOL_PRINT(Title, Kind, Value, Location)
 # define YY_STACK_PRINT(Bottom, Top)
 # define YY_REDUCE_PRINT(Rule)
-#endif /* !YYDEBUG */
+#endif /* !SDL_YYDEBUG */
 
 
 /* YYINITDEPTH -- initial size of the parser's stacks.  */
@@ -863,7 +871,7 @@ yyparse (void)
 
   YYDPRINTF ((stderr, "Starting parse\n"));
 
-  yychar = YYEMPTY; /* Cause a token to be read.  */
+  yychar = SDL_YYEMPTY; /* Cause a token to be read.  */
 
   goto yysetstate;
 
@@ -973,25 +981,25 @@ yybackup:
   /* Not known => get a lookahead token if don't already have one.  */
 
   /* YYCHAR is either empty, or end-of-input, or a valid lookahead.  */
-  if (yychar == YYEMPTY)
+  if (yychar == SDL_YYEMPTY)
     {
       YYDPRINTF ((stderr, "Reading a token\n"));
       yychar = yylex ();
     }
 
-  if (yychar <= YYEOF)
+  if (yychar <= SDL_YYEOF)
     {
-      yychar = YYEOF;
+      yychar = SDL_YYEOF;
       yytoken = YYSYMBOL_YYEOF;
       YYDPRINTF ((stderr, "Now at end of input.\n"));
     }
-  else if (yychar == YYerror)
+  else if (yychar == SDL_YYerror)
     {
       /* The scanner already issued an error message, process directly
          to error recovery.  But do not keep the error token as
          lookahead, it is too special and may lead us to an endless
          loop in error recovery. */
-      yychar = YYUNDEF;
+      yychar = SDL_YYUNDEF;
       yytoken = YYSYMBOL_YYerror;
       goto yyerrlab1;
     }
@@ -1028,7 +1036,7 @@ yybackup:
   YY_IGNORE_MAYBE_UNINITIALIZED_END
 
   /* Discard the shifted token.  */
-  yychar = YYEMPTY;
+  yychar = SDL_YYEMPTY;
   goto yynewstate;
 
 
@@ -1064,31 +1072,31 @@ yyreduce:
   switch (yyn)
     {
   case 3: /* program: DECL CHECK SEP NUM ';' program  */
-#line 78 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 80 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 {
-    if (declare((yyvsp[-2].id), (yyvsp[-4].check)) < 0)    YYABORT;
-}
-#line 1072 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
-    break;
-
-  case 4: /* program: MUS NUM ':' ASM END ';' program  */
-#line 82 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
-{
-    if (assign_schedule((yyvsp[-5].id), (yyvsp[-3].prog)))    YYABORT;
+    if (sdl_declare((yyvsp[-2].id), (yyvsp[-4].check)) < 0)    YYABORT;
 }
 #line 1080 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
     break;
 
-  case 5: /* program: ORD NUM SEP ordering ';' program  */
-#line 86 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+  case 4: /* program: MUS NUM ':' ASM END ';' program  */
+#line 84 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 {
-    add_dependency((yyvsp[-4].id), (yyvsp[-2].ord));
+    if (sdl_assign_schedule((yyvsp[-5].id), (yyvsp[-3].prog)) < 0)    YYABORT;
 }
 #line 1088 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
     break;
 
+  case 5: /* program: ORD NUM SEP ordering ';' program  */
+#line 88 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+{
+    sdl_add_dependency((yyvsp[-4].id), (yyvsp[-2].ord));
+}
+#line 1096 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+    break;
+
   case 7: /* ordering: NUM SEP ordering  */
-#line 94 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 96 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 {
     struct __sdl_ordering x;
     x.size = 1 + (yyvsp[0].ord).size;
@@ -1098,11 +1106,11 @@ yyreduce:
     free((yyvsp[0].ord).dep);
     (yyval.ord) = x;
 }
-#line 1102 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+#line 1110 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
     break;
 
   case 8: /* ordering: NUM  */
-#line 104 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 106 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 {
     struct __sdl_ordering x;
     x.size = 1;
@@ -1110,11 +1118,11 @@ yyreduce:
     x.dep[0] = (yyvsp[0].id);
     (yyval.ord) = x;
 }
-#line 1114 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+#line 1122 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
     break;
 
 
-#line 1118 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+#line 1126 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
 
       default: break;
     }
@@ -1156,7 +1164,7 @@ yyreduce:
 yyerrlab:
   /* Make sure we have latest lookahead translation.  See comments at
      user semantic actions for why this is necessary.  */
-  yytoken = yychar == YYEMPTY ? YYSYMBOL_YYEMPTY : YYTRANSLATE (yychar);
+  yytoken = yychar == SDL_YYEMPTY ? YYSYMBOL_YYEMPTY : YYTRANSLATE (yychar);
   /* If not already recovering from an error, report this error.  */
   if (!yyerrstatus)
     {
@@ -1169,17 +1177,17 @@ yyerrlab:
       /* If just tried and failed to reuse lookahead token after an
          error, discard it.  */
 
-      if (yychar <= YYEOF)
+      if (yychar <= SDL_YYEOF)
         {
           /* Return failure if at end of input.  */
-          if (yychar == YYEOF)
+          if (yychar == SDL_YYEOF)
             YYABORT;
         }
       else
         {
           yydestruct ("Error: discarding",
                       yytoken, &yylval);
-          yychar = YYEMPTY;
+          yychar = SDL_YYEMPTY;
         }
     }
 
@@ -1281,7 +1289,7 @@ yyexhaustedlab:
 | yyreturnlab -- parsing is finished, clean up and return.  |
 `----------------------------------------------------------*/
 yyreturnlab:
-  if (yychar != YYEMPTY)
+  if (yychar != SDL_YYEMPTY)
     {
       /* Make sure we have latest lookahead translation.  See comments at
          user semantic actions for why this is necessary.  */
@@ -1307,13 +1315,13 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 113 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 115 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 
 
-void yyerror(const char* msg) {
+void sdl_yyerror(const char* msg) {
     fprintf(stderr, msg);
 }
 
-int sdl_yyparse() {
-    return yyparse();
+int sdl_yyparse_safe() {
+    return sdl_yyparse();
 }

@@ -8,6 +8,8 @@
 
 %require "3.2"
 
+%define api.prefix {sdl_yy}
+
 %code requires {
 
 #include "parsing/sdl/common.h"
@@ -76,15 +78,15 @@ void        yyerror(char const*);
 program:    /* empty string */
        | DECL CHECK SEP NUM ';' program
 {
-    if (declare($4, $2) < 0)    YYABORT;
+    if (sdl_declare($4, $2) < 0)    YYABORT;
 }
        | MUS NUM ':' ASM END ';' program
 {
-    if (assign_schedule($2, $4))    YYABORT;
+    if (sdl_assign_schedule($2, $4) < 0)    YYABORT;
 }
        | ORD NUM SEP ordering ';' program
 {
-    add_dependency($2, $4);
+    sdl_add_dependency($2, $4);
 }
        | EOL program
 ;
@@ -112,10 +114,10 @@ ordering:
 
 %%
 
-void yyerror(const char* msg) {
+void sdl_yyerror(const char* msg) {
     fprintf(stderr, msg);
 }
 
-int sdl_yyparse() {
-    return yyparse();
+int sdl_yyparse_safe() {
+    return sdl_yyparse();
 }

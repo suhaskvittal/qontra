@@ -35,17 +35,25 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
-# define YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
+#ifndef YY_ASM_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
+# define YY_ASM_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED
 /* Debug traces.  */
-#ifndef YYDEBUG
-# define YYDEBUG 0
-#endif
+#ifndef ASM_YYDEBUG
+# if defined YYDEBUG
 #if YYDEBUG
-extern int yydebug;
+#   define ASM_YYDEBUG 1
+#  else
+#   define ASM_YYDEBUG 0
+#  endif
+# else /* ! defined YYDEBUG */
+#  define ASM_YYDEBUG 0
+# endif /* ! defined YYDEBUG */
+#endif  /* ! defined ASM_YYDEBUG */
+#if ASM_YYDEBUG
+extern int asm_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 10 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 12 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 
 
 #include "parsing/asm/common.h"
@@ -56,52 +64,52 @@ extern int yydebug;
 #include <string.h>
 
 
-#line 60 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
+#line 68 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
 
 /* Token kinds.  */
-#ifndef YYTOKENTYPE
-# define YYTOKENTYPE
-  enum yytokentype
+#ifndef ASM_YYTOKENTYPE
+# define ASM_YYTOKENTYPE
+  enum asm_yytokentype
   {
-    YYEMPTY = -2,
-    YYEOF = 0,                     /* "end of file"  */
-    YYerror = 256,                 /* error  */
-    YYUNDEF = 257,                 /* "invalid token"  */
+    ASM_YYEMPTY = -2,
+    ASM_YYEOF = 0,                 /* "end of file"  */
+    ASM_YYerror = 256,             /* error  */
+    ASM_YYUNDEF = 257,             /* "invalid token"  */
     INST = 258,                    /* INST  */
     ID = 259,                      /* ID  */
     NUM = 260,                     /* NUM  */
     SEP = 261,                     /* SEP  */
     EOL = 262                      /* EOL  */
   };
-  typedef enum yytokentype yytoken_kind_t;
+  typedef enum asm_yytokentype asm_yytoken_kind_t;
 #endif
 
 /* Value type.  */
-#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
-union YYSTYPE
+#if ! defined ASM_YYSTYPE && ! defined ASM_YYSTYPE_IS_DECLARED
+union ASM_YYSTYPE
 {
-#line 30 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 32 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 
     uint32_t                arg;
     char                    name[24];
     struct __asm_operand_t  operands;
 
-#line 90 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
+#line 98 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
 
 };
-typedef union YYSTYPE YYSTYPE;
-# define YYSTYPE_IS_TRIVIAL 1
-# define YYSTYPE_IS_DECLARED 1
+typedef union ASM_YYSTYPE ASM_YYSTYPE;
+# define ASM_YYSTYPE_IS_TRIVIAL 1
+# define ASM_YYSTYPE_IS_DECLARED 1
 #endif
 
 
-extern YYSTYPE yylval;
+extern ASM_YYSTYPE asm_yylval;
 
 
-int yyparse (void);
+int asm_yyparse (void);
 
 /* "%code provides" blocks.  */
-#line 21 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
+#line 23 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.y"
 
 
 int yylex();
@@ -110,6 +118,6 @@ extern int  yyparse();
 void        yyerror(char const*);
 
 
-#line 114 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
+#line 122 "/Users/svittal/Documents/qontra/include/parsing/asm/parser.tab.h"
 
-#endif /* !YY_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED  */
+#endif /* !YY_ASM_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_ASM_PARSER_TAB_H_INCLUDED  */
