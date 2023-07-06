@@ -74,6 +74,7 @@ Processor3D::reallocate_edges() {
         // First, try to add to main processor.
         if (p) {
             remove_coupling_definition(e);
+            e->processor_layer = 0;
             coupling_to_edges[e] = {e};
             main_processor.add_edge(e, p);
         } else {

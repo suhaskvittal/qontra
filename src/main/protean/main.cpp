@@ -89,7 +89,7 @@ help_exit:
 
     // Define any constraints here.
     compiler::constraint_t con;
-    con.max_connectivity = 3;
+    con.max_connectivity = 4;
     con.max_thickness = 1;
 
     // Declare compiler and run it.
@@ -104,6 +104,8 @@ help_exit:
     std::cout << "Connectivity = " << res->arch->get_mean_connectivity() << "\n";
     std::cout << "Number of ops = " << res->schedule.size() << "\n";
     std::cout << "Thickness = " << res->arch->get_thickness() << "\n";
+    std::cout << "Main is planar = " << res->arch->get_main_processor().planar() << "\n";
+    std::cout << "is tracking = " << res->arch->get_main_processor().tracking_planarity() << "\n";
 //  std::cout << "Schedule depth = " << res->dependency_graph->get_depth() << "\n";
 
     write_ir_to_folder(res, folder_out);

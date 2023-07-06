@@ -97,9 +97,7 @@ public:
     add_edge(E_t* e) {              // O(1) operation
         auto src = (V_t*)e->src;
         auto dst = (V_t*)e->dst;
-        if (src == dst) {
-            std::cout << "DONKEY!\n"; 
-        }
+        if (src == dst)                         return false;
         if (!contains(src) || !contains(dst))   return false;
         if (contains(src, dst))                 return false;
         edges.push_back(e);
@@ -200,6 +198,8 @@ public:
                             { update_state(); return max_degree; }
 
     bool    dealloc_on_delete;  // Deletes vertices and edges on delete functions if set.
+
+    void    force_update_state(void) { graph_has_changed = false; update_state(); }
 protected:
     // Updates graph if graph_has_changed is set.
     // Subclasses should override this method if they track state in any way.
