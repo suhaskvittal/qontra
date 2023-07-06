@@ -66,8 +66,8 @@ sdl_add_dependency(uint32_t id, struct __sdl_ordering ord) {
     uint32_t ch = id_to_check[id];
     for (int i = 0; i < ord.size; i++) {
         check_dependents[ch].insert(id_to_check[ord.dep[i]]);
+        check_dependences[id_to_check[ord.dep[i]]].insert(ch);
     }
-    for (auto d : dep)  check_dependences[d].insert(ch);
     free(ord.dep);
 }
 
@@ -88,7 +88,7 @@ build_dependence_graph_from_sdl(std::string filename) {
     for (auto pair : check_dependences) {
         if (pair.second.empty())    sat_checks.push_back(pair.first);
     }
-    std::map<uint32_t, std::vector<uint32_t>>
+    std::map<uint32_t, std::set<uint32_t>>
         remaining_dependences(check_dependences);
     while (sat_checks.size()) {
         uint32_t ch = sat_checks.front();

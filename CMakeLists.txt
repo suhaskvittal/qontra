@@ -32,6 +32,7 @@ set(QONTRA_FILES
     src/parsing/cmd.cpp
     # Graphs
     src/graph/decoding_graph.cpp 
+    src/graph/dependence_graph.cpp
     src/graph/coupling_graph.cpp
     src/graph/tanner_graph.cpp
     # Protean
