@@ -29,7 +29,7 @@ void        yyerror(char const*);
 %union {
     uint32_t                id;
     char                    check[24];
-    struct __sdl_asm_body   asm;
+    struct __sdl_asm_body   prog;
     struct __sdl_ordering   ord;
 }
 
@@ -68,7 +68,7 @@ void        yyerror(char const*);
 
 %type<id>       NUM
 %type<check>    CHECK
-%type<asm>      ASM
+%type<prog>     ASM
 %type<ord>      ordering
 
 %%
@@ -96,7 +96,7 @@ ordering:
     x.size = 1 + $3.size;
     x.dep = malloc(x.size * sizeof(uint32_t));
     x.dep[0] = $1;
-    memmove(x.dependents + 1, $3.dep, $3.size);
+    memmove(x.dep + 1, $3.dep, $3.size);
     free($3.dep);
     $$ = x;
 }
@@ -112,7 +112,7 @@ ordering:
 
 %%
 
-void yyparse(const char* msg) {
+void yyerror(const char* msg) {
     fprintf(stderr, msg);
 }
 

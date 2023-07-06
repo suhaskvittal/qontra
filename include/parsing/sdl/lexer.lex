@@ -46,14 +46,14 @@
                         return NUM;
                     }
 <ASM>.*?            {
-                        yylval.asm.text = malloc(yyleng+1);
-                        memcpy(yylval.asm.text, yytext, yyleng);
-                        yylval.asm.text[yyleng] = '\0';
+                        yylval.prog.text = malloc(yyleng+1);
+                        memcpy(yylval.prog.text, yytext, yyleng);
+                        yylval.prog.text[yyleng] = '\0';
                         return ASM;
                     }
 ,                   { return SEP; }
-:                   { return ':' }
-;                   { return ';' }
+:                   { return ':'; }
+;                   { return ';'; }
 [ \t]               { /* ignore whitespace */ }
 \n                  { return EOL; }
 

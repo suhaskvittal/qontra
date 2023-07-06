@@ -12,9 +12,15 @@ BISON_TARGET(ASMParser ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.y
     ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.tab.c
     DEFINES_FILE ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.tab.h)
 FLEX_TARGET(ASMLexer ${CMAKE_SOURCE_DIR}/include/parsing/asm/lexer.lex 
-    ${CMAKE_SOURCE_DIR}/include/parsing/asm/lex.yy.c
-    DEFINES_FILE ${CMAKE_SOURCE_DIR}/include/parsing/asm/lex.tab.h)
+    ${CMAKE_SOURCE_DIR}/include/parsing/asm/lex.yy.c)
 ADD_FLEX_BISON_DEPENDENCY(ASMLexer ASMParser)
+
+BISON_TARGET(SDLParser ${CMAKE_SOURCE_DIR}/include/parsing/sdl/parser.y
+    ${CMAKE_SOURCE_DIR}/include/parsing/sdl/parser.tab.c
+    DEFINES_FILE ${CMAKE_SOURCE_DIR}/include/parsing/sdl/parser.tab.h)
+FLEX_TARGET(SDLLexer ${CMAKE_SOURCE_DIR}/include/parsing/sdl/lexer.lex 
+    ${CMAKE_SOURCE_DIR}/include/parsing/sdl/lex.yy.c)
+ADD_FLEX_BISON_DEPENDENCY(SDLLexer SDLParser)
 
 set(QONTRA_FILES
     # Top-Level
@@ -45,13 +51,19 @@ set(ASM_FILES
     ${FLEX_ASMLexer_OUTPUTS}
     )
 
+set(SDL_FILES
+    src/parsing/sdl.cpp
+    ${BISON_SDLParser_OUTPUTS}
+    ${FLEX_SDLLexer_OUTPUTS}
+    )
+
 add_library(qontra ${QONTRA_FILES})
 add_executable(memory src/main/memory_experiment.cpp)
 add_executable(circuit src/main/build_circuit.cpp)
 add_executable(stim2asm src/main/stim_to_asm.cpp ${ASM_FILES})
 
 ### Protean ###
-add_executable(protean_main src/main/protean/main.cpp)
+add_executable(protean_main src/main/protean/main.cpp ${ASM_FILES} ${SDL_FILES})
 
 ### TESTING ###
 add_executable(ctrl src/main/test/ctrlsimtest.cpp ${ASM_FILES})

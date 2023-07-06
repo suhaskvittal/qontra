@@ -6,6 +6,8 @@
 #ifndef SDL_PARSER_COMMON_h
 #define SDL_PARSER_COMMON_h
 
+#include <stdio.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
