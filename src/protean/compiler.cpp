@@ -9,15 +9,6 @@ namespace protean {
 
 static uint64_t MIDDLEMAN_INDEX = 1;
 
-#define TYPE_OFFSET     62
-#define GEN_OFFSET      40
-#define GEN_MASK        ((1L << 22)-1L)
-#define ID_MASK        ((1L << 32)-1L)
-
-#define PRINT_V(id)  (id >> TYPE_OFFSET) << "|"\
-                        << ((id >> GEN_OFFSET) & GEN_MASK)\
-                        << "|" << (id & ID_MASK)
-
 using namespace graph;
 using namespace compiler;
 
@@ -520,9 +511,9 @@ Compiler::split(ir_t* curr_ir) {
 
     // Create the partner qubit
     proc3d::vertex_t* dup = new proc3d::vertex_t;
-    dup->id = ((target->id & ID_MASK) << GEN_OFFSET) 
+    dup->id = ((target->id & ID_MASK) << ID_GEN_OFFSET) 
                 | MIDDLEMAN_INDEX++ 
-                | (tanner::vertex_t::GAUGE << TYPE_OFFSET);
+                | (tanner::vertex_t::GAUGE << ID_TYPE_OFFSET);
     arch->add_vertex(dup);
     auto target_dup = new proc3d::edge_t;
     target_dup->src = target;
@@ -568,9 +559,9 @@ Compiler::flatten(ir_t* curr_ir) {
     proc3d::vertex_t* src = (proc3d::vertex_t*)violator->src;
     proc3d::vertex_t* dst = (proc3d::vertex_t*)violator->dst;
     proc3d::vertex_t* mm = new proc3d::vertex_t;
-    mm->id = ((src->id & ID_MASK) << GEN_OFFSET)
+    mm->id = ((src->id & ID_MASK) << ID_GEN_OFFSET)
                 | MIDDLEMAN_INDEX++
-                | (tanner::vertex_t::GAUGE << TYPE_OFFSET);
+                | (tanner::vertex_t::GAUGE << ID_TYPE_OFFSET);
     curr_ir->qubit_to_roles[mm] = std::vector<tanner::vertex_t*>();
 
     if (params.verbose) {
@@ -670,7 +661,7 @@ Compiler::sparsen(ir_t* curr_ir) {
         // Create a new gauge qubit.
         tanner::vertex_t* tg = new tanner::vertex_t;
         uint64_t index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
-        tg->id = (index) | (tanner::vertex_t::GAUGE << TYPE_OFFSET);
+        tg->id = (index) | (tanner::vertex_t::GAUGE << ID_TYPE_OFFSET);
         tg->qubit_type = tanner::vertex_t::GAUGE;
         tanner_graph->add_vertex(tg);
         // Add corresponding edges.

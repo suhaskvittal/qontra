@@ -31,6 +31,9 @@ struct edge_t : base::edge_t {
 // Two instructions have an edge in the DAG if they share an
 // operand. The direction of the edge points in the direction
 // of the later operation.
+//
+// Only supports dependences between qubit operands for now.
+
 class DependenceGraph : public __DependenceGraphParent {
 public:
     DependenceGraph(void)
@@ -79,7 +82,8 @@ public:
         search::callback_t<dep::vertex_t> cb = 
         [&] (dep::vertex_t* v1, dep::vertex_t* v2)
         {
-            for (uint x : v2->inst_p->operands) operand_to_ancestor[x] = v2;
+            auto qubits = v2->inst_p->get_qubit_operands();
+            for (uint x : qubits) operand_to_ancestor[x] = v2;
         };
         search::xfs(this, root, cb, false);
         // Connect v to all ancestors
@@ -156,6 +160,8 @@ private:
 
     uint    barrier_index;
 };
+
+DependenceGraph build_dependence_graph_from_sdl(std::string filename);
 
 }   // graph
 }   // qontra

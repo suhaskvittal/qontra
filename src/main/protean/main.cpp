@@ -18,8 +18,6 @@
 #include <iostream>
 #include <string>
 
-#define PRINT_V(id)  (id >> 30) << "|" << ((id >> 24) & 0x3f) << "|" << (id & 0x00ff'ffff)
-
 using namespace qontra;
 using namespace graph;
 using namespace protean;

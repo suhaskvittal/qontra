@@ -16,6 +16,15 @@
 #include <string>
 #include <vector>
 
+#define ID_TYPE_OFFSET  62
+#define ID_GEN_OFFSET   40
+#define ID_GEN_MASK     ((1L << 22)-1L)
+#define ID_MASK         ((1L << 32)-1L)
+
+#define PRINT_V(id)  (id >> ID_TYPE_OFFSET) << "|"\
+                        << ((id >> ID_GEN_OFFSET) & ID_GEN_MASK)\
+                        << "|" << (id & ID_MASK)
+
 namespace qontra {
 namespace graph {
 
@@ -122,7 +131,7 @@ private:
     std::vector<tanner::vertex_t*>  z_parity_checks;
 
     uint64_t induced_gauge_index;
-    const static uint64_t INDUCED_GAUGE_INDEX_FLAG = 1L << 40;
+    const static uint64_t INDUCED_GAUGE_INDEX_FLAG = ID_GEN_MASK << ID_GEN_OFFSET;
 };
 
 namespace io {

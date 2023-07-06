@@ -47,7 +47,9 @@ TannerGraph::induce_predecessor(vertex_t* v1, vertex_t* v2) {
     // If there is any intersection, create a vertex and add it and the edges to the graph.
     auto w = new vertex_t;
     w->qubit_type = vertex_t::GAUGE;
-    w->id = (induced_gauge_index++) | INDUCED_GAUGE_INDEX_FLAG | (w->qubit_type << 62);
+    w->id = (induced_gauge_index++) 
+            | INDUCED_GAUGE_INDEX_FLAG 
+            | (w->qubit_type << ID_TYPE_OFFSET);
     add_vertex(w);
     for (auto u : induced_adj) {
         auto e = new edge_t;
@@ -88,7 +90,7 @@ update_tanner_graph(graph::TannerGraph& graph, std::string line) {
     // Create check vertex.
     tanner::vertex_t* check_v = new tanner::vertex_t;
     check_v->qubit_type = is_x_check ? tanner::vertex_t::XPARITY : tanner::vertex_t::ZPARITY;
-    check_v->id = check_id | (check_v->qubit_type << 62);
+    check_v->id = check_id | (check_v->qubit_type << ID_TYPE_OFFSET);
     if (!graph.add_vertex(check_v)) {
         delete check_v;
         return;
