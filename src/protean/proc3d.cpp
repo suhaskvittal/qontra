@@ -1,8 +1,11 @@
-/* author: Suhas Vittal
+/* 
+ *  author: Suhas Vittal
  *  date:   31 May 2023
  * */
 
 #include "protean/proc3d.h"
+
+#define SQR(x) ((x)*(x))
 
 namespace qontra {
 namespace protean {
@@ -10,45 +13,47 @@ namespace protean {
 using namespace proc3d;
 
 bool
-Processor3D::add_vertex(proc3d::vertex_t* v) {
+Processor3D::add_vertex(vertex_t* v) {
     if (!main_processor.add_vertex(v))  return false;
     if (!Graph::add_vertex(v))  return false;
     return true;
 }
 
 bool
-Processor3D::add_edge(proc3d::edge_t* e) {
-    if (!__Processor3DParent::add_edge(e)) return false;
+Processor3D::add_edge(edge_t* e, bool force_out_of_plane) {
     auto src = (vertex_t*)e->src;
     auto dst = (vertex_t*)e->dst;
-    // Add the edge to the processor while preserving planarity.
-    bool will_be_planar = main_processor.test_planarity_after_add(e);
-    if (will_be_planar) {
-        main_processor.add_edge(e, will_be_planar);
-        coupling_to_edges[e] = std::vector<proc3d::edge_t*>{e};
-    } else {
-        std::set<uint> not_open;
+    if (!force_out_of_plane) {
+        if (!__Processor3DParent::add_edge(e)) return false;
+        // Add the edge to the processor while preserving planarity.
+        bool will_be_planar = main_processor.test_planarity_after_add(e);
+        if (will_be_planar) {
+            main_processor.add_edge(e, will_be_planar);
+            coupling_to_edges[e] = std::vector<edge_t*>{e};
+            return true;
+        }
+    }
+    std::set<uint> not_open;
 add_try_placement:
-        // Find open layer.
-        int layer = find_open_layer(src, dst, not_open);
-        // If there are no open layers, add a new processor layer.
-        if (layer < 0) {
-            layer = get_thickness();
-            if (layer == max_thickness) return false;   // Cannot add another layer.
-            graph::CouplingGraph new_chip;
-            new_chip.dealloc_on_delete = false;
-            processor_layers.push_back(new_chip);
-        }
-        if (!add_edge_to_processor_layer(e, layer)) {
-            not_open.insert(layer);
-            goto add_try_placement;
-        }
+    // Find open layer.
+    int layer = find_open_layer(src, dst, not_open);
+    // If there are no open layers, add a new processor layer.
+    if (layer < 0) {
+        layer = get_thickness();
+        if (layer == max_thickness) return false;   // Cannot add another layer.
+        graph::CouplingGraph new_chip;
+        new_chip.dealloc_on_delete = false;
+        processor_layers.push_back(new_chip);
+    }
+    if (!add_edge_to_processor_layer(e, layer)) {
+        not_open.insert(layer);
+        goto add_try_placement;
     }
     return true;
 }
 
 void
-Processor3D::delete_vertex(proc3d::vertex_t* v) {
+Processor3D::delete_vertex(vertex_t* v) {
     for (auto w : get_neighbors(v)) {
         auto e = get_edge(v, w);        
         remove_coupling_definition(e);
@@ -59,7 +64,7 @@ Processor3D::delete_vertex(proc3d::vertex_t* v) {
 }
 
 void
-Processor3D::delete_edge(proc3d::edge_t* e) {
+Processor3D::delete_edge(edge_t* e) {
     if (!contains(e))   return;
     if (e == nullptr)   return;
     remove_coupling_definition(e);
@@ -84,7 +89,7 @@ realloc_try_placement:
             uint curr_layer = impl[1]->processor_layer-1;
             // Check if there are any open layers below the current layer.
             int new_layer = find_open_layer(
-                                (proc3d::vertex_t*)e->src, (proc3d::vertex_t*)e->dst, not_open);
+                                (vertex_t*)e->src, (vertex_t*)e->dst, not_open);
             if (new_layer < 0 || curr_layer < new_layer)  continue;
             remove_coupling_definition(e);
             if (!add_edge_to_processor_layer(e, new_layer)) {
@@ -103,8 +108,17 @@ realloc_try_placement:
     }
 }
 
+void
+Processor3D::force_out_of_plane(edge_t* e) {
+    if (!contains(e))                   return;
+    if (!main_processor.contains(e))    return;
+    remove_coupling_definition(e);
+    main_processor.delete_edge(e);
+    add_edge(e, true);
+}
+
 int
-Processor3D::find_open_layer(proc3d::vertex_t* src, proc3d::vertex_t* dst,
+Processor3D::find_open_layer(vertex_t* src, vertex_t* dst,
         std::set<uint> exclude) 
 {
     std::set<uint> open_layers;
@@ -122,32 +136,32 @@ Processor3D::find_open_layer(proc3d::vertex_t* src, proc3d::vertex_t* dst,
 }
 
 bool
-Processor3D::add_edge_to_processor_layer(proc3d::edge_t* e, uint layer) {
-    auto src = (proc3d::vertex_t*)e->src;
-    auto dst = (proc3d::vertex_t*)e->dst;
+Processor3D::add_edge_to_processor_layer(edge_t* e, uint layer) {
+    auto src = (vertex_t*)e->src;
+    auto dst = (vertex_t*)e->dst;
     graph::CouplingGraph& chip = processor_layers[layer];
 
     layer++;    // Increment so junction id is clearly shows the layer
     // Create TSVs and edges.
-    proc3d::vertex_t* junc1 = new proc3d::vertex_t;
-    proc3d::vertex_t* junc2 = new proc3d::vertex_t;
+    vertex_t* junc1 = new vertex_t;
+    vertex_t* junc2 = new vertex_t;
     junc1->id = src->id | (layer << 28); // Reserve last four bits to identify the layer.
     junc1->processor_layer = layer;
     junc2->id = dst->id | (layer << 28);
     junc2->processor_layer = layer;
      
-    proc3d::edge_t* junc1_junc2 = new proc3d::edge_t;
+    edge_t* junc1_junc2 = new edge_t;
     junc1_junc2->src = junc1;
     junc1_junc2->dst = junc2;
     junc1_junc2->is_vertical = false;
     junc1_junc2->processor_layer = layer;
 
-    proc3d::edge_t* src_junc1 = new proc3d::edge_t;
+    edge_t* src_junc1 = new edge_t;
     src_junc1->src = src;
     src_junc1->dst = junc1;
     src_junc1->is_vertical = true;
 
-    proc3d::edge_t* junc2_dst = new proc3d::edge_t;
+    edge_t* junc2_dst = new edge_t;
     junc2_dst->src = junc2;
     junc2_dst->dst = dst;
     junc2_dst->is_vertical = true;
@@ -165,12 +179,12 @@ Processor3D::add_edge_to_processor_layer(proc3d::edge_t* e, uint layer) {
 
     vertex_to_tsv_junctions[src].push_back(junc1);
     vertex_to_tsv_junctions[dst].push_back(junc2);
-    coupling_to_edges[e] = std::vector<proc3d::edge_t*>{src_junc1, junc1_junc2, junc2_dst};
+    coupling_to_edges[e] = std::vector<edge_t*>{src_junc1, junc1_junc2, junc2_dst};
     return true;
 }
 
 void
-Processor3D::remove_coupling_definition(proc3d::edge_t* e) {
+Processor3D::remove_coupling_definition(edge_t* e) {
     auto impl = coupling_to_edges[e];
     if (impl.size() == 3) {  // Then this is a complex coupling, so remove the corresponding
                             // metadata.
@@ -198,6 +212,36 @@ Processor3D::remove_coupling_definition(proc3d::edge_t* e) {
         }
     }
     coupling_to_edges.erase(e);
+}
+
+void
+Processor3D::compute_coupling_lengths() {
+    lemon::ListGraph gr;
+    std::map<vertex_t*, lemon::ListGraph::Node> lemon_node_map;
+    for (auto v : main_processor.get_vertices()) {
+        auto x = gr.addNode();
+        lemon_node_map[(vertex_t*)v] = x;
+    }
+    for (auto e : main_processor.get_edges()) {
+        auto x = lemon_node_map[(vertex_t*)e->src];
+        auto y = lemon_node_map[(vertex_t*)e->dst];
+        gr.addEdge(x, y);
+    }
+    lemon::PlanarEmbedding emb(gr);
+    if (!emb.run(false))    return;
+    lemon::PlanarDrawing drawing(gr);
+    drawing.run(emb.embeddingMap());
+
+    for (auto e : edges) {
+        // So there is a vertical component to out of plane edges,
+        // but we assume this is negligible.
+        auto v = (vertex_t*)e->src;
+        auto w = (vertex_t*)e->dst;
+        auto locv = drawing[lemon_node_map[v]];
+        auto locw = drawing[lemon_node_map[w]];
+        
+        coupling_lengths[e] = sqrt(SQR(locv.x - locw.x) + SQR(locv.y - locw.y));
+    }
 }
 
 }   // protean

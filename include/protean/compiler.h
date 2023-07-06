@@ -155,24 +155,17 @@ private:
     //      Jump to (3).
     //
     //  (5) Xform-Schedule  -- transforms the ideal schedule to fit on the architecture.
-    //
-    //  (5) Micro-Schedule  -- schedules the operations for each check.
-    //  (6) Macro-Schedule  -- schedules the order of computing each check such that depth is
-    //                          minimized.
     //  
-    //  (6) Score   -- check if IR is valid. If not, jump to 7.
-    //  If Observable is defined:
-    //      (a) Find the best CNOT order by repeatedly calling the score function.
-    //  Else:
-    //      (b) Score normally.
+    //  (6) Score   -- check if IR is valid.
     //
     //  (7) Induce      -- induces predecessors onto the Tanner graph.
     //
     //  If Induce fails:
     //      (8) Sparsen -- if a gauge/parity qubit has too many connections, then split them
     //                      into groups of 2 by using intermediate gauge qubits.
+    //  
     //  If Sparsen fails:
-    //      (9) Linearize -- linearize data connections in the exist architecture. Jump to (3).
+    //      (9) Raise   -- move longest couplings to upper layers. Goto (4).
     //
     //  We repeat the following until we exit at (4). We assume that the optimization space is
     //  "smooth", so modifications do not chaotically affect the score.
@@ -183,11 +176,10 @@ private:
     bool    split(compiler::ir_t*);
     bool    flatten(compiler::ir_t*);
     void    xform_schedule(compiler::ir_t*);
-    void    schedule(compiler::ir_t*);
     void    score(compiler::ir_t*);
     bool    induce(compiler::ir_t*);
     bool    sparsen(compiler::ir_t*);
-    void    linearize(compiler::ir_t*);
+    void    raise(compiler::ir_t*);
 
     const compiler::constraint_t    constraints;
     const compiler::cost_t          objective;

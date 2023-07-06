@@ -62,24 +62,6 @@ help_exit:
     };
     TannerGraph* graph = new TannerGraph(create_graph_from_file(fin, cb));
 
-    // Print out adjacency list for each parity qubit.
-    std::cout << "Z checks:\n";
-    for (auto v : graph->get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
-        std::cout << "\tZ" << (v->id & 0x3fff'ffff) << " =";
-        for (auto w : graph->get_neighbors(v)) {
-            std::cout << " D" << w->id;
-        }
-        std::cout << "\n";
-    }
-    std::cout << "X checks:\n";
-    for (auto v : graph->get_vertices_by_type(tanner::vertex_t::XPARITY)) {
-        std::cout << "\tX" << (v->id & 0x3fff'ffff) << " =";
-        for (auto w : graph->get_neighbors(v)) {
-            std::cout << " D" << w->id;
-        }
-        std::cout << "\n";
-    }
-
     // Define the cost function here.
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
@@ -101,11 +83,12 @@ help_exit:
     // Print out some simple stats and write to the output folder.
     std::cout << "Cost = " << cf(res) << ", valid = " << res->valid << "\n";
     std::cout << "Number of qubits = " << res->arch->get_vertices().size() << "\n";
+    std::cout << "Number of couplings = " << res->arch->get_edges().size() << "\n";
     std::cout << "Connectivity = " << res->arch->get_mean_connectivity() << "\n";
     std::cout << "Number of ops = " << res->schedule.size() << "\n";
     std::cout << "Thickness = " << res->arch->get_thickness() << "\n";
     std::cout << "Main is planar = " << res->arch->get_main_processor().planar() << "\n";
-    std::cout << "is tracking = " << res->arch->get_main_processor().tracking_planarity() << "\n";
+    std::cout << "Mean coupling length = " << res->arch->get_mean_coupling_length() << "\n";
 //  std::cout << "Schedule depth = " << res->dependency_graph->get_depth() << "\n";
 
     write_ir_to_folder(res, folder_out);

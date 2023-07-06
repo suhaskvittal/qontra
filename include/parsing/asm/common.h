@@ -3,8 +3,10 @@
  *  date:   25 June 2023
  * */
 
-#ifndef ASM_PARSER_LEXER_COMMON_h
-#define ASM_PARSER_LEXER_COMMON_h
+#ifndef ASM_PARSER_COMMON_h
+#define ASM_PARSER_COMMON_h
+
+#include <stdio.h>
 
 #include <stdio.h>
 
