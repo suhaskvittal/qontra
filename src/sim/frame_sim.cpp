@@ -107,15 +107,13 @@ FrameSimulator::R(std::vector<uint> operands) {
         x_table[i] &= lock_table[i];
         leak_table[i] &= lock_table[i];
 
-        // Perform the operation
-        // z = (random & ~lck) | (z & lck)
-        stim::simd_bits zcpy(z_table[i]);
-        zcpy &= lock_table[i];
-
-        z_table[i].randomize(z_table[i].num_bits_padded(), rng);
-        lock_table[i].invert_bits();
-        z_table[i] &= lock_table[i];
-        lock_table[i].invert_bits();
+        stim::simd_bits rand = 
+            stim::simd_bits::random(z_table[i].num_bits_padded(), rng);
+        z_table[i].for_each_word(rand, lock_table[i],
+        [&] (auto& z, auto& r, auto& lock)
+        {
+            z = (r & ~lock) | (z & lock);
+        });
     }
 }
 

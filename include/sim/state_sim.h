@@ -39,11 +39,13 @@ public:
         :n_qubits(n),
         max_shots(max_shots),
         record_table(statesim::G_RECORD_SPACE_SIZE, max_shots),
-        lock_table(n_qubits, max_shots),
+        lock_table(n, max_shots),
         record_table_cpy(statesim::G_RECORD_SPACE_SIZE, max_shots),
-        lock_table_cpy(n_qubits, max_shots),
+        lock_table_cpy(n, max_shots),
         rng(0)
-    {}
+    {
+        reset_sim();
+    }
 
     void    set_seed(uint64_t x) { rng.seed(x); }
 
