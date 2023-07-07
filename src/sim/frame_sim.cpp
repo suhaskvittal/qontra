@@ -167,8 +167,8 @@ FrameSimulator::eDP1(std::vector<uint> operands, std::vector<fp_t> rates) {
             if (lock_table[j][t])   return;
 
             auto p = rng() & 3;
-            x_table[j][t] ^= (p & 1);
-            z_table[j][t] ^= (p & 2);
+            x_table[j][t] ^= (bool)(p & 1);
+            z_table[j][t] ^= (bool)(p & 2);
         });
     }
 }
@@ -182,10 +182,10 @@ FrameSimulator::eDP2(std::vector<uint> operands, std::vector<fp_t> rates) {
             if (lock_table[j1][t] || lock_table[j2][t]) return;
 
             auto p = rng() & 15;
-            x_table[j1][t] ^= (p & 1);
-            z_table[j1][t] ^= (p & 2);
-            x_table[j2][t] ^= (p & 4);
-            z_table[j2][t] ^= (p & 8);
+            x_table[j1][t] ^= (bool)(p & 1);
+            z_table[j1][t] ^= (bool)(p & 2);
+            x_table[j2][t] ^= (bool)(p & 4);
+            z_table[j2][t] ^= (bool)(p & 8);
         });
     }
 }

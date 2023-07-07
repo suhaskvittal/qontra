@@ -77,7 +77,7 @@ public:
         // Configuration of quantum computer
         TimeTable   timing;
         ErrorTable  errors;
-        uint64_t    apply_periodic_errors_at_t = 800;
+        uint64_t    apply_periodic_errors_at_t = 1000;
                                             // Apply state errors on all qubits
                                             // as frequently as shown.
         bool        simulate_periodic_as_dpo_and_dph = false;

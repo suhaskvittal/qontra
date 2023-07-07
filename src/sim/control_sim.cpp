@@ -86,6 +86,8 @@ ControlSimulator::build_error_model() {
     is_building_canonical_circuit = false;
 
     G_USE_MPI = use_mpi;
+
+    prob_histograms.clear();
 }
 
 
@@ -557,7 +559,8 @@ ControlSimulator::QEX() {
             instruction_to_trials[inst].insert(t);
         }
 
-        if (qex_br_taken[t] && !is_building_canonical_circuit) {
+        qex_br_taken[t] &= !is_building_canonical_circuit;
+        if (qex_br_taken[t]) {
             if_id_valid[t] = 0;
             id_qex_valid[t] = 0;
             pc[t].u64[0] = br_pc;
@@ -596,17 +599,13 @@ ControlSimulator::QEX() {
         stim::simd_bit_table    val_m_spec_cpy(val_m_spec);
 
         if (inst.name == "lockq") {
-            if (!is_building_canonical_circuit) {
-                for (uint i : inst.operands) {
-                    qsim->lock_table[i].clear();
-                    qsim->lock_table[i].invert_bits();
-                }
+            for (uint i : inst.operands) {
+                qsim->lock_table[i].clear();
+                qsim->lock_table[i].invert_bits();
             }
         } else if (inst.name == "unlockq") {
-            if (!is_building_canonical_circuit) {
-                for (uint i : inst.operands) {
-                    qsim->lock_table[i].clear();
-                }
+            for (uint i : inst.operands) {
+                qsim->lock_table[i].clear();
             }
         } else if (inst.name == "h") {
             qsim->H(inst.operands);
@@ -685,21 +684,31 @@ ControlSimulator::QEX() {
                 sig_m_spec[m3].clear();
                 val_m_spec[m3].clear();
 
-                stim::simd_bits last_event(event_history[k].num_bits_padded());
-                if (k > delta) {
-                    last_event |= event_history[k-delta];
+                stim::simd_bits prior_events(event_history[k]);
+                uint kk = k;
+                if (kk >= delta) {  // TODO: change to while loop and
+                                    // add a "depth" parameter to the simulator.
+                    prior_events |= event_history[kk-delta];
+                    kk -= delta;
                 }
 
                 sig_m_spec[m3].for_each_word(
                         sig_m_spec[m2],
-                        event_history[k],
-                        last_event,
-                        [&] (auto& spc, auto& pspc,  auto& ev1, auto& ev2)
+                        prior_events,
+                        [&] (auto& spc, auto& pspc, auto& ev)
                         {
-                            spc = ~(ev1 | ev2) & ~pspc;
+                            spc = ~ev & ~pspc;
                         });
 
                 val_m_spec[m3] |= qsim->record_table[m2];
+
+                if (params.verbose) {
+                    std::cout << "\t\tSpeculation on detection event:\t"
+                        << "(events = " << event_history[k][0]
+                        << prior_events[0] << ", prev = "
+                        << sig_m_spec[m2][0] << ") --> "
+                        << sig_m_spec[m3][0] << "\n";
+                }
             }
         } else if (inst.name == "obs") {
             const uint k = inst.operands[0];
@@ -834,15 +843,18 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
             lt.push_back(params.errors.op2q_leakage_transport[inst.name][x_y]);
             
             if (is_building_canonical_circuit) {
-                canonical_circuit.append_op("L_TRANSPORT", 
-                            {x, y},
-                            params.errors.op2q_leakage_transport[inst.name][x_y]);
-                canonical_circuit.append_op("L_ERROR", 
-                            {x, y},
-                            params.errors.op2q_leakage_injection[inst.name][x_y]);
-                canonical_circuit.append_op("DEPOLARIZE2", 
-                            {x, y},
-                            params.errors.op2q[inst.name][x_y]);
+                fp_t li = params.errors.op2q_leakage_injection[inst.name][x_y];
+                fp_t lt = params.errors.op2q_leakage_transport[inst.name][x_y];
+                fp_t dp = params.errors.op2q[inst.name][x_y];
+                if (lt > 0.0) {
+                    canonical_circuit.append_op("L_TRANSPORT", {x, y}, lt);
+                }
+                if (li > 0.0) {
+                    canonical_circuit.append_op("L_ERROR", {x, y}, li);
+                }
+                if (dp > 0.0) {
+                    canonical_circuit.append_op("DEPOLARIZE2", {x, y}, dp);
+                }
             }
         }
         qsim->eLT(inst.operands, lt);
