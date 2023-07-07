@@ -41,6 +41,7 @@ const std::vector<std::string> ISA{
     // Event speculation instructions
     "brifmspc",     // Jumps to address if all measurements in list have been
                     // speculated.
+    "brnifmspc",    // Same as brifmspc, but if not all have been speculated.
     // Ordering instructions
     "dfence",       // Waits until decoder finishes.
     // Tracking instructions
@@ -92,6 +93,7 @@ const std::set<std::string> ARE_JMP_OR_BR{
     "jmp",
     "brdb",
     "brifmspc",
+    "brnifmspc",
 };
 
 const std::set<std::string> IS_LOCKING{

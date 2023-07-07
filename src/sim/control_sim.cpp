@@ -43,7 +43,6 @@ ControlSimulator::ControlSimulator(
     // Microarchitecture
     program(),
     pc(G_SHOTS_PER_BATCH, 64),
-    qubit_locks(G_SHOTS_PER_BATCH, n_qubits),
     // Selective Syndrome Extraction
     sig_m_spec(4096, G_SHOTS_PER_BATCH),
     val_m_spec(4096, G_SHOTS_PER_BATCH),
@@ -60,6 +59,7 @@ ControlSimulator::ControlSimulator(
     qex_rt_valid(G_SHOTS_PER_BATCH),
     qex_pc(G_SHOTS_PER_BATCH, 64),
     qex_qubit_busy(G_SHOTS_PER_BATCH, 64*n_qubits),
+    qex_br_taken(G_SHOTS_PER_BATCH),
     // RT io
     rt_stall(G_SHOTS_PER_BATCH),
     // Other
@@ -356,7 +356,6 @@ ControlSimulator::clear() {
     latency.clear();
 
     pc.clear();
-    qubit_locks.clear();
     
     if_stall.clear();
     if_id_valid.clear();
@@ -368,6 +367,7 @@ ControlSimulator::clear() {
     qex_rt_valid.clear();
     qex_pc.clear();
     qex_qubit_busy.clear();
+    qex_br_taken.clear();
     rt_stall.clear();
 }
 
@@ -384,11 +384,23 @@ ControlSimulator::IF() {
     for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
         if (!trial_done[t]) continue;
         if (if_stall[t])    continue;
-        // Otherwise, update the PC and do any IO.
+
         if_pc[t].u64[0] = pc[t].u64[0];
 
+        auto inst = program[pc[t].u64[0]];
+        // Update the PC and do any IO.
+        //
+        // If the instruction is a jmp (unconditional),
+        // then set the PC to the correct value and invalidate
+        // the latch.
+        if (inst.name == "jmp" && !qex_br_taken[t]) {
+            pc[t].u64[0] = inst.operands[0];
+            if_id_valid[t] = 0;
+        } else {
+            pc[t].u64[0]++;
+        }
+
         // Check if this is a fastforwarding instruction.
-        auto& inst = program[pc[t].u64[0]];
         if (params.enable_fast_forwarding && !is_building_canonical_circuit) {
             if (inst.name == "ffstart") {
                 // Apply any pending periodic errors.
@@ -399,7 +411,6 @@ ControlSimulator::IF() {
                 is_fast_forwarding = false;
             }
         }
-        pc[t].u64[0]++;
     }
 }
 
@@ -480,7 +491,7 @@ ControlSimulator::QEX() {
         // See instruction.h for details about what these instructions
         // do.
         uint64_t    br_pc;
-        bool        br_taken = false;
+        qex_br_taken[t] = 0;
 
         if (inst.name == "decode") {
             syndrome_t s(events_tp[t]);
@@ -512,21 +523,11 @@ ControlSimulator::QEX() {
                 }
                 trace_index++;
             }
-        } else if (inst.name == "lockq") {
-            for (uint i : inst.operands) {
-                qubit_locks[t][i] = 1;
-            }
-        } else if (inst.name == "unlockq") {
-            for (uint i : inst.operands) {
-                qubit_locks[t][i] = 0;
-            }
         } else if (inst.name == "jmp") {
-            br_pc = inst.operands[0];
-            br_taken = true;
         } else if (inst.name == "brdb") {
             br_pc = inst.operands[0];
-            br_taken = decoder_busy[t].not_zero();
-        } else if (inst.name == "brifmspc") {
+            qex_br_taken[t] = decoder_busy[t].not_zero();
+        } else if (inst.name == "brifmspc" || inst.name == "brnifmspc") {
             br_pc = inst.operands[0];
             bool all_speculated = true;
             for (uint i = 1; i < inst.operands.size(); i++) {
@@ -535,15 +536,7 @@ ControlSimulator::QEX() {
                 // Premptively place the results.
                 qsim->record_table[j][t] = val_m_spec[j][t];
             }
-            br_taken = all_speculated;
-        } else if (inst.name == "lockqifmspc") {
-            bool all_speculated = true;
-            for (uint i = 1; i < inst.operands.size(); i++) {
-                uint j = inst.operands[i];
-                all_speculated &= sig_m_spec[j][t];
-            }
-            // Lock the qubit operand.
-            qubit_locks[t][inst.operands[0]] = all_speculated;
+            qex_br_taken[t] = all_speculated ^ (inst.name == "brnifmspc");
         } else if (inst.name == "dfence") {
             if (decoder_busy[t].not_zero()) {
                 qex_stall[t] = 1;
@@ -564,7 +557,7 @@ ControlSimulator::QEX() {
             instruction_to_trials[inst].insert(t);
         }
 
-        if (br_taken && !is_building_canonical_circuit) {
+        if (qex_br_taken[t] && !is_building_canonical_circuit) {
             if_id_valid[t] = 0;
             id_qex_valid[t] = 0;
             pc[t].u64[0] = br_pc;
@@ -577,13 +570,12 @@ ControlSimulator::QEX() {
     for (auto pair : instruction_to_trials) {
         auto inst = pair.first;
         if (params.verbose) {
-            std::cout << "\t\t\t" << inst.str() << "\tT !=";
+            std::cout << "\t\t\t" << inst.str() << "\t#T = ";
+            uint64_t trials_part_of_batch = 0;
             for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
-                if (!pair.second.count(t)) {
-                    std::cout << " " << t;
-                }
+                trials_part_of_batch += pair.second.count(t);
             }
-            std::cout << "\n";
+            std::cout << trials_part_of_batch << "\n";
         }
         // Create snapshot of state simulator state.
         qsim->snapshot();
@@ -603,7 +595,20 @@ ControlSimulator::QEX() {
         stim::simd_bit_table    sig_m_spec_cpy(sig_m_spec);
         stim::simd_bit_table    val_m_spec_cpy(val_m_spec);
 
-        if (inst.name == "h") {
+        if (inst.name == "lockq") {
+            if (!is_building_canonical_circuit) {
+                for (uint i : inst.operands) {
+                    qsim->lock_table[i].clear();
+                    qsim->lock_table[i].invert_bits();
+                }
+            }
+        } else if (inst.name == "unlockq") {
+            if (!is_building_canonical_circuit) {
+                for (uint i : inst.operands) {
+                    qsim->lock_table[i].clear();
+                }
+            }
+        } else if (inst.name == "h") {
             qsim->H(inst.operands);
             if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("H", inst.operands);
@@ -680,11 +685,18 @@ ControlSimulator::QEX() {
                 sig_m_spec[m3].clear();
                 val_m_spec[m3].clear();
 
+                stim::simd_bits last_event(event_history[k].num_bits_padded());
+                if (k > delta) {
+                    last_event |= event_history[k-delta];
+                }
+
                 sig_m_spec[m3].for_each_word(
+                        sig_m_spec[m2],
                         event_history[k],
-                        [&] (auto& spc1, auto& ev)
+                        last_event,
+                        [&] (auto& spc, auto& pspc,  auto& ev1, auto& ev2)
                         {
-                            spc1 = ~ev;
+                            spc = ~(ev1 | ev2) & ~pspc;
                         });
 
                 val_m_spec[m3] |= qsim->record_table[m2];
@@ -747,9 +759,6 @@ ControlSimulator::QEX() {
         // the change.
         for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
             if (!pair.second.count(t)) {
-                if (params.verbose) {
-                    std::cout << "\t\tRolling back state at T = " << t << "\n";
-                }
                 // Undo any changes
                 if (inst.name == "event") {
                     const uint k = inst.operands[0];

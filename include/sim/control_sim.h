@@ -140,9 +140,6 @@ private:
     // Microarchitecture
     imem                    program;    // Program should remain constant
     stim::simd_bit_table    pc;
-    stim::simd_bit_table    qubit_locks;    // If a qubit operand is locked,
-                                            // then any future operation with 
-                                            // the qubit is executed as a nop.
 
     //
     //  Data structures for Selective Syndrome Extraction
@@ -164,6 +161,7 @@ private:
     stim::simd_bits         qex_rt_valid;
     stim::simd_bit_table    qex_pc;
     stim::simd_bit_table    qex_qubit_busy;
+    stim::simd_bits         qex_br_taken;
     // RT io
     stim::simd_bits         rt_stall;
 

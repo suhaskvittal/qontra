@@ -203,7 +203,7 @@ CliffordSimulator::M(std::vector<uint> operands, int record) {
         }
 
         if (record >= 0) {
-            record_table[record].for_each_word(r_table[2*n_qubits], lock_table[i],
+            record_table[record].for_each_word(r_table[2*n_qubits], lock_table[j],
                     [&] (auto& rec, auto& r, auto& lock)
                     {
                         rec |= r & ~lock;

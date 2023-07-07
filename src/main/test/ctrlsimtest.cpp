@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
 
     ControlSimulator sim(n, prog, &fsim);
     tables::ErrorAndTiming params;
-//  tables::populate(n, sim.params.errors, sim.params.timing, params);
+    tables::populate(n, sim.params.errors, sim.params.timing, params);
 
     decoder::MWPMDecoder* mwpm = nullptr;
     if (!parser.option_set("nodec")) {
