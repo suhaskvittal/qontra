@@ -39,14 +39,19 @@ public:
         :n_qubits(n),
         max_shots(max_shots),
         record_table(statesim::G_RECORD_SPACE_SIZE, max_shots),
+        lock_table(n, max_shots),
         record_table_cpy(statesim::G_RECORD_SPACE_SIZE, max_shots),
+        lock_table_cpy(n, max_shots),
         rng(0)
-    {}
+    {
+        reset_sim();
+    }
 
     void    set_seed(uint64_t x) { rng.seed(x); }
 
     virtual void    reset_sim(void) {
         record_table.clear();
+        lock_table.clear();
     }
 
     virtual void    H(std::vector<uint>) =0;
@@ -74,9 +79,11 @@ public:
                             // Rolls back the state to the snapshot
 
     stim::simd_bit_table    record_table;
+    stim::simd_bit_table    lock_table;
     uint64_t                shots;
 protected:
     stim::simd_bit_table    record_table_cpy;
+    stim::simd_bit_table    lock_table_cpy;
 
     std::mt19937_64 rng;
 

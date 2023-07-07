@@ -9,17 +9,37 @@ namespace qontra {
 
 void
 FrameSimulator::H(std::vector<uint> operands) {
-    for (uint i : operands) x_table[i].swap_with(z_table[i]);
+    for (uint i : operands) {
+        x_table[i].for_each_word(
+                z_table[i],
+                lock_table[i],
+                [&] (auto& x, auto& z, auto& lock)
+                {
+                    auto tmp = z;
+                    z = (x & ~lock) | (z & lock);
+                    x = (tmp & ~lock) | (x & lock);
+                });
+    }
 }
 
 void
 FrameSimulator::X(std::vector<uint> operands) {
-    for (uint i : operands) x_table[i].invert_bits();
+    for (uint i : operands) {
+        // Flip X wherever lock = 0
+        lock_table[i].invert_bits();
+        x_table[i] ^= lock_table[i];
+        lock_table[i].invert_bits();
+    }
 }
 
 void
 FrameSimulator::Z(std::vector<uint> operands) {
-    for (uint i : operands) z_table[i].invert_bits();
+    for (uint i : operands) {
+        // Flip Z wherever lock = 0
+        lock_table[i].invert_bits();
+        z_table[i] ^= lock_table[i];
+        lock_table[i].invert_bits();
+    }
 }
 
 void
@@ -29,22 +49,29 @@ void
 FrameSimulator::CX(std::vector<uint> operands) {
     for (uint i = 0; i < operands.size(); i += 2) {
         uint j1 = operands[i], j2 = operands[i+1];
+    
+        stim::simd_bits lock_both(lock_table[j1]);
+        lock_both |= lock_table[j2];
+
         x_table[j1].for_each_word(
             z_table[j1],
             leak_table[j1],
             x_table[j2],
             z_table[j2],
             leak_table[j2],
-        [&] (auto& x1, auto& z1, auto& l1, auto& x2, auto& z2, auto& l2)
+            lock_both,
+        [&] (auto& x1, auto& z1, auto& l1,
+            auto& x2, auto& z2, auto& l2,
+            auto& lock)
         {
                 stim::simd_word rx1(rng(), rng());
                 stim::simd_word rz1(rng(), rng());
                 stim::simd_word rx2(rng(), rng());
                 stim::simd_word rz2(rng(), rng());
-                x1 ^= l2 & rx1;
-                z1 ^= (z2 & ~l2) | (l2 & rz1);
-                x2 ^= (x1 & ~l1) | (l1 & rx2);
-                z2 ^= l1 & rz2;
+                x1 ^= l2 & rx1 & ~lock;
+                z1 ^= ((z2 & ~l2) | (l2 & rz1)) & ~lock;
+                x2 ^= ((x1 & ~l1) | (l1 & rx2)) & ~lock;
+                z2 ^= l1 & rz2 & ~lock;
         });
     }
 }
@@ -52,13 +79,21 @@ FrameSimulator::CX(std::vector<uint> operands) {
 void
 FrameSimulator::M(std::vector<uint> operands, int record) {
     for (uint i : operands) {
-        x_table[i].for_each_word(leak_table[i], 
-        [&] (auto& x, auto& l)
+        x_table[i].for_each_word(leak_table[i], lock_table[i],
+        [&] (auto& x, auto& l, auto& lock)
         {
             stim::simd_word r(rng(), rng());
-            x = (x & ~l) | (r & l);
+            x = (((x & ~l) | (r & l)) & ~lock) | (x & lock);
         });
-        z_table[i].randomize(z_table[i].num_bits_padded(), rng);
+
+        stim::simd_bits rand = 
+            stim::simd_bits::random(z_table[i].num_bits_padded(), rng);
+        z_table[i].for_each_word(rand, lock_table[i],
+        [&] (auto& z, auto& r, auto& lock)
+        {
+            z = (r & ~lock) | (z & lock);
+        });
+
         if (record >= 0) {
             record_table[record].clear();
             record_table[record++] |= x_table[i];
@@ -69,9 +104,16 @@ FrameSimulator::M(std::vector<uint> operands, int record) {
 void
 FrameSimulator::R(std::vector<uint> operands) {
     for (uint i : operands) {
-        x_table[i].clear();
-        z_table[i].randomize(z_table[i].num_bits_padded(), rng);
-        leak_table[i].clear();
+        x_table[i] &= lock_table[i];
+        leak_table[i] &= lock_table[i];
+
+        stim::simd_bits rand = 
+            stim::simd_bits::random(z_table[i].num_bits_padded(), rng);
+        z_table[i].for_each_word(rand, lock_table[i],
+        [&] (auto& z, auto& r, auto& lock)
+        {
+            z = (r & ~lock) | (z & lock);
+        });
     }
 }
 
@@ -83,6 +125,7 @@ FrameSimulator::eDPO(std::vector<uint> operands, std::vector<fp_t> rates) {
         [&] (size_t t) {
             // Implement as reset. We conservatively assume that
             // if the qubit was in |2>, it has only relaxed to |1>.
+            if (lock_table[j][t])   return;
             x_table[j][t] = leak_table[j][t];
             z_table[j][t] = rng();
             leak_table[j][t] = 0;
@@ -102,6 +145,8 @@ FrameSimulator::eDPH(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j][t])   return;
+
             auto tmp = x_table[j][t];
             x_table[j][t] = z_table[j][t];
             z_table[j][t] = tmp;
@@ -115,6 +160,8 @@ FrameSimulator::eDP1(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j][t])   return;
+
             auto p = rng() & 3;
             x_table[j][t] ^= (p & 1);
             z_table[j][t] ^= (p & 2);
@@ -128,6 +175,8 @@ FrameSimulator::eDP2(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j1 = operands[i], j2 = operands[i+1];
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j1][t] || lock_table[j2][t]) return;
+
             auto p = rng() & 15;
             x_table[j1][t] ^= (p & 1);
             z_table[j1][t] ^= (p & 2);
@@ -143,6 +192,8 @@ FrameSimulator::eX(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j][t])   return;
+            
             x_table[j][t] ^= 1;
         });
     }
@@ -154,6 +205,8 @@ FrameSimulator::eLI(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j1 = operands[i], j2 = operands[i+1];
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j1][t] || lock_table[j2][t]) return;
+
             auto p = rng() % 3;
             // Either leak (or unleak) one or both qubits.
             leak_table[j1][t] ^= (p == 0) || (p == 2);
@@ -170,6 +223,8 @@ FrameSimulator::eLT(std::vector<uint> operands, std::vector<fp_t> rates) {
 
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j1][t] || lock_table[j2][t]) return;
+
             leak_table[j1][t] |= leak_table[j2][t];
             leak_table[j2][t] |= leak_table[j1][t];
         });

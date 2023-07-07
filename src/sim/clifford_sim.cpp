@@ -14,13 +14,13 @@ CliffordSimulator::H(std::vector<uint> operands) {
             uint k = i*n_qubits + j;    // Note that x_table and z_table are
                                         // flattened 2D arrays.
             r_table[i].for_each_word(
-                x_table[k], z_table[k], leak_table[j],
-            [&](auto& r, auto& x, auto& z, auto& l)
+                x_table[k], z_table[k], leak_table[j], lock_table[j],
+            [&](auto& r, auto& x, auto& z, auto& l, auto& lock)
             {
-                r ^= x & z & ~l;
+                r ^= x & z & ~l & ~lock;
                 stim::simd_word tmp = z;
-                z = (z & l) | (x & ~l);
-                x = (x & l) | (tmp & ~l);
+                z = (z & (l | lock)) | (x & ~(l | lock));
+                x = (x & (l | lock)) | (tmp & ~(l | lock));
             });
         }
     }
@@ -33,10 +33,10 @@ CliffordSimulator::X(std::vector<uint> operands) {
             uint k = i*n_qubits + j;
             // Only flip where not leaked.
             r_table[i].for_each_word(
-                z_table[k], leak_table[j],
-            [&](auto& r, auto& z, auto& l)
+                z_table[k], leak_table[j], lock_table[j],
+            [&](auto& r, auto& z, auto& l, auto& lock)
             {
-                r ^= z & ~l;
+                r ^= z & ~l & ~lock;
             });
         }
     }
@@ -48,10 +48,10 @@ CliffordSimulator::Z(std::vector<uint> operands) {
         for (uint j : operands) {
             uint k = i*n_qubits + j;
             r_table[i].for_each_word(
-                x_table[k], leak_table[j],
-            [&](auto& r, auto& x, auto& l)
+                x_table[k], leak_table[j], lock_table[j],
+            [&](auto& r, auto& x, auto& l, auto& lock)
             {
-                r ^= x & ~l;
+                r ^= x & ~l & ~lock;
             });
         }
     }
@@ -63,11 +63,11 @@ CliffordSimulator::S(std::vector<uint> operands) {
         for (uint j : operands) {
             uint k = i*n_qubits + j;
             r_table[i].for_each_word(
-                    x_table[k], z_table[k], leak_table[j],
-            [&](auto& r, auto& x, auto& z, auto& l)
+                    x_table[k], z_table[k], leak_table[j], lock_table[j],
+            [&](auto& r, auto& x, auto& z, auto& l, auto& lock)
             {
-                r ^= x & z & ~l;
-                z ^= x & ~l;
+                r ^= x & z & ~l & ~lock;
+                z ^= x & ~l & ~lock;
             });
         }
     }
@@ -82,11 +82,18 @@ CliffordSimulator::CX(std::vector<uint> operands) {
             uint k1 = i*n_qubits + j1;
             uint k2 = i*n_qubits + j2;
 
+            stim::simd_bits lock_both(lock_table[j1]);
+            lock_both |= lock_table[j2];
+
             r_table[i].for_each_word(
                 x_table[k1], z_table[k1],
                 x_table[k2], z_table[k2],
                 leak_table[j1], leak_table[j2],
-            [&](auto& r, auto& x1, auto& z1, auto& x2, auto& z2, auto& l1, auto& l2)
+                lock_both,
+            [&](auto& r, auto& x1, auto& z1, 
+                auto& x2, auto& z2, 
+                auto& l1, auto& l2,
+                auto& lock)
             {
                 stim::simd_word rx1(rng(), rng());
                 stim::simd_word rz1(rng(), rng());
@@ -94,14 +101,14 @@ CliffordSimulator::CX(std::vector<uint> operands) {
                 stim::simd_word rz2(rng(), rng());
 
                 // Only update phase if the qubits are not leaked.
-                r ^= (x1 & z2) & ~(x2 ^ z1) & ~(l1 | l2);
-                x2 ^= ~(l1 | l2) & x1;
-                z1 ^= ~(l1 | l2) & z2;
+                r ^= ((x1 & z2) & ~(x2 ^ z1) & ~(l1 | l2)) & ~lock;
+                x2 ^= ~(l1 | l2 | lock) & x1;
+                z1 ^= ~(l1 | l2 | lock) & z2;
                 // Apply depolarizing error if they are leaked.
-                r ^= (z1 & rx1 & l2)
+                r ^= ((z1 & rx1 & l2)
                         & (x1 & rz1 & l2)
                         & (z2 & rx2 & l1)
-                        & (x2 & rz2 & l2);
+                        & (x2 & rz2 & l2)) & ~lock;
             });
         }
     }
@@ -125,6 +132,11 @@ CliffordSimulator::M(std::vector<uint> operands, int record) {
         leak_table[j].invert_bits();
         x_table[x_width-1] &= leak_table[j];
         leak_table[j].invert_bits();
+
+        // If the qubit is locked in a trial, also set it to 0. We will just
+        // record the measurement for the locked trial as 0.
+        lock_table[j].invert_bits();
+        x_table[x_width-1] &= lock_table[j];
         
         // Perform determinate measurement. We want to condition this
         // to happen wherever x_table[x_width-1] = 0
@@ -136,20 +148,23 @@ CliffordSimulator::M(std::vector<uint> operands, int record) {
         }
         r_table[2*n_qubits].clear();
         for (uint i = 0; i < n_qubits; i++) {
-            // Predicate the rowsum where xij = 1
+            // Predicate the rowsum where xij = 1 and j is unlocked.
             uint k = n_qubits*i + j;
-            browsum(2*n_qubits, i+n_qubits, true, x_table[k]);
+            stim::simd_bits pred(x_table[k]);
+            pred &= lock_table[j];
+            browsum(2*n_qubits, i+n_qubits, true, pred);
         }
+        lock_table[j].invert_bits();
         // Measurement outcome is r_table[2*n_qubits]
         // Condition results based on x_table[x_width-1] = 0
         // Also, if any of these qubits were leaked, set the measurement
         // output to a random value.
         r_table[2*n_qubits].for_each_word(
-                x_table[x_width-1], leak_table[j],
-        [&] (auto& r, auto& x, auto& l)
+                x_table[x_width-1], leak_table[j], lock_table[j],
+        [&] (auto& r, auto& x, auto& l, auto& lock)
         {
             stim::simd_word rand(rng(), rng());
-            r = (r & ~x & ~l) | (rand & l);
+            r = ((r & ~l) | (rand & l)) & ~(x | lock);
         });
         // Now, perform any indeterminate measurements.
         // This takes more time as we must handle each case separately.
@@ -206,6 +221,8 @@ CliffordSimulator::R(std::vector<uint> operands) {
         M({j}, 0);
         for (uint i = 0; i < 2*n_qubits; i++) {
             uint k = i*n_qubits + j;
+            // Rec should be 0 whenever j is locked, so 
+            // the outcome should not change.
             r_table[i].for_each_word(
                 z_table[k], record_table[0],
             [&](auto& r, auto& z, auto& rec) {
@@ -222,6 +239,7 @@ CliffordSimulator::eDPO(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j][t])   return;
             for (uint ii = 0; ii < 2*n_qubits; ii++) {
                 uint k = n_qubits*ii + j;
                 // Implement this as a reset.
@@ -251,6 +269,7 @@ CliffordSimulator::eDPH(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j][t])   return;
             for (uint ii = 0; ii < 2*n_qubits; ii++) {
                 uint k = n_qubits*ii + j;
                 r_table[ii][t] ^= x_table[k][t] & z_table[k][t] & ~leak_table[j][t];
@@ -270,6 +289,7 @@ CliffordSimulator::eDP1(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j][t])   return;
             auto p = rng() & 3;
             for (uint ii = 0; ii < 2*n_qubits; ii++) {
                 uint k = n_qubits*ii + j;
@@ -289,6 +309,7 @@ CliffordSimulator::eDP2(std::vector<uint> operands, std::vector<fp_t> rates) {
 
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j1][t] || lock_table[j2][t]) return;
             auto p = rng() & 15;
             for (uint ii = 0; ii < 2*n_qubits; ii++) {
                 uint k1 = n_qubits*ii + j1;
@@ -311,6 +332,7 @@ CliffordSimulator::eX(std::vector<uint> operands, std::vector<fp_t> rates) {
         uint j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j][t])   return;
             for (uint ii = 0; ii < 2*n_qubits; ii++) {
                 uint k = n_qubits*ii + j;
                 r_table[ii][t] ^= z_table[k][t] & ~leak_table[j][t];
@@ -327,6 +349,7 @@ CliffordSimulator::eLI(std::vector<uint> operands, std::vector<fp_t> rates) {
 
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j1][t] || lock_table[j2][t]) return;
             auto p = rng() % 3;
             // Either leak (or unleak) one or both qubits.
             leak_table[j1][t] ^= (p == 0) || (p == 2);
@@ -343,6 +366,7 @@ CliffordSimulator::eLT(std::vector<uint> operands, std::vector<fp_t> rates) {
 
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) {
+            if (lock_table[j1][t] || lock_table[j2][t]) return;
             leak_table[j1][t] |= leak_table[j2][t];
             leak_table[j2][t] |= leak_table[j1][t];
         });
