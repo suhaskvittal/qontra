@@ -74,9 +74,11 @@ public:
                             // Rolls back the state to the snapshot
 
     stim::simd_bit_table    record_table;
+    stim::simd_bit_table    lock_table;
     uint64_t                shots;
 protected:
     stim::simd_bit_table    record_table_cpy;
+    stim::simd_bit_table    lock_table_cpy;
 
     std::mt19937_64 rng;
 
