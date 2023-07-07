@@ -512,24 +512,28 @@ ControlSimulator::QEX() {
                     pauli_frames[i+offset][t] ^= res.corr[i];
                 }
 
-                /*
-                if (pauli_frames[offset][t] != obs_buffer[0][t]) {
-                    std::cout << "\t\tFaulty syndrome:\n\t\t\t\t";
-                    for (uint i = 0; i < 4; i++) {
-                        std::cout << s[i];
+                if (params.verbose) {
+                    const uint det = decoder->get_circuit().count_detectors();
+                    if (pauli_frames[offset][t] != obs_buffer[offset][t]) {
+                        std::cout << "\t\tFaulty syndrome(t = " << t 
+                            << "): True = " << obs_buffer[offset][t]
+                            << ", Corr = " << pauli_frames[offset][t]
+                            << "\n\t\t\t\t";
+                        for (uint i = 0; i < 4; i++) {
+                            std::cout << s[i];
+                        }
+                        for (uint i = 4; i < det - 4; i++) 
+                        {
+                            if ((i+4) % 8 == 0)  std::cout << "\n\t\t\t\t";
+                            std::cout << s[i];
+                        }
+                        std::cout << "\n\t\t\t\t";
+                        for (uint i = det-4; i < det; i++) {
+                            std::cout << s[i];
+                        }
+                        std::cout << "\n";
                     }
-                    for (uint i = 8; i < decoder->get_circuit().count_detectors() - 4; i++) 
-                    {
-                        if (i % 8 == 0)  std::cout << "\n\t\t\t\t";
-                        std::cout << s[i];
-                    }
-                    std::cout << "\n\t\t\t\t";
-                    for (uint i = 0; i < 4; i++) {
-                        std::cout << s[i + decoder->get_circuit().count_detectors()];
-                    }
-                    std::cout << "\n";
                 }
-                */
             }
 
             if (params.save_syndromes_to_file) {
@@ -628,6 +632,11 @@ ControlSimulator::QEX() {
             for (uint i : inst.operands) {
                 qsim->lock_table[i].clear();
             }
+        } else if (inst.name == "mspcflush") {
+            for (uint i : inst.operands) {
+                sig_m_spec[i].clear();
+                val_m_spec[i].clear();
+            }
         } else if (inst.name == "h") {
             qsim->H(inst.operands);
             if (is_building_canonical_circuit) {
@@ -707,8 +716,7 @@ ControlSimulator::QEX() {
 
                 stim::simd_bits prior_events(event_history[k]);
                 uint kk = k;
-                if (kk >= delta) {  // TODO: change to while loop and
-                                    // add a "depth" parameter to the simulator.
+                for (uint d = 0; d < 2 && kk >= delta; d++) {
                     prior_events |= event_history[kk-delta];
                     kk -= delta;
                 }
@@ -752,7 +760,6 @@ ControlSimulator::QEX() {
         } else if (inst.name == "xorfr") {
             const uint i = inst.operands[0];
             const uint j = inst.operands[1];
-            std::cout << "i, j = " << i << ", " << j << "\n";
             obs_buffer[j] ^= pauli_frames[i];
         } else if (inst.name == "hshift") {
             const uint x = inst.operands[0];
@@ -791,7 +798,12 @@ ControlSimulator::QEX() {
         for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
             if (!pair.second.count(t)) {
                 // Undo any changes
-                if (inst.name == "event") {
+                if (inst.name == "mspcflush") {
+                    for (uint i : inst.operands) {
+                        sig_m_spec[i][t] = sig_m_spec_cpy[i][t];
+                        val_m_spec[i][t] = val_m_spec_cpy[i][t];
+                    }
+                } if (inst.name == "event") {
                     const uint k = inst.operands[0];
                     event_history[k][t] = event_history_cpy[k][t];
                     if (params.speculate_measurements 

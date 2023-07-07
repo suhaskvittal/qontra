@@ -42,6 +42,8 @@ const std::vector<std::string> ISA{
     "brifmspc",     // Jumps to address if all measurements in list have been
                     // speculated.
     "brnifmspc",    // Same as brifmspc, but if not all have been speculated.
+    "mspcflush",    // Clears all measurement speculations for the provided
+                    // operands.
     // Ordering instructions
     "dfence",       // Waits until decoder finishes.
     // Tracking instructions
