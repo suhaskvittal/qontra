@@ -39,7 +39,9 @@ public:
         :n_qubits(n),
         max_shots(max_shots),
         record_table(statesim::G_RECORD_SPACE_SIZE, max_shots),
+        lock_table(n_qubits, max_shots),
         record_table_cpy(statesim::G_RECORD_SPACE_SIZE, max_shots),
+        lock_table_cpy(n_qubits, max_shots),
         rng(0)
     {}
 
@@ -47,6 +49,7 @@ public:
 
     virtual void    reset_sim(void) {
         record_table.clear();
+        lock_table.clear();
     }
 
     virtual void    H(std::vector<uint>) =0;
