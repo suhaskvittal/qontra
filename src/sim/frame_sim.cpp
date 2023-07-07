@@ -96,7 +96,12 @@ FrameSimulator::M(std::vector<uint> operands, int record) {
 
         if (record >= 0) {
             record_table[record].clear();
-            record_table[record++] |= x_table[i];
+            record_table[record].for_each_word(x_table[i], lock_table[i],
+                    [&] (auto& rec, auto& x, auto& lock)
+                    {
+                        rec |= x & ~lock;
+                    });
+            record++;
         }
     }
 }

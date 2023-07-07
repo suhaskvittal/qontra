@@ -41,8 +41,6 @@ const std::vector<std::string> ISA{
     // Event speculation instructions
     "brifmspc",     // Jumps to address if all measurements in list have been
                     // speculated.
-    "lockqifmspc",  // Prevents operations on the qubit operand if all measurements
-                    // in the list have been speculated.
     // Ordering instructions
     "dfence",       // Waits until decoder finishes.
     // Tracking instructions
@@ -99,7 +97,6 @@ const std::set<std::string> ARE_JMP_OR_BR{
 const std::set<std::string> IS_LOCKING{
     "lockq",
     "unlockq",
-    "lockqifmspc"
 };
 
 struct Instruction {
