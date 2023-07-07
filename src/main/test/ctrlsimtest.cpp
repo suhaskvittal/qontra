@@ -66,7 +66,6 @@ int main(int argc, char* argv[]) {
         if (world_rank == 0) {
             std::cout << "Expected LER = " << mxp_res.logical_error_rate << "\n";
         }
-        std::cout << error_model.str() << "\n";
     }
     sim.load_decoder(mwpm);
 

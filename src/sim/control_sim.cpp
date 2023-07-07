@@ -511,6 +511,25 @@ ControlSimulator::QEX() {
                 for (uint i = 0; i < res.corr.size(); i++) {
                     pauli_frames[i+offset][t] ^= res.corr[i];
                 }
+
+                /*
+                if (pauli_frames[offset][t] != obs_buffer[0][t]) {
+                    std::cout << "\t\tFaulty syndrome:\n\t\t\t\t";
+                    for (uint i = 0; i < 4; i++) {
+                        std::cout << s[i];
+                    }
+                    for (uint i = 8; i < decoder->get_circuit().count_detectors() - 4; i++) 
+                    {
+                        if (i % 8 == 0)  std::cout << "\n\t\t\t\t";
+                        std::cout << s[i];
+                    }
+                    std::cout << "\n\t\t\t\t";
+                    for (uint i = 0; i < 4; i++) {
+                        std::cout << s[i + decoder->get_circuit().count_detectors()];
+                    }
+                    std::cout << "\n";
+                }
+                */
             }
 
             if (params.save_syndromes_to_file) {
@@ -597,6 +616,8 @@ ControlSimulator::QEX() {
         stim::simd_bit_table    event_history_cpy(event_history);
         stim::simd_bit_table    sig_m_spec_cpy(sig_m_spec);
         stim::simd_bit_table    val_m_spec_cpy(val_m_spec);
+
+        stim::simd_bit_table    obs_buffer_cpy(obs_buffer);
 
         if (inst.name == "lockq") {
             for (uint i : inst.operands) {
@@ -731,6 +752,7 @@ ControlSimulator::QEX() {
         } else if (inst.name == "xorfr") {
             const uint i = inst.operands[0];
             const uint j = inst.operands[1];
+            std::cout << "i, j = " << i << ", " << j << "\n";
             obs_buffer[j] ^= pauli_frames[i];
         } else if (inst.name == "hshift") {
             const uint x = inst.operands[0];
@@ -785,7 +807,7 @@ ControlSimulator::QEX() {
                     }
                 } else if (inst.name == "obs") {
                     const uint k = inst.operands[0];
-                    obs_buffer[k][t] = 0;
+                    obs_buffer[k][t] = obs_buffer_cpy[k][t];
                 } else if (inst.name == "xorfr") {
                     const uint k1 = inst.operands[0];
                     const uint k2 = inst.operands[1];
