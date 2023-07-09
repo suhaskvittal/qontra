@@ -3,11 +3,11 @@
  *  date:   25 June 2023
  * */
 
-#include "graph/dependence_graph.h"
 #include "graph/tanner_graph.h"
 #include "instruction.h"
 #include "parsing/sdl/common.h"
 #include "parsing/sdl/helper.h"
+#include "protean/compiler.h"
 
 #include <deque>
 #include <map>
@@ -72,11 +72,12 @@ sdl_add_dependency(uint32_t id, struct __sdl_ordering ord) {
 }
 
 namespace qontra {
-namespace graph {
+namespace protean {
+namespace compiler {
 
-DependenceGraph
+SDGraph
 build_dependence_graph_from_sdl(std::string filename) {
-    DependenceGraph graph;
+    SDGraph graph;
 
     FILE* fin = fopen(filename.c_str(), "r");
     sdl_yystart_file(fin);
@@ -90,17 +91,34 @@ build_dependence_graph_from_sdl(std::string filename) {
     }
     std::map<uint32_t, std::set<uint32_t>>
         remaining_dependences(check_dependences);
+    uint64_t vid = 0;
     while (sat_checks.size()) {
         uint32_t ch = sat_checks.front();
         sat_checks.pop_front();
-        for (auto& x : check_to_schedule[ch]) {
-            Instruction* inst = new Instruction;
-            inst->name = x.name;
-            inst->operands = x.operands;
-            if ((ch >> 30) & tanner::vertex_t::XPARITY) {
-                inst->is_measuring_x_check = true;
+        
+        auto v = new sdvertex_t;
+        v->id = ch;
+        auto sch = check_to_schedule[ch];
+        // Modify the schedule operands so that any qubit ids
+        // are converted to check ids.
+        for (auto& inst : sch) {
+            for (uint& x : inst.operands) {
+                if (x == check_to_id[ch]) {
+                    x = ch;
+                }
             }
         }
+        graph.add_vertex(v);
+
+        for (auto d : check_dependences[ch]) {
+            auto w = graph.get_vertex(d);
+            auto e = new sdedge_t;
+            e->src = w;
+            e->dst = v;
+            e->is_undirected = false;
+            graph.add_edge(e);
+        }
+
         for (auto d : check_dependents[ch]) {
             remaining_dependences[d].erase(ch);            
             if (remaining_dependences[d].empty()) {
@@ -112,5 +130,6 @@ build_dependence_graph_from_sdl(std::string filename) {
     return graph;
 }
 
-}   // graph
+}   // compiler
+}   // protean
 }   // qontra

@@ -116,8 +116,6 @@ private:
     uint    barrier_index;
 };
 
-DependenceGraph build_dependence_graph_from_sdl(std::string filename);
-
 }   // graph
 }   // qontra
 

@@ -39,6 +39,16 @@ namespace qontra {
 namespace protean {
 
 namespace compiler {
+    struct sdvertex_t : graph::base::vertex_t {
+        schedule_t sch;
+    };
+
+    typedef graph::base::edge_t sdedge_t;
+    typedef graph::Graph<sdvertex_t, sdedge_t>  SDGraph;
+
+    SDGraph     build_schedule_graph_from_sdl(std::string filename);
+    schedule_t  build_schedule_from_sdgraph(SDGraph&);
+    
     struct ir_t {
         ~ir_t(void) {
             delete arch;
@@ -47,7 +57,7 @@ namespace compiler {
 
         graph::TannerGraph* curr_spec;
         Processor3D*        arch;
-        schedule_t          schedule;
+        SDGraph             schedule_graph;
         fp_t                score;
         bool                valid;
         // Data structures:
@@ -55,30 +65,18 @@ namespace compiler {
                                                 role_to_qubit;
         std::map<proc3d::vertex_t*, std::vector<graph::tanner::vertex_t*>>
                                                 qubit_to_roles;
-                                                        // During the "reduce"  pass, a qubit
-                                                        // may take on multiple roles due to a
-                                                        // contraction. For example, a parity
-                                                        // check qubit may need to take on the
-                                                        // role of a gauge qubit later.
+                                                    // During the "reduce"  pass, a qubit
+                                                    // may take on multiple roles due to a
+                                                    // contraction. For example, a parity
+                                                    // check qubit may need to take on the
+                                                    // role of a gauge qubit later.
         std::set<proc3d::vertex_t*> is_gauge_only;  // Keep track of pure gauge qubits for
                                                     // operations like reduce.
 
-        std::map<graph::tanner::vertex_t*, schedule_t>  
-                                            check_to_impl;  
-                                                // Contains micro-schedules which
-                                                // implement each parity check.
-        std::set<std::pair<graph::tanner::vertex_t*, graph::tanner::vertex_t*>>
-                                            conflicting_checks;
-                                                // A set of checks that cannot be
-                                                // scheduled concurrently.
-        graph::DependenceGraph*             dependency_graph;
-                                                // Defines the dependence relation
-                                                // for the instrucitons in the 
-                                                // macro-schedule.
         std::set<graph::tanner::vertex_t*>  sparsen_visited_set;
 
         bool is_data(proc3d::vertex_t* v) {
-            return (v->id >> 30) == graph::tanner::vertex_t::DATA;
+            return (v->id >> ID_TYPE_OFFSET) == graph::tanner::vertex_t::DATA;
         }
     };
 
@@ -112,9 +110,9 @@ public:
     void            set_seed(uint64_t s) { rng.seed(s); }
 
     // The compiler takes in a Tanner graph, which defines the QEC code,
-    // and an idealized syndrome extraction schedule. The schedule should
-    // NOT contain any gauge qubits.
-    compiler::ir_t* run(graph::TannerGraph*, const schedule_t& ideal_sch);
+    // and an idealized syndrome extraction schedule defined in the
+    // corresponding SDL file. The schedule should NOT contain any gauge qubits.
+    compiler::ir_t* run(graph::TannerGraph*, std::string sdl_file);
 
     params_t    params;
 private:
@@ -192,8 +190,6 @@ private:
     std::mt19937_64 rng;
 };
 
-void    print_connectivity(Processor3D*);
-void    print_schedule(const schedule_t&);
 
 // build_stim_circuit writes a memory experiment Stim spec for a given IR 
 // and Z/X observable. The user must provide:

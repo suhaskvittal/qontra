@@ -13,17 +13,21 @@ using namespace graph;
 using namespace compiler;
 
 ir_t*
-Compiler::run(TannerGraph* tanner_graph, const schedule_t& ideal_sch) {
+Compiler::run(TannerGraph* tanner_graph, std::string sdl_file) {
     // Set state variables to initial values.
     compile_round = 0;
 
     uint rounds_without_progress = 0;
 
+    // Initialize IR.
+    SDGraph ideal_sch = build_schedule_graph_from_sdl(filename);
+    ideal_sch->dealloc_on_delete = false;
+
     ir_t* best_result = nullptr;
     ir_t* ir = new ir_t;
     ir->curr_spec = tanner_graph;
     ir->arch = new Processor3D;
-    ir->schedule = ideal_sch;
+    ir->schedule_graph = SDGraph(ideal_sch);
 __place:
     if (params.verbose) {
         std::cout << "[ place ] ---------------------\n";
@@ -106,7 +110,7 @@ __score:
     ir_t* new_ir = new ir_t;
     new_ir->curr_spec = ir->curr_spec;
     new_ir->arch = new Processor3D;
-    new_ir->schedule = ideal_sch;
+    new_ir->schedule_graph = SDGraph(ideal_sch);
     // Perform transformations on Tanner graph.
     compile_round++;
     if (params.verbose)      std::cout << "[ induce ] ---------------------\n";
@@ -584,6 +588,70 @@ Compiler::flatten(ir_t* curr_ir) {
 
 void
 Compiler::xform_schedule(ir_t* curr_ir) {
+    // Transform the existing schedule graph so it can be run on
+    // the defined coupling graph.
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    Processor3D* arch = curr_ir->arch;
+    SDGraph& sch_graph = curr_ir->schedule_graph;
+
+    distance::callback_t d_cb = [&] (proc3d::vertex_t* v1, 
+                                    proc3d::vertex_t* v2,
+                                    const std::map<proc3d::vertex_t*, fp_t> dist,
+                                    const std::map<proc3d::vertex_t*, proc3d::vertex_t*> prev)
+    {
+        std::vector<proc3d::vertex_t*> path;
+        auto curr = v2;
+        while (curr != v1) {
+            path.push_back(curr);
+            curr = prev[v2];
+        }
+        path.push_back(v1);
+        return path;
+    };
+    auto path_table = distance::create_distance_matrix(
+                                arch, 
+                                unit_ewf_t<proc3d::vertex_t>(),
+                                d_cb);
+
+    std::map<proc3d::vertex_t*, uint32_t>   pv_to_qubitno;
+    uint32_t pvid = 0;
+    for (auto pv : arch->get_vertices()) {
+        pv_to_qubitno[pv] = pvid++;
+    }
+
+    for (auto sdv : sch_graph.get_vertices()) {
+        auto sch = sdv->sch;
+        schedule_t new_sch;
+        schedule_t epilogue;    // Any extra instructions we may need
+                                // to execute
+        std::map<proc3d::vertex_t*, uint> gauge_acc_ctr;
+        for (auto& inst : sch) {
+            if (inst.name == "cx") {
+                uint dq = inst.operands[0];
+                uint pq = inst.operands[1];
+                if ((dq >> 30) & 0x2)   std::swap(dq, pq);
+                bool is_x_check = (pq >> 30) == tanner::vertex_t::XPARITY;
+
+                // Note that sdv's have 32-bit ids that are used in the
+                // instructions.
+                uint64_t pq64 = (pq & ((1<<30)-1)) | ((pq >> 30) << ID_TYPE_OFFSET);
+                auto tdv = tanner_graph->get_vertex(dq);
+                auto tpv = tanner_graph->get_vertex(pq);
+                // Get corresponding physical qubits.
+                auto pdv = arch->get_vertex(tdv);
+                auto ppv = curr_ir->role_to_qubit[tpv];
+
+                auto path = path_table[pdv][ppv];
+                for (uint i = 1; i < path.size(); i++) {
+                    auto px = path[i-1];
+                    auto py = path[i];
+                    if ((py >> ID_TYPE_OFFSET) == tanner::vertex_t::GAUGE) {
+                        // Only proceed if all data qubits 
+                    }
+                }
+            }
+        }
+    }
 }
 
 
