@@ -105,7 +105,7 @@ instruction:
     inst.operands.size = 1 + $3.size;
     inst.operands.data = malloc(inst.operands.size * sizeof(uint32_t));
     inst.operands.data[0] = label;
-    memmove(inst.operands.data+1, $3.data, $3.size*sizeof(uint32_t));
+    memcpy(inst.operands.data+1, $3.data, $3.size*sizeof(uint32_t));
     free($3.data);
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
@@ -134,7 +134,7 @@ operands:
     x.size = 1 + $3.size;
     x.data = malloc(x.size * sizeof(uint32_t));
     x.data[0] = $1;
-    memmove(x.data+1, $3.data, $3.size*sizeof(uint32_t));
+    memcpy(x.data+1, $3.data, $3.size*sizeof(uint32_t));
     free($3.data);
     $$ = x;
 }
@@ -153,12 +153,6 @@ asm_yyerror(const char* msg) {
 
 int
 asm_yyparse_safe() {
-    int parse_out = asm_yyparse();
-    // Free any heap-allocated memory.
-    for (int i = 0; i < ASMParserScheduleLen; i++) {
-        struct __asm_inst_t* inst = &ASMParserSchedule[i];
-        if (inst->operands.size) free(inst->operands.data);
-    }
-    return parse_out;
+    return asm_yyparse();
 }
 

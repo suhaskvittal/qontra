@@ -27,10 +27,8 @@ int main(int argc, char* argv[]) {
 
     std::string help = "Arguments list:\n";
     help += "\tCode name (--code), do not have to use --input and --output if used\n";
-    help += "\t\tAssumes that there is a ../graphs/tanner/*.txt file and ../data folder";
-    help += "\tInput tanner graph file (--input)\n";
-    help += "\tOutput folder (--output)\n";
-
+    help += "\t\tAssumes that there is a ../graphs/tanner/*.txt file,";
+    help += " ../sdl/*.txt file, and ../data folder\n";
     help += "\tVerbose (-v)\n";
 
     bool help_requested = parser.option_set("h");
@@ -43,13 +41,12 @@ help_exit:
     std::string code_name;
     std::string file_in;
     std::string folder_out;
+    std::string sdl_file;
 
     if (parser.get_string("code", code_name)) {
         file_in = std::string("../graphs/tanner/") + code_name + std::string(".txt");
         folder_out = std::string("../data/") + code_name;
-    } else {
-        parser.get_string("input", file_in);
-        parser.get_string("output", folder_out);
+        sdl_file = std::string("../sdl/") + code_name + std::string(".sdl");
     }
     bool verbose = parser.option_set("v");
 
@@ -76,8 +73,7 @@ help_exit:
     Compiler compiler(con, cf);
     compiler.params.verbose = verbose;
 
-    schedule_t tmp; // REMOVE
-    compiler::ir_t* res = compiler.run(graph, tmp);
+    compiler::ir_t* res = compiler.run(graph, sdl_file);
     // Print out some simple stats and write to the output folder.
     std::cout << "Cost = " << cf(res) << ", valid = " << res->valid << "\n";
     std::cout << "Number of qubits = " << res->arch->get_vertices().size() << "\n";

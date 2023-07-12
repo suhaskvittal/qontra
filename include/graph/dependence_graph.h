@@ -67,11 +67,7 @@ public:
         barrier_index(other.barrier_index)
     {}
 
-    ~DependenceGraph(void) {
-        if (this->dealloc_on_delete) {
-            for (auto v : this->vertices) delete v->inst_p;
-        }
-    }
+    ~DependenceGraph(void) {}
 
     bool    add_vertex(dep::vertex_t*) override;
 

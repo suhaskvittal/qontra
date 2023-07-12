@@ -20,16 +20,20 @@ using namespace qontra;
 
 static std::map<uint32_t, uint32_t>     id_to_check;
 static std::map<uint32_t, uint32_t>     check_to_id;
-static std::map<uint32_t, schedule_t>   check_to_schedule;
+static std::map<uint32_t, schedule_t>   id_to_schedule;
 
 static std::map<uint32_t, std::set<uint32_t>>
-                                        check_dependents;
+                                        dependents;
 static std::map<uint32_t, std::set<uint32_t>>
-                                        check_dependences;
+                                        dependences;
 
 void
 sdl_reset_parser() {
-
+    id_to_check.clear();
+    check_to_id.clear();
+    id_to_schedule.clear();
+    dependents.clear();
+    dependences.clear();
 }
 
 int
@@ -53,20 +57,18 @@ sdl_declare(uint32_t id, char* check_str) {
 
 int
 sdl_assign_schedule(uint32_t id, struct __sdl_asm_body prog) {
-    uint32_t check = id_to_check[id];
-    if (check_to_schedule.count(check)) return -1;
+    if (id_to_schedule.count(id)) return -1;
     schedule_t sch = schedule_from_text(std::string(prog.text));
-    check_to_schedule[check] = sch;
-    free(prog.text);
+    id_to_schedule[id] = sch;
+    if (prog.text != NULL)  free(prog.text);
     return 0;
 }
 
 void
 sdl_add_dependency(uint32_t id, struct __sdl_ordering ord) {
-    uint32_t ch = id_to_check[id];
     for (int i = 0; i < ord.size; i++) {
-        check_dependents[ch].insert(id_to_check[ord.dep[i]]);
-        check_dependences[id_to_check[ord.dep[i]]].insert(ch);
+        dependents[id].insert(ord.dep[i]);
+        dependences[ord.dep[i]].insert(id);
     }
     free(ord.dep);
 }
@@ -76,8 +78,11 @@ namespace protean {
 namespace compiler {
 
 SDGraph
-build_dependence_graph_from_sdl(std::string filename) {
+build_schedule_graph_from_sdl(std::string filename) {
     SDGraph graph;
+    sdvertex_t* root = new sdvertex_t;
+    root->id = 0;
+    graph.add_vertex(root);
 
     FILE* fin = fopen(filename.c_str(), "r");
     sdl_yystart_file(fin);
@@ -86,32 +91,46 @@ build_dependence_graph_from_sdl(std::string filename) {
 
     std::deque<uint32_t> sat_checks;    // A deque of checks whose dependences
                                         // are already in the graph.
-    for (auto pair : check_dependences) {
-        if (pair.second.empty())    sat_checks.push_back(pair.first);
+    std::map<uint32_t, std::set<uint32_t>> remaining_dependences;
+    for (auto pair : id_to_check) {
+        uint32_t ch = pair.second;
+        auto dep = dependences[pair.first];
+        if (dep.empty())    sat_checks.push_back(ch);
+        remaining_dependences[ch] = std::set<uint32_t>();
+        for (auto x : dep) {
+            remaining_dependences[ch].insert(x);
+        }
     }
-    std::map<uint32_t, std::set<uint32_t>>
-        remaining_dependences(check_dependences);
-    uint64_t vid = 0;
+    uint64_t vid = 1;
     while (sat_checks.size()) {
         uint32_t ch = sat_checks.front();
         sat_checks.pop_front();
         
         auto v = new sdvertex_t;
-        v->id = ch;
-        auto sch = check_to_schedule[ch];
+        v->id = vid++;
+
+        uint32_t id = check_to_id[ch];
+        auto sch = id_to_schedule[check_to_id[ch]];
         // Modify the schedule operands so that any qubit ids
         // are converted to check ids.
         for (auto& inst : sch) {
             for (uint& x : inst.operands) {
-                if (x == check_to_id[ch]) {
+                if (x == id) {
                     x = ch;
                 }
             }
         }
+        v->sch = sch;
         graph.add_vertex(v);
+        // Add an edge with the root.
+        auto re = new sdedge_t;
+        re->src = root;
+        re->dst = v;
+        graph.add_edge(re);
 
-        for (auto d : check_dependences[ch]) {
-            auto w = graph.get_vertex(d);
+        for (auto d : dependences[id]) {
+            uint32_t x = id_to_check[d];
+            auto w = graph.get_vertex(x);
             auto e = new sdedge_t;
             e->src = w;
             e->dst = v;
@@ -119,10 +138,11 @@ build_dependence_graph_from_sdl(std::string filename) {
             graph.add_edge(e);
         }
 
-        for (auto d : check_dependents[ch]) {
-            remaining_dependences[d].erase(ch);            
-            if (remaining_dependences[d].empty()) {
-                sat_checks.push_back(d);
+        for (auto d : dependents[id]) {
+            uint32_t x = id_to_check[d];
+            remaining_dependences[x].erase(ch);            
+            if (remaining_dependences[x].empty()) {
+                sat_checks.push_back(x);
             }
         }
     }

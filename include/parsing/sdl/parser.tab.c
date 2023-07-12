@@ -108,7 +108,7 @@ enum yysymbol_kind_t
   YYSYMBOL_CHECK = 4,                      /* CHECK  */
   YYSYMBOL_NUM = 5,                        /* NUM  */
   YYSYMBOL_MUS = 6,                        /* MUS  */
-  YYSYMBOL_ASM = 7,                        /* ASM  */
+  YYSYMBOL_INST = 7,                       /* INST  */
   YYSYMBOL_END = 8,                        /* END  */
   YYSYMBOL_ORD = 9,                        /* ORD  */
   YYSYMBOL_SEP = 10,                       /* SEP  */
@@ -117,7 +117,8 @@ enum yysymbol_kind_t
   YYSYMBOL_13_ = 13,                       /* ':'  */
   YYSYMBOL_YYACCEPT = 14,                  /* $accept  */
   YYSYMBOL_program = 15,                   /* program  */
-  YYSYMBOL_ordering = 16                   /* ordering  */
+  YYSYMBOL_body = 16,                      /* body  */
+  YYSYMBOL_ordering = 17                   /* ordering  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -445,16 +446,16 @@ union yyalloc
 /* YYFINAL -- State number of the termination state.  */
 #define YYFINAL  10
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   27
+#define YYLAST   26
 
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  14
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  3
+#define YYNNTS  4
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  8
+#define YYNRULES  11
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  27
+#define YYNSTATES  30
 
 /* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   266
@@ -502,9 +503,10 @@ static const yytype_int8 yytranslate[] =
 
 #if SDL_YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
-static const yytype_int8 yyrline[] =
+static const yytype_uint8 yyrline[] =
 {
-       0,    78,    78,    79,    83,    87,    91,    95,   105
+       0,    80,    80,    81,    85,    89,    93,    97,   117,   136,
+     143,   153
 };
 #endif
 
@@ -521,8 +523,8 @@ static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
 static const char *const yytname[] =
 {
   "\"end of file\"", "error", "\"invalid token\"", "DECL", "CHECK", "NUM",
-  "MUS", "ASM", "END", "ORD", "SEP", "EOL", "';'", "':'", "$accept",
-  "program", "ordering", YY_NULLPTR
+  "MUS", "INST", "END", "ORD", "SEP", "EOL", "';'", "':'", "$accept",
+  "program", "body", "ordering", YY_NULLPTR
 };
 
 static const char *
@@ -532,7 +534,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-6)
+#define YYPACT_NINF (-8)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -546,9 +548,9 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-      -2,    -1,    -3,     0,    -2,     6,     1,    -5,     2,    -6,
-      -6,     5,     8,    11,     9,    10,     3,    12,    -2,    13,
-      11,    -2,    -6,    -2,    -6,    -6,    -6
+      -2,     1,     6,     7,    -2,    13,     5,     3,     8,    -8,
+      -8,    14,    -5,    15,     9,    -5,    -8,    -5,    -2,    16,
+      11,    -2,    -8,    -8,    -8,    15,    -2,    -8,    -8,    -8
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -557,20 +559,20 @@ static const yytype_int8 yypact[] =
 static const yytype_int8 yydefact[] =
 {
        2,     0,     0,     0,     2,     0,     0,     0,     0,     6,
-       1,     0,     0,     0,     0,     0,     8,     0,     2,     0,
-       0,     2,     3,     2,     7,     5,     4
+       1,     0,     0,     0,     0,     0,     9,     0,     2,    11,
+       0,     2,     7,     8,     4,     0,     2,     3,    10,     5
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-      -6,    -4,     7
+      -8,    -4,    -7,    -1
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,     5,    17
+       0,     5,    18,    20
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -578,16 +580,16 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-       9,     1,     7,     6,     2,     8,    10,     3,    12,     4,
-      14,    11,    13,    20,    22,    15,    16,    25,    19,    26,
-       0,    18,     0,     0,    21,    23,     0,    24
+       9,     1,    15,    16,     2,     6,    17,     3,    22,     4,
+      23,     7,     8,    10,    24,    11,    12,    27,    13,    14,
+      19,    21,    29,    26,    28,     0,    25
 };
 
 static const yytype_int8 yycheck[] =
 {
-       4,     3,     5,     4,     6,     5,     0,     9,    13,    11,
-       5,    10,    10,    10,    18,     7,     5,    21,     8,    23,
-      -1,    12,    -1,    -1,    12,    12,    -1,    20
+       4,     3,     7,     8,     6,     4,    11,     9,    15,    11,
+      17,     5,     5,     0,    18,    10,    13,    21,    10,     5,
+       5,    12,    26,    12,    25,    -1,    10
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
@@ -595,20 +597,22 @@ static const yytype_int8 yycheck[] =
 static const yytype_int8 yystos[] =
 {
        0,     3,     6,     9,    11,    15,     4,     5,     5,    15,
-       0,    10,    13,    10,     5,     7,     5,    16,    12,     8,
-      10,    12,    15,    12,    16,    15,    15
+       0,    10,    13,    10,     5,     7,     8,    11,    16,     5,
+      17,    12,    16,    16,    15,    10,    12,    15,    17,    15
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,    14,    15,    15,    15,    15,    15,    16,    16
+       0,    14,    15,    15,    15,    15,    15,    16,    16,    16,
+      17,    17
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     0,     6,     7,     6,     2,     3,     1
+       0,     2,     0,     6,     5,     6,     2,     2,     2,     1,
+       3,     1
 };
 
 
@@ -1072,31 +1076,86 @@ yyreduce:
   switch (yyn)
     {
   case 3: /* program: DECL CHECK SEP NUM ';' program  */
-#line 80 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 82 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 {
     if (sdl_declare((yyvsp[-2].id), (yyvsp[-4].check)) < 0)    YYABORT;
 }
-#line 1080 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+#line 1084 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
     break;
 
-  case 4: /* program: MUS NUM ':' ASM END ';' program  */
-#line 84 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+  case 4: /* program: MUS NUM ':' body program  */
+#line 86 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 {
-    if (sdl_assign_schedule((yyvsp[-5].id), (yyvsp[-3].prog)) < 0)    YYABORT;
+    if (sdl_assign_schedule((yyvsp[-3].id), (yyvsp[-1].prog)) < 0)    YYABORT;
 }
-#line 1088 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+#line 1092 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
     break;
 
   case 5: /* program: ORD NUM SEP ordering ';' program  */
-#line 88 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 90 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 {
     sdl_add_dependency((yyvsp[-4].id), (yyvsp[-2].ord));
 }
-#line 1096 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+#line 1100 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
     break;
 
-  case 7: /* ordering: NUM SEP ordering  */
-#line 96 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+  case 7: /* body: INST body  */
+#line 98 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+{
+    struct __sdl_asm_body x;
+    int len = strlen((yyvsp[-1].inst));
+    if ((yyvsp[0].prog).size == 0) {
+        x.size = len;
+        x.text = (yyvsp[-1].inst);
+    } else {
+        int size = len + (yyvsp[0].prog).size;
+        x.text = malloc(size + 1);
+        memcpy(x.text, (yyvsp[-1].inst), len);
+        memcpy(x.text + len, (yyvsp[0].prog).text, (yyvsp[0].prog).size);
+        x.text[size] = '\0';
+        x.size = size;
+
+        free((yyvsp[-1].inst));
+        free((yyvsp[0].prog).text);
+    }
+    (yyval.prog) = x;
+}
+#line 1124 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+    break;
+
+  case 8: /* body: EOL body  */
+#line 118 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+{
+    struct __sdl_asm_body x;
+    if ((yyvsp[0].prog).size == 0) {
+        x.size = 1;
+        x.text = malloc(2);
+        x.text[0] = '\n';
+        x.text[1] = '\0';
+    } else {
+        x.text = malloc((yyvsp[0].prog).size + 2);
+        x.text[0] = '\n';
+        memmove(x.text+1, (yyvsp[0].prog).text, (yyvsp[0].prog).size);
+        x.text[(yyvsp[0].prog).size+1] = '\0';
+        x.size = (yyvsp[0].prog).size + 1;
+
+        free((yyvsp[0].prog).text);
+    }
+    (yyval.prog) = x;
+}
+#line 1147 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+    break;
+
+  case 9: /* body: END  */
+#line 137 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+{
+    (yyval.prog) = (struct __sdl_asm_body) { NULL, 0 };
+}
+#line 1155 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+    break;
+
+  case 10: /* ordering: NUM SEP ordering  */
+#line 144 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 {
     struct __sdl_ordering x;
     x.size = 1 + (yyvsp[0].ord).size;
@@ -1106,11 +1165,11 @@ yyreduce:
     free((yyvsp[0].ord).dep);
     (yyval.ord) = x;
 }
-#line 1110 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+#line 1169 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
     break;
 
-  case 8: /* ordering: NUM  */
-#line 106 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+  case 11: /* ordering: NUM  */
+#line 154 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 {
     struct __sdl_ordering x;
     x.size = 1;
@@ -1118,11 +1177,11 @@ yyreduce:
     x.dep[0] = (yyvsp[0].id);
     (yyval.ord) = x;
 }
-#line 1122 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+#line 1181 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
     break;
 
 
-#line 1126 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
+#line 1185 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.c"
 
       default: break;
     }
@@ -1315,11 +1374,11 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 115 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
+#line 163 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.y"
 
 
 void sdl_yyerror(const char* msg) {
-    fprintf(stderr, msg);
+    fprintf(stderr, "sdl parser: %s\n", msg);
 }
 
 int sdl_yyparse_safe() {

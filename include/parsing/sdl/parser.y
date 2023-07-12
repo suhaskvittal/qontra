@@ -31,6 +31,7 @@ void        yyerror(char const*);
 %union {
     uint32_t                id;
     char                    check[24];
+    char*                   inst;
     struct __sdl_asm_body   prog;
     struct __sdl_ordering   ord;
 }
@@ -43,7 +44,7 @@ void        yyerror(char const*);
         NUM = any number
 
         MUS = mus (micro-schedule operation)
-        ASM = any string: this will be interpreted as ASM
+        INST = any string: this will be interpreted as ASM
         END = end
 
         ORD = order (dependency declaration)
@@ -57,7 +58,7 @@ void        yyerror(char const*);
 %token  NUM
 
 %token  MUS
-%token  ASM  
+%token  INST 
 %token  END
 
 %token  ORD
@@ -70,7 +71,8 @@ void        yyerror(char const*);
 
 %type<id>       NUM
 %type<check>    CHECK
-%type<prog>     ASM
+%type<inst>     INST
+%type<prog>     body
 %type<ord>      ordering
 
 %%
@@ -80,7 +82,7 @@ program:    /* empty string */
 {
     if (sdl_declare($4, $2) < 0)    YYABORT;
 }
-       | MUS NUM ':' ASM END ';' program
+       | MUS NUM ':' body program
 {
     if (sdl_assign_schedule($2, $4) < 0)    YYABORT;
 }
@@ -89,6 +91,52 @@ program:    /* empty string */
     sdl_add_dependency($2, $4);
 }
        | EOL program
+;
+
+body:
+    INST body
+{
+    struct __sdl_asm_body x;
+    int len = strlen($1);
+    if ($2.size == 0) {
+        x.size = len;
+        x.text = $1;
+    } else {
+        int size = len + $2.size;
+        x.text = malloc(size + 1);
+        memcpy(x.text, $1, len);
+        memcpy(x.text + len, $2.text, $2.size);
+        x.text[size] = '\0';
+        x.size = size;
+
+        free($1);
+        free($2.text);
+    }
+    $$ = x;
+}
+    | EOL body
+{
+    struct __sdl_asm_body x;
+    if ($2.size == 0) {
+        x.size = 1;
+        x.text = malloc(2);
+        x.text[0] = '\n';
+        x.text[1] = '\0';
+    } else {
+        x.text = malloc($2.size + 2);
+        x.text[0] = '\n';
+        memmove(x.text+1, $2.text, $2.size);
+        x.text[$2.size+1] = '\0';
+        x.size = $2.size + 1;
+
+        free($2.text);
+    }
+    $$ = x;
+}
+    | END
+{
+    $$ = (struct __sdl_asm_body) { NULL, 0 };
+}
 ;
 
 ordering:
@@ -115,7 +163,7 @@ ordering:
 %%
 
 void sdl_yyerror(const char* msg) {
-    fprintf(stderr, msg);
+    fprintf(stderr, "sdl parser: %s\n", msg);
 }
 
 int sdl_yyparse_safe() {

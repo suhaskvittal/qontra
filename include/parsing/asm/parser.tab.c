@@ -1127,7 +1127,7 @@ yyreduce:
     inst.operands.size = 1 + (yyvsp[-1].operands).size;
     inst.operands.data = malloc(inst.operands.size * sizeof(uint32_t));
     inst.operands.data[0] = label;
-    memmove(inst.operands.data+1, (yyvsp[-1].operands).data, (yyvsp[-1].operands).size*sizeof(uint32_t));
+    memcpy(inst.operands.data+1, (yyvsp[-1].operands).data, (yyvsp[-1].operands).size*sizeof(uint32_t));
     free((yyvsp[-1].operands).data);
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
@@ -1165,7 +1165,7 @@ yyreduce:
     x.size = 1 + (yyvsp[0].operands).size;
     x.data = malloc(x.size * sizeof(uint32_t));
     x.data[0] = (yyvsp[-2].arg);
-    memmove(x.data+1, (yyvsp[0].operands).data, (yyvsp[0].operands).size*sizeof(uint32_t));
+    memcpy(x.data+1, (yyvsp[0].operands).data, (yyvsp[0].operands).size*sizeof(uint32_t));
     free((yyvsp[0].operands).data);
     (yyval.operands) = x;
 }
@@ -1380,12 +1380,6 @@ asm_yyerror(const char* msg) {
 
 int
 asm_yyparse_safe() {
-    int parse_out = asm_yyparse();
-    // Free any heap-allocated memory.
-    for (int i = 0; i < ASMParserScheduleLen; i++) {
-        struct __asm_inst_t* inst = &ASMParserSchedule[i];
-        if (inst->operands.size) free(inst->operands.data);
-    }
-    return parse_out;
+    return asm_yyparse();
 }
 

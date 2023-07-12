@@ -32,8 +32,11 @@
 #include <set>
 #include <vector>
 #include <utility>
+#include <tuple>
 
 #include <math.h>
+
+#define SDGRAPH_ROOT_ID     0
 
 namespace qontra {
 namespace protean {
@@ -47,19 +50,26 @@ namespace compiler {
     typedef graph::Graph<sdvertex_t, sdedge_t>  SDGraph;
 
     SDGraph     build_schedule_graph_from_sdl(std::string filename);
-    schedule_t  build_schedule_from_sdgraph(SDGraph&);
+    SDGraph*    alloc_sdgraph_deep_copy(SDGraph&);
     
     struct ir_t {
         ~ir_t(void) {
             delete arch;
+            delete schedule_graph;
             delete dependency_graph;
         }
 
         graph::TannerGraph* curr_spec;
         Processor3D*        arch;
-        SDGraph             schedule_graph;
+        SDGraph*            schedule_graph;
+        schedule_t          schedule;
         fp_t                score;
         bool                valid;
+
+        std::map<proc3d::vertex_t*, uint>   qubit_labels;
+
+        graph::DependenceGraph*             dependency_graph;
+
         // Data structures:
         std::map<graph::tanner::vertex_t*, proc3d::vertex_t*>
                                                 role_to_qubit;

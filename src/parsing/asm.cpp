@@ -103,7 +103,9 @@ schedule_after_parse() {
         __asm_inst_t x = ASMParserSchedule[i];
         std::string name(x.name);
         std::vector<uint> operands;
-        operands.assign(x.operands.data, x.operands.data + x.operands.size);
+        for (uint j = 0; j < x.operands.size; j++) {
+            operands.push_back(x.operands.data[j]);
+        }
         // Check if any operands are labels.
         // 
         // Note that any PCs are inverted, so we must subtract the final

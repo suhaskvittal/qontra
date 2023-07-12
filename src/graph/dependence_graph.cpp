@@ -19,7 +19,11 @@ DependenceGraph::add_vertex(dep::vertex_t* v) {
     [&] (dep::vertex_t* v1, dep::vertex_t* v2)
     {
         auto qubits = v2->inst_p->get_qubit_operands();
-        for (uint x : qubits) operand_to_ancestor[x] = v2;
+        for (uint x : qubits) {
+            if (vertex_to_depth[v2] > vertex_to_depth[operand_to_ancestor[x]]) {
+                operand_to_ancestor[x] = v2;
+            }
+        }
     };
     search::xfs(this, root, cb, false);
     // Connect v to all ancestors
@@ -42,6 +46,7 @@ DependenceGraph::add_vertex(dep::vertex_t* v) {
         }
     }
     vertex_to_depth[v] = max_ancestor_depth+1;
+    std::cout << "\tdepth = " << vertex_to_depth[v] << "\n";
     if (vertex_to_depth[v] > depth) depth = vertex_to_depth[v];
     return true;
 }

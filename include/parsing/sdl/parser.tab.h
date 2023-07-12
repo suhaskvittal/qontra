@@ -77,7 +77,7 @@ extern int sdl_yydebug;
     CHECK = 259,                   /* CHECK  */
     NUM = 260,                     /* NUM  */
     MUS = 261,                     /* MUS  */
-    ASM = 262,                     /* ASM  */
+    INST = 262,                    /* INST  */
     END = 263,                     /* END  */
     ORD = 264,                     /* ORD  */
     SEP = 265,                     /* SEP  */
@@ -94,10 +94,11 @@ union SDL_YYSTYPE
 
     uint32_t                id;
     char                    check[24];
+    char*                   inst;
     struct __sdl_asm_body   prog;
     struct __sdl_ordering   ord;
 
-#line 101 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
+#line 102 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
 
 };
 typedef union SDL_YYSTYPE SDL_YYSTYPE;
@@ -121,6 +122,6 @@ extern int  yyparse();
 void        yyerror(char const*);
 
 
-#line 125 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
+#line 126 "/Users/svittal/Documents/qontra/include/parsing/sdl/parser.tab.h"
 
 #endif /* !YY_SDL_YY_USERS_SVITTAL_DOCUMENTS_QONTRA_INCLUDE_PARSING_SDL_PARSER_TAB_H_INCLUDED  */

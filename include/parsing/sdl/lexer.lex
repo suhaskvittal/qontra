@@ -35,30 +35,31 @@
 
 %%
 
+<INITIAL,ASM>\n     { return EOL; }
+<ASM>(?i:end)       { BEGIN(INITIAL); return END; }
+<ASM>.*;            {
+                        yylval.inst = malloc(yyleng+1);
+                        memcpy(yylval.inst, yytext, yyleng);
+                        yylval.inst[yyleng] = '\0';
+                        return INST;
+                    }
 #.+?\n      { /* this is a comment */ }
 (?i:decl)           { return DECL; }
-(?i:mus)            { BEGIN(ASM); return MUS; }
-(?i:end)            { BEGIN(INITIAL); return END; }
+(?i:mus)            { return MUS; }
 (?i:order)          { return ORD; }
 [XZ][0-9]+          {
                         memcpy(yylval.check, yytext, yyleng);
+                        yylval.check[yyleng] = '\0';
                         return CHECK;
                     }
 [0-9]+              {
                         yylval.id = atoi(yytext);
                         return NUM;
                     }
-<ASM>.*?            {
-                        yylval.prog.text = malloc(yyleng+1);
-                        memcpy(yylval.prog.text, yytext, yyleng);
-                        yylval.prog.text[yyleng] = '\0';
-                        return ASM;
-                    }
 ,                   { return SEP; }
-:                   { return ':'; }
+:                   { BEGIN(ASM); return ':'; }
 ;                   { return ';'; }
 [ \t]               { /* ignore whitespace */ }
-\n                  { return EOL; }
 
 %%
 

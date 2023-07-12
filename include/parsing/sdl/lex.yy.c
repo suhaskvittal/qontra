@@ -623,12 +623,12 @@ struct yy_trans_info
 	flex_int32_t yy_verify;
 	flex_int32_t yy_nxt;
 	};
-static const flex_int16_t yy_accept[37] =
+static const flex_int16_t yy_accept[39] =
     {   0,
-        0,    0,    8,    8,   15,   14,   12,   13,   14,    9,
-        7,   10,   11,   14,   14,   14,   14,   14,    8,    0,
-        1,    7,    0,    0,    0,    0,    6,    8,    0,    4,
-        3,    0,    2,    0,    5,    0
+        0,    0,    0,    0,   15,   14,   13,    1,   14,   10,
+        9,   11,   12,   14,   14,   14,   14,   14,    3,   14,
+        0,    4,    9,    0,    0,    0,    8,    0,    3,    0,
+        0,    6,    0,    2,    5,    0,    7,    0
     } ;
 
 static const YY_CHAR yy_ec[256] =
@@ -670,50 +670,54 @@ static const YY_CHAR yy_meta[30] =
         1,    1,    1,    1,    1,    1,    1,    1,    1
     } ;
 
-static const flex_int16_t yy_base[40] =
+static const flex_int16_t yy_base[42] =
     {   0,
-        0,    0,   62,   61,   63,   66,   66,   66,   59,   66,
-       55,   66,   66,   19,   17,   14,   17,   54,    0,   56,
-       66,   52,   25,   25,   19,   27,   51,    0,   26,   66,
-       66,   28,   66,   24,   66,   66,   51,   53,   55
+        0,    0,   27,   28,   78,   79,   79,   79,   74,   79,
+       70,   79,   79,   21,   15,   18,   69,   66,   65,   32,
+       69,   79,   59,   28,   24,   32,   58,   55,   53,   46,
+       35,   79,   40,   52,   79,   39,   79,   79,   67,   69,
+       58
     } ;
 
-static const flex_int16_t yy_def[40] =
+static const flex_int16_t yy_def[42] =
     {   0,
-       36,    1,   37,   37,   36,   36,   36,   36,   38,   36,
-       36,   36,   36,   36,   36,   36,   36,   36,   39,   38,
-       36,   36,   36,   36,   36,   36,   36,   39,   36,   36,
-       36,   36,   36,   36,   36,    0,   36,   36,   36
+       38,    1,   39,   39,   38,   38,   38,   38,   40,   38,
+       38,   38,   38,   38,   38,   38,   38,   41,   41,   41,
+       40,   38,   38,   38,   38,   38,   38,   41,   41,   41,
+       38,   38,   38,   41,   38,   38,   38,    0,   38,   38,
+       38
     } ;
 
-static const flex_int16_t yy_nxt[96] =
+static const flex_int16_t yy_nxt[109] =
     {   0,
         6,    7,    8,    9,   10,   11,   12,   13,    6,   14,
-       15,    6,   16,    6,   17,    6,    6,    6,   18,    6,
-       14,   15,    6,   16,    6,   17,    6,    6,    6,   23,
-       24,   25,   26,   29,   30,   31,   32,   33,   34,   35,
-       23,   24,   25,   26,   29,   30,   31,   32,   33,   34,
-       35,   19,   19,   20,   20,   28,   27,   22,   21,   27,
-       22,   21,   36,    6,    6,    5,   36,   36,   36,   36,
-       36,   36,   36,   36,   36,   36,   36,   36,   36,   36,
-       36,   36,   36,   36,   36,   36,   36,   36,   36,   36,
-       36,   36,   36,   36,   36
+        6,    6,   15,    6,   16,    6,    6,    6,   17,    6,
+       14,    6,    6,   15,    6,   16,    6,    6,    6,    8,
+        8,   24,   25,   26,   19,   19,   31,   20,   20,   29,
+       32,   33,   24,   25,   26,   30,   35,   31,   20,   20,
+       36,   32,   33,   29,   37,   34,   30,   35,   28,   29,
+       29,   36,   29,   27,   23,   37,   34,   18,   18,   21,
+       21,   22,   29,   29,   27,   23,   22,   38,    5,   38,
+       38,   38,   38,   38,   38,   38,   38,   38,   38,   38,
+       38,   38,   38,   38,   38,   38,   38,   38,   38,   38,
 
+       38,   38,   38,   38,   38,   38,   38,   38
     } ;
 
-static const flex_int16_t yy_chk[96] =
+static const flex_int16_t yy_chk[109] =
     {   0,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
-        1,    1,    1,    1,    1,    1,    1,    1,    1,   14,
-       15,   16,   17,   23,   24,   25,   26,   29,   32,   34,
-       14,   15,   16,   17,   23,   24,   25,   26,   29,   32,
-       34,   37,   37,   38,   38,   39,   27,   22,   20,   18,
-       11,    9,    5,    4,    3,   36,   36,   36,   36,   36,
-       36,   36,   36,   36,   36,   36,   36,   36,   36,   36,
-       36,   36,   36,   36,   36,   36,   36,   36,   36,   36,
-       36,   36,   36,   36,   36
+        1,    1,    1,    1,    1,    1,    1,    1,    1,    3,
+        4,   14,   15,   16,    3,    4,   24,    3,    4,   20,
+       25,   26,   14,   15,   16,   20,   31,   24,    3,    4,
+       33,   25,   26,   30,   36,   30,   20,   31,   41,   34,
+       29,   33,   28,   27,   23,   36,   30,   39,   39,   40,
+       40,   21,   19,   18,   17,   11,    9,    5,   38,   38,
+       38,   38,   38,   38,   38,   38,   38,   38,   38,   38,
+       38,   38,   38,   38,   38,   38,   38,   38,   38,   38,
 
+       38,   38,   38,   38,   38,   38,   38,   38
     } ;
 
 static yy_state_type yy_last_accepting_state;
@@ -759,8 +763,8 @@ char *yytext;
 
 #define yylval sdl_yylval
 
-#line 762 "/Users/svittal/Documents/qontra/include/parsing/sdl/lex.yy.c"
-#line 763 "/Users/svittal/Documents/qontra/include/parsing/sdl/lex.yy.c"
+#line 766 "/Users/svittal/Documents/qontra/include/parsing/sdl/lex.yy.c"
+#line 767 "/Users/svittal/Documents/qontra/include/parsing/sdl/lex.yy.c"
 
 #define INITIAL 0
 #define ASM 1
@@ -981,7 +985,7 @@ YY_DECL
 #line 36 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
 
 
-#line 984 "/Users/svittal/Documents/qontra/include/parsing/sdl/lex.yy.c"
+#line 988 "/Users/svittal/Documents/qontra/include/parsing/sdl/lex.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1008,13 +1012,13 @@ yy_match:
 			while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
 				{
 				yy_current_state = (int) yy_def[yy_current_state];
-				if ( yy_current_state >= 37 )
+				if ( yy_current_state >= 39 )
 					yy_c = yy_meta[yy_c];
 				}
 			yy_current_state = yy_nxt[yy_base[yy_current_state] + yy_c];
 			++yy_cp;
 			}
-		while ( yy_base[yy_current_state] != 66 );
+		while ( yy_base[yy_current_state] != 79 );
 
 yy_find_action:
 		yy_act = yy_accept[yy_current_state];
@@ -1042,86 +1046,87 @@ case 1:
 /* rule 1 can match eol */
 YY_RULE_SETUP
 #line 38 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ /* this is a comment */ }
+{ return EOL; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
 #line 39 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ return DECL; }
+{ BEGIN(INITIAL); return END; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
 #line 40 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ BEGIN(ASM); return MUS; }
+{
+                        yylval.inst = malloc(yyleng+1);
+                        memcpy(yylval.inst, yytext, yyleng);
+                        yylval.inst[yyleng] = '\0';
+                        return INST;
+                    }
 	YY_BREAK
 case 4:
+/* rule 4 can match eol */
 YY_RULE_SETUP
-#line 41 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ BEGIN(INITIAL); return END; }
+#line 46 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+{ /* this is a comment */ }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 42 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ return ORD; }
+#line 47 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+{ return DECL; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 43 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{
-                        memcpy(yylval.check, yytext, yyleng);
-                        return CHECK;
-                    }
+#line 48 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+{ return MUS; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 47 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+#line 49 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+{ return ORD; }
+	YY_BREAK
+case 8:
+YY_RULE_SETUP
+#line 50 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+{
+                        memcpy(yylval.check, yytext, yyleng);
+                        yylval.check[yyleng] = '\0';
+                        return CHECK;
+                    }
+	YY_BREAK
+case 9:
+YY_RULE_SETUP
+#line 55 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
 {
                         yylval.id = atoi(yytext);
                         return NUM;
                     }
 	YY_BREAK
-case 8:
-YY_RULE_SETUP
-#line 51 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{
-                        yylval.prog.text = malloc(yyleng+1);
-                        memcpy(yylval.prog.text, yytext, yyleng);
-                        yylval.prog.text[yyleng] = '\0';
-                        return ASM;
-                    }
-	YY_BREAK
-case 9:
-YY_RULE_SETUP
-#line 57 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ return SEP; }
-	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 58 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ return ':'; }
+#line 59 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+{ return SEP; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 59 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ return ';'; }
+#line 60 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+{ BEGIN(ASM); return ':'; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 60 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ /* ignore whitespace */ }
+#line 61 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+{ return ';'; }
 	YY_BREAK
 case 13:
-/* rule 13 can match eol */
 YY_RULE_SETUP
-#line 61 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
-{ return EOL; }
+#line 62 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+{ /* ignore whitespace */ }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 63 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+#line 64 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
 ECHO;
 	YY_BREAK
-#line 1124 "/Users/svittal/Documents/qontra/include/parsing/sdl/lex.yy.c"
+#line 1129 "/Users/svittal/Documents/qontra/include/parsing/sdl/lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(ASM):
 	yyterminate();
@@ -1419,7 +1424,7 @@ static int yy_get_next_buffer (void)
 		while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
 			{
 			yy_current_state = (int) yy_def[yy_current_state];
-			if ( yy_current_state >= 37 )
+			if ( yy_current_state >= 39 )
 				yy_c = yy_meta[yy_c];
 			}
 		yy_current_state = yy_nxt[yy_base[yy_current_state] + yy_c];
@@ -1447,11 +1452,11 @@ static int yy_get_next_buffer (void)
 	while ( yy_chk[yy_base[yy_current_state] + yy_c] != yy_current_state )
 		{
 		yy_current_state = (int) yy_def[yy_current_state];
-		if ( yy_current_state >= 37 )
+		if ( yy_current_state >= 39 )
 			yy_c = yy_meta[yy_c];
 		}
 	yy_current_state = yy_nxt[yy_base[yy_current_state] + yy_c];
-	yy_is_jam = (yy_current_state == 36);
+	yy_is_jam = (yy_current_state == 38);
 
 		return yy_is_jam ? 0 : yy_current_state;
 }
@@ -2127,7 +2132,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 63 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
+#line 64 "/Users/svittal/Documents/qontra/include/parsing/sdl/lexer.lex"
 
 
 void sdl_yystart_file(FILE* fin) {
