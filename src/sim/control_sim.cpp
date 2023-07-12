@@ -508,7 +508,7 @@ ControlSimulator::QEX() {
                 }
                 // Update Pauli frames
                 uint offset = inst.operands[0];
-                for (uint i = 0; i < res.corr.size(); i++) {
+                for (uint i = 0; i < res.corr.num_bits_padded(); i++) {
                     pauli_frames[i+offset][t] ^= res.corr[i];
                 }
 

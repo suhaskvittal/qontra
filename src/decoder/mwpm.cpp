@@ -41,7 +41,10 @@ MWPMDecoder::decode_error(const syndrome_t& syndrome) {
     }
     // Solve instance.
     pm.Solve();
-    std::vector<uint8_t> corr(n_observables, 0);
+    stim::simd_bits corr(n_observables);
+    corr.clear();
+
+    std::vector<Decoder::assign_t>  error_assignments;
     for (uint i = 0; i < n_vertices; i++) {
         uint j = pm.GetMatch(i);
         uint di = detectors[i];
@@ -51,11 +54,22 @@ MWPMDecoder::decode_error(const syndrome_t& syndrome) {
         auto vi = decoding_graph.get_vertex(di);
         auto vj = decoding_graph.get_vertex(dj);
         auto error_data = decoding_graph.get_error_chain_data(vi, vj);
+
+        stim::simd_bits local_assign(n_observables);
+        local_assign.clear();
         for (auto f : error_data.frame_changes) {
-            if (f >= 0) corr[f] ^= 1;
+            if (f >= 0) local_assign[f] ^= 1;
         }
+        corr ^= local_assign;
+        error_assignments.push_back(std::make_tuple(di, dj, local_assign));
     }
     auto time_taken = (fp_t)timer.clk_end();
+    Decoder::result_t res = {
+        time_taken,
+        corr,
+        is_error(corr, syndrome),
+        error_assignments
+    };
 
     return (Decoder::result_t) { time_taken, corr, is_error(corr, syndrome) };
 }

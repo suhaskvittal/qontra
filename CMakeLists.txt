@@ -22,6 +22,7 @@ set(QONTRA_FILES
     src/instruction.cpp
     # Decoders
     src/decoder/mwpm.cpp
+    src/decoder/window.cpp
     # Parsing
     src/parsing/cmd.cpp
     # Graphs
