@@ -132,26 +132,30 @@ public:
             else            it++;
         }
 
-        for (auto w : adjacency_lists[v]) {
-            auto& adj = adjacency_lists[w];
-            for (auto it = adj.begin(); it != adj.end();) {
-                if (*it == v)   it = adj.erase(it);
-                else            it++;
-            }
-            adjacency_matrix[v][w] = nullptr;
-            adjacency_matrix[w][v] = nullptr;
-        }
-        adjacency_lists.erase(v);
         for (auto it = edges.begin(); it != edges.end();) {
             auto e = *it;
             auto u1 = (V_t*)e->src;
             auto u2 = (V_t*)e->dst;
             if (u1 == v || u2 == v) { 
+                // Delete v from the adjacency list of the other vertex.
+                V_t* other = u1;
+                if (u1 == v)    other = u2;
+                auto& adj = adjacency_lists[other];
+                for (auto it = adj.begin(); it != adj.end();) {
+                    if (*it == v)   it = adj.erase(it);
+                    else            it++;
+                }
+                adjacency_matrix[other][v] = nullptr;
+                if (e->is_undirected)   adjacency_matrix[v][other] = nullptr;
+                
+                
+                // Now delete the edge itself.
                 it = edges.erase(it); 
                 if (dealloc_on_delete)  delete e;
             }
             else                    it++;
         }
+        adjacency_lists.erase(v);
         graph_has_changed = true;
         if (dealloc_on_delete)  delete v;
     }

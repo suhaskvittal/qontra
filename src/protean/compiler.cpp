@@ -34,6 +34,33 @@ alloc_sdgraph_deep_copy(SDGraph& graph) {
     return new_graph;
 }
 
+std::map<sdvertex_t*, uint>
+get_sdv_depths(SDGraph& graph) {
+    std::map<sdvertex_t*, uint> sdv_to_layer;
+
+    sdvertex_t* root = graph.get_vertex(SDGRAPH_ROOT_ID);
+    for (auto v : graph.get_vertices()) {
+        sdv_to_layer[v] = 0;
+    }
+
+    // We need a custom version of BFS for this:
+    std::deque<sdvertex_t*> bfs;
+    bfs.push_back(root);
+    while (bfs.size()) {
+        auto v = bfs.front();
+        bfs.pop_front();
+
+        for (auto w : graph.get_neighbors(v)) {
+            if (sdv_to_layer[w] < sdv_to_layer[v]+1) {
+                sdv_to_layer[w] = sdv_to_layer[v] + 1; 
+                bfs.push_back(w);   
+            }
+        }
+    }
+
+    return sdv_to_layer;
+}
+
 }   // compiler
 
 static uint64_t MIDDLEMAN_INDEX = 1;
@@ -657,6 +684,8 @@ Compiler::xform_schedule(ir_t* curr_ir) {
     typedef std::pair<Instruction, std::vector<proc3d::vertex_t*>>
         labeled_inst_t; // contains translation from operands to physical qubits.
 
+    std::map<sdvertex_t*, std::set<proc3d::vertex_t*>>  sch_to_uses;
+
     for (auto sdv : sch_graph->get_vertices()) {
         if (sdv->id == SDGRAPH_ROOT_ID) continue;
 
@@ -669,8 +698,6 @@ Compiler::xform_schedule(ir_t* curr_ir) {
         // First, run through the schedule once to figure out how many qubits
         // each gauge qubit supports.
         std::vector<labeled_inst_t> labeled_schedule;
-        std::cout << "Looking at schedule " << sdv->id << ":\n";
-        std::cout << schedule_to_text(sch) << "\n";
         for (auto& inst : sch) {
             std::vector<proc3d::vertex_t*> physical_qubits;
             if (inst.name == "cx") {
@@ -721,11 +748,15 @@ Compiler::xform_schedule(ir_t* curr_ir) {
             auto& physical_qubits = labeled_inst.second;
             // Nothing complicated for single-qubit gates (assumed to be anything
             // that is not a CX). Just relabel the operands and ship it out.
-            if (inst.name != "cx") {
+            if (inst.name == "epilogue") {
+                // Dump the epilogue here.
+                for (auto& x : epilogue)    new_sch.push_back(x);
+            } else if (inst.name != "cx") {
                 Instruction new_inst;
                 new_inst.name = inst.name;
                 for (auto pv : physical_qubits) {
                     new_inst.operands.push_back(pv_to_qubitno[pv]);
+                    if (!curr_ir->is_data(pv))  sch_to_uses[sdv].insert(pv);
                 }
                 new_sch.push_back(new_inst);
             } else {
@@ -736,9 +767,16 @@ Compiler::xform_schedule(ir_t* curr_ir) {
                     auto pv1 = physical_qubits[i];
                     auto pv2 = physical_qubits[i+1];
                     auto path = path_table[pv1][pv2];
+
+                    for (uint j = 0; j < path.size(); j++) {
+                        auto px = path[j];
+                        if (!curr_ir->is_data(px))  sch_to_uses[sdv].insert(px);
+                    }
+
                     for (uint j = 1; j < path.size(); j++) {
                         auto px = path[j-1];
                         auto py = path[j];
+
                         if (gauge_support.count(py)) {
                             if (gauge_support[py].empty()) continue;    // We have already
                                                                         // reached this gauge.
@@ -761,11 +799,35 @@ Compiler::xform_schedule(ir_t* curr_ir) {
                 }
             }
         }
-        // Merge the new schedule and epilogue together.
-        schedule_t final_sch(new_sch);
-        for (auto& x : epilogue)    final_sch.push_back(x);
         // Replace the schedule for the SDGraph vertex.
-        sdv->sch = final_sch;
+        sdv->sch = new_sch;
+    }
+    // Now, create new edges in the scheduling graph based on use conflicts.
+    auto sdv_to_layer = get_sdv_depths(*sch_graph);
+    for (auto sdv : sch_graph->get_vertices()) {
+        auto v_uses = sch_to_uses[sdv];
+        for (auto sdw : sch_graph->get_vertices()) {
+            if (sdv == sdw) continue;
+            auto w_uses = sch_to_uses[sdw];
+            std::set<proc3d::vertex_t*> intersect;
+            std::set_intersection(v_uses.begin(), v_uses.end(),
+                                    w_uses.begin(), w_uses.end(),
+                                    std::inserter(intersect, intersect.begin()));
+            if (intersect.empty())  continue;
+            auto e = new sdedge_t;
+            // If v is above w, keep it that way.
+            if (sdv_to_layer[sdv] <= sdv_to_layer[sdw]) {
+                e->src = sdv;
+                e->dst = sdw;
+            } else {
+                e->src = sdw;
+                e->dst = sdv;
+            }
+            e->is_undirected = false;
+            sch_graph->add_edge(e);
+            // Update depths.
+            sdv_to_layer = get_sdv_depths(*sch_graph);
+        }
     }
     // Finally, perform a BFS on the schedule description graph (SDGraph)
     // to obtain the final schedule.
@@ -773,26 +835,21 @@ Compiler::xform_schedule(ir_t* curr_ir) {
     // Create a dependence graph first, and then convert this to a schedule.
     DependenceGraph* dgr = new DependenceGraph();
 
-    std::map<sdvertex_t*, uint> sdv_to_layer;
     std::vector<std::vector<sdvertex_t*>>   scheduling_layers;  // We will try and parallelize
                                                                 // operations for schedules in
                                                                 // the same layer.
-
-    sdvertex_t* root = sch_graph->get_vertex(SDGRAPH_ROOT_ID);
-    sdv_to_layer[root] = 0;
-
-    search::callback_t<sdvertex_t> bfs_cb = [&] (sdvertex_t* v1, sdvertex_t* v2)
-    {
-        sdv_to_layer[v2] = sdv_to_layer[v1]+1;
-        if (sdv_to_layer[v2] > scheduling_layers.size()) {
+    auto root = sch_graph->get_vertex(SDGRAPH_ROOT_ID);
+    for (auto v : sch_graph->get_vertices()) {
+        if (v == root)  continue;
+        if (sdv_to_layer[v] > scheduling_layers.size()) {
             scheduling_layers.push_back(std::vector<sdvertex_t*>());
         }
-        scheduling_layers[sdv_to_layer[v2]-1].push_back(v2);
-    };
-    search::xfs(sch_graph, root, bfs_cb, false);
+        scheduling_layers[sdv_to_layer[v]-1].push_back(v);
+    }
+
     // Now, merge the layers together.
     uint dvid = 0;
-    for (auto sdlayer : scheduling_layers) {
+    for (auto& sdlayer : scheduling_layers) {
         uint opnum = 0;
         bool all_done = false;
         while (!all_done) {
@@ -801,6 +858,7 @@ Compiler::xform_schedule(ir_t* curr_ir) {
                 auto& sch = sdv->sch;
                 if (opnum >= sch.size())    continue;
                 Instruction& inst = sch[opnum];
+                if (inst.name == "nop") continue;
                 auto dv = new dep::vertex_t;
                 dv->id = dvid++;
                 dv->inst_p = &inst;
@@ -997,7 +1055,7 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
     std::filesystem::path sched = folder/"schedule.asm";
     std::ofstream sched_out(sched);
     auto dgr = ir->dependency_graph;
-    for (uint i = 0; i < dgr->get_depth(); i++) {
+    for (uint i = 1; i <= dgr->get_depth(); i++) {
         sched_out << "\n####\tLAYER " << i << "\t####\n\n";
         for (auto v : dgr->get_vertices_at_depth(i)) {
             sched_out << v->inst_p->str() << "\n";

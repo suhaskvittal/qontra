@@ -79,13 +79,10 @@ public:
         schedule_t sch;
 
         // Add the instructions through a BFS.
-        std::set<dep::vertex_t*> visited;
         search::callback_t<dep::vertex_t> cb = 
         [&] (dep::vertex_t* v1, dep::vertex_t* v2)
         {
-            if (visited.count(v2))  return;
             sch.push_back(*(v2->inst_p));
-            visited.insert(v2);
         };
         search::xfs(this, root, cb, false);
         return sch;

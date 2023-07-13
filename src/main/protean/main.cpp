@@ -60,8 +60,11 @@ help_exit:
     // Define the cost function here.
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
+        /*
         return (fp_t)ir->arch->get_mean_connectivity() 
-            + 0.01*ir->arch->get_vertices().size();
+            + 0.01*ir->arch->get_vertices().size()
+            + 0.5*ir->dependency_graph->get_depth();
+        */
     };
 
     // Define any constraints here.
@@ -83,7 +86,7 @@ help_exit:
     std::cout << "Thickness = " << res->arch->get_thickness() << "\n";
     std::cout << "Main is planar = " << res->arch->get_main_processor().planar() << "\n";
     std::cout << "Mean coupling length = " << res->arch->get_mean_coupling_length() << "\n";
-//  std::cout << "Schedule depth = " << res->dependency_graph->get_depth() << "\n";
+    std::cout << "Schedule depth = " << res->dependency_graph->get_depth() << "\n";
 
     write_ir_to_folder(res, folder_out);
 

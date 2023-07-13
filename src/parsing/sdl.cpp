@@ -101,13 +101,12 @@ build_schedule_graph_from_sdl(std::string filename) {
             remaining_dependences[ch].insert(x);
         }
     }
-    uint64_t vid = 1;
     while (sat_checks.size()) {
         uint32_t ch = sat_checks.front();
         sat_checks.pop_front();
         
         auto v = new sdvertex_t;
-        v->id = vid++;
+        v->id = (((uint64_t)(ch >> 30)) << ID_TYPE_OFFSET) | (ch & ((1 << 30)-1));
 
         uint32_t id = check_to_id[ch];
         auto sch = id_to_schedule[check_to_id[ch]];
@@ -126,6 +125,7 @@ build_schedule_graph_from_sdl(std::string filename) {
         auto re = new sdedge_t;
         re->src = root;
         re->dst = v;
+        re->is_undirected = false;
         graph.add_edge(re);
 
         for (auto d : dependences[id]) {

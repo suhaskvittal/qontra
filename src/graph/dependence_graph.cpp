@@ -46,7 +46,6 @@ DependenceGraph::add_vertex(dep::vertex_t* v) {
         }
     }
     vertex_to_depth[v] = max_ancestor_depth+1;
-    std::cout << "\tdepth = " << vertex_to_depth[v] << "\n";
     if (vertex_to_depth[v] > depth) depth = vertex_to_depth[v];
     return true;
 }

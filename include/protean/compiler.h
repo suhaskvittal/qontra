@@ -51,6 +51,8 @@ namespace compiler {
 
     SDGraph     build_schedule_graph_from_sdl(std::string filename);
     SDGraph*    alloc_sdgraph_deep_copy(SDGraph&);
+
+    std::map<sdvertex_t*, uint> get_sdv_depths(SDGraph&);
     
     struct ir_t {
         ~ir_t(void) {
