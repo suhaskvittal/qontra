@@ -92,6 +92,8 @@ protected:
     graph::DecodingGraph    decoding_graph;
 
     Timer   timer;
+
+    friend class WindowDecoder;
 };
 
 }   // decoder

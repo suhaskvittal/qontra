@@ -71,7 +71,7 @@ MWPMDecoder::decode_error(const syndrome_t& syndrome) {
         error_assignments
     };
 
-    return (Decoder::result_t) { time_taken, corr, is_error(corr, syndrome) };
+    return res;
 }
 
 }   // decoder

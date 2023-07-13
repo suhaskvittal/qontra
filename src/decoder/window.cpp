@@ -16,19 +16,27 @@ WindowDecoder::decode_error(const syndrome_t& syndrome) {
     const uint obs = base_decoder->get_circuit().count_observables();
 
     syndrome_t running_syndrome(syndrome);
+    auto detectors = get_nonzero_detectors(syndrome);
 
     fp_t exec_time = 0;
     std::vector<Decoder::assign_t> error_assignments;
     stim::simd_bits corr(obs);
+
+    bool    boundary_already_matched = false;
+
     for (uint r = 0; r < rounds; r += commit_window) {
-        bool is_last_call = r + commit_window >= rounds;
+        bool is_first_call = (r == 0);
+        bool is_last_call = (r + commit_window) >= rounds;
 
         uint offset = r*detectors_per_round;
-        uint upp = det - (is_last_call ? 0 : detectors_per_round);
+        uint n_events = is_last_call 
+                            ? det - detectors_per_round 
+                            : det - 2*detectors_per_round;
 
         syndrome_t rxs(det);
         rxs.clear();
-        for (uint i = 0; i < upp; i++) {
+        for (uint i = 0; i < n_events; i++) {
+            if (i + offset >= circuit.count_detectors())  break;
             rxs[i] = running_syndrome[i+offset];
         }
         Decoder::result_t rxres;
@@ -38,11 +46,16 @@ WindowDecoder::decode_error(const syndrome_t& syndrome) {
 
         for (auto aa : rxres.error_assignments) {
             uint x = std::get<0>(aa), y = std::get<1>(aa);
-            running_syndrome[x + offset] ^= 1;
-            running_syndrome[y + offset] ^= 1;
-
-            error_assignments.push_back(
-                    std::make_tuple(x+offset, y+offset, std::get<2>(aa)));
+            if (x != graph::BOUNDARY_INDEX) {
+                running_syndrome[x + offset] ^= 1;
+                x += offset;
+            }
+            if (y != graph::BOUNDARY_INDEX) {
+                running_syndrome[y + offset] ^= 1;
+                y += offset;
+            }
+                
+            error_assignments.push_back(std::make_tuple(x, y, std::get<2>(aa)));
         }
         corr ^= rxres.corr;
         exec_time += rxres.exec_time;
@@ -54,6 +67,32 @@ WindowDecoder::decode_error(const syndrome_t& syndrome) {
         is_error(corr, syndrome),
         error_assignments
     };
+
+    /*
+    if (is_error(corr, syndrome)) {
+        std::cout << "Error occurred on syndrome:";
+        for (auto d : get_nonzero_detectors(syndrome)) {
+            std::cout << " " << d;
+        }
+        std::cout << "\n";
+
+        std::cout << "\tAssignment:\n";
+        for (auto aa : error_assignments) {
+            std::cout << "\t\t" << std::get<0>(aa)
+                << " <--> " << std::get<1>(aa)
+                << " ( " << std::get<2>(aa)[0] << " )\n";
+        }
+        auto mres = baseline.decode_error(syndrome);
+        std::cout << "\tMWPM assignments (had error = " 
+            << mres.is_error << "):\n";
+        for (auto aa : mres.error_assignments) {
+            std::cout << "\t\t" << std::get<0>(aa)
+                << " <--> " << std::get<1>(aa)
+                << " ( " << std::get<2>(aa)[0] << " )\n";
+        }
+    }
+    */
+
     return final_res;
 }
 
@@ -98,6 +137,9 @@ WindowDecoder::retrieve_result_from_base(
                             uint min_detector,
                             uint max_detector) 
 {
+    const uint det = base_decoder->get_circuit().count_detectors();
+    const uint window_size = det / detectors_per_round - 2;
+
     auto res = base_decoder->decode_error(base_syndrome);
 
     std::vector<Decoder::assign_t> error_assignments;
@@ -107,12 +149,35 @@ WindowDecoder::retrieve_result_from_base(
     // We only care about assignments in the first round.
     for (auto aa : res.error_assignments) {
         uint di = std::get<0>(aa);
+        uint dj = std::get<1>(aa);
+        if (di > dj)    std::swap(di, dj);
         if (di < min_detector || di >= max_detector) {
             continue;
         }
-        uint dj = std::get<1>(aa);
         auto local_corr = std::get<2>(aa);
-        error_assignments.push_back(aa);
+        // First, check if this assignment spans across >window_size/2 rounds.
+        uint ri = di / detectors_per_round;
+        uint rj = dj / detectors_per_round;
+        if (rj - ri > (window_size>>1)
+            && di != graph::BOUNDARY_INDEX
+            && dj != graph::BOUNDARY_INDEX)
+        {
+            // If so, do not commit dj. Just commit di to the boundary.
+            dj = graph::BOUNDARY_INDEX;
+            graph::DecodingGraph& dg = base_decoder->decoding_graph;
+            auto vi = dg.get_vertex(di);
+            auto vj = dg.get_vertex(dj);
+            auto error_data = dg.get_error_chain_data(vi, vj);
+            local_corr.clear();
+            for (auto f : error_data.frame_changes) local_corr[f] ^= 1;
+
+            di -= min_detector;
+        } else {
+            // Adjust the error assignment indices.
+            if (di != graph::BOUNDARY_INDEX)    di -= min_detector;
+            if (dj != graph::BOUNDARY_INDEX)    dj -= min_detector;
+        }
+        error_assignments.push_back(std::make_tuple(di, dj, local_corr));
         corr ^= local_corr;
     }
     Decoder::result_t final_res = {

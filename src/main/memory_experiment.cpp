@@ -122,7 +122,6 @@ help_exit:
     stim::Circuit wcirc;
 
     if (use_window) {
-        stim::Circuit base_circuit; // For sliding window decoders.
         if (parser.get_string("wstim-file", wfile)) {
             FILE* fptr = fopen(stim_file.c_str(), "r");
             wcirc = stim::Circuit::from_file(fptr);
@@ -133,7 +132,7 @@ help_exit:
             && parser.get_uint32("wr", wr))
         {
             std::string task = is_memory_x ? "rotated_memory_x" : "rotated_memory_z";
-            stim::CircuitGenParameters params(wr+2, wd, task);
+            stim::CircuitGenParameters params(wr+1, wd, task);
             if (parser.get_float("error-rate-std", pstd)) {
                 params.after_clifford_depolarization_stddev = pstd;
                 params.before_round_data_depolarization_stddev = pstd;

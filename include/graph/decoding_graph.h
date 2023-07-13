@@ -41,11 +41,7 @@ struct edge_t : base::edge_t {
 class DecodingGraph : public __DecodingGraphParent {
 public:
     DecodingGraph()
-        :Graph(), 
-        distance_matrix(), 
-        error_polynomial(), 
-        expected_errors(),
-        maintain_distance_matrix(false)
+        :Graph(), distance_matrix(), error_polynomial(), expected_errors()
     {
         std::array<fp_t, 3> boundary_coords;
         boundary_coords.fill(-1);
@@ -86,23 +82,20 @@ public:
 
     poly_t  get_error_polynomial(void) { update_state(); return error_polynomial; }
     fp_t    get_expected_errors(void) { update_state(); return expected_errors; }
-
-    bool    maintain_distance_matrix;
 protected:
     bool    update_state(void) override;
 private:
     void    build_distance_matrix(void);
     void    build_error_polynomial(void);
 
-    distance::DistanceMatrix<decoding::vertex_t, matrix_entry_t>
-            distance_matrix;
+    distance::DistanceMatrix<decoding::vertex_t, matrix_entry_t>    distance_matrix;
 
     poly_t  error_polynomial;
     fp_t    expected_errors;
 };
 
 DecodingGraph
-to_decoding_graph(const stim::Circuit&, bool maintain_distance_matrix=true);
+to_decoding_graph(const stim::Circuit&);
 
 }   // graph
 }   // qontra

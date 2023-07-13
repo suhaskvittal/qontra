@@ -7,6 +7,7 @@
 #define DECODER_WINDOW_h
 
 #include "decoder/decoder.h"
+#include "decoder/mwpm.h"
 
 namespace qontra {
 namespace decoder {
@@ -14,7 +15,7 @@ namespace decoder {
 // This is a class for sliding window decoders.
 // The sliding window decoder uses a "base" decoder.
 // This decoder should be capable of decoding
-// 2 rounds than wanted (d+2, for example). This
+// 1 round than wanted (d+1, for example). This
 // is to avoid time boundary effects.
 //
 // Corrections are computed within the "commit"
