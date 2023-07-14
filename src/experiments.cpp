@@ -9,6 +9,8 @@ namespace qontra {
 
 namespace experiments {
 
+callback_t  DEFAULT_CALLBACKS;
+
 bool        G_USE_MPI  = true;
 uint64_t    G_SHOTS_PER_BATCH = 100'000;
 uint64_t    G_BASE_SEED = 0;
@@ -20,7 +22,10 @@ uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
 using namespace experiments;
 
 void
-generate_syndromes(const stim::Circuit& circuit, uint64_t shots, cb_t1 cb) {
+generate_syndromes(const stim::Circuit& circuit, 
+                    uint64_t shots, 
+                    callback_t callbacks)
+{
     uint64_t __shots;
 
     int world_size, world_rank;
@@ -45,14 +50,120 @@ generate_syndromes(const stim::Circuit& circuit, uint64_t shots, cb_t1 cb) {
         samples = samples.transposed();
         for (uint64_t t = 0; t < shots_this_batch; t++) {
             stim::simd_bits_range_ref row = samples[t];
-            cb(row);
+            callbacks.prologue(row);
         }
         __shots -= shots_this_batch;
     }
 }
 
+void
+build_syndrome_trace(std::string output_folder,
+        const stim::Circuit& circuit, 
+        uint64_t shots) 
+{
+    int world_size = 1, world_rank = 0;
+    if (G_USE_MPI) {
+        MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    }
+
+    uint width = circuit.count_detectors() + circuit.count_observables();
+    stim::simd_bit_table syndromes(G_SHOTS_PER_BATCH, width);
+
+    syndromes.clear();
+
+    stim::simd_bits ref(width);
+
+    uint64_t ctr = 0;
+    uint file_offset = world_rank;
+    cb_t1 t_cb = [&] (stim::simd_bits_range_ref row) {
+        syndromes[++ctr] |= row;
+        if (ctr == G_SHOTS_PER_BATCH) {
+            ctr = 0;
+            std::string filename = output_folder + "/batch_"
+                                + std::to_string(file_offset)
+                                + ".dets";
+            auto output_trace = syndromes.transposed();
+            FILE* fout = fopen(filename.c_str(), "w");
+            stim::write_table_data(fout,
+                                    G_SHOTS_PER_BATCH,
+                                    width,
+                                    ref,
+                                    output_trace,
+                                    stim::SampleFormat::SAMPLE_FORMAT_DETS,
+                                    'D',
+                                    'L',
+                                    circuit.count_detectors());
+            fclose(fout);
+            syndromes.clear();
+            file_offset += world_rank;
+        }
+    };
+    callback_t srcbs;
+    srcbs.prologue = t_cb;
+    generate_syndromes(circuit, shots, srcbs);
+    // Write out any remaining syndromes as well.
+    if (ctr) {
+        std::string filename = output_folder + "/batch_"
+                            + std::to_string(file_offset)
+                            + ".dets";
+        auto output_trace = syndromes.transposed();
+        FILE* fout = fopen(filename.c_str(), "w");
+        stim::write_table_data(fout,
+                                G_SHOTS_PER_BATCH,
+                                width,
+                                ref,
+                                output_trace,
+                                stim::SampleFormat::SAMPLE_FORMAT_DETS,
+                                'D',
+                                'L',
+                                circuit.count_detectors());
+        fclose(fout);
+    }
+}
+
+void
+read_syndrome_trace(std::string folder, 
+                        const stim::Circuit& circuit,
+                        callback_t callbacks) 
+{
+    const uint det = circuit.count_detectors();
+    const uint obs = circuit.count_observables();
+
+    int world_rank = 0, world_size = 1;
+    if (G_USE_MPI) {
+        MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    }
+
+    uint file_offset = world_rank;
+    std::string batch_file = folder + "/batch_" 
+                                + std::to_string(file_offset) + ".dets";
+    while (access(batch_file.c_str(), F_OK) >= 0) {
+        stim::simd_bit_table samples(G_SHOTS_PER_BATCH, det+obs);
+        FILE* fin = fopen(batch_file.c_str(), "r");
+        uint64_t true_shots = stim::read_file_data_into_shot_table(
+                                fin,
+                                G_SHOTS_PER_BATCH,
+                                det,
+                                stim::SampleFormat::SAMPLE_FORMAT_DETS,
+                                'D',
+                                samples,
+                                true,
+                                0,
+                                det,
+                                obs);
+        for (uint64_t s = 0; s < true_shots; s++) {
+            stim::simd_bits_range_ref row = samples[s];
+            callbacks.prologue(row);
+        }
+        file_offset += world_size;
+        batch_file = folder + "/batch_" + std::to_string(file_offset) + ".dets";
+    }
+}
+
 memory_result_t
-memory_experiment(decoder::Decoder* dec, uint64_t shots, cb_t1 cb1, cb_t2 cb2) {
+memory_experiment(decoder::Decoder* dec, experiments::memory_params_t params) {
     const stim::Circuit circuit = dec->get_circuit();
     // Stats that will be placed in memory_result_t
     uint64_t    logical_errors, __logical_errors = 0;
@@ -67,7 +178,7 @@ memory_experiment(decoder::Decoder* dec, uint64_t shots, cb_t1 cb1, cb_t2 cb2) {
         circuit.count_detectors() + circuit.count_observables();
     cb_t1 dec_cb = [&] (stim::simd_bits_range_ref& row)
     {
-        cb1(row);
+        params.callbacks.prologue(row);
         uint obs_bits = 0;
         for (uint i = 0; i < circuit.count_observables(); i++) {
             obs_bits += row[i+circuit.count_detectors()];
@@ -85,10 +196,18 @@ memory_experiment(decoder::Decoder* dec, uint64_t shots, cb_t1 cb1, cb_t2 cb2) {
         __t_sum += res.exec_time;
         __t_sqr_sum += SQR(res.exec_time);
         __t_max = res.exec_time > __t_max ? res.exec_time : __t_max;
-        cb2(res);
+        params.callbacks.epilogue(res);
     };
 
-    generate_syndromes(circuit, shots, dec_cb);
+    callback_t srcbs;
+    srcbs.prologue = dec_cb;
+
+    uint64_t shots = params.shots;
+    if (shots == 0) {
+        read_syndrome_trace(params.trace_folder, circuit, srcbs);
+    } else {
+        generate_syndromes(circuit, shots, srcbs);
+    }
 
     // Collect results using MPI if enabled.
     if (G_USE_MPI) {

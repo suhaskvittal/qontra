@@ -68,31 +68,6 @@ WindowDecoder::decode_error(const syndrome_t& syndrome) {
         error_assignments
     };
 
-    /*
-    if (is_error(corr, syndrome)) {
-        std::cout << "Error occurred on syndrome:";
-        for (auto d : get_nonzero_detectors(syndrome)) {
-            std::cout << " " << d;
-        }
-        std::cout << "\n";
-
-        std::cout << "\tAssignment:\n";
-        for (auto aa : error_assignments) {
-            std::cout << "\t\t" << std::get<0>(aa)
-                << " <--> " << std::get<1>(aa)
-                << " ( " << std::get<2>(aa)[0] << " )\n";
-        }
-        auto mres = baseline.decode_error(syndrome);
-        std::cout << "\tMWPM assignments (had error = " 
-            << mres.is_error << "):\n";
-        for (auto aa : mres.error_assignments) {
-            std::cout << "\t\t" << std::get<0>(aa)
-                << " <--> " << std::get<1>(aa)
-                << " ( " << std::get<2>(aa)[0] << " )\n";
-        }
-    }
-    */
-
     return final_res;
 }
 

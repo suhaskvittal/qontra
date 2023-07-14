@@ -39,6 +39,8 @@ int main(int argc, char* argv[]) {
     help += "\tPhysical error rate standard deviation (--error-rate-std)\n";
     help += "\tStim file (--stim-file, string)";
     help += " (overrides distance and error-rate)\n";
+    help += "\tTrace folder (--trace-folder, string)";
+    help += " (overrides shots)\n";
     help += "\tShots (--shots)\n";
     help += "\tShots per batch (--shots-per-batch)\n";
     help += "\tDecoder (MWPM, ...) (--decoder)\n";
@@ -66,6 +68,7 @@ help_exit:
     fp_t pmean;
     fp_t pstd = 0;
     std::string stim_file;
+    std::string trace_folder;
     uint64_t shots;
     uint64_t shots_per_batch;
     std::string decoder;
@@ -155,7 +158,10 @@ help_exit:
         if (!parser.get_uint32("wcomm", wcomm)) goto help_exit;
     }
 
-    if (!parser.get_uint64("shots", shots)) goto help_exit;
+    if (!parser.get_uint64("shots", shots))             shots = 0 ;
+    if (!parser.get_string("trace-file", trace_folder)) trace_folder = "DNE";
+    if (trace_folder == "DNE" && shots == 0)            goto help_exit;
+
     if (!parser.get_uint64("shots-per-batch", shots_per_batch)) {
         shots_per_batch = 100'000;
     }
@@ -223,7 +229,10 @@ help_exit:
         dec = new decoder::WindowDecoder(wcirc, base_dec, wcomm, wdpr);
     }
     // Execute the experiment
-    auto res = memory_experiment(dec, shots);
+    experiments::memory_params_t params;
+    params.shots = shots;
+    params.trace_folder = trace_folder;
+    auto res = memory_experiment(dec, params);
     // Write the data
     if (world_rank == 0) {
         out << res.logical_error_rate << br

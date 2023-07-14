@@ -62,7 +62,9 @@ int main(int argc, char* argv[]) {
         mwpm = new decoder::MWPMDecoder(error_model);
 
         // Check expected LER.
-        auto mxp_res = memory_experiment(mwpm, shots);
+        experiments::memory_params_t params;
+        params.shots = shots;
+        auto mxp_res = memory_experiment(mwpm, params);
         if (world_rank == 0) {
             std::cout << "Expected LER = " << mxp_res.logical_error_rate << "\n";
         }
