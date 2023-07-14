@@ -70,6 +70,8 @@ namespace compiler {
 
         std::map<proc3d::vertex_t*, uint>   qubit_labels;
 
+        std::vector<tanner::vertex_t*>      measurement_order;
+
         graph::DependenceGraph*             dependency_graph;
 
         // Data structures:

@@ -12,6 +12,7 @@
 #include "parsing/cmd.h"
 #include "protean/compiler.h"
 #include "protean/proc3d.h"
+#include "sim/control_sim.h"
 #include "tables.h"
 
 #include <fstream>
@@ -60,11 +61,26 @@ help_exit:
     // Define the cost function here.
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
-        /*
-        return (fp_t)ir->arch->get_mean_connectivity() 
-            + 0.01*ir->arch->get_vertices().size()
-            + 0.5*ir->dependency_graph->get_depth();
-        */
+        // Generate memory experiment ASM.
+        schedule_t mexp;
+        //
+        // PROLOGUE: initialization.
+        //
+        const uint n_qubits = ir->arch->get_vertices().size();
+        Instruction init_reset;
+        init_reset.name = "reset";
+        for (uint i = 0; i < n_qubits; i++) {
+            init_reset.operands.push_back(i);
+        }
+        mexp.push_back(init_reset);
+        //
+        // Syndrome extraction
+        //
+        for (auto inst : ir->schedule) {
+            if (inst.name == "mnrc") {
+                // Convert this to an mrc instruction.
+            }
+        }
     };
 
     // Define any constraints here.
