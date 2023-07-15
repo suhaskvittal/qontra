@@ -159,7 +159,7 @@ help_exit:
     }
 
     if (!parser.get_uint64("shots", shots))             shots = 0 ;
-    if (!parser.get_string("trace-file", trace_folder)) trace_folder = "DNE";
+    if (!parser.get_string("trace-folder", trace_folder)) trace_folder = "DNE";
     if (trace_folder == "DNE" && shots == 0)            goto help_exit;
 
     if (!parser.get_uint64("shots-per-batch", shots_per_batch)) {

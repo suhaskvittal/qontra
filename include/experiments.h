@@ -94,7 +94,7 @@ void    generate_syndromes(const stim::Circuit&,
                                 experiments::callback_t);
 void    build_syndrome_trace(std::string, const stim::Circuit&, uint64_t shots);
 
-void
+uint64_t
 read_syndrome_trace(std::string, const stim::Circuit&, experiments::callback_t);
 
 experiments::memory_result_t

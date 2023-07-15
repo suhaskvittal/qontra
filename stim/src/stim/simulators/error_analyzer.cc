@@ -1538,11 +1538,13 @@ void ErrorAnalyzer::do_global_error_decomposition_pass() {
     }
 }
 
+#define MAX_INVOLVED_DETECTORS  64
+
 template <size_t s>
 void ErrorAnalyzer::add_error_combinations(
     std::array<double, 1 << s> independent_probabilities, std::array<ConstPointerRange<DemTarget>, s> basis_errors) {
     std::array<uint64_t, 1 << s> detector_masks{};
-    FixedCapVector<DemTarget, 16> involved_detectors{};
+    FixedCapVector<DemTarget, MAX_INVOLVED_DETECTORS> involved_detectors{};
     std::array<ConstPointerRange<DemTarget>, 1 << s> stored_ids;
 
     for (size_t k = 0; k < s; k++) {
@@ -1555,7 +1557,7 @@ void ErrorAnalyzer::add_error_combinations(
                     } catch (const std::out_of_range &ex) {
                         std::stringstream message;
                         message << "An error case in a composite error exceeded that max supported number of symptoms "
-                                   "(<=15). ";
+                                   "(<=" << MAX_INVOLVED_DETECTORS << "). ";
                         message << "\nThe " << std::to_string(s)
                                 << " basis error cases (e.g. X, Z) used to form the combined ";
                         message << "error cases (e.g. Y = X*Z) are:\n";

@@ -57,6 +57,7 @@ add_executable(protean_main src/main/protean/main.cpp)
 ### TESTING ###
 add_executable(ctrl src/main/test/ctrlsimtest.cpp ${ASM_FILES})
 add_executable(asmtest src/main/test/asmparsetest.cpp ${ASM_FILES})
+add_executable(perceptron src/main/test/perceptron_test.cpp)
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
     target_compile_options(qontra PUBLIC -O3 -lemon -fno-strict-aliasing)
@@ -86,5 +87,6 @@ target_link_libraries(stim_to_asm PRIVATE qontra)
 
 target_link_libraries(ctrl PRIVATE qontra)
 target_link_libraries(asmtest PRIVATE qontra)
+target_link_libraries(perceptron PRIVATE qontra)
 
 target_link_libraries(protean_main PRIVATE qontra)

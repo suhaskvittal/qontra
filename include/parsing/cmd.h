@@ -36,6 +36,12 @@ public:
         return true;
     }
 
+    bool get_int32(std::string opt, int32_t& out) {
+        if (!option_set(opt))   return false;
+        out = std::stoi(option_to_arg[opt]);
+        return true;
+    }
+
     bool get_uint32(std::string opt, uint32_t& out) {
         if (!option_set(opt))   return false;
         out = std::stoi(option_to_arg[opt]); 

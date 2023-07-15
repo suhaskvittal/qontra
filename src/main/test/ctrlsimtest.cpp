@@ -10,6 +10,7 @@
 
 #include <stim.h>
 
+#include <fstream>
 #include <iostream>
 #include <vector>
 
@@ -93,5 +94,16 @@ int main(int argc, char* argv[]) {
     MPI_Finalize();
 
     if (mwpm)   delete mwpm;
+
+    if (parser.option_set("trace-folder")) {
+        if (world_rank == 0) {
+            sim.params.save_syndromes_to_file = false;
+
+            sim.build_error_model();
+            stim::Circuit error_model = sim.get_error_model();
+            std::ofstream error_model_out(trace_folder + "/error_model.stim");
+            error_model_out << error_model.str() << "\n";
+        }
+    }
 }
 

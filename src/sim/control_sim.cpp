@@ -264,7 +264,7 @@ ControlSimulator::run(uint64_t shots) {
                             shots_in_curr_batch*TRACES_PER_SHOT,
                             trace_width,
                             ref,
-                            event_trace,
+                            event_trace.transposed(),
                             stim::SampleFormat::SAMPLE_FORMAT_DETS,
                             'D',
                             'L',
@@ -511,29 +511,6 @@ ControlSimulator::QEX() {
                 for (uint i = 0; i < res.corr.num_bits_padded(); i++) {
                     pauli_frames[i+offset][t] ^= res.corr[i];
                 }
-
-                if (params.verbose) {
-                    const uint det = decoder->get_circuit().count_detectors();
-                    if (pauli_frames[offset][t] != obs_buffer[offset][t]) {
-                        std::cout << "\t\tFaulty syndrome(t = " << t 
-                            << "): True = " << obs_buffer[offset][t]
-                            << ", Corr = " << pauli_frames[offset][t]
-                            << "\n\t\t\t\t";
-                        for (uint i = 0; i < 4; i++) {
-                            std::cout << s[i];
-                        }
-                        for (uint i = 4; i < det - 4; i++) 
-                        {
-                            if ((i+4) % 8 == 0)  std::cout << "\n\t\t\t\t";
-                            std::cout << s[i];
-                        }
-                        std::cout << "\n\t\t\t\t";
-                        for (uint i = det-4; i < det; i++) {
-                            std::cout << s[i];
-                        }
-                        std::cout << "\n";
-                    }
-                }
             }
 
             if (params.save_syndromes_to_file) {
@@ -676,6 +653,36 @@ ControlSimulator::QEX() {
                 }
                 canonical_circuit.append_op("M", qubits);
             }
+
+            // Do not execute the following for a canonical circuit.
+            if (!is_building_canonical_circuit && params.speculate_measurements) {
+                const uint delta = inst.operands.size() - 1;    // Assume this is
+                                                                // the delta, or
+                                                                // number of
+                                                                // measurements per
+                                                                // round.
+                for (uint i = 0; i < inst.operands.size()-1; i++) {
+                    uint m2 = inst.operands[0] + i;
+                    if (delta > m2) break;
+                    uint m1 = m2 - delta;   // Round before
+                    uint m3 = m2 + delta;   // Round after
+
+                    sig_m_spec[m3].for_each_word(
+                            sig_m_spec[m1],
+                            sig_m_spec[m2],
+                            [&] (auto& sig3, auto& sig1, auto& sig2)
+                            {
+                                sig3 = ~(sig1 ^ sig2);
+                            });
+                    val_m_spec[m3].for_each_word(
+                            val_m_spec[m1],
+                            val_m_spec[m2],
+                            [&] (auto& val3, auto& val1, auto& val2)
+                            {
+                                val3 = val2;
+                            });
+                }
+            }
         } else if (inst.name == "mnrc") {
             qsim->M(inst.operands, -1);
         } else if (inst.name == "reset") {
@@ -700,48 +707,6 @@ ControlSimulator::QEX() {
                                                 | stim::TARGET_RECORD_BIT);
                 }
                 canonical_circuit.append_op("DETECTOR", stim_operands);
-                continue;
-            }
-            // Do not execute the below if we are building a canonical
-            // circuit.
-            if (params.speculate_measurements && inst.operands.size() == 3) {
-                uint m1 = inst.operands[1];
-                uint m2 = inst.operands[2];
-                if (m1 > m2)    std::swap(m1, m2);
-                // We are assuming that a future event will have the
-                // same "stride" as this event.
-                uint delta = m2 - m1;
-                uint m3 = m2 + delta;
-
-                // If the event is 0, then speculate that the next
-                // measurement will remain the same.
-                sig_m_spec[m3].clear();
-                val_m_spec[m3].clear();
-
-                stim::simd_bits prior_events(event_history[k]);
-                uint kk = k;
-                for (uint d = 0; d < 2 && kk >= delta; d++) {
-                    prior_events |= event_history[kk-delta];
-                    kk -= delta;
-                }
-
-                sig_m_spec[m3].for_each_word(
-                        sig_m_spec[m2],
-                        prior_events,
-                        [&] (auto& spc, auto& pspc, auto& ev)
-                        {
-                            spc = ~ev & ~pspc;
-                        });
-
-                val_m_spec[m3] |= qsim->record_table[m2];
-
-                if (params.verbose) {
-                    std::cout << "\t\tSpeculation on detection event:\t"
-                        << "(events = " << event_history[k][0]
-                        << prior_events[0] << ", prev = "
-                        << sig_m_spec[m2][0] << ") --> "
-                        << sig_m_spec[m3][0] << "\n";
-                }
             }
         } else if (inst.name == "obs") {
             const uint k = inst.operands[0];
@@ -803,17 +768,6 @@ ControlSimulator::QEX() {
         } else if (inst.name == "event") {
             const uint k = inst.operands[0];
             copy_where(event_history_cpy[k], event_history[k], trial_mask);
-            if (params.speculate_measurements 
-                    && inst.operands.size() == 3) 
-            {
-                uint m1 = inst.operands[1];
-                uint m2 = inst.operands[2];
-                if (m1 > m2)    std::swap(m1, m2);
-                uint delta = m2 - m1;
-                uint m3 = m2 + delta;
-                copy_where(sig_m_spec_cpy[m3], sig_m_spec[m3], trial_mask);
-                copy_where(val_m_spec_cpy[m3], val_m_spec[m3], trial_mask);
-            }
         } else if (inst.name == "obs") {
             const uint k = inst.operands[0];
             copy_where(obs_buffer_cpy[k], obs_buffer[k], trial_mask);
@@ -827,6 +781,17 @@ ControlSimulator::QEX() {
             qsim->rollback_where(trial_mask);
         } else {
             qsim->rollback_where(trial_mask);
+            if (inst.name == "mrc" && params.speculate_measurements) {
+                const uint delta = inst.operands.size() - 1;
+                for (uint i = 0; i < inst.operands.size() - 1; i++) {
+                    uint m2 = inst.operands[0] + i;
+                    if (delta > m2) break;  // We would have not speculated
+                                            // if this was the case.
+                    uint m3 = m2 + delta;
+                    copy_where(sig_m_spec_cpy[m3], sig_m_spec[m3], trial_mask);
+                    copy_where(val_m_spec_cpy[m3], val_m_spec[m3], trial_mask);
+                }
+            }
         }
 
         // Now set the qubits as busy for X amount of time.

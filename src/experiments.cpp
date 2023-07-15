@@ -122,7 +122,7 @@ build_syndrome_trace(std::string output_folder,
     }
 }
 
-void
+uint64_t
 read_syndrome_trace(std::string folder, 
                         const stim::Circuit& circuit,
                         callback_t callbacks) 
@@ -139,6 +139,7 @@ read_syndrome_trace(std::string folder,
     uint file_offset = world_rank;
     std::string batch_file = folder + "/batch_" 
                                 + std::to_string(file_offset) + ".dets";
+    uint64_t local_shots = 0;
     while (access(batch_file.c_str(), F_OK) >= 0) {
         stim::simd_bit_table samples(G_SHOTS_PER_BATCH, det+obs);
         FILE* fin = fopen(batch_file.c_str(), "r");
@@ -159,7 +160,16 @@ read_syndrome_trace(std::string folder,
         }
         file_offset += world_size;
         batch_file = folder + "/batch_" + std::to_string(file_offset) + ".dets";
+        local_shots += true_shots;
     }
+    uint64_t shots;
+    if (G_USE_MPI) {
+        MPI_Allreduce(&local_shots, &shots, 1, MPI_UNSIGNED_LONG, MPI_SUM,
+                        MPI_COMM_WORLD);
+    } else {
+        shots = local_shots;
+    }
+    return shots;
 }
 
 memory_result_t
@@ -204,7 +214,7 @@ memory_experiment(decoder::Decoder* dec, experiments::memory_params_t params) {
 
     uint64_t shots = params.shots;
     if (shots == 0) {
-        read_syndrome_trace(params.trace_folder, circuit, srcbs);
+        shots = read_syndrome_trace(params.trace_folder, circuit, srcbs);
     } else {
         generate_syndromes(circuit, shots, srcbs);
     }
