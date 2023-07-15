@@ -168,7 +168,7 @@ FrameSimulator::eDP1(std::vector<uint> operands, std::vector<fp_t> rates) {
 
             auto p = rng() & 3;
             x_table[j][t] ^= (bool)(p & 1);
-            z_table[j][t] ^= (bool)(p & 2);
+            z_table[j][t] ^= (p & 2);
         });
     }
 }
@@ -244,12 +244,12 @@ FrameSimulator::snapshot() {
 }
 
 void
-FrameSimulator::rollback_at_trial(uint64_t t) {
-    StateSimulator::rollback_at_trial(t);
+FrameSimulator::rollback_where(stim::simd_bits_range_ref pred) {
+    StateSimulator::rollback_where(pred);
     for (uint i = 0; i < n_qubits; i++) {
-        x_table[i][t] = x_table_cpy[i][t];
-        z_table[i][t] = z_table_cpy[i][t];
-        leak_table[i][t] = leak_table_cpy[i][t];
+        copy_where(x_table_cpy[i], x_table[i], pred);
+        copy_where(z_table_cpy[i], z_table[i], pred);
+        copy_where(leak_table_cpy[i], leak_table[i], pred);
     }
 }
 

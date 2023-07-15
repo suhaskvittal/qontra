@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
     uint64_t shots;
     if (!parser.get_uint64("shots", shots)) return 1;
 
-    experiments::G_SHOTS_PER_BATCH = 1 << 12;
+    experiments::G_SHOTS_PER_BATCH = 1 << 13;
 
     FrameSimulator fsim(n, experiments::G_SHOTS_PER_BATCH);
 

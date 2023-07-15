@@ -50,7 +50,7 @@ public:
     void    eLT(std::vector<uint>, std::vector<fp_t>) override;
 
     void    snapshot(void) override;
-    void    rollback_at_trial(uint64_t) override;
+    void    rollback_where(stim::simd_bits_range_ref) override;
 private:
     stim::simd_bit_table    x_table;
     stim::simd_bit_table    z_table;

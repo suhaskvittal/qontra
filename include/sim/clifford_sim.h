@@ -68,7 +68,7 @@ public:
     void    eLT(std::vector<uint>, std::vector<fp_t>) override;
 
     void    snapshot(void) override;
-    void    rollback_at_trial(uint64_t) override;
+    void    rollback_where(stim::simd_bits_range_ref) override;
 private:
     void    init_tables(void);
     void    rowsum(uint h, uint i, uint64_t t); // Only executes rowsum on one trial.

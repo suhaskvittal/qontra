@@ -508,12 +508,14 @@ CliffordSimulator::snapshot() {
 }
 
 void
-CliffordSimulator::rollback_at_trial(uint64_t t) {
-    StateSimulator::rollback_at_trial(t);
-    for (uint i = 0; i < x_width; i++)  x_table[i][t] = x_table_cpy[i][t];
-    for (uint i = 0; i < z_width; i++)  z_table[i][t] = z_table_cpy[i][t];
-    for (uint i = 0; i < r_width; i++)  r_table[i][t] = r_table_cpy[i][t];
-    for (uint i = 0; i < leak_width; i++)  leak_table[i][t] = leak_table_cpy[i][t];
+CliffordSimulator::rollback_where(stim::simd_bits_range_ref pred) {
+    StateSimulator::rollback_where(pred);
+    for (uint i = 0; i < x_width; i++)  copy_where(x_table_cpy[i], x_table[i], pred);
+    for (uint i = 0; i < z_width; i++)  copy_where(z_table_cpy[i], z_table[i], pred);
+    for (uint i = 0; i < r_width; i++)  copy_where(r_table_cpy[i], r_table[i], pred);
+    for (uint i = 0; i < leak_width; i++) {
+        copy_where(leak_table_cpy[i], leak_table[i], pred);
+    }
 }
 
 }   // qontra

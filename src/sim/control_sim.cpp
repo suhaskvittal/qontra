@@ -595,6 +595,10 @@ ControlSimulator::QEX() {
     }
     for (auto pair : instruction_to_trials) {
         auto inst = pair.first;
+        stim::simd_bits trial_mask(G_SHOTS_PER_BATCH);
+        for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
+            if (!pair.second.count(t))  trial_mask[t] = 1;
+        }
         if (params.verbose) {
             std::cout << "\t\t\t" << inst.str() << "\t#T = ";
             uint64_t trials_part_of_batch = 0;
@@ -790,50 +794,47 @@ ControlSimulator::QEX() {
         if (!apply_error_before.count(inst.name)) {
             apply_gate_error(inst);
         }
+        // Undo any changes if necessary.
+        if (inst.name == "mspcflush") {
+            for (uint i : inst.operands) {
+                copy_where(sig_m_spec_cpy[i], sig_m_spec[i], trial_mask);
+                copy_where(val_m_spec_cpy[i], val_m_spec[i], trial_mask);
+            }
+        } else if (inst.name == "event") {
+            const uint k = inst.operands[0];
+            copy_where(event_history_cpy[k], event_history[k], trial_mask);
+            if (params.speculate_measurements 
+                    && inst.operands.size() == 3) 
+            {
+                uint m1 = inst.operands[1];
+                uint m2 = inst.operands[2];
+                if (m1 > m2)    std::swap(m1, m2);
+                uint delta = m2 - m1;
+                uint m3 = m2 + delta;
+                copy_where(sig_m_spec_cpy[m3], sig_m_spec[m3], trial_mask);
+                copy_where(val_m_spec_cpy[m3], val_m_spec[m3], trial_mask);
+            }
+        } else if (inst.name == "obs") {
+            const uint k = inst.operands[0];
+            copy_where(obs_buffer_cpy[k], obs_buffer[k], trial_mask);
+        } else if (inst.name == "xorfr") {
+            const uint k = inst.operands[1];
+            copy_where(obs_buffer_cpy[k], obs_buffer[k], trial_mask);
+        } else if (inst.name == "hshift") {
+            for (uint i = 0; i < 4096; i++) {
+                copy_where(event_history_cpy[i], event_history[i], trial_mask);
+            }
+            qsim->rollback_where(trial_mask);
+        } else {
+            qsim->rollback_where(trial_mask);
+        }
 
         // Now set the qubits as busy for X amount of time.
         //
         // Or if the trial did not want to execute the operation, rollback
         // the change.
         for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
-            if (!pair.second.count(t)) {
-                // Undo any changes
-                if (inst.name == "mspcflush") {
-                    for (uint i : inst.operands) {
-                        sig_m_spec[i][t] = sig_m_spec_cpy[i][t];
-                        val_m_spec[i][t] = val_m_spec_cpy[i][t];
-                    }
-                } if (inst.name == "event") {
-                    const uint k = inst.operands[0];
-                    event_history[k][t] = event_history_cpy[k][t];
-                    if (params.speculate_measurements 
-                            && inst.operands.size() == 3) 
-                    {
-                        uint m1 = inst.operands[1];
-                        uint m2 = inst.operands[2];
-                        if (m1 > m2)    std::swap(m1, m2);
-                        uint delta = m2 - m1;
-                        uint m3 = m2 + delta;
-                        sig_m_spec[m3][t] = sig_m_spec_cpy[m3][t];
-                        val_m_spec[m3][t] = val_m_spec_cpy[m3][t];
-                    }
-                } else if (inst.name == "obs") {
-                    const uint k = inst.operands[0];
-                    obs_buffer[k][t] = obs_buffer_cpy[k][t];
-                } else if (inst.name == "xorfr") {
-                    const uint k1 = inst.operands[0];
-                    const uint k2 = inst.operands[1];
-                    obs_buffer[k2][t] ^= pauli_frames[k1][t];
-                } else if (inst.name == "hshift") {
-                    for (uint i = 0; i < 4096; i++) {
-                        event_history[i][t] = event_history_cpy[i][t];
-                    }
-                    qsim->rollback_at_trial(t);
-                } else {
-                    qsim->rollback_at_trial(t);
-                }
-                continue;
-            }
+            if (trial_mask[t])  continue;
             // Do not do any latency updates if we are fast forwarding.
             if (is_fast_forwarding) continue;
             if (inst.name == "cx") {

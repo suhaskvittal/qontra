@@ -75,7 +75,7 @@ public:
 
     virtual void    snapshot(void);
                             // Saves the current state of the simulator.
-    virtual void    rollback_at_trial(uint64_t);
+    virtual void    rollback_where(stim::simd_bits_range_ref);
                             // Rolls back the state to the snapshot
 
     stim::simd_bit_table    record_table;
@@ -90,6 +90,10 @@ protected:
     const uint      n_qubits;
     const uint64_t  max_shots;
 };
+
+void    copy_where(stim::simd_bits_range_ref from,
+                    stim::simd_bits_range_ref to,
+                    stim::simd_bits_range_ref pred);
 
 }   // qontra
 
