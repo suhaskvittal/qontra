@@ -5,8 +5,12 @@
  *  Testing for a perceptron round predictor.
  * */
 
+#include "graph/io.h"
+#include "graph/lattice_graph.h"
 #include "experiments.h"
 #include "parsing/cmd.h"
+#include "sim/components/syndrome_predictor.h"
+#include "sim/components/syndrome_predictors/perceptron.h"
 
 #include <fstream>
 #include <iostream>
@@ -18,6 +22,7 @@
 
 using namespace qontra;
 using namespace experiments;
+using namespace sim;
 
 int main(int argc, char* argv[]) {
     CmdParser parser(argc, argv);
@@ -32,7 +37,9 @@ int main(int argc, char* argv[]) {
     stim::Circuit circuit = stim::generate_surface_code_circuit(params).circuit;
 
     std::string trace_folder;
+    std::string lattice_file;
     if (!parser.get_string("trace-folder", trace_folder))   return 1;
+    if (!parser.get_string("lattice-file", lattice_file))   return 1;
 
     int detectors_per_round = (distance*distance-1) / 2;
 
@@ -42,15 +49,43 @@ int main(int argc, char* argv[]) {
     int d;
     if (!parser.get_int32("depth", d)) d = 2;
     
-    //
-    //  Two perceptrons so far:
-    //      (1) All-zeros prediction.
-    //      (2) Same-bits prediction.
+    // Create predictors.
+    std::ifstream fin(lattice_file);
+    graph::io::callback_t<graph::LatticeGraph> cb = 
+        [] (graph::LatticeGraph& graph, std::string line)
+        {
+            graph::io::update_lattice_graph(graph, line);
+        };
+    graph::LatticeGraph lattice = graph::create_graph_from_file(fin, cb);
 
-    std::vector<int32_t>    weights_allzeros(detectors_per_round*d+1, 0);
-    std::vector<int32_t>    weights_issame(detectors_per_round*d+1, 0);
+    SimpleSyndromePredictor simple(d, detectors_per_round);
+    PerceptronPredictor pshare(d,
+                                    detectors_per_round,
+                                    1,
+                                    &lattice,
+                                    PerceptronPredictor::Mode::share);
+    PerceptronPredictor pgeom(d,
+                                    detectors_per_round,
+                                    1,
+                                    &lattice,
+                                    PerceptronPredictor::Mode::geom);
+    PerceptronPredictor plocal(d,
+                                    detectors_per_round,
+                                    1,
+                                    &lattice,
+                                    PerceptronPredictor::Mode::local);
+    PerceptronPredictor pglobal(d,
+                                    detectors_per_round,
+                                    1,
+                                    &lattice,
+                                    PerceptronPredictor::Mode::global);
 
-    std::ofstream fout("syndrome_log.txt");
+    uint64_t max_data = 50000;
+
+    stim::simd_bit_table data(max_data+100, (d+1)*detectors_per_round);
+    stim::simd_bit_table test(max_data+100, (d+1)*detectors_per_round);
+    uint64_t s1 = 0;
+    uint64_t s2 = 0;
 
     callback_t callbacks;
     callbacks.prologue = [&] (stim::simd_bits_range_ref row) 
@@ -61,124 +96,135 @@ int main(int argc, char* argv[]) {
         }
         const uint hw = row.popcnt() - obs_bits;
         if (hw == 0)    return;
-        fout << "--------------------------------------------------------\n";
-        if (rng() % 100 < 20) {
+        if (rng() % 100 < 20 && s2 < max_data) {
             // This is testing data.
-            stim::simd_bits row_cpy(row);
-            testing_data.push_back(row_cpy);
+            test[s2++] |= row;
             return;
         }
-        for (int r = 0; r < rounds; r++) {
-            fout << "R" << r << "\t";
-            for (uint i = 0; i < detectors_per_round; i++) {
-                uint k = r*detectors_per_round + i;
-                if (row[k]) fout << "!";
-                else        fout << "_";
-            }
-            fout << "\n";
-        }
-        for (int r = d-1; r < rounds-1; r++) {
-            // We collect the true labels for the training data.
-            bool is_all_zeros = true;
-            bool is_all_same = true;
-            for (uint i = 0; i < detectors_per_round; i++) {
-                is_all_zeros &= !row[(r+1)*detectors_per_round + i];
-                is_all_same &= row[r*detectors_per_round+i]
-                                    == row[(r+1)*detectors_per_round+i];
-            }
-            // Update weights accordingly.
-            int y_allzeros = is_all_zeros ? 1 : -1;
-            int y_issame = is_all_same ? 1 : -1;
-            weights_allzeros[0] += y_allzeros;
-            weights_issame[0] += y_issame;
-            int wn = 1;
-            for (int i = -(d-1)*detectors_per_round; i < detectors_per_round; i++) {
-                int rv = row[r*detectors_per_round + i] ? 1 : -1;
-                weights_allzeros[wn] += y_allzeros * rv;
-                weights_issame[wn] += y_issame * rv;
-                wn++;
-            }
+        if (s1 >= max_data)  return;
+        for (uint r = d-1; r < rounds-1; r++) {
+            // Create the training data set.
+            uint min = (r - (d-1))*detectors_per_round;
+            uint max = (r+2)*detectors_per_round;
+            bool all_zeros = true;
+            for (uint i = 0; i < max-min; i++) {
+                all_zeros &= !row[i+min];
+            } 
+            if (all_zeros)  continue;
+            for (uint i = 0; i < max-min; i++) {
+                data[s1][i] = row[i+min];
+            } 
+            s1++;
         }
     };
+    std::cout << "Collecting data...\n";
     read_syndrome_trace(trace_folder, circuit, callbacks);
+    std::cout << "Got " << s1 << " samples. Training...\n";
+    data = data.transposed();
 
-    uint correct_pred_allzeros = 0;
-    uint total_pred_allzeros = 0;
-    uint correct_pred_naive = 0;
-    uint correct_nonzero_pred_allzeros = 0;
-    uint total_nonzero_pred_allzeros = 0;
+    std::cout << "\tshare...\n";
+    pshare.train(data);
 
-    uint correct_pred_issame = 0;
-    uint total_pred_issame = 0;
-    uint correct_nonzero_pred_issame = 0;
-    uint total_nonzero_pred_issame = 0;
+    /*
 
-    for (auto row : testing_data) {
-        for (int r = d-1; r < rounds-1; r++) {
-            bool is_all_zeros = true;
-            bool is_all_same = true;
-            bool curr_round_is_all_zeros = true;
+    std::cout << "\tgeom...\n";
+    pgeom.train(data);
+    
+    std::cout << "\tlocal...\n";
+    plocal.train(data);
+
+    std::cout << "\tglobal...\n";
+    pglobal.train(data);
+
+    */
+
+    std::cout << "Done training.\n";
+
+    std::vector<SyndromePredictor*> predictors;
+    predictors.push_back(&simple);
+    predictors.push_back(&pshare);
+    /*
+    predictors.push_back(&pglobal);
+    predictors.push_back(&pgeom);
+    predictors.push_back(&plocal);
+    */
+
+    std::vector<std::string> pnames{
+        "simple",
+        "perceptron_share",
+        "perceptron_global",
+        "perceptron_geom",
+        "perceptron_local",
+    };
+
+    auto test_tp = test.transposed();
+
+    for (uint k = 0; k < predictors.size(); k++) {
+        auto predictor = predictors[k];
+        std::string name = pnames[k];
+        auto res = predictor->predict(test_tp);
+        
+        auto sig_pred = res.sig_pred.transposed();
+        auto val_pred = res.val_pred.transposed();
+
+        /*
+        fp_t sum_frac_predicted = 0.0;
+        fp_t n_correct = 0.0;
+
+        const uint off1 = (d-1)*detectors_per_round;
+        const uint off2 = d*detectors_per_round;
+        for (uint64_t t = 0; t < s2; t++) {
+            fp_t n_predicted = 0;
+            bool is_correct = true;
             for (uint i = 0; i < detectors_per_round; i++) {
-                is_all_zeros &= !row[(r+1)*detectors_per_round + i];
-                is_all_same &= row[r*detectors_per_round+i]
-                                    == row[(r+1)*detectors_per_round + i];
-                curr_round_is_all_zeros &= !row[r*detectors_per_round+i];
+                if (!sig_pred[t][i])    continue;
+                n_predicted++;
+                is_correct &= (val_pred[t][i] == test[t][off2+i]);
             }
-            int true_y_allzeros = is_all_zeros ? 1 : -1;
-            int true_y_issame = is_all_same ? 1 : -1;
-            int pred_y_allzeros = weights_allzeros[0];
-            int pred_y_issame = weights_issame[0];
-            int wn = 1;
-            bool input_is_all_zeros = true;
-            for (int i = -(d-1)*detectors_per_round; i < detectors_per_round; i++) {
-                int rv = row[r*detectors_per_round + i] ? 1 : -1;
-                pred_y_allzeros += weights_allzeros[wn] * rv;
-                pred_y_issame += weights_issame[wn] * rv;
-
-                input_is_all_zeros &= (rv < 0);
-
-                wn++;
-            }
-            pred_y_allzeros = pred_y_allzeros > 0 ? 1 : -1;
-            pred_y_issame = pred_y_issame > 0 ? 1 : -1;
-            
-            correct_pred_allzeros += true_y_allzeros == pred_y_allzeros;
-            correct_pred_naive += is_all_zeros && curr_round_is_all_zeros;
-            total_pred_allzeros++;
-            correct_nonzero_pred_allzeros += 
-                !curr_round_is_all_zeros && (true_y_allzeros == pred_y_allzeros);
-            total_nonzero_pred_allzeros += !curr_round_is_all_zeros;
-
-            correct_pred_issame += true_y_issame == pred_y_issame;
-            total_pred_issame++;
-            correct_nonzero_pred_issame += 
-                !curr_round_is_all_zeros && (true_y_issame == pred_y_issame);
-            total_nonzero_pred_issame += !curr_round_is_all_zeros;
+            n_correct += is_correct;
+            sum_frac_predicted += n_predicted/detectors_per_round;
         }
-    }
-    std::cout << "Perceptron Statistics (All Zeros):\n";
-    std::cout << "\t" << correct_pred_allzeros << " of " << total_pred_allzeros
-                << " (" 
-                << (((fp_t)correct_pred_allzeros)/total_pred_allzeros * 100.0) 
+        fp_t mean_frac_predicted = sum_frac_predicted / s2;
+        std::cout << "[ " << name << " ]\n";
+        std::cout << "\tCorrectly predicted " << n_correct
+                << " of " << s2 << " ("
+                << (n_correct/s2 * 100.0)
                 << "%)\n";
-    std::cout << "\t\tnaive approach predicts " << correct_pred_naive
-                << " of " << total_pred_allzeros << " (" 
-                << (((fp_t)correct_pred_naive)/total_pred_allzeros * 100.0)
-                << "%)\n";
-    std::cout << "\t(only nonzero) " << correct_nonzero_pred_allzeros << " of " 
-                << total_nonzero_pred_allzeros << " (" 
-                << (((fp_t)correct_nonzero_pred_allzeros)/total_nonzero_pred_allzeros 
-                        * 100.0) 
-                << "%)\n";
+        std::cout << "\tMean fraction predicted: " 
+            << mean_frac_predicted << "\n";
+        */
+        uint64_t n_predicts = 0;
+        uint64_t n_correct_predicts = 0;
+        uint64_t n_nontrivial_predicts = 0;
+        uint64_t n_correct_nontrivial_predicts = 0;
+        uint64_t n_requests = 0;
 
-    std::cout << "Perceptron Statistics (All Same):\n";
-    std::cout << "\t" << correct_pred_issame << " of " << total_pred_issame
-                << " (" 
-                << (((fp_t)correct_pred_issame)/total_pred_issame * 100.0) 
+        const uint off1 = (d-1)*detectors_per_round;
+        const uint off2 = d*detectors_per_round;
+        for (uint64_t t = 0; t < s2; t++) {
+            for (uint i = 0; i < detectors_per_round; i++) {
+                n_requests++;
+                if (!sig_pred[t][i])    continue;
+                n_predicts++;
+                n_correct_predicts += (val_pred[t][i] == test[t][off2+i]);
+                n_nontrivial_predicts += test[t][off1+i];
+                n_correct_nontrivial_predicts +=
+                        (val_pred[t][i] == test[t][off2+i])
+                        && (test[t][off1+i]);
+            }
+        }
+        std::cout << "[ " << name << " ]\n";
+        std::cout << "\tPredicted " << n_predicts << " of " 
+                << n_requests << " (" 
+                << (((fp_t)n_predicts)/n_requests * 100.0)
                 << "%)\n";
-    std::cout << "\t(only nonzero) " << correct_nonzero_pred_issame << " of " 
-                << total_nonzero_pred_issame << " (" 
-                << (((fp_t)correct_nonzero_pred_issame)/total_nonzero_pred_issame 
-                        * 100.0) 
+        std::cout << "\tCorrectly predicted " << n_correct_predicts
+                << " of " << n_predicts << " ("
+                << (((fp_t)n_correct_predicts)/n_predicts * 100.0)
                 << "%)\n";
+        std::cout << "\t\t(nontrivial) " << n_correct_nontrivial_predicts
+                << " of " << n_nontrivial_predicts << " ("
+                << (((fp_t)n_correct_nontrivial_predicts)/n_nontrivial_predicts
+                        * 100.0) << "%)\n";
+    }
 }

@@ -6,6 +6,8 @@
 #ifndef GRAPH_IO_h
 #define GRAPH_IO_h
 
+#include "defs.h"
+
 #include <fstream>
 #include <functional>
 #include <iostream>

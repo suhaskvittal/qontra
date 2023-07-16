@@ -28,11 +28,13 @@ set(QONTRA_FILES
     # Graphs
     src/graph/decoding_graph.cpp 
     src/graph/coupling_graph.cpp
+    src/graph/lattice_graph.cpp
     src/graph/tanner_graph.cpp
     # Protean
     src/protean/compiler.cpp
     src/protean/proc3d.cpp
     # Simulation
+    src/sim/components/syndrome_predictors/perceptron.cpp
     src/sim/clifford_sim.cpp
     src/sim/control_sim.cpp
     src/sim/frame_sim.cpp
