@@ -848,8 +848,6 @@ Compiler::xform_schedule(ir_t* curr_ir) {
     }
 
     // Now, merge the layers together.
-    std::vector<tanner::vertex_t*> meas_order;
-
     uint dvid = 0;
     for (auto& sdlayer : scheduling_layers) {
         uint opnum = 0;
@@ -860,13 +858,16 @@ Compiler::xform_schedule(ir_t* curr_ir) {
                 auto& sch = sdv->sch;
                 if (opnum >= sch.size())    continue;
                 Instruction& inst = sch[opnum];
-                if (inst.name == "nop") continue;
+//              if (inst.name == "nop") continue;
+                auto dv = new dep::vertex_t;
+
                 if (inst.name == "mnrc") {
                     auto tv = tanner_graph->get_vertex(sdv->id);
-                    meas_order.push_back(tv);
+                    dv->id = tv->id;
+                } else {
+                    dv->id = dvid++;
                 }
-                auto dv = new dep::vertex_t;
-                dv->id = dvid++;
+
                 dv->inst_p = &inst;
                 dgr->add_vertex(dv);
                 all_done = false;
@@ -880,8 +881,6 @@ Compiler::xform_schedule(ir_t* curr_ir) {
     curr_ir->qubit_labels = pv_to_qubitno;
     curr_ir->dependency_graph = dgr;
     curr_ir->schedule = composite_sch;
-
-    curr_ir->measurement_order = meas_order;
 }
 
 

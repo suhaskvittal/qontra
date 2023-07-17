@@ -3,6 +3,9 @@
  *  date:   12 June 2023
  * */
 
+#ifndef EXPERIMENTS_h
+#define EXPERIMENTS_h
+
 #include "decoder/decoder.h"
 #include "defs.h"
 
@@ -81,3 +84,5 @@ memory_experiment(decoder::Decoder* dec, uint64_t shots) {
 }
 
 }   // qontra
+
+#endif  // EXPERIMENTS_h

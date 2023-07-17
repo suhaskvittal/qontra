@@ -1,4 +1,5 @@
-/* author: Suhas Vittal
+/* 
+ *  author: Suhas Vittal
  *  date:   31 May 2023
  * */
 
@@ -68,11 +69,9 @@ namespace compiler {
         fp_t                score;
         bool                valid;
 
-        std::map<proc3d::vertex_t*, uint>   qubit_labels;
+        std::map<proc3d::vertex_t*, uint>       qubit_labels;
 
-        std::vector<tanner::vertex_t*>      measurement_order;
-
-        graph::DependenceGraph*             dependency_graph;
+        graph::DependenceGraph*                 dependency_graph;
 
         // Data structures:
         std::map<graph::tanner::vertex_t*, proc3d::vertex_t*>

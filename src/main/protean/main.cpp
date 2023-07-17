@@ -58,15 +58,22 @@ help_exit:
     };
     TannerGraph* graph = new TannerGraph(create_graph_from_file(fin, cb));
 
+    uint rounds = 3;
+    uint64_t shots = 1'000'000;
+
     // Define the cost function here.
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
+        auto tanner_graph = ir->curr_spec;
+        auto arch = ir->arch;
+        auto dgr = ir->dependency_graph;
+        
         // Generate memory experiment ASM.
         schedule_t mexp;
         //
         // PROLOGUE: initialization.
         //
-        const uint n_qubits = ir->arch->get_vertices().size();
+        const uint n_qubits = arch->get_vertices().size();
         Instruction init_reset;
         init_reset.name = "reset";
         for (uint i = 0; i < n_qubits; i++) {
@@ -76,12 +83,134 @@ help_exit:
         //
         // Syndrome extraction
         //
-        for (auto inst : ir->schedule) {
-            if (inst.name == "mnrc") {
-                // Convert this to an mrc instruction.
+        uint mctr = 0;
+        uint ectr = 0;
+        std::vector<tanner::vertex_t*> meas_order;
+        for (uint r = 0; r < rounds; r++) {
+            uint moffset = mctr;
+            for (uint d = 1; d <= dgr->get_depth(); d++) {
+                Instruction hsimd = {"h", {}};
+                Instruction cxsimd = {"cx", {}};
+                Instruction msimd = {"mrc", {mctr}};
+                Instruction rsimd = {"reset", {}};
+                for (auto v : dgr->get_vertices_at_depth(d)) {
+                    auto inst = *(v->inst_p);
+                    if (inst.name == "mnrc") {
+                        // Convert this to an mrc instruction.
+                        for (uint i : inst.get_qubit_operands()) {
+                            msimd.operands.push_back(i);
+                        }
+                        mctr += inst.get_qubit_operands().size();
+                        // Update the measurement order.
+                        if (r == 0) {
+                            auto tv = tanner_graph->get_vertex(v->id);
+                            meas_order.push_back(tv);
+                        }
+                    } else if (inst.name == "h") {
+                        for (uint i : inst.operands) {
+                            hsimd.operands.push_back(i);
+                        }
+                    } else if (inst.name == "cx") {
+                        for (uint i : inst.operands) {
+                            cxsimd.operands.push_back(i);
+                        }
+                    } else if (inst.name == "reset") {
+                        for (uint i : inst.operands) {
+                            rsimd.operands.push_back(i);
+                        }
+                    }
+                }    
+                std::vector<Instruction*> simd_ops{&hsimd, &cxsimd, &msimd, &rsimd};
+                for (auto inst_p : simd_ops) {
+                    if (inst_p->get_qubit_operands().size()) mexp.push_back(*inst_p);
+                }
+            }
+            // Add detection events.
+            for (uint i = 0; i < meas_order.size(); i++) {
+                auto tv = meas_order[i];
+                if (tv->qubit_type == tanner::vertex_t::XPARITY)    continue;
+                Instruction det;
+                det.name = "event";
+                det.operands.push_back(ectr++);
+                det.operands.push_back(moffset + i);
+                if (r > 0) {
+                    det.operands.push_back(moffset + i - meas_order.size());
+                }
+                mexp.push_back(det);
             }
         }
+        //
+        // Epilogue
+        //
+        Instruction dqmeas;
+        Instruction obs;
+        dqmeas.name = "mrc";
+        dqmeas.operands.push_back(mctr);
+
+        obs.name = "obs";
+        obs.operands.push_back(0);
+
+        std::map<tanner::vertex_t*, uint> data_qubit_meas_order;
+
+        auto data_qubits = tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA);
+        for (uint i = 0; i < data_qubits.size(); i++) {
+            auto dv = data_qubits[i];
+            auto pv = arch->get_vertex(dv->id);
+            uint x = ir->qubit_labels[pv];
+            dqmeas.operands.push_back(x);
+            obs.operands.push_back(mctr + i);
+
+            data_qubit_meas_order[dv] = i;
+        }
+        mexp.push_back(dqmeas);
+        // Add detection events for measurement errors.
+        for (uint i = 0; i < meas_order.size(); i++) {
+            auto tv = meas_order[i];
+            if (tv->qubit_type == tanner::vertex_t::XPARITY)    continue;
+
+            Instruction det;
+            det.name = "event";
+            det.operands.push_back(ectr++);
+            det.operands.push_back(mctr + i - meas_order.size());
+
+            for (auto dv : tanner_graph->get_neighbors(tv)) {
+                uint j = data_qubit_meas_order[dv];
+                det.operands.push_back(mctr + j);
+            }
+            mexp.push_back(det);
+        }
+        mexp.push_back(obs);
+        mexp.push_back((Instruction){"done", {}});
+
+        std::cout << "Schedule:\n" << schedule_to_text(mexp) << "\n";
+
+        // Now that we have the memory experiment schedule, build the error
+        // model. Then, use the Control Simulator to generate a canonical circuit
+        // for evaluation.
+        //
+        // Simple version: uniform model.
+        tables::ErrorAndTiming et;
+
+        FrameSimulator state_sim(n_qubits, 1024);   // Shots do not matter here.
+        ControlSimulator csim(n_qubits, mexp, &state_sim);
+        tables::populate(n_qubits, csim.params.errors, csim.params.timing, et);
+
+        experiments::G_SHOTS_PER_BATCH = 128;
+        std::cout << "\tBuilding error model...\n";
+        csim.build_error_model();
+        std::cout << "\tDone.\n";
+        experiments::G_SHOTS_PER_BATCH = 100'000;
+        stim::Circuit circuit = csim.get_error_model();
+
+        std::cout << circuit.str() << "\n";
+
+        // Build a decoder, and then benchmark it with a memory experiment.
+        decoder::MWPMDecoder dec(circuit);
+        auto mexp_res = memory_experiment(&dec, shots);
+        
+        return mexp_res.logical_error_rate;
     };
+    experiments::G_USE_MPI = false;
 
     // Define any constraints here.
     compiler::constraint_t con;
