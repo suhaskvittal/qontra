@@ -59,7 +59,7 @@ help_exit:
     TannerGraph* graph = new TannerGraph(create_graph_from_file(fin, cb));
 
     uint rounds = 3;
-    uint64_t shots = 1'000'000;
+    uint64_t shots = 100'000;
 
     // Define the cost function here.
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
@@ -182,27 +182,16 @@ help_exit:
         mexp.push_back(obs);
         mexp.push_back((Instruction){"done", {}});
 
-        std::cout << "Schedule:\n" << schedule_to_text(mexp) << "\n";
-
         // Now that we have the memory experiment schedule, build the error
         // model. Then, use the Control Simulator to generate a canonical circuit
         // for evaluation.
         //
         // Simple version: uniform model.
         tables::ErrorAndTiming et;
-
-        FrameSimulator state_sim(n_qubits, 1024);   // Shots do not matter here.
-        ControlSimulator csim(n_qubits, mexp, &state_sim);
-        tables::populate(n_qubits, csim.params.errors, csim.params.timing, et);
-
-        experiments::G_SHOTS_PER_BATCH = 128;
-        std::cout << "\tBuilding error model...\n";
-        csim.build_error_model();
-        std::cout << "\tDone.\n";
-        experiments::G_SHOTS_PER_BATCH = 100'000;
-        stim::Circuit circuit = csim.get_error_model();
-
-        std::cout << circuit.str() << "\n";
+        ErrorTable errors;
+        TimeTable timing;
+        tables::populate(n_qubits, errors, timing, et);
+        stim::Circuit circuit = fast_convert_to_stim(mexp, errors, timing);
 
         // Build a decoder, and then benchmark it with a memory experiment.
         decoder::MWPMDecoder dec(circuit);

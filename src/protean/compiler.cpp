@@ -858,7 +858,7 @@ Compiler::xform_schedule(ir_t* curr_ir) {
                 auto& sch = sdv->sch;
                 if (opnum >= sch.size())    continue;
                 Instruction& inst = sch[opnum];
-//              if (inst.name == "nop") continue;
+                if (inst.name == "nop") continue;
                 auto dv = new dep::vertex_t;
 
                 if (inst.name == "mnrc") {
