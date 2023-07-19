@@ -64,6 +64,8 @@ help_exit:
     // Define the cost function here.
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
+        std::ofstream error_model_out(folder_out + "/error_model.stim");
+
         auto tanner_graph = ir->curr_spec;
         auto arch = ir->arch;
         auto dgr = ir->dependency_graph;
@@ -85,7 +87,7 @@ help_exit:
         //
         uint mctr = 0;
         uint ectr = 0;
-        std::vector<tanner::vertex_t*> meas_order;
+        std::vector<std::pair<tanner::vertex_t*, bool>> meas_order;
         for (uint r = 0; r < rounds; r++) {
             uint moffset = mctr;
             for (uint d = 1; d <= dgr->get_depth(); d++) {
@@ -103,8 +105,8 @@ help_exit:
                         mctr += inst.get_qubit_operands().size();
                         // Update the measurement order.
                         if (r == 0) {
-                            auto tv = tanner_graph->get_vertex(v->id);
-                            meas_order.push_back(tv);
+                            auto tv = tanner_graph->get_vertex(inst.metadata.owning_check_id);
+                            meas_order.push_back(std::make_pair(tv, inst.metadata.is_for_flag));
                         }
                     } else if (inst.name == "h") {
                         for (uint i : inst.operands) {
@@ -127,8 +129,9 @@ help_exit:
             }
             // Add detection events.
             for (uint i = 0; i < meas_order.size(); i++) {
-                auto tv = meas_order[i];
-                if (tv->qubit_type == tanner::vertex_t::XPARITY)    continue;
+                auto tv = meas_order[i].first;
+                bool is_for_flag = meas_order[i].second;
+                if (r == 0 && tv->qubit_type == tanner::vertex_t::XPARITY)  continue;
                 Instruction det;
                 det.name = "event";
                 det.operands.push_back(ectr++);
@@ -165,8 +168,11 @@ help_exit:
         mexp.push_back(dqmeas);
         // Add detection events for measurement errors.
         for (uint i = 0; i < meas_order.size(); i++) {
-            auto tv = meas_order[i];
-            if (tv->qubit_type == tanner::vertex_t::XPARITY)    continue;
+            auto tv = meas_order[i].first;
+            bool is_for_flag = meas_order[i].second;
+            if (tv->qubit_type == tanner::vertex_t::XPARITY || is_for_flag) {
+                continue;
+            }
 
             Instruction det;
             det.name = "event";
@@ -193,11 +199,16 @@ help_exit:
         tables::populate(n_qubits, errors, timing, et);
         stim::Circuit circuit = fast_convert_to_stim(mexp, errors, timing);
 
+        error_model_out << circuit << "\n";
+
         // Build a decoder, and then benchmark it with a memory experiment.
         decoder::MWPMDecoder dec(circuit);
         auto mexp_res = memory_experiment(&dec, shots);
+
+        std::cout << "\tLogical error rate: " << mexp_res.logical_error_rate << "\n";
         
-        return mexp_res.logical_error_rate;
+        return mexp_res.logical_error_rate
+                + ir->arch->get_mean_connectivity();
     };
     experiments::G_USE_MPI = false;
 
@@ -212,7 +223,7 @@ help_exit:
 
     compiler::ir_t* res = compiler.run(graph, sdl_file);
     // Print out some simple stats and write to the output folder.
-    std::cout << "Cost = " << cf(res) << ", valid = " << res->valid << "\n";
+    std::cout << "Cost = " << res->score << ", valid = " << res->valid << "\n";
     std::cout << "Number of qubits = " << res->arch->get_vertices().size() << "\n";
     std::cout << "Number of couplings = " << res->arch->get_edges().size() << "\n";
     std::cout << "Connectivity = " << res->arch->get_mean_connectivity() << "\n";

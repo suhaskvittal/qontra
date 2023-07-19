@@ -131,6 +131,8 @@ fast_convert_to_stim(const schedule_t& prog, ErrorTable& errors, TimeTable& timi
             circuit.append_op("X", inst.get_qubit_operands());
         } else if (inst.name == "z") {
             circuit.append_op("Z", inst.get_qubit_operands());
+        } else if (inst.name == "h") {
+            circuit.append_op("H", inst.get_qubit_operands());
         } else if (inst.name == "s") {
             circuit.append_op("S", inst.get_qubit_operands());
         } else if (inst.name == "cx") {

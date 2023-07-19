@@ -681,23 +681,25 @@ Compiler::xform_schedule(ir_t* curr_ir) {
         pv_to_qubitno[pv] = pvid++;
     }
 
-    typedef std::pair<Instruction, std::vector<proc3d::vertex_t*>>
-        labeled_inst_t; // contains translation from operands to physical qubits.
-
     std::map<sdvertex_t*, std::set<proc3d::vertex_t*>>  sch_to_uses;
 
     for (auto sdv : sch_graph->get_vertices()) {
         if (sdv->id == SDGRAPH_ROOT_ID) continue;
 
-
         auto sch = sdv->sch;
         schedule_t new_sch;
-        schedule_t epilogue;    // Any extra instructions we may need
-                                // to execute such as any "undoing" operations.
-        std::map<proc3d::vertex_t*, std::set<proc3d::vertex_t*>> gauge_support;
+
+        auto tcheck = tanner_graph->get_vertex(sdv->id);
+
+        // We will maintain prologue and epilogue instructions to add
+        // to the schedule for flag qubits.
+        std::deque<Instruction> prologue;
+        std::deque<Instruction> epilogue;
+        std::deque<Instruction> body;
+
+        std::set<proc3d::vertex_t*> visited;
         // First, run through the schedule once to figure out how many qubits
         // each gauge qubit supports.
-        std::vector<labeled_inst_t> labeled_schedule;
         for (auto& inst : sch) {
             std::vector<proc3d::vertex_t*> physical_qubits;
             if (inst.name == "cx") {
@@ -709,26 +711,68 @@ Compiler::xform_schedule(ir_t* curr_ir) {
                     // Get corresponding physical qubits.
                     proc3d::vertex_t* pv1;
                     proc3d::vertex_t* pv2;
+                    bool data_qubit_is_control;
+                    // We want to grow the path from the data qubit.
+                    //
+                    // If there are gauge qubits in the path, as follows:
+                    //      D, G1, G2, P
+                    // Then, in the schedule body, we will add a CNOT between
+                    // D and G1 (preserving orientation). In the prologue and epilogue,
+                    // we will add CNOTs between G1, G2 and G2, P.
+                    //
+                    // We will further mark G1 and G2 as visited to avoid redundant
+                    // operations in the prologue/epilogue.
                     if (tv1->qubit_type == tanner::vertex_t::DATA) {
                         pv1 = arch->get_vertex(tv1->id);
                         pv2 = curr_ir->role_to_qubit[tv2];
+                        data_qubit_is_control = true;
                     } else {
-                        pv1 = curr_ir->role_to_qubit[tv1];
-                        pv2 = arch->get_vertex(tv2->id);
+                        pv1 = arch->get_vertex(tv2->id);
+                        pv2 = curr_ir->role_to_qubit[tv1];
+                        data_qubit_is_control = false;
                     }
                     auto path = path_table[pv1][pv2];
-                    for (uint j = 1; j < path.size(); j++) {
-                        auto px = path[j-1];
-                        auto py = path[j];
-                        if (j != path.size() - 1) {
-                            gauge_support[py].insert(px);
-                        }
+                    // First, mark all non-data qubits as uses in the schedule
+                    for (auto px : path) {
+                        if (!curr_ir->is_data(px))  sch_to_uses[sdv].insert(px);
                     }
 
-                    physical_qubits.push_back(pv1);
-                    physical_qubits.push_back(pv2);
+                    auto pv3 = path[1]; // This may very well just be pv2.
+                    Instruction first_cx = {"cx", {}};
+                    if (data_qubit_is_control) {
+                        first_cx.operands.push_back(pv_to_qubitno[pv1]);
+                        first_cx.operands.push_back(pv_to_qubitno[pv3]);
+                    } else {
+                        first_cx.operands.push_back(pv_to_qubitno[pv3]);
+                        first_cx.operands.push_back(pv_to_qubitno[pv1]);
+                    }
+                    body.push_back(first_cx);
+                    // Add remainder of the path to the prologue and epilogue
+                    std::deque<Instruction> cx_along_path;
+                    for (uint j = 2; j < path.size(); j++) {
+                        auto px = path[j-1];
+                        auto py = path[j];
+                        if (visited.count(px))  break;
+
+                        Instruction cx = {"cx", {}};
+                        if (data_qubit_is_control) {
+                            cx.operands.push_back(pv_to_qubitno[px]);
+                            cx.operands.push_back(pv_to_qubitno[py]);
+                        } else {
+                            cx.operands.push_back(pv_to_qubitno[py]);
+                            cx.operands.push_back(pv_to_qubitno[px]);
+                        }
+                        cx_along_path.push_front(cx);
+                        visited.insert(px);
+                    }
+
+                    for (auto& new_inst : cx_along_path) {
+                        prologue.push_back(new_inst);
+                        epilogue.push_front(new_inst);
+                    }
                 }
             } else {
+                Instruction new_inst = {inst.name, {}};
                 for (uint64_t q : inst.operands) {
                     auto tv = tanner_graph->get_vertex(ID32_TO_ID64(q));
                     proc3d::vertex_t* pv;
@@ -737,69 +781,40 @@ Compiler::xform_schedule(ir_t* curr_ir) {
                     } else {
                         pv = curr_ir->role_to_qubit[tv];
                     }
-                    physical_qubits.push_back(pv);
-                }
-            }
-            labeled_schedule.push_back(std::make_pair(inst, physical_qubits));
-        }
-        // Now, transform the schedule.
-        for (auto labeled_inst : labeled_schedule) {
-            auto& inst = labeled_inst.first;
-            auto& physical_qubits = labeled_inst.second;
-            // Nothing complicated for single-qubit gates (assumed to be anything
-            // that is not a CX). Just relabel the operands and ship it out.
-            if (inst.name == "epilogue") {
-                // Dump the epilogue here.
-                for (auto& x : epilogue)    new_sch.push_back(x);
-            } else if (inst.name != "cx") {
-                Instruction new_inst;
-                new_inst.name = inst.name;
-                for (auto pv : physical_qubits) {
                     new_inst.operands.push_back(pv_to_qubitno[pv]);
-                    if (!curr_ir->is_data(pv))  sch_to_uses[sdv].insert(pv);
                 }
-                new_sch.push_back(new_inst);
-            } else {
-                // For CX, we try and perform each operation by executing the CNOTs
-                // along a path. We only proceed along a path once all the qubits in a
-                // gauge's support have reached the gauge.
-                for (uint i = 0; i < inst.operands.size(); i += 2) {
-                    auto pv1 = physical_qubits[i];
-                    auto pv2 = physical_qubits[i+1];
-                    auto path = path_table[pv1][pv2];
-
-                    for (uint j = 0; j < path.size(); j++) {
-                        auto px = path[j];
-                        if (!curr_ir->is_data(px))  sch_to_uses[sdv].insert(px);
-                    }
-
-                    for (uint j = 1; j < path.size(); j++) {
-                        auto px = path[j-1];
-                        auto py = path[j];
-
-                        if (gauge_support.count(py)) {
-                            if (gauge_support[py].empty()) continue;    // We have already
-                                                                        // reached this gauge.
-                            gauge_support[py].erase(px);
-                            if (!gauge_support[py].empty()) break;  // Cannot perform the
-                                                                    // CX yet.
-                        }
-                        // Perform the CX if everything else is fine.
-                        Instruction new_inst;
-                        new_inst.name = "cx";
-                        new_inst.operands.push_back(pv_to_qubitno[px]);
-                        new_inst.operands.push_back(pv_to_qubitno[py]);
-                        new_sch.push_back(new_inst);
-                        // Also add the CX to the epilogue (undoing instructino)
-                        // Only do so if this is not the last CX in the path
-                        if (j != path.size() - 1) {
-                            epilogue.insert(epilogue.begin(), new_inst);
-                        }
-                    }
+                if (inst.name == "mnrc") {
+                    new_inst.metadata.owning_check_id = tcheck->id;
                 }
+                body.push_back(new_inst);
             }
+        }
+        // Add measurements for the flag qubits.
+        for (auto px : visited) {
+            if (tcheck->qubit_type == tanner::vertex_t::ZPARITY) {
+                Instruction h = {"h", {pv_to_qubitno[px]}};
+                prologue.push_front(h);
+                epilogue.push_back(h);
+            }
+            Instruction meas = {"mnrc", {pv_to_qubitno[px]}};
+            // Fill out metadata for measurement.
+            meas.metadata.owning_check_id = tcheck->id;
+            meas.metadata.is_for_flag = true;
+
+            Instruction reset = {"reset", {pv_to_qubitno[px]}};
+            epilogue.push_back(meas);
+            epilogue.push_back(reset);
         }
         // Replace the schedule for the SDGraph vertex.
+        for (auto& inst : body) {
+            if (inst.name == "prologue") {
+                for (auto& x : prologue) new_sch.push_back(x);
+            } else if (inst.name == "epilogue") {
+                for (auto& x : epilogue) new_sch.push_back(x);
+            } else {
+                new_sch.push_back(inst);
+            }
+        }
         sdv->sch = new_sch;
     }
     // Now, create new edges in the scheduling graph based on use conflicts.
@@ -858,18 +873,12 @@ Compiler::xform_schedule(ir_t* curr_ir) {
                 auto& sch = sdv->sch;
                 if (opnum >= sch.size())    continue;
                 Instruction& inst = sch[opnum];
-                if (inst.name == "nop") continue;
+//              if (inst.name == "nop") continue;
                 auto dv = new dep::vertex_t;
-
-                if (inst.name == "mnrc") {
-                    auto tv = tanner_graph->get_vertex(sdv->id);
-                    dv->id = tv->id;
-                } else {
-                    dv->id = dvid++;
-                }
-
+                dv->id = dvid++;
                 dv->inst_p = &inst;
                 dgr->add_vertex(dv);
+
                 all_done = false;
             }
             opnum++;

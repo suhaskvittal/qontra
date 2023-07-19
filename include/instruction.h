@@ -96,8 +96,16 @@ struct Instruction {
     std::string name;
     std::vector<uint> operands;
 
-    // Extra metadata
-    bool    is_measuring_x_check;
+    // Extra metadata (not necessary for general use).
+    //
+    // Usually, applications will fill this out for their own use.
+    // The user should not need to modify this.
+    struct {
+        uint64_t    owning_check_id = 0;    // The id of the tanner graph vertex
+                                            // for which this Instruction is executing
+                                            // the check.
+        bool        is_for_flag = false;
+    } metadata;
 
     std::vector<uint>   get_qubit_operands(void) const;
 
