@@ -45,9 +45,9 @@ DecodingGraph::build_distance_matrix() {
 
         fp_t weight = dist.at(dst);
         bool found_boundary = false;
+        std::vector<vertex_t*> path;
         if (weight < 1000) {
             auto curr = dst;
-            std::vector<vertex_t*> path;
             while (curr != src) {
                 auto next = pred.at(curr);
                 if (curr == next) {

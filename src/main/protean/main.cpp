@@ -203,7 +203,9 @@ help_exit:
 
         // Build a decoder, and then benchmark it with a memory experiment.
         decoder::MWPMDecoder dec(circuit);
-        auto mexp_res = memory_experiment(&dec, shots);
+        experiments::memory_params_t params;
+        params.shots = shots;
+        auto mexp_res = memory_experiment(&dec, params);
 
         std::cout << "\tLogical error rate: " << mexp_res.logical_error_rate << "\n";
         
