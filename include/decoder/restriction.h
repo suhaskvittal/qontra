@@ -3,8 +3,7 @@
  *  date:   19 July 2023
  *
  *  An implementation of Kubica and Delfosse's
- *  Restriction Decoder for color codes
- *  (with Chamberland et al.'s extension).
+ *  Restriction Decoder for color codes.
  * */
 
 #ifndef RESTRICTION_DECODER_h
@@ -12,6 +11,7 @@
 
 #include "decoder/mwpm.h"
 #include "defs.h"
+#include "graph/graph.h"
 
 namespace qontra {
 namespace decoder {

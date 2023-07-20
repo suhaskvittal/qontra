@@ -67,6 +67,7 @@ public:
         std::set<uint>  frame_changes;  // Pauli frames that are changed by the chain
 
         std::vector<decoding::vertex_t*>    error_chain;
+        bool                                error_chain_run_through_boundary;
     } matrix_entry_t;
 
     matrix_entry_t

@@ -44,6 +44,7 @@ DecodingGraph::build_distance_matrix() {
         std::set<uint> frames;
 
         fp_t weight = dist.at(dst);
+        bool found_boundary = false;
         if (weight < 1000) {
             auto curr = dst;
             std::vector<vertex_t*> path;
@@ -52,6 +53,7 @@ DecodingGraph::build_distance_matrix() {
                 if (curr == next) {
                     weight = 1000000000;
                     path.clear();
+                    found_boundary = false;
                     goto failed;
                 }
                 auto e = this->get_edge(next, curr);
@@ -64,14 +66,16 @@ DecodingGraph::build_distance_matrix() {
                 frames = new_frames;
                 length++;
                 path.push_back(curr);
+                found_boundary |= (curr->id == BOUNDARY_INDEX);
                 curr = next;
             }
             path.push_back(src);
+            found_boundary |= (src->id == BOUNDARY_INDEX);
         }
 failed:
         fp_t prob = pow(10, -weight);
 
-        return (matrix_entry_t) {length, prob, weight, frames, path};
+        return (matrix_entry_t) {length, prob, weight, frames, path, found_boundary};
     };
 
     distance_matrix = distance::create_distance_matrix(this, w, cb);
