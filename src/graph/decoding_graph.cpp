@@ -46,10 +46,12 @@ DecodingGraph::build_distance_matrix() {
         fp_t weight = dist.at(dst);
         if (weight < 1000) {
             auto curr = dst;
+            std::vector<vertex_t*> path;
             while (curr != src) {
                 auto next = pred.at(curr);
                 if (curr == next) {
                     weight = 1000000000;
+                    path.clear();
                     goto failed;
                 }
                 auto e = this->get_edge(next, curr);
@@ -61,13 +63,15 @@ DecodingGraph::build_distance_matrix() {
                 // Update data
                 frames = new_frames;
                 length++;
+                path.push_back(curr);
                 curr = next;
             }
+            path.push_back(src);
         }
 failed:
         fp_t prob = pow(10, -weight);
 
-        return (matrix_entry_t) {length, prob, weight, frames};
+        return (matrix_entry_t) {length, prob, weight, frames, path};
     };
 
     distance_matrix = distance::create_distance_matrix(this, w, cb);

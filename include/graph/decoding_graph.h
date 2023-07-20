@@ -65,6 +65,8 @@ public:
         fp_t            probability;    // Probability of error chain
         fp_t            weight;         // Weight used for MWPM decoding
         std::set<uint>  frame_changes;  // Pauli frames that are changed by the chain
+
+        std::vector<decoding::vertex_t*>    error_chain;
     } matrix_entry_t;
 
     matrix_entry_t
