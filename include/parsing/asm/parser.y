@@ -91,7 +91,7 @@ instruction:
     inst.operands.data[0] = label;
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
-           | INST ID operands ';'
+           | INST ID SEP operands ';'
 {
     struct __asm_inst_t inst;
     memcpy(inst.name, $1, IDLEN);
@@ -100,11 +100,11 @@ instruction:
     if (label < 0) {
         label = record_label($2);    
     }
-    inst.operands.size = 1 + $3.size;
+    inst.operands.size = 1 + $4.size;
     inst.operands.data = malloc(inst.operands.size * sizeof(uint32_t));
     inst.operands.data[0] = label;
-    memmove(inst.operands.data+1, $3.data, $3.size*sizeof(uint32_t));
-    free($3.data);
+    memmove(inst.operands.data+1, $4.data, $4.size*sizeof(uint32_t));
+    free($4.data);
     ASMParserSchedule[ASMParserScheduleLen++] = inst;
 }
            | INST operands ';'

@@ -22,13 +22,29 @@ StateSimulator::shift_record_by(uint64_t offset) {
 void
 StateSimulator::snapshot() {
     record_table_cpy = stim::simd_bit_table(record_table);
+    lock_table_cpy = stim::simd_bit_table(lock_table);
 }
 
 void
-StateSimulator::rollback_at_trial(uint64_t t) {
+StateSimulator::rollback_where(stim::simd_bits_range_ref pred) {
     for (uint i = 0; i < statesim::G_RECORD_SPACE_SIZE; i++) {
-        record_table[i][t] = record_table_cpy[i][t];
+        copy_where(record_table_cpy[i], record_table[i], pred);
     }
+    for (uint i = 0; i < n_qubits; i++) {
+        copy_where(lock_table_cpy[i], lock_table[i], pred);
+    }
+}
+
+void
+copy_where(stim::simd_bits_range_ref from,
+            stim::simd_bits_range_ref to,
+            stim::simd_bits_range_ref pred)
+{
+    from.for_each_word(to, pred, 
+            [&] (auto& f, auto& t, auto& p)
+            {
+                t = (t & ~p) | (f & p);
+            });
 }
 
 }   // qontra

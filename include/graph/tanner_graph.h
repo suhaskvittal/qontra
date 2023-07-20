@@ -132,7 +132,7 @@ namespace io {
 // In a tanner graph description file, each line should be of the form:
 //          <X/Z><check-id>,<data-qubit-1>,<data-qubit-2>,...
 
-void    update_tanner_graph(graph::TannerGraph&, std::string); // Callback for io function.
+void    update_tanner_graph(TannerGraph&, std::string); // Callback for io function.
 
 }   // io
 

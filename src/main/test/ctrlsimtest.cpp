@@ -10,6 +10,7 @@
 
 #include <stim.h>
 
+#include <fstream>
 #include <iostream>
 #include <vector>
 
@@ -47,7 +48,7 @@ int main(int argc, char* argv[]) {
     uint64_t shots;
     if (!parser.get_uint64("shots", shots)) return 1;
 
-    experiments::G_SHOTS_PER_BATCH = 1 << 12;
+    experiments::G_SHOTS_PER_BATCH = 1 << 13;
 
     FrameSimulator fsim(n, experiments::G_SHOTS_PER_BATCH);
 
@@ -62,7 +63,9 @@ int main(int argc, char* argv[]) {
         mwpm = new decoder::MWPMDecoder(error_model);
 
         // Check expected LER.
-        auto mxp_res = memory_experiment(mwpm, shots);
+        experiments::memory_params_t params;
+        params.shots = shots;
+        auto mxp_res = memory_experiment(mwpm, params);
         if (world_rank == 0) {
             std::cout << "Expected LER = " << mxp_res.logical_error_rate << "\n";
         }
@@ -70,6 +73,7 @@ int main(int argc, char* argv[]) {
     sim.load_decoder(mwpm);
 
     sim.params.verbose = parser.option_set("v") && (world_rank == 0);
+    sim.params.kill_batch_after_time_elapsed = 1000;
 
     std::string trace_folder;
     if (parser.get_string("trace-folder", trace_folder)) {
@@ -90,5 +94,16 @@ int main(int argc, char* argv[]) {
     MPI_Finalize();
 
     if (mwpm)   delete mwpm;
+
+    if (parser.option_set("trace-folder")) {
+        if (world_rank == 0) {
+            sim.params.save_syndromes_to_file = false;
+
+            sim.build_error_model();
+            stim::Circuit error_model = sim.get_error_model();
+            std::ofstream error_model_out(trace_folder + "/error_model.stim");
+            error_model_out << error_model.str() << "\n";
+        }
+    }
 }
 

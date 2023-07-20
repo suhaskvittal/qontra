@@ -10,9 +10,11 @@
 #include "defs.h"
 #include "experiments.h"
 #include "instruction.h"
+#include "sim/components/syndrome_predictor.h"
 #include "sim/frame_sim.h"
 #include "tables.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -49,6 +51,8 @@ public:
 
     void    load_simulator(StateSimulator* ss) { qsim = ss; }
     void    load_decoder(decoder::Decoder* dec) { decoder = dec; }
+    void    load_predictor(sim::SyndromePredictor* pr) 
+                { syndrome_predictor = pr; }
 
     struct {
         // Simulation parameters
@@ -70,11 +74,11 @@ public:
         // Control system configuration
         fp_t        clock_frequency = 250e6;
         bool        decoder_is_ideal = true;    // Decoder only takes 1ns to run.
+
         // Configuration of quantum computer
         TimeTable   timing;
         ErrorTable  errors;
-
-        uint64_t    apply_periodic_errors_at_t = 800;
+        uint64_t    apply_periodic_errors_at_t = 100;
                                             // Apply state errors on all qubits
                                             // as frequently as shown.
         bool        simulate_periodic_as_dpo_and_dph = false;
@@ -138,6 +142,15 @@ private:
     imem                    program;    // Program should remain constant
     stim::simd_bit_table    pc;
 
+    //
+    //  Data structures for Selective Syndrome Extraction
+    //
+    stim::simd_bit_table    sig_m_spec;     // Active if the measurement was
+                                            // speculated.
+    stim::simd_bit_table    val_m_spec;     // Value of speculated measurement.
+
+    sim::SyndromePredictor* syndrome_predictor;
+
     // IF io
     stim::simd_bits         if_stall;
     stim::simd_bits         if_id_valid;
@@ -151,6 +164,7 @@ private:
     stim::simd_bits         qex_rt_valid;
     stim::simd_bit_table    qex_pc;
     stim::simd_bit_table    qex_qubit_busy;
+    stim::simd_bits         qex_br_taken;
     // RT io
     stim::simd_bits         rt_stall;
 

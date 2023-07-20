@@ -43,6 +43,10 @@ ControlSimulator::ControlSimulator(
     // Microarchitecture
     program(),
     pc(G_SHOTS_PER_BATCH, 64),
+    // Selective Syndrome Extraction
+    sig_m_spec(4096, G_SHOTS_PER_BATCH),
+    val_m_spec(4096, G_SHOTS_PER_BATCH),
+    syndrome_predictor(nullptr),
     // IF io
     if_stall(G_SHOTS_PER_BATCH),
     if_pc(G_SHOTS_PER_BATCH, 64),
@@ -56,6 +60,7 @@ ControlSimulator::ControlSimulator(
     qex_rt_valid(G_SHOTS_PER_BATCH),
     qex_pc(G_SHOTS_PER_BATCH, 64),
     qex_qubit_busy(G_SHOTS_PER_BATCH, 64*n_qubits),
+    qex_br_taken(G_SHOTS_PER_BATCH),
     // RT io
     rt_stall(G_SHOTS_PER_BATCH),
     // Other
@@ -82,6 +87,8 @@ ControlSimulator::build_error_model() {
     is_building_canonical_circuit = false;
 
     G_USE_MPI = use_mpi;
+
+    prob_histograms.clear();
 }
 
 
@@ -224,6 +231,11 @@ ControlSimulator::run(uint64_t shots) {
                         << " trials because walltime exceeded "
                         << rt*1e-9 << "s.\n";
                 __n_trials_killed += trial_done.popcnt();
+                std::cout << "[ ALERT ] Killed "
+                        << trial_done.popcnt() << 
+                        " since walltime of " 
+                        << rt*1e-9
+                        << "s has been exceeded.\n";
                 trial_done.clear();
             }
         }
@@ -253,7 +265,7 @@ ControlSimulator::run(uint64_t shots) {
                             shots_in_curr_batch*TRACES_PER_SHOT,
                             trace_width,
                             ref,
-                            event_trace,
+                            event_trace.transposed(),
                             stim::SampleFormat::SAMPLE_FORMAT_DETS,
                             'D',
                             'L',
@@ -358,6 +370,7 @@ ControlSimulator::clear() {
     qex_rt_valid.clear();
     qex_pc.clear();
     qex_qubit_busy.clear();
+    qex_br_taken.clear();
     rt_stall.clear();
 }
 
@@ -374,11 +387,23 @@ ControlSimulator::IF() {
     for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
         if (!trial_done[t]) continue;
         if (if_stall[t])    continue;
-        // Otherwise, update the PC and do any IO.
+
         if_pc[t].u64[0] = pc[t].u64[0];
 
+        auto inst = program[pc[t].u64[0]];
+        // Update the PC and do any IO.
+        //
+        // If the instruction is a jmp (unconditional),
+        // then set the PC to the correct value and invalidate
+        // the latch.
+        if (inst.name == "jmp" && !qex_br_taken[t]) {
+            pc[t].u64[0] = inst.operands[0];
+            if_id_valid[t] = 0;
+        } else {
+            pc[t].u64[0]++;
+        }
+
         // Check if this is a fastforwarding instruction.
-        auto& inst = program[pc[t].u64[0]];
         if (params.enable_fast_forwarding && !is_building_canonical_circuit) {
             if (inst.name == "ffstart") {
                 // Apply any pending periodic errors.
@@ -389,7 +414,6 @@ ControlSimulator::IF() {
                 is_fast_forwarding = false;
             }
         }
-        pc[t].u64[0]++;
     }
 }
 
@@ -425,8 +449,8 @@ ControlSimulator::QEX() {
     // accessing the contents of these structures each trial (assuming
     // that most trials are at the same point in the program). So,
     // this should maximize cache accesses.
-    stim::simd_bit_table events_t = event_history.transposed();
-    stim::simd_bit_table obs_t = obs_buffer.transposed();
+    stim::simd_bit_table events_tp = event_history.transposed();
+    stim::simd_bit_table obs_tp = obs_buffer.transposed();
 
     // As we can execute quantum instructions in a batch, track
     // which instructions are being executed in which trials.
@@ -438,11 +462,13 @@ ControlSimulator::QEX() {
 
         if (IS_NOP_LIKE.count(inst.name))    continue;
 
+        auto qubit_operands = inst.get_qubit_operands();
         // If the instruction requires interacting with any qubits,
         // check if any operands are busy. If so, stall the pipeline.
         bool stall_pipeline = false;
-        auto qubit_operands = inst.get_qubit_operands();
-        if (IS_FENCE.count(inst.name)) {
+        if (is_building_canonical_circuit && IS_LOCKING.count(inst.name)) {
+            continue;
+        } else if (IS_FENCE.count(inst.name)) {
             for (uint x = 0; x < n_qubits; x++) {
                 if (qex_qubit_busy[t].u64[x] > 0) {
                     qex_stall[t] = 1;
@@ -468,10 +494,10 @@ ControlSimulator::QEX() {
         // See instruction.h for details about what these instructions
         // do.
         uint64_t    br_pc;
-        bool        br_taken = false;
+        qex_br_taken[t] = 0;
 
         if (inst.name == "decode") {
-            syndrome_t s(events_t[t]);
+            syndrome_t s(events_tp[t]);
             if (decoder != nullptr) {
                 auto res = decoder->decode_error(s);
                 uint64_t exec_time = (uint64_t)res.exec_time;
@@ -483,7 +509,7 @@ ControlSimulator::QEX() {
                 }
                 // Update Pauli frames
                 uint offset = inst.operands[0];
-                for (uint i = 0; i < res.corr.size(); i++) {
+                for (uint i = 0; i < res.corr.num_bits_padded(); i++) {
                     pauli_frames[i+offset][t] ^= res.corr[i];
                 }
             }
@@ -496,27 +522,31 @@ ControlSimulator::QEX() {
                 event_trace[i] |= s;
                 for (uint j = 0; j < params.save_observables.size(); j++) {
                     uint obs = params.save_observables[j];
-                    event_trace[i][event_trace_max_written+j] = obs_t[t][j];
+                    event_trace[i][event_trace_max_written+j] = obs_tp[t][j];
                 }
                 trace_index++;
             }
         } else if (inst.name == "jmp") {
-            br_pc = inst.operands[0];
-            br_taken = true;
         } else if (inst.name == "brdb") {
             br_pc = inst.operands[0];
-            br_taken = decoder_busy[t].not_zero();
-        } else if (inst.name == "braspc") {
+            qex_br_taken[t] = decoder_busy[t].not_zero();
+        } else if (inst.name == "brifmspc" || inst.name == "brnifmspc") {
             br_pc = inst.operands[0];
-        } else if (inst.name == "brospc") {
-            br_pc = inst.operands[0];
+            bool all_speculated = true;
+            for (uint i = 1; i < inst.operands.size(); i++) {
+                uint j = inst.operands[i];
+                all_speculated &= sig_m_spec[j][t];
+                // Premptively place the results.
+                qsim->record_table[j][t] = val_m_spec[j][t];
+            }
+            qex_br_taken[t] = all_speculated ^ (inst.name == "brnifmspc");
         } else if (inst.name == "dfence") {
             if (decoder_busy[t].not_zero()) {
                 qex_stall[t] = 1;
                 qex_rt_valid[t] = 0;
             }
         } else if (inst.name == "savem") {
-            vlw_t x = to_vlw(obs_t[t], obs_buffer_max_written);
+            vlw_t x = to_vlw(obs_tp[t], obs_buffer_max_written);
             prob_histograms[x]++;
         } else if (inst.name == "done") {
             trial_done[t] = 0;
@@ -530,7 +560,8 @@ ControlSimulator::QEX() {
             instruction_to_trials[inst].insert(t);
         }
 
-        if (br_taken) {
+        qex_br_taken[t] &= !is_building_canonical_circuit;
+        if (qex_br_taken[t]) {
             if_id_valid[t] = 0;
             id_qex_valid[t] = 0;
             pc[t].u64[0] = br_pc;
@@ -542,16 +573,19 @@ ControlSimulator::QEX() {
     }
     for (auto pair : instruction_to_trials) {
         auto inst = pair.first;
-        if (params.verbose) {
-            std::cout << "\t\t\t" << inst.str() << "\tT !=";
-            for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
-                if (!pair.second.count(t)) {
-                    std::cout << " " << t;
-                }
-            }
-            std::cout << "\n";
+        stim::simd_bits trial_mask(G_SHOTS_PER_BATCH);
+        for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
+            if (!pair.second.count(t))  trial_mask[t] = 1;
         }
-        // Create snapshot of Clifford simulator state.
+        if (params.verbose) {
+            std::cout << "\t\t\t" << inst.str() << "\t#T = ";
+            uint64_t trials_part_of_batch = 0;
+            for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
+                trials_part_of_batch += pair.second.count(t);
+            }
+            std::cout << trials_part_of_batch << "\n";
+        }
+        // Create snapshot of state simulator state.
         qsim->snapshot();
         // Execute the operation, alongside any errors.
         //
@@ -565,9 +599,27 @@ ControlSimulator::QEX() {
             apply_gate_error(inst);
         }
 
-        stim::simd_bit_table event_history_cpy(event_history);
+        stim::simd_bit_table    event_history_cpy(event_history);
+        stim::simd_bit_table    sig_m_spec_cpy(sig_m_spec);
+        stim::simd_bit_table    val_m_spec_cpy(val_m_spec);
 
-        if (inst.name == "h") {
+        stim::simd_bit_table    obs_buffer_cpy(obs_buffer);
+
+        if (inst.name == "lockq") {
+            for (uint i : inst.operands) {
+                qsim->lock_table[i].clear();
+                qsim->lock_table[i].invert_bits();
+            }
+        } else if (inst.name == "unlockq") {
+            for (uint i : inst.operands) {
+                qsim->lock_table[i].clear();
+            }
+        } else if (inst.name == "mspcflush") {
+            for (uint i : inst.operands) {
+                sig_m_spec[i].clear();
+                val_m_spec[i].clear();
+            }
+        } else if (inst.name == "h") {
             qsim->H(inst.operands);
             if (is_building_canonical_circuit) {
                 canonical_circuit.append_op("H", inst.operands);
@@ -601,6 +653,51 @@ ControlSimulator::QEX() {
                         measurement_count++;
                 }
                 canonical_circuit.append_op("M", qubits);
+            }
+
+            // Do not execute the following for a canonical circuit.
+            if (!is_building_canonical_circuit && syndrome_predictor != nullptr) {
+                syndrome_predictor->trial_mask = trial_mask;
+                syndrome_predictor->trial_mask_valid = true;
+                const uint pred_width = syndrome_predictor->round_depth
+                                        * syndrome_predictor->detectors_per_round;
+                stim::simd_bit_table pred_input(shots_in_curr_batch, pred_width);
+                for (uint r = 0; r < syndrome_predictor->round_depth; r++) {
+                    uint delta = r*syndrome_predictor->detectors_per_round;
+                    for (uint i = 0; 
+                            i < syndrome_predictor->detectors_per_round; i++) 
+                    {
+                        uint mbase = inst.operands[0] + i;
+                        if (delta > mbase)  break;
+                        uint m = mbase - delta;
+                        pred_input[m] |= qsim->record_table[m];
+                        if (m > syndrome_predictor->detectors_per_round) {
+                            uint mp = m - syndrome_predictor->detectors_per_round;
+                            pred_input[m] ^= qsim->record_table[mp];
+                        }
+                    }
+                }
+                auto res = syndrome_predictor->predict(pred_input);
+                for (uint i = 0; 
+                        i < syndrome_predictor->detectors_per_round; i++) 
+                {
+                    uint mbase = inst.operands[0] + i;
+                    uint mn = mbase + syndrome_predictor->detectors_per_round;
+
+                    sig_m_spec[mn].swap_with(res.sig_pred[i]);
+                    sig_m_spec[mn].for_each_word(
+                                    sig_m_spec[mbase],
+                                    [&] (auto& m2, auto& m1)
+                                    {
+                                        m2 &= ~m1;  // Do not speculate
+                                                    // if we speculated last
+                                                    // round.
+                                    });
+                    // Note that the predictor works with detection events, so
+                    // we have to convert back.
+                    val_m_spec[mn].swap_with(res.val_pred[i]);
+                    val_m_spec[mn] ^= qsim->record_table[mbase];
+                }
             }
         } else if (inst.name == "mnrc") {
             qsim->M(inst.operands, -1);
@@ -652,10 +749,17 @@ ControlSimulator::QEX() {
         } else if (inst.name == "hshift") {
             const uint x = inst.operands[0];
             qsim->shift_record_by(x);
-            // Shift event history as well.
+            // Shift event history and speculation data as well.
             for (uint i = 0; i < 4096; i++) {
-                if (i < x)  event_history[i].clear();
-                else        event_history[i].swap_with(event_history[i-x]);
+                if (i < x) {
+                    event_history[i].clear();
+                    sig_m_spec[i].clear();
+                    val_m_spec[i].clear();
+                } else {
+                    event_history[i].swap_with(event_history[i-x]);
+                    sig_m_spec[i].swap_with(sig_m_spec[i-x]);
+                    val_m_spec[i].swap_with(val_m_spec[i-x]);
+                }
             }
 
             if (is_building_canonical_circuit) {
@@ -671,37 +775,47 @@ ControlSimulator::QEX() {
         if (!apply_error_before.count(inst.name)) {
             apply_gate_error(inst);
         }
+        // Undo any changes if necessary.
+        if (inst.name == "mspcflush") {
+            for (uint i : inst.operands) {
+                copy_where(sig_m_spec_cpy[i], sig_m_spec[i], trial_mask);
+                copy_where(val_m_spec_cpy[i], val_m_spec[i], trial_mask);
+            }
+        } else if (inst.name == "event") {
+            const uint k = inst.operands[0];
+            copy_where(event_history_cpy[k], event_history[k], trial_mask);
+        } else if (inst.name == "obs") {
+            const uint k = inst.operands[0];
+            copy_where(obs_buffer_cpy[k], obs_buffer[k], trial_mask);
+        } else if (inst.name == "xorfr") {
+            const uint k = inst.operands[1];
+            copy_where(obs_buffer_cpy[k], obs_buffer[k], trial_mask);
+        } else if (inst.name == "hshift") {
+            for (uint i = 0; i < 4096; i++) {
+                copy_where(event_history_cpy[i], event_history[i], trial_mask);
+            }
+            qsim->rollback_where(trial_mask);
+        } else {
+            qsim->rollback_where(trial_mask);
+            if (inst.name == "mrc" && syndrome_predictor != nullptr) {
+                for (uint i = 0; 
+                        i < syndrome_predictor->detectors_per_round; i++) 
+                {
+                    uint mbase = inst.operands[0] + i;
+                    uint mn = mbase + syndrome_predictor->detectors_per_round;
+
+                    copy_where(sig_m_spec_cpy[mn], sig_m_spec[mn], trial_mask);
+                    copy_where(val_m_spec_cpy[mn], val_m_spec[mn], trial_mask);
+                }
+            }
+        }
 
         // Now set the qubits as busy for X amount of time.
         //
         // Or if the trial did not want to execute the operation, rollback
         // the change.
         for (uint64_t t = 0; t < shots_in_curr_batch; t++) {
-            if (!pair.second.count(t)) {
-                if (params.verbose) {
-                    std::cout << "\t\tRolling back state at T = " << t << "\n";
-                }
-                // Undo any changes
-                if (inst.name == "event") {
-                    const uint k = inst.operands[0];
-                    event_history[k][t] = 0;
-                } else if (inst.name == "obs") {
-                    const uint k = inst.operands[0];
-                    obs_buffer[k][t] = 0;
-                } else if (inst.name == "xorfr") {
-                    const uint k1 = inst.operands[0];
-                    const uint k2 = inst.operands[1];
-                    obs_buffer[k2][t] ^= pauli_frames[k1][t];
-                } else if (inst.name == "hshift") {
-                    for (uint i = 0; i < 4096; i++) {
-                        event_history[i][t] = event_history_cpy[i][t];
-                    }
-                    qsim->rollback_at_trial(t);
-                } else {
-                    qsim->rollback_at_trial(t);
-                }
-                continue;
-            }
+            if (trial_mask[t])  continue;
             // Do not do any latency updates if we are fast forwarding.
             if (is_fast_forwarding) continue;
             if (inst.name == "cx") {
@@ -745,15 +859,18 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
             lt.push_back(params.errors.op2q_leakage_transport[inst.name][x_y]);
             
             if (is_building_canonical_circuit) {
-                canonical_circuit.append_op("L_TRANSPORT", 
-                            {x, y},
-                            params.errors.op2q_leakage_transport[inst.name][x_y]);
-                canonical_circuit.append_op("L_ERROR", 
-                            {x, y},
-                            params.errors.op2q_leakage_injection[inst.name][x_y]);
-                canonical_circuit.append_op("DEPOLARIZE2", 
-                            {x, y},
-                            params.errors.op2q[inst.name][x_y]);
+                fp_t li = params.errors.op2q_leakage_injection[inst.name][x_y];
+                fp_t lt = params.errors.op2q_leakage_transport[inst.name][x_y];
+                fp_t dp = params.errors.op2q[inst.name][x_y];
+                if (lt > 0.0) {
+                    canonical_circuit.append_op("L_TRANSPORT", {x, y}, lt);
+                }
+                if (li > 0.0) {
+                    canonical_circuit.append_op("L_ERROR", {x, y}, li);
+                }
+                if (dp > 0.0) {
+                    canonical_circuit.append_op("DEPOLARIZE2", {x, y}, dp);
+                }
             }
         }
         qsim->eLT(inst.operands, lt);

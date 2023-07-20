@@ -39,14 +39,19 @@ public:
         :n_qubits(n),
         max_shots(max_shots),
         record_table(statesim::G_RECORD_SPACE_SIZE, max_shots),
+        lock_table(n, max_shots),
         record_table_cpy(statesim::G_RECORD_SPACE_SIZE, max_shots),
+        lock_table_cpy(n, max_shots),
         rng(0)
-    {}
+    {
+        reset_sim();
+    }
 
     void    set_seed(uint64_t x) { rng.seed(x); }
 
     virtual void    reset_sim(void) {
         record_table.clear();
+        lock_table.clear();
     }
 
     virtual void    H(std::vector<uint>) =0;
@@ -70,19 +75,25 @@ public:
 
     virtual void    snapshot(void);
                             // Saves the current state of the simulator.
-    virtual void    rollback_at_trial(uint64_t);
+    virtual void    rollback_where(stim::simd_bits_range_ref);
                             // Rolls back the state to the snapshot
 
     stim::simd_bit_table    record_table;
+    stim::simd_bit_table    lock_table;
     uint64_t                shots;
 protected:
     stim::simd_bit_table    record_table_cpy;
+    stim::simd_bit_table    lock_table_cpy;
 
     std::mt19937_64 rng;
 
     const uint      n_qubits;
     const uint64_t  max_shots;
 };
+
+void    copy_where(stim::simd_bits_range_ref from,
+                    stim::simd_bits_range_ref to,
+                    stim::simd_bits_range_ref pred);
 
 }   // qontra
 
