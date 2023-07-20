@@ -30,6 +30,8 @@ int main(int argc, char* argv[]) {
     help += "\tCode name (--code), do not have to use --input and --output if used\n";
     help += "\t\tAssumes that there is a ../graphs/tanner/*.txt file,";
     help += " ../sdl/*.txt file, and ../data folder\n";
+    help += "\tMemory experiments rounds (--rounds)\n";
+    help += "\tMemory experiments shots (--shots)\n";
     help += "\tVerbose (-v)\n";
 
     bool help_requested = parser.option_set("h");
@@ -58,8 +60,9 @@ help_exit:
     };
     TannerGraph* graph = new TannerGraph(create_graph_from_file(fin, cb));
 
-    uint rounds = 3;
-    uint64_t shots = 100'000;
+    uint rounds;
+    uint64_t shots;
+    if (!parser.get_uint32("rounds", rounds) || !parser.get_uint64("shots", shots)) goto help_exit;
 
     // Define the cost function here.
     compiler::cost_t cf = [&] (compiler::ir_t* ir)

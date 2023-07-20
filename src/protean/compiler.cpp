@@ -344,10 +344,6 @@ Compiler::unify(ir_t* curr_ir) {
                     // Delete the second check and merge the roles.
                     auto pv = curr_ir->role_to_qubit[tv];
                     auto pw = curr_ir->role_to_qubit[tw];
-                    if (params.verbose) {
-                        std::cout << "\tMerging " << PRINT_V(pw->id) << " with "
-                                << PRINT_V(pv->id) << "\n";
-                    }
                     curr_ir->role_to_qubit[tw] = pv;
                     
                     for (auto tu : curr_ir->qubit_to_roles[pw]) {
@@ -415,9 +411,6 @@ Compiler::reduce(ir_t* curr_ir) {
         if (!any_nondata_neighbors) {
             if (!curr_ir->is_gauge_only.count(pv))   goto reduce_do_not_remove_nondata;
             // Otherwise delete the qubit.
-            if (params.verbose) {
-                std::cout << "\tDeleting qubit " << PRINT_V(pv->id) << "\n";
-            }
             for (auto tv : curr_ir->qubit_to_roles[pv]) {
                 curr_ir->role_to_qubit.erase(tv);
             }
@@ -497,10 +490,6 @@ reduce_do_not_remove_nondata:
         }
         curr_ir->qubit_to_roles.erase(pv);
 
-        if (params.verbose) {
-            std::cout << "\tReducing " << PRINT_V(pv->id) << " to " << PRINT_V(pw->id) << "\n";
-        }
-        
         visited.insert(pv);
         visited.insert(pw);
         deallocated.insert(pv);
@@ -545,10 +534,6 @@ Compiler::merge(ir_t* curr_ir) {
     for (auto tv : curr_ir->qubit_to_roles[v2]) {
         curr_ir->qubit_to_roles[v1].push_back(tv);
         curr_ir->role_to_qubit[tv] = v1;
-    }
-    if (params.verbose) {
-        std::cout << "\tDeleted qubit " << PRINT_V(v2->id) << " and merged it with "
-                << PRINT_V(v1->id) << ".\n";
     }
     arch->delete_vertex(v2);
     // Add new edges
@@ -626,11 +611,6 @@ Compiler::flatten(ir_t* curr_ir) {
                 | (tanner::vertex_t::GAUGE << ID_TYPE_OFFSET);
     curr_ir->qubit_to_roles[mm] = std::vector<tanner::vertex_t*>();
 
-    if (params.verbose) {
-        std::cout << "\tCreated gauge " << PRINT_V(mm->id) << " for coupling between "
-            << PRINT_V(src->id) << " and " << PRINT_V(dst->id) << ".\n";
-    }
-    
     auto src_mm = new proc3d::edge_t;
     src_mm->src = src;
     src_mm->dst = mm;
@@ -899,8 +879,7 @@ Compiler::score(ir_t* curr_ir) {
     curr_ir->valid = !check_connectivity_violation(curr_ir)
                 && !check_size_violation(curr_ir)
                 && curr_ir->arch->get_thickness() <= constraints.max_thickness;
-    // If constraints are maintained, score the IR.
-    if (curr_ir->valid)  curr_ir->score = objective(curr_ir);
+    curr_ir->score = objective(curr_ir);
 }
 
 bool
@@ -924,11 +903,6 @@ Compiler::induce(ir_t* curr_ir) {
                 uint d = tanner_graph->get_degree(ti);
                 if (d < new_max_cw) new_max_cw = d;
                 any_change = true;
-                if (params.verbose) {
-                    std::cout << "\tInduced gauge " << PRINT_V(ti->id)
-                                << " on " << PRINT_V(tv->id) << " and " << PRINT_V(tw->id)
-                                << " succeeded.\n";
-                }
             }
         }
     }
@@ -979,12 +953,6 @@ Compiler::sparsen(ir_t* curr_ir) {
         ty_tg->src = (void*)ty;
         ty_tg->dst = (void*)tg;
         tanner_graph->add_edge(ty_tg);
-        
-        if (params.verbose) {
-            std::cout << "\t( " << PRINT_V(target->id) << " ) Added new gauge between " 
-                            << PRINT_V(tx->id) << " and "
-                            << PRINT_V(ty->id) << "\n";
-        }
     }
     return true;
 }
