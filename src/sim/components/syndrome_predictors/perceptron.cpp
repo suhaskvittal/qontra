@@ -20,6 +20,11 @@ PerceptronPredictor::predict(stim::simd_bit_table& input) {
     for (uint64_t t = 0; t < input.num_minor_bits_padded(); t++) {
         if (trial_mask_valid && !trial_mask[t]) continue;
         for (uint i = 0; i < detectors_per_round; i++) {
+            if (predict_only_nontrivial_events && is_trivial(input_tp, t, i)) {
+                sig_pred_tp[t][i] = 0;
+                continue;
+            }
+
             wgt_t pred = get_bias(i);
 
             for (uint r = 0; r < round_depth; r++) {
@@ -69,34 +74,47 @@ PerceptronPredictor::predict(stim::simd_bit_table& input) {
 
 void
 PerceptronPredictor::train(stim::simd_bit_table& data) {
+    const int NONZERO_MULT = 3;
+
     stim::simd_bit_table data_tp = data.transposed();
 
     const uint off1 = round_depth*detectors_per_round;
     const uint off2 = off1 + detectors_per_round;
     for (uint64_t t = 0; t < data.num_minor_bits_padded(); t++) {
-        if (t % 10000 == 0)
-        std::cout << "\t\tt = " << t << "\n";
         for (uint i = 0; i < detectors_per_round; i++) {
+            // Check if this is a trivial event. If we are restricted to
+            // nontrivial events, then skip.
+            if (predict_only_nontrivial_events && is_trivial(data_tp, t, i)) {
+                continue;
+            }
             // First, compute the labels.
             wgt_t y;
-            y.is_zero = data_tp[t][off2+i] == 0 ? 1 : -1;
+            y.is_zero = data_tp[t][off2+i] == 0 ? 1 : -1*NONZERO_MULT;
             y.is_same = data_tp[t][off1+i] == data_tp[t][off2+i] ? 1 : -1;
 
             wgt_t& bias = get_bias(i);
             bias += y;
-            bias.clamp();
             // Do not update weights multiple times if they are used
             // multiple times.
             for (uint r = 0; r < round_depth; r++) {
                 for (uint j = 0; j < detectors_per_round; j++) {
                     wgt_t& x = get(i, r, j);
-                    int iv = data_tp[t][j] ? 1 : -1;
+                    int iv = data_tp[t][j] ? 1*NONZERO_MULT : -1;
                     x += iv*y;
-                    x.clamp();
                 }
             }
         }
     }
+}
+
+bool
+PerceptronPredictor::is_trivial(stim::simd_bit_table& data, uint64_t t, uint i) {
+    bool is_trivial = true;
+    uint cnt = 0;
+    for (uint r = 0; r < round_depth; r++) {
+        cnt += data[t][r*detectors_per_round+i];
+    }
+    return cnt < ceil(round_depth*0.5);
 }
 
 PerceptronPredictor::wgt_t&

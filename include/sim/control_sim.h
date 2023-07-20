@@ -10,6 +10,7 @@
 #include "defs.h"
 #include "experiments.h"
 #include "instruction.h"
+#include "sim/components/syndrome_predictor.h"
 #include "sim/frame_sim.h"
 #include "tables.h"
 
@@ -50,6 +51,8 @@ public:
 
     void    load_simulator(StateSimulator* ss) { qsim = ss; }
     void    load_decoder(decoder::Decoder* dec) { decoder = dec; }
+    void    load_predictor(sim::SyndromePredictor* pr) 
+                { syndrome_predictor = pr; }
 
     struct {
         // Simulation parameters
@@ -71,8 +74,6 @@ public:
         // Control system configuration
         fp_t        clock_frequency = 250e6;
         bool        decoder_is_ideal = true;    // Decoder only takes 1ns to run.
-        
-        bool        speculate_measurements = true;
 
         // Configuration of quantum computer
         TimeTable   timing;
@@ -147,6 +148,8 @@ private:
     stim::simd_bit_table    sig_m_spec;     // Active if the measurement was
                                             // speculated.
     stim::simd_bit_table    val_m_spec;     // Value of speculated measurement.
+
+    sim::SyndromePredictor* syndrome_predictor;
 
     // IF io
     stim::simd_bits         if_stall;

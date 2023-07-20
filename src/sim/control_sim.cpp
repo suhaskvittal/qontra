@@ -46,6 +46,7 @@ ControlSimulator::ControlSimulator(
     // Selective Syndrome Extraction
     sig_m_spec(4096, G_SHOTS_PER_BATCH),
     val_m_spec(4096, G_SHOTS_PER_BATCH),
+    syndrome_predictor(nullptr),
     // IF io
     if_stall(G_SHOTS_PER_BATCH),
     if_pc(G_SHOTS_PER_BATCH, 64),
@@ -655,32 +656,47 @@ ControlSimulator::QEX() {
             }
 
             // Do not execute the following for a canonical circuit.
-            if (!is_building_canonical_circuit && params.speculate_measurements) {
-                const uint delta = inst.operands.size() - 1;    // Assume this is
-                                                                // the delta, or
-                                                                // number of
-                                                                // measurements per
-                                                                // round.
-                for (uint i = 0; i < inst.operands.size()-1; i++) {
-                    uint m2 = inst.operands[0] + i;
-                    if (delta > m2) break;
-                    uint m1 = m2 - delta;   // Round before
-                    uint m3 = m2 + delta;   // Round after
+            if (!is_building_canonical_circuit && syndrome_predictor != nullptr) {
+                syndrome_predictor->trial_mask = trial_mask;
+                syndrome_predictor->trial_mask_valid = true;
+                const uint pred_width = syndrome_predictor->round_depth
+                                        * syndrome_predictor->detectors_per_round;
+                stim::simd_bit_table pred_input(shots_in_curr_batch, pred_width);
+                for (uint r = 0; r < syndrome_predictor->round_depth; r++) {
+                    uint delta = r*syndrome_predictor->detectors_per_round;
+                    for (uint i = 0; 
+                            i < syndrome_predictor->detectors_per_round; i++) 
+                    {
+                        uint mbase = inst.operands[0] + i;
+                        if (delta > mbase)  break;
+                        uint m = mbase - delta;
+                        pred_input[m] |= qsim->record_table[m];
+                        if (m > syndrome_predictor->detectors_per_round) {
+                            uint mp = m - syndrome_predictor->detectors_per_round;
+                            pred_input[m] ^= qsim->record_table[mp];
+                        }
+                    }
+                }
+                auto res = syndrome_predictor->predict(pred_input);
+                for (uint i = 0; 
+                        i < syndrome_predictor->detectors_per_round; i++) 
+                {
+                    uint mbase = inst.operands[0] + i;
+                    uint mn = mbase + syndrome_predictor->detectors_per_round;
 
-                    sig_m_spec[m3].for_each_word(
-                            sig_m_spec[m1],
-                            sig_m_spec[m2],
-                            [&] (auto& sig3, auto& sig1, auto& sig2)
-                            {
-                                sig3 = ~(sig1 ^ sig2);
-                            });
-                    val_m_spec[m3].for_each_word(
-                            val_m_spec[m1],
-                            val_m_spec[m2],
-                            [&] (auto& val3, auto& val1, auto& val2)
-                            {
-                                val3 = val2;
-                            });
+                    sig_m_spec[mn].swap_with(res.sig_pred[i]);
+                    sig_m_spec[mn].for_each_word(
+                                    sig_m_spec[mbase],
+                                    [&] (auto& m2, auto& m1)
+                                    {
+                                        m2 &= ~m1;  // Do not speculate
+                                                    // if we speculated last
+                                                    // round.
+                                    });
+                    // Note that the predictor works with detection events, so
+                    // we have to convert back.
+                    val_m_spec[mn].swap_with(res.val_pred[i]);
+                    val_m_spec[mn] ^= qsim->record_table[mbase];
                 }
             }
         } else if (inst.name == "mnrc") {
@@ -781,15 +797,15 @@ ControlSimulator::QEX() {
             qsim->rollback_where(trial_mask);
         } else {
             qsim->rollback_where(trial_mask);
-            if (inst.name == "mrc" && params.speculate_measurements) {
-                const uint delta = inst.operands.size() - 1;
-                for (uint i = 0; i < inst.operands.size() - 1; i++) {
-                    uint m2 = inst.operands[0] + i;
-                    if (delta > m2) break;  // We would have not speculated
-                                            // if this was the case.
-                    uint m3 = m2 + delta;
-                    copy_where(sig_m_spec_cpy[m3], sig_m_spec[m3], trial_mask);
-                    copy_where(val_m_spec_cpy[m3], val_m_spec[m3], trial_mask);
+            if (inst.name == "mrc" && syndrome_predictor != nullptr) {
+                for (uint i = 0; 
+                        i < syndrome_predictor->detectors_per_round; i++) 
+                {
+                    uint mbase = inst.operands[0] + i;
+                    uint mn = mbase + syndrome_predictor->detectors_per_round;
+
+                    copy_where(sig_m_spec_cpy[mn], sig_m_spec[mn], trial_mask);
+                    copy_where(val_m_spec_cpy[mn], val_m_spec[mn], trial_mask);
                 }
             }
         }

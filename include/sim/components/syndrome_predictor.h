@@ -29,6 +29,13 @@ public:
         trial_mask_valid(false)
     {}
 
+    SyndromePredictor(const SyndromePredictor& other)
+        :round_depth(other.round_depth),
+        detectors_per_round(other.detectors_per_round),
+        trial_mask(1),
+        trial_mask_valid(false)
+    {}
+
     typedef struct {
         stim::simd_bit_table    sig_pred;   // Whether to skip the next round.
         stim::simd_bit_table    val_pred;   // The predicted measurement in 

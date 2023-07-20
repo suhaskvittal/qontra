@@ -10,6 +10,7 @@
 #include "experiments.h"
 #include "parsing/cmd.h"
 #include "sim/components/syndrome_predictor.h"
+#include "sim/components/syndrome_predictors/multi_level.h"
 #include "sim/components/syndrome_predictors/perceptron.h"
 
 #include <fstream>
@@ -80,6 +81,9 @@ int main(int argc, char* argv[]) {
                                     &lattice,
                                     PerceptronPredictor::Mode::global);
 
+    PerceptronPredictor ml_per(plocal);
+    ml_per.predict_only_nontrivial_events = true;
+
     uint64_t max_data = 50000;
 
     stim::simd_bit_table data(max_data+100, (d+1)*detectors_per_round);
@@ -117,41 +121,46 @@ int main(int argc, char* argv[]) {
             s1++;
         }
     };
-    std::cout << "Collecting data...\n";
     read_syndrome_trace(trace_folder, circuit, callbacks);
-    std::cout << "Got " << s1 << " samples. Training...\n";
     data = data.transposed();
 
-    std::cout << "\tshare...\n";
     pshare.train(data);
+    ml_per.train(data);
+
+    MultiLevelPredictor<2> multi_level;
+    multi_level[1] = &simple;
+    multi_level[0] = &ml_per;
 
     /*
 
     std::cout << "\tgeom...\n";
     pgeom.train(data);
-    
+
     std::cout << "\tlocal...\n";
     plocal.train(data);
 
     std::cout << "\tglobal...\n";
     pglobal.train(data);
 
-    */
 
     std::cout << "Done training.\n";
+    */
 
     std::vector<SyndromePredictor*> predictors;
     predictors.push_back(&simple);
     predictors.push_back(&pshare);
+    predictors.push_back(&multi_level);
     /*
     predictors.push_back(&pglobal);
     predictors.push_back(&pgeom);
     predictors.push_back(&plocal);
     */
+    pshare.print_weights();
 
     std::vector<std::string> pnames{
         "simple",
         "perceptron_share",
+        "multi_level",
         "perceptron_global",
         "perceptron_geom",
         "perceptron_local",
@@ -159,6 +168,41 @@ int main(int argc, char* argv[]) {
 
     auto test_tp = test.transposed();
 
+    std::ofstream   pp_pred_out("predictions.txt");
+
+    const uint off1 = (d-1)*detectors_per_round;
+    const uint off2 = d*detectors_per_round;
+
+    // Write to log files before computing stats.
+    auto pp_res = multi_level.predict(test_tp);
+    auto pp_sig_pred = pp_res.sig_pred.transposed();
+    auto pp_val_pred = pp_res.val_pred.transposed();
+    for (uint64_t t = 0; t < s2; t++) {
+        pp_pred_out << "----------------------------------------------\n";
+        for (uint r = 0; r <= d; r++) {
+            if (r == d) pp_pred_out << "****";
+            else        pp_pred_out << "    ";
+            pp_pred_out << "\t\t";
+            for (uint i = 0; i < detectors_per_round; i++) {
+                if (test[t][r*detectors_per_round+i])   pp_pred_out << "!";
+                else                                    pp_pred_out << "_";
+            }
+            pp_pred_out << "\n";
+        }
+        pp_pred_out << "perceptron\t";
+        for (uint i = 0; i < detectors_per_round; i++) {
+            if (!pp_sig_pred[t][i]) {
+                pp_pred_out << "?";
+            } else if (pp_val_pred[t][i] == test[t][off2+i]) {
+                pp_pred_out << "O";
+            } else {
+                pp_pred_out << "X";
+            }
+        }
+        pp_pred_out << "\n";
+    }
+
+    // Compute stats for each predictor.
     for (uint k = 0; k < predictors.size(); k++) {
         auto predictor = predictors[k];
         std::string name = pnames[k];
@@ -167,41 +211,13 @@ int main(int argc, char* argv[]) {
         auto sig_pred = res.sig_pred.transposed();
         auto val_pred = res.val_pred.transposed();
 
-        /*
-        fp_t sum_frac_predicted = 0.0;
-        fp_t n_correct = 0.0;
-
-        const uint off1 = (d-1)*detectors_per_round;
-        const uint off2 = d*detectors_per_round;
-        for (uint64_t t = 0; t < s2; t++) {
-            fp_t n_predicted = 0;
-            bool is_correct = true;
-            for (uint i = 0; i < detectors_per_round; i++) {
-                if (!sig_pred[t][i])    continue;
-                n_predicted++;
-                is_correct &= (val_pred[t][i] == test[t][off2+i]);
-            }
-            n_correct += is_correct;
-            sum_frac_predicted += n_predicted/detectors_per_round;
-        }
-        fp_t mean_frac_predicted = sum_frac_predicted / s2;
-        std::cout << "[ " << name << " ]\n";
-        std::cout << "\tCorrectly predicted " << n_correct
-                << " of " << s2 << " ("
-                << (n_correct/s2 * 100.0)
-                << "%)\n";
-        std::cout << "\tMean fraction predicted: " 
-            << mean_frac_predicted << "\n";
-        */
         uint64_t n_predicts = 0;
         uint64_t n_correct_predicts = 0;
         uint64_t n_nontrivial_predicts = 0;
         uint64_t n_correct_nontrivial_predicts = 0;
         uint64_t n_requests = 0;
-
-        const uint off1 = (d-1)*detectors_per_round;
-        const uint off2 = d*detectors_per_round;
         for (uint64_t t = 0; t < s2; t++) {
+            fp_t n_predicted = 0;
             for (uint i = 0; i < detectors_per_round; i++) {
                 n_requests++;
                 if (!sig_pred[t][i])    continue;
@@ -211,8 +227,10 @@ int main(int argc, char* argv[]) {
                 n_correct_nontrivial_predicts +=
                         (val_pred[t][i] == test[t][off2+i])
                         && (test[t][off1+i]);
+                n_predicted++;
             }
         }
+
         std::cout << "[ " << name << " ]\n";
         std::cout << "\tPredicted " << n_predicts << " of " 
                 << n_requests << " (" 

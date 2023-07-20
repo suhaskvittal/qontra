@@ -3,8 +3,8 @@
  *  date:   15 July 2023
  * */
 
-#ifndef PERCEPTRON_h
-#define PERCEPTRON_h
+#ifndef PERCEPTRON_SYNDROME_PREDICTOR_h
+#define PERCEPTRON_SYNDROME_PREDICTOR_h
 
 #include "graph/lattice_graph.h"
 #include "sim/components/syndrome_predictor.h"
@@ -56,7 +56,19 @@ public:
         lattice(lattice),
         mode(mode),
         locality_level(locality_level),
-        access_memoizer()
+        access_memoizer(),
+        predict_only_nontrivial_events(false)
+    {}
+
+    PerceptronPredictor(const PerceptronPredictor& other)
+        :SyndromePredictor(other),
+        weights(other.weights),
+        threshold(other.threshold),
+        lattice(other.lattice),
+        mode(other.mode),
+        locality_level(other.locality_level),
+        access_memoizer(other.access_memoizer),
+        predict_only_nontrivial_events(other.predict_only_nontrivial_events)
     {}
 
     SyndromePredictor::pred_result_t    predict(stim::simd_bit_table&) override;
@@ -64,6 +76,23 @@ public:
     // The training data should have extra rows that contain events in
     // the next round.
     void    train(stim::simd_bit_table&);
+
+    // This function
+    void    train_using_error_model(const stim::Circuit& error_model, 
+                                        uint64_t shots);
+
+    void print_weights(void) {
+        std::cout << "Weights:\n";
+        for (auto& x : weights) {
+            if (x.is_zero == 0 && x.is_same == 0)   continue;
+            std::cout << "\t" << x.is_zero << ", " << x.is_same << "\n";
+        }
+    }
+
+    bool    predict_only_nontrivial_events; // This restricts the Perceptron
+                                            // to only training/predicting
+                                            // on events where the most recent
+                                            // bit is 1.
 private:
     struct wgt_t {
         int     is_zero = 0;
@@ -97,6 +126,8 @@ private:
         }
     };
 
+    bool    is_trivial(stim::simd_bit_table&, uint64_t, uint);
+
     wgt_t&  get_bias(uint i);
     wgt_t&  get(uint i, uint r, uint j);
 
@@ -109,8 +140,11 @@ private:
     uint locality_level;
 
     typedef std::tuple<uint, uint, uint> access_t;
-    std::map<access_t, int>    access_memoizer;
-
+    std::map<access_t, int>    access_memoizer; // This will speed up weight
+                                                // accesses if get is rather
+                                                // slow.
+        
+    // Below are some operator overloads to make the code readable.
     friend wgt_t operator+(int lhs, wgt_t rhs) {
         return { rhs.is_zero + lhs, rhs.is_same + lhs};
     }
@@ -131,5 +165,5 @@ private:
 }   // sim
 }   // qontra
 
-#endif  // PERCEPTRON_h
+#endif  // PERCEPTRON_SYNDROME_PREDICTOR_h
 
