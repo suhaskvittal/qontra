@@ -14,3 +14,10 @@ python/
 src/gulliver/logs/*
 build/*
 build
+
+include/parsing/asm/parser.tab.c
+include/parsing/asm/parser.tab.h
+include/parsing/asm/lex.yy.c
+include/parsing/sdl/parser.tab.c
+include/parsing/sdl/parser.tab.h
+include/parsing/sdl/lex.yy.c

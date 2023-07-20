@@ -66,6 +66,11 @@ public:
     }
 
     virtual bool
+    contains(uint64_t id) {
+        return id_to_vertex.count(id);
+    }
+
+    virtual bool
     contains(V_t* v) {              // O(1) operation
         return id_to_vertex.count(v->id);
     }

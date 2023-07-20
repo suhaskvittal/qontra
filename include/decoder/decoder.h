@@ -13,6 +13,7 @@
 #include "timer.h"
 
 #include <string>
+#include <tuple>
 #include <utility>
 
 #include <strings.h>
@@ -32,11 +33,15 @@ public:
 
     virtual ~Decoder() {}
 
-    typedef struct {
-        fp_t exec_time;
-        std::vector<uint8_t> corr;
-        bool is_error;
-    } result_t;
+    typedef std::tuple<uint, uint, stim::simd_bits> assign_t;
+
+    struct result_t {
+        fp_t exec_time = 0.0;
+        stim::simd_bits corr = stim::simd_bits(1);
+        bool is_error = false;
+
+        std::vector<assign_t>   error_assignments;
+    };
 
     virtual result_t decode_error(const syndrome_t&) =0;    // This function
                                                             // will perform decoding
@@ -50,7 +55,7 @@ protected:
     // is_error: checks if the provided correction is a logical error.
 
     bool is_error(
-            const std::vector<uint8_t>& correction, const syndrome_t& syndrome)
+            const stim::simd_bits& correction, const syndrome_t& syndrome)
     {
         const uint n_detectors = circuit.count_detectors();
         const uint n_observables = circuit.count_observables();
@@ -87,6 +92,8 @@ protected:
     graph::DecodingGraph    decoding_graph;
 
     Timer   timer;
+
+    friend class WindowDecoder;
 };
 
 }   // decoder

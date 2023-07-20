@@ -9,6 +9,10 @@ namespace qontra {
 
 std::vector<uint>
 Instruction::get_qubit_operands() const {
+    // Note: this is for qubit operands that are physically interacted with!
+    //
+    // Do not include instructions like lockq or unlockq which do not interact
+    // with qubits directly.
     if (ONLY_HAS_QUBIT_OPERANDS.count(name)) {
         return operands;
     } else if (name == "mrc") {
@@ -106,6 +110,9 @@ relabel_operands(const schedule_t& sch) {
                 uint x = operand_map[i];
                 new_inst.operands.push_back(x);
             }
+        } else if (inst.name == "lckqifmspc") {
+            new_inst.operands = std::vector<uint>(inst.operands);
+            new_inst.operands[0] = operand_map[inst.operands[0]];
         } else {
             new_inst.operands = inst.operands;
         }

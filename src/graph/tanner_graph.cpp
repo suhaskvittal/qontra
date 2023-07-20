@@ -101,7 +101,7 @@ update_tanner_graph(graph::TannerGraph& graph, std::string line) {
         if ((ssi = line.find(",", pssi)) == std::string::npos) {
             ssi = line.size();
         }
-        uint dqid = std::stoi(line.substr(pssi, ssi));
+        uint dqid = std::stoi(line.substr(pssi, ssi-pssi));
         auto data_v = graph.get_vertex(dqid);
         if (data_v == nullptr) {
             data_v = new tanner::vertex_t;
