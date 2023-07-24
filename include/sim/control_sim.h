@@ -18,8 +18,9 @@
 #include <filesystem>
 #include <functional>
 #include <map>
-#include <vector>
+#include <queue>
 #include <random>
+#include <vector>
 
 #include <math.h>
 #include <stdio.h>
@@ -37,14 +38,30 @@ extern uint64_t     EVENT_HISTORY_SIZE; // Default is 1024*8 (1KB)
 extern uint64_t     OBS_BUFFER_SIZE;    // Default is 128.
 extern uint64_t     TRACES_PER_SHOT;    // Default is 1.
 
+struct error_event_t {
+    uint64_t    time_of_occurrence;
+    bool        is_timing_error;    // If true, then this is due to decoherence
+                                    // or dephasing. Otherwise, it is a gate error.
+    std::string operation_name;
+    
+    StateSimulator::error_data_t    data;
+
+    bool operator<(const error_event_t& other) const {
+        return time_of_occurrence < other.time_of_occurrence;
+    }
+};
+
 }
 
 class ControlSimulator {
 public:
     ControlSimulator(uint n_qubits, const schedule_t&, StateSimulator*);
 
-    void run(uint64_t shots);
-    void clear();
+    void    run(uint64_t shots);
+    void    clear();
+
+    void    replay_errors(uint64_t shots, 
+                            const std::vector<ctrlsim::error_event_t>&);
 
     void            build_error_model();
     stim::Circuit   get_error_model(void) { return canonical_circuit; }
@@ -61,6 +78,7 @@ public:
                                             // the simulator after this
                                             // much walltime has elapsed.
         uint        verbose = 0;
+
         // Fast-forwarding parameters
         //      Fast-forwarding the simulator makes all instructions take
         //      1 cycle and have no execution latency (i.e. a measurement
@@ -71,6 +89,20 @@ public:
         bool        enable_fast_forwarding = true;
         uint64_t    ff_apply_periodic_errors_at_t = 250;
         uint64_t    ff_periodic_error_assume_time_elapsed = 1000;
+
+        // Replay parameters
+        //      Replay allows the simulator to replay errors that have already
+        //      been recorded. This effectively functions as a form of trace-based
+        //      simulation. Replay also allows the simulator to inject new errors
+        //      and is useful for rare event simulation.
+        //
+        //      An error is only injected at some time T if:
+        //          (a) the error is a timing error (decoherence or dephasing), or
+        //          (b) the error is a operation error AND the qubit is in
+        //              the list of operands AND the instruction name is correct.
+        bool    inject_new_errors_on_replay = true;
+        bool    copy_replayed_errors_to_error_log = true;
+
         // Control system configuration
         fp_t        clock_frequency = 250e6;
         bool        decoder_is_ideal = true;    // Decoder only takes 1ns to run.
@@ -81,9 +113,6 @@ public:
         uint64_t    apply_periodic_errors_at_t = 100;
                                             // Apply state errors on all qubits
                                             // as frequently as shown.
-        bool        simulate_periodic_as_dpo_and_dph = false;
-                                            // If false, we just do depolarizing
-                                            // errors instead.
         // Saving syndrome data
         bool                save_syndromes_to_file = false;
         std::string         syndrome_output_folder; 
@@ -107,20 +136,25 @@ public:
     uint64_t    latency_std;
 
     uint64_t    sim_time;
+
+    std::vector<ctrlsim::error_event_t> error_log;
 private:
     typedef std::array<Instruction, 4096>   imem;
 
-    void        IF(void);   // Instruction fetch
-    void        ID(void);   // Instruction decode
-    void        QEX(void);  // Quantum instruction execution
-    void        RT(void);   // Retire
+    void    IF(void);   // Instruction fetch
+    void    ID(void);   // Instruction decode
+    void    QEX(void);  // Quantum instruction execution
+    void    RT(void);   // Retire
     
     typedef std::function<void(std::vector<uint>, std::vector<fp_t>)>   ef_t;
 
-    void        apply_gate_error(Instruction&);
-    void        apply_periodic_error(fp_t t);
+    void    apply_gate_error(Instruction&);
+    void    apply_periodic_error(fp_t t);
+
+    void    replay(StateSimulator::ErrorLabel error, uint64_t q, uint64_t t);
 
     uint64_t    shots_in_curr_batch;
+    uint64_t    shots_elapsed;
     Timer       timer;
 
     // Simulation state tracking
@@ -180,6 +214,9 @@ private:
     // Fast forwarding structures.
     bool    is_fast_forwarding;
     bool    apply_pending_errors;
+    // Replay structures.
+    std::priority_queue<ctrlsim::error_event_t>  error_replay_queue;
+    bool    is_replaying_errors;
 };
 
 }   // qontra

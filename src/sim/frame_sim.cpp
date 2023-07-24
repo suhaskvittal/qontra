@@ -7,6 +7,15 @@
 
 namespace qontra {
 
+#define L_I     StateSimulator::label_1q_t::I
+#define L_X     StateSimulator::label_1q_t::X
+#define L_Y     StateSimulator::label_1q_t::Y
+#define L_Z     StateSimulator::label_1q_t::Z
+#define L_L     StateSimulator::label_1q_t::L
+
+static const StateSimulator::label_1q_t IXYZ[4] = { L_I, L_X, L_Y, L_Z };
+static const StateSimulator::label_1q_t IL[2] = { L_I, L_L };
+
 void
 FrameSimulator::H(std::vector<uint> operands) {
     for (uint i : operands) {
@@ -121,118 +130,66 @@ FrameSimulator::R(std::vector<uint> operands) {
     }
 }
 
-void
-FrameSimulator::eDPO(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i++) {
-        uint j = operands[i];
-        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-        [&] (size_t t) {
-            // Implement as reset. We conservatively assume that
-            // if the qubit was in |2>, it has only relaxed to |1>.
-            if (lock_table[j][t])   return;
-            x_table[j][t] = leak_table[j][t];
-            z_table[j][t] = rng();
-            leak_table[j][t] = 0;
-        });
-    }
+StateSimulator::label_1q_t
+FrameSimulator::eDP1(uint q, uint64_t t) {
+    auto p = rng() & 3;
+    x_table[q][t] ^= (bool)(p & 1);
+    z_table[q][t] ^= (bool)(p & 2);
+    return IXYZ[p];
 }
 
-void
-FrameSimulator::eDPH(std::vector<uint> operands, std::vector<fp_t> rates) {
-    // I believe that properly simulating dephasing errors requires a state
-    // vector simulator, so to a first order approximation, we will just
-    // perform a "Hadamard error" so we rotate the qubit by 90 deg. This
-    // results in a uniform superposition in the current basis.
-    //  i.e. |+> --> |0> = |+> + |->    (ignoring the constant for readability)
-    //       |0> --> |+> = |0> + |1>
-    for (uint i = 0; i < operands.size(); i++) {
-        uint j = operands[i];
-        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j][t])   return;
-
-            auto tmp = x_table[j][t];
-            x_table[j][t] = z_table[j][t];
-            z_table[j][t] = tmp;
-        });
-    }
+StateSimulator::label_1q_t
+FrameSimulator::eX(uint q, uint64_t t) {
+    x_table[q][t] ^= 1;
+    return L_X;
 }
 
-void
-FrameSimulator::eDP1(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i++) {
-        uint j = operands[i];
-        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j][t])   return;
-
-            auto p = rng() & 3;
-            x_table[j][t] ^= (bool)(p & 1);
-            z_table[j][t] ^= (p & 2);
-        });
-    }
+StateSimulator::label_1q_t
+FrameSimulator::eY(uint q, uint64_t t) {
+    x_table[q][t] ^= 1;
+    z_table[q][t] ^= 1;
+    return L_Y;
 }
 
-void
-FrameSimulator::eDP2(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i += 2) {
-        uint j1 = operands[i], j2 = operands[i+1];
-        stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j1][t] || lock_table[j2][t]) return;
-
-            auto p = rng() & 15;
-            x_table[j1][t] ^= (bool)(p & 1);
-            z_table[j1][t] ^= (bool)(p & 2);
-            x_table[j2][t] ^= (bool)(p & 4);
-            z_table[j2][t] ^= (bool)(p & 8);
-        });
-    }
+StateSimulator::label_1q_t
+FrameSimulator::eZ(uint q, uint64_t t) {
+    z_table[q][t] ^= 1;
+    return L_Z;
 }
 
-void
-FrameSimulator::eX(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i++) {
-        uint j = operands[i];
-        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j][t])   return;
-            
-            x_table[j][t] ^= 1;
-        });
-    }
+StateSimulator::label_1q_t
+FrameSimulator::eL(uint q, uint64_t t) {
+    leak_table[q][t] ^= 1;
+    return L_L;
 }
 
-void
-FrameSimulator::eLI(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i += 2) {
-        uint j1 = operands[i], j2 = operands[i+1];
-        stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j1][t] || lock_table[j2][t]) return;
-
-            auto p = rng() % 3;
-            // Either leak (or unleak) one or both qubits.
-            leak_table[j1][t] ^= (p == 0) || (p == 2);
-            leak_table[j2][t] ^= (p == 1) || (p == 2);
-        });
-    }
+StateSimulator::label_2q_t 
+FrameSimulator::eDP2(uint q1, uint q2, uint64_t t) {
+    auto p = rng() & 15;
+    x_table[q1][t] ^= (bool)(p & 1);
+    z_table[q1][t] ^= (bool)(p & 2);
+    x_table[q2][t] ^= (bool)(p & 4);
+    z_table[q2][t] ^= (bool)(p & 8);
+    return std::make_pair(IXYZ[p & 3], IXYZ[(p >> 2) & 3]);
 }
 
-void
-FrameSimulator::eLT(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i += 2) {
-        uint j1 = operands[i];
-        uint j2 = operands[i+1];
+StateSimulator::label_2q_t 
+FrameSimulator::eLI(uint q1, uint q2, uint64_t t) {
+    auto p = rng() % 3;
+    bool c1 = (p == 0) || (p == 2);
+    bool c2 = (p == 1) || (p == 2);
+    leak_table[q1][t] ^= c1;
+    leak_table[q2][t] ^= c2;
+    return std::make_pair(IL[c1], IL[c2]);
+}
 
-        stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j1][t] || lock_table[j2][t]) return;
-
-            leak_table[j1][t] |= leak_table[j2][t];
-            leak_table[j2][t] |= leak_table[j1][t];
-        });
-    }
+StateSimulator::label_2q_t 
+FrameSimulator::eLT(uint q1, uint q2, uint64_t t) {
+    bool c1 = leak_table[q2][t] & ~leak_table[q1][t];
+    bool c2 = leak_table[q1][t] & ~leak_table[q2][t];
+    leak_table[q1][t] ^= c1;
+    leak_table[q2][t] ^= c2;
+    return std::make_pair(IL[c1], IL[c2]);
 }
 
 void

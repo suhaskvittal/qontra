@@ -40,14 +40,15 @@ public:
     void    M(std::vector<uint>, int record=-1) override;
     void    R(std::vector<uint>) override;
 
-    void    eDPO(std::vector<uint>, std::vector<fp_t>) override;
-    void    eDPH(std::vector<uint>, std::vector<fp_t>) override;
+    StateSimulator::label_1q_t  eDP1(uint, uint64_t) override;
+    StateSimulator::label_1q_t  eX(uint, uint64_t) override;
+    StateSimulator::label_1q_t  eY(uint, uint64_t) override;
+    StateSimulator::label_1q_t  eZ(uint, uint64_t) override;
+    StateSimulator::label_1q_t  eL(uint, uint64_t) override;
 
-    void    eDP1(std::vector<uint>, std::vector<fp_t>) override;
-    void    eDP2(std::vector<uint>, std::vector<fp_t>) override;
-    void    eX(std::vector<uint>, std::vector<fp_t>) override;
-    void    eLI(std::vector<uint>, std::vector<fp_t>) override;
-    void    eLT(std::vector<uint>, std::vector<fp_t>) override;
+    StateSimulator::label_2q_t  eDP2(uint, uint, uint64_t) override;
+    StateSimulator::label_2q_t  eLI(uint, uint, uint64_t) override;
+    StateSimulator::label_2q_t  eLT(uint, uint, uint64_t) override;
 
     void    snapshot(void) override;
     void    rollback_where(stim::simd_bits_range_ref) override;

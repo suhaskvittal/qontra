@@ -7,6 +7,18 @@
 
 namespace qontra {
 
+#define L_I     StateSimulator::label_1q_t::I
+#define L_X     StateSimulator::label_1q_t::X
+#define L_Y     StateSimulator::label_1q_t::Y
+#define L_Z     StateSimulator::label_1q_t::Z
+#define L_L     StateSimulator::label_1q_t::L
+
+static const StateSimulator::label_1q_t IXYZ[4] = { L_I, L_X, L_Y, L_Z };
+static const StateSimulator::label_1q_t IX[2] = { L_I, L_X };
+static const StateSimulator::label_1q_t IY[2] = { L_I, L_Y };
+static const StateSimulator::label_1q_t IZ[2] = { L_I, L_Z };
+static const StateSimulator::label_1q_t IL[2] = { L_I, L_L };
+
 void
 CliffordSimulator::H(std::vector<uint> operands) {
     for (uint i = 0; i < 2*n_qubits; i++) {
@@ -76,9 +88,9 @@ CliffordSimulator::S(std::vector<uint> operands) {
 void
 CliffordSimulator::CX(std::vector<uint> operands) {
     for (uint i = 0; i < 2*n_qubits; i++) {
-        for (uint ii = 0; ii < operands.size(); ii += 2) {
-            uint j1 = operands[ii];
-            uint j2 = operands[ii+1];
+        for (uint i = 0; i < operands.size(); i += 2) {
+            uint j1 = operands[i];
+            uint j2 = operands[i+1];
             uint k1 = i*n_qubits + j1;
             uint k2 = i*n_qubits + j2;
 
@@ -171,35 +183,35 @@ CliffordSimulator::M(std::vector<uint> operands, int record) {
         for (uint64_t t = 0; t < shots; t++) {
             if (!x_table[x_width-1][t]) continue;
             // Find first i where xia = 1 in i = n+1 to 2n. Call this ii.
-            uint ii;
+            uint i;
             for (uint i = n_qubits; i < 2*n_qubits; i++) {
                 uint k = n_qubits*i + j;
                 if (x_table[k][t]) {
-                    ii = i;
+                    i = i;
                     break;
                 }
             }
             // First perform rowsums.
             for (uint i = 0; i < 2*n_qubits; i++) {
                 uint k = n_qubits*i + j;
-                if (i != ii && x_table[k][t]) {
-                    rowsum(i, ii, t);
+                if (i != i && x_table[k][t]) {
+                    rowsum(i, i, t);
                 }
             }
             // Second, swap (ii-n)-th row with ii-th row and clear
             // ii-th row. Set rii to random value.
             for (uint jj = 0; jj < n_qubits; jj++) {
-                x_table[(ii-n_qubits)*n_qubits+jj][t] = x_table[ii*n_qubits+jj][t];
-                z_table[(ii-n_qubits)*n_qubits+jj][t] = z_table[ii*n_qubits+jj][t];
-                x_table[ii*n_qubits+jj][t] = 0;
-                z_table[ii*n_qubits+jj][t] = 0;
+                x_table[(i-n_qubits)*n_qubits+jj][t] = x_table[i*n_qubits+jj][t];
+                z_table[(i-n_qubits)*n_qubits+jj][t] = z_table[i*n_qubits+jj][t];
+                x_table[i*n_qubits+jj][t] = 0;
+                z_table[i*n_qubits+jj][t] = 0;
             }
-            r_table[ii-n_qubits][t] = r_table[ii][t];
-            r_table[ii][t] = rng() & 1;
-            z_table[ii*n_qubits+j][t] = 1;
+            r_table[i-n_qubits][t] = r_table[i][t];
+            r_table[i][t] = rng() & 1;
+            z_table[i*n_qubits+j][t] = 1;
             // For simplicity, copy the rii value (the measurement outcome)
             // to the scratch space (row 2n+1) in r.
-            r_table[2*n_qubits][t] = r_table[ii][t];
+            r_table[2*n_qubits][t] = r_table[i][t];
         }
 
         if (record >= 0) {
@@ -238,144 +250,81 @@ CliffordSimulator::R(std::vector<uint> operands) {
     record_table[0].swap_with(record_0_cpy);
 }
 
-void
-CliffordSimulator::eDPO(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i++) {
-        uint j = operands[i];
-        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j][t])   return;
-            for (uint ii = 0; ii < 2*n_qubits; ii++) {
-                uint k = n_qubits*ii + j;
-                // Implement this as a reset.
-                x_table[k][t] &= z_table[k][t];
-                r_table[ii][t] ^= x_table[k][t];
-                x_table[k][t] = 0;
-                z_table[k][t];
-                // Not sure if |2> also relaxes to |0> at the same rate. 
-                // We'll make a conservative assumption that if the qubit
-                // is leaked, it is now in |1>
-                r_table[ii][t] ^= leak_table[j][t];
-                leak_table[j][t] = 0;
-            }
-        });
+StateSimulator::label_1q_t
+CliffordSimulator::eDP1(uint q, uint64_t t) {
+    auto p = rng() & 3;
+    if (leak_table[q][t])   p = 0;
+    for (uint i = 0; i < 2*n_qubits; i++) {
+        uint k = n_qubits*i + q;
+        r_table[i][t] ^= (z_table[k][t] & (p & 1)) ^ (x_table[k][t] & (p & 2));
     }
+    return IXYZ[p];
 }
 
-void
-CliffordSimulator::eDPH(std::vector<uint> operands, std::vector<fp_t> rates) {
-    // I believe that properly simulating dephasing errors requires a state
-    // vector simulator, so to a first order approximation, we will just
-    // perform a "Hadamard error" so we rotate the qubit by 90 deg. This
-    // results in a uniform superposition in the current basis.
-    //  i.e. |+> --> |0> = |+> + |->    (ignoring the constant for readability)
-    //       |0> --> |+> = |0> + |1>
-    for (uint i = 0; i < operands.size(); i++) {
-        uint j = operands[i];
-        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j][t])   return;
-            for (uint ii = 0; ii < 2*n_qubits; ii++) {
-                uint k = n_qubits*ii + j;
-                r_table[ii][t] ^= x_table[k][t] & z_table[k][t] & ~leak_table[j][t];
-                auto tmp = z_table[k][t];
-                z_table[k][t] = (z_table[k][t] & leak_table[j][t])
-                                | (x_table[k][t] & ~leak_table[j][t]);
-                x_table[k][t] = (x_table[k][t] & leak_table[j][t])
-                                | (tmp & ~leak_table[j][t]);
-            }
-        });
+StateSimulator::label_1q_t
+CliffordSimulator::eX(uint q, uint64_t t) {
+    for (uint i = 0; i < 2*n_qubits; i++) {
+        uint k = n_qubits*i + q;
+        r_table[i][t] ^= z_table[k][t] & ~leak_table[q][t];
     }
+    return IX[1 - leak_table[q][t]];
 }
 
-void
-CliffordSimulator::eDP1(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i++) {
-        uint j = operands[i];
-        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j][t])   return;
-            auto p = rng() & 3;
-            for (uint ii = 0; ii < 2*n_qubits; ii++) {
-                uint k = n_qubits*ii + j;
-                r_table[ii][t] ^= ((z_table[k][t]) & (p & 1))
-                                    & ((x_table[k][t]) & (p & 2))
-                                    & ~leak_table[j][t];
-            }
-        });
+StateSimulator::label_1q_t
+CliffordSimulator::eY(uint q, uint64_t t) {
+    for (uint i = 0; i < 2*n_qubits; i++) {
+        uint k = n_qubits*i + q;
+        r_table[i][t] ^= (x_table[k][t] ^ z_table[k][t]) & ~leak_table[q][t];
     }
+    return IY[1 - leak_table[q][t]];
 }
 
-void
-CliffordSimulator::eDP2(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i += 2) {
-        uint j1 = operands[i];
-        uint j2 = operands[i+1];
-
-        stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j1][t] || lock_table[j2][t]) return;
-            auto p = rng() & 15;
-            for (uint ii = 0; ii < 2*n_qubits; ii++) {
-                uint k1 = n_qubits*ii + j1;
-                uint k2 = n_qubits*ii + j2;
-                r_table[ii][t] ^= ((z_table[k1][t]) & (p & 1))
-                                    & ((x_table[k1][t]) & (p & 2))
-                                    & ~leak_table[j1][t];
-                r_table[ii][t] ^= ((z_table[k2][t]) & (p & 4))
-                                    & ((x_table[k2][t]) & (p & 8))
-                                    & ~leak_table[j2][t];
-                // Todo: flag correlated errors
-            }
-        });
+StateSimulator::label_1q_t
+CliffordSimulator::eZ(uint q, uint64_t t) {
+    for (uint i = 0; i < 2*n_qubits; i++) {
+        uint k = n_qubits*i + q;
+        r_table[i][t] ^= x_table[k][t] & ~leak_table[q][t];
     }
+    return IZ[1 - leak_table[q][t]];
 }
 
-void
-CliffordSimulator::eX(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i++) {
-        uint j = operands[i];
-        stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j][t])   return;
-            for (uint ii = 0; ii < 2*n_qubits; ii++) {
-                uint k = n_qubits*ii + j;
-                r_table[ii][t] ^= z_table[k][t] & ~leak_table[j][t];
-            }
-        });
-    }
+StateSimulator::label_1q_t
+CliffordSimulator::eL(uint q, uint64_t t) {
+    leak_table[q][t] ^= 1;
+    return L_L;
 }
 
-void
-CliffordSimulator::eLI(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i += 2) {
-        uint j1 = operands[i];
-        uint j2 = operands[i+1];
-
-        stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j1][t] || lock_table[j2][t]) return;
-            auto p = rng() % 3;
-            // Either leak (or unleak) one or both qubits.
-            leak_table[j1][t] ^= (p == 0) || (p == 2);
-            leak_table[j2][t] ^= (p == 1) || (p == 2);
-        });
+StateSimulator::label_2q_t
+CliffordSimulator::eDP2(uint q1, uint q2, uint64_t t) {
+    auto p = rng() & 15;
+    if (leak_table[q1][t])  p &= 0xc;   // Clear out bottom 2 bits
+    if (leak_table[q2][t])  p &= 0x3;   // Clear out upper two bits.
+    for (uint i = 0; i < 2*n_qubits; i++) {
+        uint k1 = n_qubits*i + q1;
+        uint k2 = n_qubits*i + q2;
+        r_table[i][t] ^= (z_table[k1][t] & (p & 1)) ^ (x_table[k1][t] & (p & 2));
+        r_table[i][t] ^= (z_table[k2][t] & (p & 4)) ^ (x_table[k2][t] & (p & 8));
     }
+    return std::make_pair(IXYZ[p & 3], IXYZ[(p >> 2) & 3]);
 }
 
-void
-CliffordSimulator::eLT(std::vector<uint> operands, std::vector<fp_t> rates) {
-    for (uint i = 0; i < operands.size(); i += 2) {
-        uint j1 = operands[i];
-        uint j2 = operands[i+1];
+StateSimulator::label_2q_t 
+CliffordSimulator::eLI(uint q1, uint q2, uint64_t t) {
+    auto p = rng() % 3;
+    bool c1 = (p == 0) || (p == 2);
+    bool c2 = (p == 1) || (p == 2);
+    leak_table[q1][t] ^= c1;
+    leak_table[q2][t] ^= c2;
+    return std::make_pair(IL[c1], IL[c2]);
+}
 
-        stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
-        [&] (size_t t) {
-            if (lock_table[j1][t] || lock_table[j2][t]) return;
-            leak_table[j1][t] |= leak_table[j2][t];
-            leak_table[j2][t] |= leak_table[j1][t];
-        });
-    }
+StateSimulator::label_2q_t 
+CliffordSimulator::eLT(uint q1, uint q2, uint64_t t) {
+    bool c1 = leak_table[q2][t] & ~leak_table[q1][t];
+    bool c2 = leak_table[q1][t] & ~leak_table[q2][t];
+    leak_table[q1][t] ^= c1;
+    leak_table[q2][t] ^= c2;
+    return std::make_pair(IL[c1], IL[c2]);
 }
 
 void

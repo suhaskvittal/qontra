@@ -111,6 +111,8 @@ ControlSimulator::run(uint64_t shots) {
     uint64_t latency_sqr_sum, __latency_sqr_sum = 0;
 
     qsim->set_seed(G_BASE_SEED + world_rank);
+    error_log.clear();
+    shots_elapsed = 0;
 
     trial_done.clear();
 
@@ -272,6 +274,7 @@ ControlSimulator::run(uint64_t shots) {
                             event_trace_max_written);
             fclose(fout);
         }
+        shots_elapsed += shots_in_curr_batch;
         shots_left -= shots_in_curr_batch;
         bno += world_size;
     }
@@ -372,6 +375,31 @@ ControlSimulator::clear() {
     qex_qubit_busy.clear();
     qex_br_taken.clear();
     rt_stall.clear();
+}
+
+void
+ControlSimulator::replay_errors(
+        uint64_t shots, 
+        const std::vector<error_event_t>& errors) 
+{
+    int world_rank = 0, world_size = 1;
+    if (G_USE_MPI) {
+        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    }
+    // Split up the list of errors across the different processors such that
+    // if the error's trial modulo world_size == world_rank, that processor
+    // maintains the error.
+    error_replay_queue = std::priority_queue<error_event_t>();
+    for (auto& ev : errors) {
+        if (ev.data.trial % world_size == world_rank) {
+            ev.data.trial /= world_size;
+            error_replay_queue.push(ev);
+        }
+    }
+    is_replaying_errors = true;
+    run(shots);
+    is_replaying_errors = false;
 }
 
 void
@@ -846,10 +874,53 @@ ControlSimulator::RT() {
 
 void
 ControlSimulator::apply_gate_error(Instruction& inst) {
+    // First, check if we need to replay any errors.
+    while (error_replay_queue.size()) {
+        error_event_t ev = error_replay_queue.top();
+        error_replay_queue.pop();
+
+        uint64_t t = ev.data.trial - shots_elapsed;
+        if (latency[t].u64[0] < ev.time_of_occurrence) {
+            error_replay_queue.push(ev);
+            break;
+        } else if (latency[t].u64[0] == ev.time_of_occurrence) {
+            // If this is not the right operation, just push it back
+            // onto the queue.
+            if (ev.operation_name != inst.name) {
+                error_replay_queue.push(ev);
+                continue;
+            }
+            // Check that the operand is in the operand list.
+            if (std::find(inst.operands.begin(), inst.operands.end(), ev.data.q1)
+                    == inst.operands.end())
+            {
+                error_replay_queue.push(ev);
+                continue;
+            }
+            if (inst.name == "cx") {
+                // Check that second operand is also in operand list.
+                if (std::find(inst.operands.begin(), inst.operands.end(), ev.data.q2)
+                        == inst.operands.end())
+                {
+                    error_replay_queue.push(ev);
+                    continue;
+                }
+                replay(ev.data.error_on_q2, ev.data.q2, ev.data.trial);
+            }
+            replay(ev.data.error_on_q1, ev.data.q1, ev.data.trial);
+            if (params.copy_replayed_errors_to_error_log) {
+                error_log.push_back(ev);
+            }
+        }   // Else, just throw away the error (has expired).
+    }
+
+    if (!params.inject_new_errors_on_replay && is_replaying_errors) return;
+
+    // Now apply errors normally.
     if (inst.name == "cx") {
-        std::vector<fp_t>   dp2;
-        std::vector<fp_t>   li;
-        std::vector<fp_t>   lt;
+        std::vector<fp_t> dp2;
+        std::vector<fp_t> li;
+        std::vector<fp_t> lt;
         for (uint i = 0; i < inst.operands.size(); i += 2) {
             uint x = inst.operands[i];
             uint y = inst.operands[i+1];
@@ -873,9 +944,9 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
                 }
             }
         }
-        qsim->eLT(inst.operands, lt);
-        qsim->eLI(inst.operands, li);
-        qsim->eDP2(inst.operands, dp2);
+        qsim->error_channel<&StateSimulator::eLT>(inst.operands, lt);
+        qsim->error_channel<&StateSimulator::eLI>(inst.operands, li);
+        qsim->error_channel<&StateSimulator::eDP2>(inst.operands, dp2);
     } else {
         std::string key = inst.name;
         std::vector<uint> operands = inst.get_qubit_operands();
@@ -897,41 +968,114 @@ ControlSimulator::apply_gate_error(Instruction& inst) {
         }
 
         if (key == "m" || key == "reset") {
-            qsim->eX(operands, e);
+            qsim->error_channel<&StateSimulator::eX>(operands, e);
         } else {
-            qsim->eDP1(operands, e);
+            qsim->error_channel<&StateSimulator::eDP1>(operands, e);
         }
     }
+    // Update error log.
+    auto errors = qsim->get_error_log();
+    for (auto raw_error_data : errors) {
+        error_event_t ev = {
+            latency[raw_error_data.trial].u64[0],
+            false,
+            inst.name,
+            raw_error_data
+        };
+        // Update the trial to account for batches (currently the value
+        // is modulo the batch size).
+        ev.data.trial += shots_elapsed;
+        error_log.push_back(ev);
+    }
+    qsim->clear_error_log();
 }
 
 void
 ControlSimulator::apply_periodic_error(fp_t t) {
-    std::vector<uint> q;
-    if (params.simulate_periodic_as_dpo_and_dph
-        && !is_building_canonical_circuit) {
-        std::vector<fp_t> e1, e2;
-        for (uint i = 0; i < n_qubits; i++) {
-            q.push_back(i);
-            fp_t x = 1 - exp(-t / params.timing.t1[i]);
-            fp_t y = 1 - exp(-t / params.timing.t2[i]);
-            e1.push_back(x);
-            e2.push_back(y);
-        }
-        qsim->eDPO(q, e1);
-        qsim->eDPH(q, e2);
-    } else {
-        std::vector<fp_t> e;
-        for (uint i = 0; i < n_qubits; i++) {
-            fp_t mt = 0.5 * (params.timing.t1[i] + params.timing.t2[i]);
-            fp_t x = 1 - exp(-t / mt);
-            q.push_back(i);
-            e.push_back(x);
-
-            if (is_building_canonical_circuit) {
-                canonical_circuit.append_op("DEPOLARIZE1", {i}, x);
+    // First, check if we need to replay any errors.
+    while (error_replay_queue.size()) {
+        error_event_t ev = error_replay_queue.top();
+        error_replay_queue.pop();
+        uint64_t t = ev.data.trial - shots_elapsed;
+        if (latency[t].u64[0] < ev.time_of_occurrence) {
+            error_replay_queue.push(ev);
+            break;
+        } else if (latency[t].u64[0] == ev.time_of_occurrence) {
+            if (!ev.is_timing_error) {
+                error_replay_queue.push(ev);
+                continue;
             }
+            replay(ev.data.error_on_q1, ev.data.q1, ev.data.trial);
+            if (params.copy_replayed_errors_to_error_log) {
+                error_log.push_back(ev);
+            }
+        } // Else (curr_time < time_of_occurrence) --> do nothing.
+    }
+    // Only proceed if we want to inject new errors alongside replaying errors.
+    if (!params.inject_new_errors_on_replay && is_replaying_errors) return;
+
+    // Decoherence errors and dephasing errors can be approximated through
+    // an uneven combination of X, Y, and Z errors.
+    //
+    // See the following paper for details:
+    // https://arxiv.org/pdf/1404.3747.pdf (Tomita and Svore, 2014)
+    std::vector<uint> q;
+    std::vector<fp_t> ex, ey, ez;
+    for (uint i = 0; i < n_qubits; i++) {
+        // Pauli Twirling:
+        //      p(eX) = P_DC / 4
+        //      p(eY) = P_DC / 4
+        //      p(eZ) = P_DPH / 2 + P_DCO / 4
+        const fp_t a = (1.0 - exp(-t / params.timing.t1[i])) * 0.25;
+        const fp_t b = (1.0 - exp(-t / params.timing.t2[i])) * 0.5;
+
+        fp_t pex = a;
+        fp_t pey = a;
+        fp_t pez = b - a;
+        if (pez < 0.0)  pez = 0.0;
+
+        q.push_back(i);
+        ex.push_back(pex);
+        ey.push_back(pey);
+        ez.push_back(pez);
+
+        if (is_building_canonical_circuit) {
+            canonical_circuit.append_op("X_ERROR", {i}, pex);
+            canonical_circuit.append_op("Y_ERROR", {i}, pey);
+            canonical_circuit.append_op("Z_ERROR", {i}, pez);
         }
-        qsim->eDP1(q, e);
+    }
+    qsim->error_channel<&StateSimulator::eX>(q, ex);
+    qsim->error_channel<&StateSimulator::eY>(q, ex);
+    qsim->error_channel<&StateSimulator::eZ>(q, ex);
+    // Update error log.
+    auto errors = qsim->get_error_log();
+    for (auto raw_error_data : errors) {
+        error_event_t ev = {
+            latency[raw_error_data.trial].u64[0],
+            true,
+            "",
+            raw_error_data
+        };
+        // Update the trial to account for batches (currently the value
+        // is modulo the batch size).
+        ev.data.trial += shots_elapsed;
+        error_log.push_back(ev);
+    }
+    qsim->clear_error_log();
+}
+
+void
+ControlSimulator::replay(StateSimulator::ErrorLabel error, uint64_t q, uint64_t t) {
+    // Inject the error: can only be X, Y, or Z.
+    if (error == StateSimulator::ErrorLabel::X) {
+        qsim->eX(q, t);
+    } else if (error == StateSimulator::ErrorLabel::Y) {
+        qsim->eY(q, t);
+    } else if (error == StateSimulator::ErrorLabel::Z) {
+        qsim->eZ(q, t);
+    } else if (error == StateSimulator::ErrorLabel::L) {
+        qsim->eL(q, t);
     }
 }
 
