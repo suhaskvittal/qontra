@@ -8,8 +8,6 @@
 namespace qontra {
 namespace graph {
 
-#define N_COORD 3
-
 typedef std::function<void(fp_t, std::vector<uint>, std::set<uint>)>
     error_callback_t;
 typedef std::function<void(uint, std::array<fp_t, N_COORD>)>
@@ -193,8 +191,7 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
     std::array<fp_t, N_COORD> coord_offset;
     coord_offset.fill(0);  // Zero initialize.
     // Use callbacks to build graph.
-    read_detector_error_model(dem, 1, det_offset, coord_offset,
-                                err_f, det_f);
+    read_detector_error_model(dem, 1, det_offset, coord_offset, err_f, det_f);
     return graph;
 }
 

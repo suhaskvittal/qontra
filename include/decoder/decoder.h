@@ -23,13 +23,23 @@ namespace decoder {
 
 class Decoder {
 public: 
-    Decoder(const stim::Circuit& circ)          // The decoder uses the passed in
-                                                // circuit for decoding. It should
-                                                // be a memory experiment circuit
-                                                // for X rounds.
+    // The decoder uses the passed in circuit for decoding. It should
+    // be a memory experiment circuit for X rounds.
+    //
+    // The second argument in the constructor is optional and prevents
+    // the decoding graph from being constructed. The user should not
+    // use this, but rather a subclass constructor should.
+    // This is useful for sliding window decoders, where
+    // the circuit used for evaluation may be 100s or 1000s of rounds long,
+    // but the backing decoder only uses a few rounds. This may also be 
+    // used if the subclass constructs the decoding graph
+    // via a custom strategy, or does not need a decoding graph.
+    Decoder(const stim::Circuit& circ, bool build_decoding_graph=true)
         :circuit(circ),
-        decoding_graph(graph::to_decoding_graph(circ))
-    {}
+        decoding_graph()
+    {
+        if (build_decoding_graph)   decoding_graph = graph::to_decoding_graph(circ);
+    }
 
     virtual ~Decoder() {}
 
@@ -50,6 +60,7 @@ public:
 
     stim::Circuit       get_circuit(void) { return circuit; }
 protected:
+
     // Other helpful functions:
     //
     // is_error: checks if the provided correction is a logical error.

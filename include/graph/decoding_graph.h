@@ -24,8 +24,13 @@ const uint BOUNDARY_INDEX = std::numeric_limits<uint>::max();
 
 namespace decoding {
 
+#define N_COORD    16
+
 struct vertex_t : base::vertex_t {
-    std::array<fp_t, 3> coords;
+    enum class Color { none, red, blue, green };
+
+    std::array<fp_t, N_COORD>    coords;
+    Color                   color;
 };
 
 struct edge_t : base::edge_t {
@@ -43,7 +48,7 @@ public:
     DecodingGraph()
         :Graph(), distance_matrix(), error_polynomial(), expected_errors()
     {
-        std::array<fp_t, 3> boundary_coords;
+        std::array<fp_t, N_COORD> boundary_coords;
         boundary_coords.fill(-1);
 
         decoding::vertex_t* boundary = new decoding::vertex_t;
@@ -96,6 +101,15 @@ private:
     poly_t  error_polynomial;
     fp_t    expected_errors;
 };
+
+// This is standard method of building decoding graphs, where each error is assumed
+// to flip exactly two detectors. This works for codes like the surface code.
+//
+// For codes such as the color code where an error can flip 3 detectors, a custom 
+// method must be used. We leave this at the discretion of the user, but we note
+// this can be easily performed by leveraging the metadata for each detector
+// in the Stim circuit (i.e. instead of coordinates, use colors and have your own
+// method use that).
 
 DecodingGraph
 to_decoding_graph(const stim::Circuit&);

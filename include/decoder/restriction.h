@@ -13,54 +13,58 @@
 #include "defs.h"
 #include "graph/graph.h"
 
+#include <deque>
+#include <set>
+#include <tuple>
+#include <utility>
+#include <vector>
+
 namespace qontra {
 namespace decoder {
 
-// To distinguish the color of a detector, we will
-// assume by default that det % 0 =
-//      0   if the detector is a "red" event
-//      1   if it is blue
-//      2   if it is green
-// Naturally, the boundary is exempt from this
-// requirement.
-//
-// The user can also specify the color of detector.
+#define __COLOR graph::decoding::vertex_t::Color
 
-#define CC_RED      0
-#define CC_BLUE     1
-#define CC_GREEN    2
-
-class RestrictionDecoder : public MWPMDecoder {
+class RestrictionDecoder : public Decoder {
 public:
-    RestrictionDecoder(const stim::Circuit& circuit)
-        :MWPMDecoder(circuit)
-    {
-        for (uint64_t d = 0; d < circuit.count_detectors(); d++) {
-            auto v = decoding_graph.get_vertex(d);
-            if (d % 3 == CC_RED)        detector_to_color[v] = Color::red;
-            else if (d % 3 == CC_BLUE)  detector_to_color[v] = Color::blue;
-            else if (d % 3 == CC_GREEN) detector_to_color[v] = Color::green;
-        }
-    }
+    RestrictionDecoder(const stim::Circuit&);
 
-    enum class Color { red, blue, green };
+    ~RestrictionDecoder(void) {
+        for (auto dec : rlatt_dec)  delete dec;
+    }
 
     std::string name(void) override { return "RestrictionDecoder"; }
 
-    void set_detector_color(uint d, Color c) {
-        auto v = decoding_graph.get_vertex(d);
-        detector_to_color[v] = c;
-    }
-
     Decoder::result_t   decode_error(const syndrome_t&) override;
 private:
-    Decoder::result_t   decode_restricted_lattice(
-                            const std::vector<uint>& detectors,
-                            Color c1,
-                            Color c2);
+    // The decode_restricted_lattice function decodes the restricted lattice that
+    // restricts the passed in color.
+    Decoder::result_t   decode_restricted_lattice(const std::vector<uint>&, __COLOR);
 
-    std::map<graph::decoding::vertex_t*, Color> detector_to_color;
+    std::array<MWPMDecoder*, 3> rlatt_dec;  // Three MWPM decoders, each of which responsible
+                                            // for decoding a different restricted lattice.
+                                            //
+                                            // Note RestrictionDecoder is a friend of MWPMDecoder,
+                                            // so the decoder can access their DecodingGraphs.
+    typedef std::map<uint, std::array<uint, 3>>     fwdetmap_t;
+    typedef std::map<std::pair<uint, uint>, uint>   bwdetmap_t;
+    // As the MWPM decoders operate on
+    // different decoding graphs and these
+    // graphs do not match the input
+    // circuit, we must be able to convert
+    // the input syndrome to syndromes for
+    // each MWPM decoder.
+    fwdetmap_t  to_rlatt; 
+    bwdetmap_t  from_rlatt;
+
+    std::map<uint, __COLOR>   color_map;
 };
+
+inline int c2i(__COLOR x) {
+    if (x == __COLOR::red)      return 0;
+    if (x == __COLOR::green)    return 1;
+    if (x == __COLOR::blue)     return 2;
+    return -1;
+}
 
 }   // decoder
 }   // qontra

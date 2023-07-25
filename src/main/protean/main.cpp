@@ -73,7 +73,7 @@ help_exit:
         auto arch = ir->arch;
         auto dgr = ir->dependency_graph;
         
-        // Generate memory experiment ASM.
+        // Generate memory experiment circuit.
         schedule_t mexp;
         //
         // PROLOGUE: initialization.
@@ -91,6 +91,9 @@ help_exit:
         uint mctr = 0;
         uint ectr = 0;
         std::vector<std::pair<tanner::vertex_t*, bool>> meas_order;
+        // We also want to track colors.
+        std::map<uint, uint> detector_to_color_id;
+        std::map<uint, uint> measurement_to_color_id;
         for (uint r = 0; r < rounds; r++) {
             uint moffset = mctr;
             for (uint d = 1; d <= dgr->get_depth(); d++) {
@@ -101,14 +104,16 @@ help_exit:
                 for (auto v : dgr->get_vertices_at_depth(d)) {
                     auto inst = *(v->inst_p);
                     if (inst.name == "mnrc") {
+                        auto tv = tanner_graph->get_vertex(inst.metadata.owning_check_id);
                         // Convert this to an mrc instruction.
-                        for (uint i : inst.get_qubit_operands()) {
-                            msimd.operands.push_back(i);
+                        for (uint i = 0; i < inst.operands.size(); i++) {
+                            uint j = inst.operands[i];
+                            msimd.operands.push_back(j);
+                            measurement_to_color_id[mctr+i-1] = tv->id % 3;
                         }
                         mctr += inst.get_qubit_operands().size();
                         // Update the measurement order.
                         if (r == 0) {
-                            auto tv = tanner_graph->get_vertex(inst.metadata.owning_check_id);
                             meas_order.push_back(std::make_pair(tv, inst.metadata.is_for_flag));
                         }
                     } else if (inst.name == "h") {
@@ -135,6 +140,9 @@ help_exit:
                 auto tv = meas_order[i].first;
                 bool is_for_flag = meas_order[i].second;
                 if (r == 0 && tv->qubit_type == tanner::vertex_t::XPARITY)  continue;
+                
+                detector_to_color_id[ectr] = measurement_to_color_id[moffset + i];
+
                 Instruction det;
                 det.name = "event";
                 det.operands.push_back(ectr++);
@@ -177,6 +185,8 @@ help_exit:
                 continue;
             }
 
+            detector_to_color_id[ectr] = measurement_to_color_id[mctr + i - meas_order.size()];
+
             Instruction det;
             det.name = "event";
             det.operands.push_back(ectr++);
@@ -201,7 +211,26 @@ help_exit:
         TimeTable timing;
         tables::populate(n_qubits, errors, timing, et);
         stim::Circuit circuit = fast_convert_to_stim(mexp, errors, timing);
-
+        // Add color annotations to stim circuit.
+        ectr = 0;
+        stim::Circuit annotated_circuit;
+        circuit.for_each_operation([&] (const stim::Operation& op)
+                {
+                    std::string opname(op.gate->name);
+                    if (opname == "DETECTOR") {
+                        std::vector<uint> operands;
+                        for (auto it = op.target_data.targets.begin(); 
+                                it != op.target_data.targets.end(); it++) 
+                        {
+                            operands.push_back(it->data);
+                        }
+                        annotated_circuit.append_op(
+                                "DETECTOR", operands, detector_to_color_id[ectr++]);
+                    } else {
+                        annotated_circuit.append_operation(op);
+                    }
+                });
+        circuit = annotated_circuit;
         error_model_out << circuit << "\n";
 
         // Build a decoder, and then benchmark it with a memory experiment.

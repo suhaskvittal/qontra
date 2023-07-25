@@ -12,6 +12,34 @@ namespace decoder {
 
 using namespace graph;
 
+#define CDET_TO_ID(x)   ((x.first) | ((uint64_t)c2i(x.second)) << 60)
+
+RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
+    :Decoder(circuit, false),
+    rlatt_dec()
+{
+    // Restricted lattice order: RG (so blue is restricted), RB, GB
+    const __COLOR colors[3] = { __COLOR::blue, __COLOR::green, __COLOR::red };
+    // Create new Stim circuits for each restricted color.
+    for (uint i = 0; i < 3; i++) {
+        __COLOR restricted_color = colors[i];
+        stim::Circuit sub_circuit;
+        // Only keep detection events whose color is NOT blue.
+        circuit.for_each_operation([&] (stim::Operation op) {
+            std::string gate_name(op.gate->name);
+            if (gate_name == "DETECTOR") {
+                int color_id = (int) op.target_data.args[0];
+                if (colors[color_id] != restricted_color) {
+                    sub_circuit.append_operation(op);
+                }
+            } else {
+                sub_circuit.append_operation(op);
+            }
+        });
+        rlatt_dec[i] = new MWPMDecoder(sub_circuit);
+    }
+}
+
 Decoder::result_t
 RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     const uint n_detectors = circuit.count_detectors();
@@ -20,58 +48,212 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     timer.clk_start();
     std::vector<uint> detectors = get_nonzero_detectors(syndrome);
     // Get matching results for each restricted lattice.
-    auto r_latRG = decode_restricted_lattice(detectors, Color::red, Color::green);
-    auto r_latRB = decode_restricted_lattice(detectors, Color::red, Color::blue);
-    // Now, we must merge the matching results.
-    //
-    // We do this by "jamming" correction strings of different colors at their R vertex
-    // meeting point.
-    std::map<decoding::vertex_t*, std::array<decoding::vertex_t*, 2>> r_match_table;
-    std::vector<Decoder::result_t*> res_array{&r_latRG, &r_latRB};
-    for (uint i = 0; i < 2; i++) {
+    auto r_lattRG = decode_restricted_lattice(detectors, __COLOR::blue);
+    auto r_lattRB = decode_restricted_lattice(detectors, __COLOR::green);
+    auto r_lattGB = decode_restricted_lattice(detectors, __COLOR::red);
+
+    typedef std::pair<uint, __COLOR>    cdet_t;
+    // Compute the connections for each detector. Also, we need to track
+    // their color for cases such as the boundary (where the color is
+    // pre-determined).
+    // 
+    // Create a graph to track the connections and then later compute the
+    // connected components.
+    struct cv_t : base::vertex_t {
+        cdet_t  detector;
+    };
+    struct ce_t : base::edge_t {
+        uint    rlatt;
+    };
+    typedef Graph<cv_t, ce_t>   ConnGraph;
+
+    ConnGraph connection_graph;
+    Decoder::result_t* res_array[] = { &r_lattRG, &r_lattRB, &r_lattGB };
+
+    const __COLOR rlatt_c1_array[] = { __COLOR::red, __COLOR::red, __COLOR::green };
+    const __COLOR rlatt_c2_array[] = { __COLOR::green, __COLOR::blue, __COLOR::blue };
+    for (uint i = 0; i < 3; i++) {
         auto res_p = res_array[i];
+        __COLOR first_possible_color = rlatt_c1_array[i];
+        __COLOR second_possible_color = rlatt_c2_array[i];
+
         for (auto aa : res_p->error_assignments) {
             uint d1 = std::get<0>(aa);
             uint d2 = std::get<1>(aa);
 
-            auto v1 = decoding_graph.get_vertex(d1);
-            auto v2 = decoding_graph.get_vertex(d2);
-
-            Color c1 = detector_to_color[v1];
-            Color c2 = detector_to_color[v2];
-            if ((v1->id == BOUNDARY_INDEX && c2 == Color::red)
-                || (v2->id == BOUNDARY_INDEX && c1 != Color::red)
-                || (v2->id != BOUNDARY_INDEX && c2 == Color::red))
-            {
-                std::swap(v1, v2);
+            if (d1 == BOUNDARY_INDEX)   std::swap(d1, d2);
+            __COLOR c1 = color_map[d1];
+            // Compute d2's color. If d2 is the boundary, then we need
+            // to use d1's color to do so.
+            __COLOR c2;
+            if (d2 == BOUNDARY_INDEX) {
+                uint rlatt_d1 = to_rlatt[d1][i];
+                // Get decoding graph vertices.
+                DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
+                auto vd1 = gr.get_vertex(rlatt_d1);
+                auto vd2 = gr.get_vertex(BOUNDARY_INDEX);
+                auto ec_data = gr.get_error_chain_data(vd1, vd2);
+                // If the error chain length is even, then d2 is the same
+                // color as d1. Otherwise, it is the opposite color.
+                uint len = ec_data.chain_length;
+                if (len & 0x1) {
+                    if (c1 == first_possible_color) c2 = second_possible_color;
+                    else                            c2 = first_possible_color;
+                } else {
+                    c2 = c1;
+                }
+            } else {
+                c2 = color_map[d2];
             }
-            r_match_table[v1][i] = v2;
+            cdet_t cd1 = std::make_pair(d1, c1);
+            cdet_t cd2 = std::make_pair(d2, c2);
+            // Create an edge in the connection graph
+            // Create any vertices if they do not exist.
+            cv_t* v1;
+            cv_t* v2;
+            uint64_t id1 = CDET_TO_ID(cd1);
+            uint64_t id2 = CDET_TO_ID(cd1);
+            if ((v1=connection_graph.get_vertex(id1)) == nullptr) {
+                v1 = new cv_t;
+                v1->id = id1;
+                v1->detector = cd1;
+                connection_graph.add_vertex(v1);
+            }
+            if ((v2=connection_graph.get_vertex(id2)) == nullptr) {
+                v2 = new cv_t;
+                v2->id = id2;
+                v2->detector = cd2;
+                connection_graph.add_vertex(v2);
+            }
+            ce_t* e = new ce_t;
+            e->src = v1;
+            e->dst = v2;
+            e->is_undirected = true;
+            e->rlatt = i;
+            connection_graph.add_edge(e);
         }
     }
-    // Now, compute the correction.
+    // Here, we will partition the syndrome into two parts:
+    //  (1) Syndrome bits not in a connected component with the red boundary.
+    //  (2) Everything else.
+    // Then, we will "jam" matchings in each partition separately. Jamming is essentially
+    // when a detector has matchings in two different colors (i.e. G and B). Then, we ignore
+    // one of the incident frame changes as this implies that we are at a face.
+    std::set<cdet_t> in_connected_components;
+
+    typedef std::pair<std::vector<cdet_t>, __COLOR> jamming_set_t;
+    
+    cdet_t red_boundary = std::make_pair(BOUNDARY_INDEX, __COLOR::red);
+    auto rbv = connection_graph.get_vertex(CDET_TO_ID(red_boundary));
+
+    std::vector<jamming_set_t> jamming_sets;
+    if (rbv != nullptr) {
+        // Perform a DFS to get paths from the red boundary to any other boundary.
+        //
+        // Needs to be a special DFS, so we aren't using the xfs function.
+        std::deque<cv_t*> dfs;
+        dfs.push_back(rbv);
+
+        std::set<cv_t*> visited;
+        std::map<cv_t*, cv_t*> prev;
+        while (dfs.size()) {
+            auto v = dfs.back();
+            dfs.pop_back();
+            visited.insert(v);
+            for (auto w : connection_graph.get_neighbors(v)) {
+                cdet_t wd = w->detector;
+                if (wd.first == BOUNDARY_INDEX) {
+                    // This is one connected component.
+                    std::vector<cdet_t> cc;
+                    auto curr = v;
+                    while (curr != rbv) {
+                        cc.push_back(v->detector);
+                        curr = prev[curr];
+                    }
+                    cc.push_back(wd);
+                    cc.push_back(red_boundary);
+                    __COLOR cc_color;
+                    if (wd.second == __COLOR::red || wd.second == __COLOR::blue)  {
+                        cc_color = __COLOR::green;
+                    } else {
+                        cc_color = __COLOR::blue;
+                    }
+                    jamming_set_t js = std::make_pair(cc, cc_color);
+                    for (auto x : cc)   in_connected_components.insert(x);
+                    jamming_sets.push_back(js);
+                } else if (!visited.count(w)) {
+                    prev[w] = v;
+                    dfs.push_back(w);
+                }
+            }
+        }
+    }
+    // Add everything not in a connected components to its own jamming set.
+    std::vector<cdet_t> not_cc;
+    for (uint d : detectors) {
+        __COLOR c = color_map[d];
+        cdet_t det = std::make_pair(d, c);
+        if (!in_connected_components.count(det))    not_cc.push_back(det);
+    }
+    jamming_sets.push_back(std::make_pair(not_cc, __COLOR::red));
+    // Compute correction using the jamming sets.
     stim::simd_bits corr(n_observables);
     corr.clear();
-    for (auto pair : r_match_table) {
-        auto rv = pair.first;
-        auto mates = pair.second;
 
-        decoding::vertex_t* vj1 = nullptr;
-        decoding::vertex_t* vj2 = nullptr;
-        for (uint i = 0; i < 2; i++) {
-            auto ov = mates[i];
-            auto path = decoding_graph.get_error_chain_data(rv, ov).error_chain;
-            for (uint j = 2; j < path.size(); j++) {
-                auto vx = path[j-1];
-                auto vy = path[j];
-                auto e = decoding_graph.get_edge(vx, vy);
+    for (auto& pair : jamming_sets) {
+        std::map<uint, __COLOR> detector_to_color;
+        auto& js = pair.first;
+        __COLOR jsc = pair.second;
+        for (uint i = 1; i < js.size(); i++) {
+            cdet_t cd1 = js[i-1];
+            cdet_t cd2 = js[i];
+            // Get the path between cdx and cdy and only examine detectors
+            // with color jsc.
+            //
+            // First, check the colors of cdx and cdy and then get the corresponding
+            // decoding graph.
+            __COLOR restricted_color;
+            // Compute restricted color.
+            __COLOR offcolor = cd1.second == jsc ? cd2.second : cd1.second;
+            uint8_t available = 0x7;
+            available &= ~((jsc == __COLOR::red || offcolor == __COLOR::red));
+            available &= ~((jsc == __COLOR::green || offcolor == __COLOR::green) << 1);
+            available &= ~((jsc == __COLOR::blue || offcolor == __COLOR::blue) << 2);
+            if (available & 1)      restricted_color == __COLOR::red;
+            else if (available & 2) restricted_color == __COLOR::green;
+            else if (available & 4) restricted_color == __COLOR::blue;
+            // Now get decoding graph.
+            const uint dec_index = 2 - c2i(restricted_color);
+            DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
+            uint rlatt_d1 = to_rlatt[cd1.first][dec_index];
+            uint rlatt_d2 = to_rlatt[cd1.first][dec_index];
+            auto v1 = gr.get_vertex(rlatt_d1);
+            auto v2 = gr.get_vertex(rlatt_d2);
+            // Get path between v1 and v2: only perform frame changes incident
+            // on vertices matching the color jsc.
+            auto error_chain = gr.get_error_chain_data(v1, v2).error_chain;
+            for (uint j = 1; j < error_chain.size(); j++) {
+                auto vx = error_chain[i-1];
+                auto vy = error_chain[i];
+                uint rlatt_dx = vx->id;
+                uint rlatt_dy = vy->id;
+                uint dx = from_rlatt[std::make_pair(rlatt_dx, dec_index)];
+                uint dy = from_rlatt[std::make_pair(rlatt_dy, dec_index)];
+                if (color_map[dx] == jsc) {
+                    auto old_color = detector_to_color[dx];
+                    detector_to_color[dx] = restricted_color;
+                    // Jam the correction if necessary.
+                    if (old_color != restricted_color)  continue;
+                } else {
+                    auto old_color = detector_to_color[dy];
+                    detector_to_color[dx] = restricted_color;
+                    // Jam the correction if necessary.
+                    if (old_color != restricted_color)  continue;
+                }
+                auto e = gr.get_edge(vx, vy);
                 for (auto fr : e->frames)   corr[fr] ^= 1;
             }
-            if (i == 0) vj1 = path[1];
-            else        vj2 = path[1];
         }
-        // Jam vj1 and vj2.
-        auto jam_frames = decoding_graph.get_error_chain_data(vj1, vj2).frame_changes;
-        for (auto fr : jam_frames)  corr[fr] ^= 1;
     }
     fp_t t = (fp_t)timer.clk_end();
     return (Decoder::result_t) { t, corr, is_error(corr, syndrome) };
@@ -80,20 +262,29 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 Decoder::result_t
 RestrictionDecoder::decode_restricted_lattice(
                             const std::vector<uint>& detectors,
-                            Color c1,
-                            Color c2)
+                            __COLOR restricted_color)
 {
-    const uint n_detectors = circuit.count_detectors();
-    const uint n_observables = circuit.count_observables();
+    const uint i = 2 - c2i(restricted_color);
+    MWPMDecoder* dec = rlatt_dec[i];
+    const uint n_detectors = dec->get_circuit().count_detectors();
+    const uint n_observables = dec->get_circuit().count_observables();
 
     stim::simd_bits restricted_syndrome(n_detectors+n_observables);
     restricted_syndrome.clear();
     for (uint d : detectors) {
-        auto v = decoding_graph.get_vertex(d);
-        Color c = detector_to_color[v];
-        restricted_syndrome[d] ^= (c == c1 || c == c2);
+        if (color_map[d] == restricted_color)   continue;
+        uint dd = to_rlatt[d][i];
+        restricted_syndrome[d] = 1;
     }
-    return MWPMDecoder::decode_error(restricted_syndrome);
+    auto res = dec->decode_error(restricted_syndrome);
+    // Convert the error assignments to the original circuit's detectors.
+    for (auto& aa : res.error_assignments) {
+        uint& d1 = std::get<0>(aa);
+        uint& d2 = std::get<0>(aa);
+        if (d1 != BOUNDARY_INDEX)   d1 = from_rlatt[std::make_pair(d1, i)];
+        if (d2 != BOUNDARY_INDEX)   d2 = from_rlatt[std::make_pair(d2, i)];
+    }
+    return res;
 }
 
 }   // decoder

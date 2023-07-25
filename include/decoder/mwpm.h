@@ -38,6 +38,8 @@ public:
     std::string name(void) override { return "MWPMDecoder"; }
 
     Decoder::result_t       decode_error(const syndrome_t&) override;
+private:
+    friend class RestrictionDecoder;
 };
 
 }   // decoder
