@@ -5,6 +5,7 @@
 
 #include "decoder/decoder.h"
 #include "decoder/mwpm.h"
+#include "decoder/restriction.h"
 #include "defs.h"
 #include "experiments.h"
 #include "graph/io.h"
@@ -109,7 +110,7 @@ help_exit:
                         for (uint i = 0; i < inst.operands.size(); i++) {
                             uint j = inst.operands[i];
                             msimd.operands.push_back(j);
-                            measurement_to_color_id[mctr+i-1] = tv->id % 3;
+                            measurement_to_color_id[mctr+i] = tv->id % 3;
                         }
                         mctr += inst.get_qubit_operands().size();
                         // Update the measurement order.
@@ -234,7 +235,7 @@ help_exit:
         error_model_out << circuit << "\n";
 
         // Build a decoder, and then benchmark it with a memory experiment.
-        decoder::MWPMDecoder dec(circuit);
+        decoder::RestrictionDecoder dec(circuit);
         experiments::memory_params_t params;
         params.shots = shots;
         auto mexp_res = memory_experiment(&dec, params);

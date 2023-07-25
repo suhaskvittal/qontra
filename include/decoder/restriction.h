@@ -63,6 +63,7 @@ inline int c2i(__COLOR x) {
     if (x == __COLOR::red)      return 0;
     if (x == __COLOR::green)    return 1;
     if (x == __COLOR::blue)     return 2;
+    std::cout << "NONE OF THE COLORS?\n";
     return -1;
 }
 

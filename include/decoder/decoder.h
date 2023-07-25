@@ -36,10 +36,9 @@ public:
     // via a custom strategy, or does not need a decoding graph.
     Decoder(const stim::Circuit& circ, bool build_decoding_graph=true)
         :circuit(circ),
-        decoding_graph()
-    {
-        if (build_decoding_graph)   decoding_graph = graph::to_decoding_graph(circ);
-    }
+        decoding_graph(build_decoding_graph 
+                        ? graph::to_decoding_graph(circ) : graph::DecodingGraph())
+    {}
 
     virtual ~Decoder() {}
 
