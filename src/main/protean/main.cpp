@@ -68,8 +68,6 @@ help_exit:
     // Define the cost function here.
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
-        std::ofstream error_model_out(folder_out + "/error_model.stim");
-
         auto tanner_graph = ir->curr_spec;
         auto arch = ir->arch;
         auto dgr = ir->dependency_graph;
@@ -110,7 +108,9 @@ help_exit:
                         for (uint i = 0; i < inst.operands.size(); i++) {
                             uint j = inst.operands[i];
                             msimd.operands.push_back(j);
-                            measurement_to_color_id[mctr+i] = tv->id % 3;
+                            // If this is a gauge qubit, then color it differently than
+                            // tv.
+                            measurement_to_color_id[mctr+i] = (tv->id % 3 + inst.metadata.is_for_flag) % 3;
                         }
                         mctr += inst.get_qubit_operands().size();
                         // Update the measurement order.
@@ -140,7 +140,7 @@ help_exit:
             for (uint i = 0; i < meas_order.size(); i++) {
                 auto tv = meas_order[i].first;
                 bool is_for_flag = meas_order[i].second;
-                if (r == 0 && tv->qubit_type == tanner::vertex_t::XPARITY)  continue;
+                if (tv->qubit_type == tanner::vertex_t::XPARITY)  continue;
                 
                 detector_to_color_id[ectr] = measurement_to_color_id[moffset + i];
 
@@ -232,7 +232,10 @@ help_exit:
                     }
                 });
         circuit = annotated_circuit;
-        error_model_out << circuit << "\n";
+        if (n_qubits == 10) {
+            std::ofstream error_model_out(folder_out + "/error_model.stim");
+            error_model_out << circuit << "\n";
+        }
 
         // Build a decoder, and then benchmark it with a memory experiment.
         decoder::RestrictionDecoder dec(circuit);
@@ -242,8 +245,7 @@ help_exit:
 
         std::cout << "\tLogical error rate: " << mexp_res.logical_error_rate << "\n";
         
-        return mexp_res.logical_error_rate
-                + ir->arch->get_mean_connectivity();
+        return n_qubits;
     };
     experiments::G_USE_MPI = false;
 

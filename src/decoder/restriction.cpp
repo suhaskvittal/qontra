@@ -225,7 +225,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     std::cout << "Jamming sets:\n";
 #endif
     for (auto& pair : jamming_sets) {
-        std::map<uint, __COLOR> detector_to_color;
+        std::map<cdet_t, __COLOR> detector_to_color;
         auto& js = pair.first;
         __COLOR jsc = pair.second;
 #ifdef DEBUG
@@ -234,10 +234,6 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
         for (uint i = 1; i < js.size(); i++) {
             cdet_t cd1 = js[i-1];
             cdet_t cd2 = js[i];
-#ifdef DEBUG
-            std::cout << "\t\t" << cd1.first << "(" << c2i(cd1.second) << ") <----> "
-                << cd2.first << "(" << c2i(cd2.second) << ")\n";
-#endif
             // Get the path between cdx and cdy and only examine detectors
             // with color jsc.
             //
@@ -245,16 +241,49 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             // decoding graph.
             __COLOR restricted_color;
             // Compute restricted color.
-            std::set<__COLOR> available{__COLOR::red, __COLOR::green, __COLOR::blue};
-            __COLOR c1 = cd1.second;
-            __COLOR c2 = cd2.second;
-            available.erase(c1);
-            available.erase(c2);
-            restricted_color = *available.begin();
-            // Now get decoding graph.
+            if (cd1.second != cd2.second
+                    && cd1.second != jsc
+                    && cd2.second != jsc)   continue;
 #ifdef DEBUG
-            std::cout << "\t\t\trestricted = " << c2i(restricted_color) << "\n";
+            std::cout << "\t\t" << cd1.first << "(" << c2i(cd1.second) << ") <----> "
+                << cd2.first << "(" << c2i(cd2.second) << ")\n";
 #endif
+            __COLOR offcolor = cd1.second == jsc ? cd2.second : cd1.second;
+            uint8_t available = 0x7;
+            available &= ~((jsc == __COLOR::red || offcolor == __COLOR::red));
+            available &= ~((jsc == __COLOR::green || offcolor == __COLOR::green) << 1);
+            available &= ~((jsc == __COLOR::blue || offcolor == __COLOR::blue) << 2);
+            if (available & 1)      restricted_color = __COLOR::red;
+            else if (available & 2) restricted_color = __COLOR::green;
+            else if (available & 4) restricted_color = __COLOR::blue;
+            // Check if we need to jam.
+            auto old_d1_color = detector_to_color.count(cd1)
+                                    ? detector_to_color[cd1] : __COLOR::none;
+            auto old_d2_color = detector_to_color.count(cd2)
+                                    ? detector_to_color[cd2] : __COLOR::none;
+            detector_to_color[cd1] = restricted_color;
+            detector_to_color[cd2] = restricted_color;
+            if (old_d1_color != __COLOR::none) {
+                if (old_d1_color != restricted_color) {
+#ifdef DEBUG
+                    std::cout << "\t\t\tjammed!\n";
+#endif
+                    detector_to_color.erase(cd1);
+                    detector_to_color.erase(cd2);
+                    continue;
+                }
+            }
+            if (old_d2_color != __COLOR::none) {
+                if (old_d2_color != restricted_color) {
+#ifdef DEBUG
+                    std::cout << "\t\t\tjammed!\n";
+#endif
+                    detector_to_color.erase(cd1);
+                    detector_to_color.erase(cd2);
+                    continue;
+                }
+            }
+            // Now get decoding graph.
             const uint dec_index = 2 - c2i(restricted_color);
             DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
             uint rlatt_d1 = to_rlatt[cd1.first][dec_index];
@@ -263,49 +292,10 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             auto v2 = gr.get_vertex(rlatt_d2);
             // Get path between v1 and v2: only perform frame changes incident
             // on vertices matching the color jsc.
-            auto error_chain = gr.get_error_chain_data(v1, v2).error_chain;
-            for (uint j = 1; j < error_chain.size(); j++) {
-                auto vx = error_chain[j-1];
-                auto vy = error_chain[j];
-                uint rlatt_dx = vx->id;
-                uint rlatt_dy = vy->id;
-                uint dx = from_rlatt[std::make_pair(rlatt_dx, dec_index)];
-                uint dy = from_rlatt[std::make_pair(rlatt_dy, dec_index)];
+            for (auto f : gr.get_error_chain_data(v1, v2).frame_changes) {
+                corr[f] ^= 1;                
 #ifdef DEBUG
-                std::cout << "\t\t\t(" << dx << ", " << dy << ")(";
-#endif
-                if (color_map[dx] == jsc) {
-                    auto old_color = detector_to_color.count(dx) 
-                                        ? detector_to_color[dx] : restricted_color;
-                    detector_to_color[dx] = restricted_color;
-                    // Jam the correction if necessary.
-                    if (old_color != restricted_color) {
-#ifdef DEBUG
-                        std::cout << "j)\n";
-#endif
-                        continue;
-                    }
-                } else {
-                    auto old_color = detector_to_color.count(dy)
-                                        ? detector_to_color[dy] : restricted_color;
-                    detector_to_color[dy] = restricted_color;
-                    // Jam the correction if necessary.
-                    if (old_color != restricted_color) {
-#ifdef DEBUG
-                        std::cout << "j)\n";
-#endif
-                        continue;
-                    }
-                }
-                auto e = gr.get_edge(vx, vy);
-                for (auto fr : e->frames) {
-                    corr[fr] ^= 1;
-#ifdef DEBUG
-                    std::cout << fr;
-#endif
-                }
-#ifdef DEBUG
-                std::cout << ")\n";
+                std::cout << "\t\t\tfr" << f << "\n";
 #endif
             }
         }
