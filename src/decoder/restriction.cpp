@@ -253,7 +253,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     std::cout << "Jamming sets:\n";
 #endif
     for (auto& p1 : jamming_sets) {
-        std::map<cdet_t, __COLOR> detector_to_color;
+        // We track the incident colors for each detector
+        std::map<cdet_t, __COLOR> detector_to_incident_color;
+
         auto& js = p1.first;
         __COLOR jsc = p1.second;
 #ifdef DEBUG
@@ -269,70 +271,109 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 << c2i(restricted_color) << "\n";
 #endif
             if (restricted_color == jsc) {
-#ifdef DEBUG
-                std::cout << "\t\t\tskipped!\n";
-#endif
                 continue;
             }
             // Now get decoding graph.
             const uint dec_index = 2 - c2i(restricted_color);
             DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
-            uint rlatt_d1 = to_rlatt[cd1.first][dec_index];
-            uint rlatt_d2 = to_rlatt[cd2.first][dec_index];
+            uint rlatt_d1 = cd1.first == BOUNDARY_INDEX ? 
+                                BOUNDARY_INDEX : to_rlatt[cd1.first][dec_index];
+            uint rlatt_d2 = cd2.first == BOUNDARY_INDEX ? 
+                                BOUNDARY_INDEX : to_rlatt[cd2.first][dec_index];
             auto v1 = gr.get_vertex(rlatt_d1);
             auto v2 = gr.get_vertex(rlatt_d2);
-            // Check if we need to jam.
+            // Perform frame changes along the path provided one of the detectors
+            // has the same color as the jamming set.
 #ifdef DEBUG
-            std::cout << "\t\t\tlength = "
-                        << gr.get_error_chain_data(v1, v2).chain_length
-                        << "\n";
+            std::cout << "\t\t\tpath:\n";
+#endif
             auto path = gr.get_error_chain_data(v1, v2).error_chain;
-            std::cout << "\t\t\tpath:";
-            for (auto x : path) {
-                std::cout << " " <<  x->id << "(" << c2i(color_map[x->id]) << ")"; 
+            __COLOR possible_boundary_color1, possible_boundary_color2;
+            if (jsc == __COLOR::red) {
+                possible_boundary_color1 = __COLOR::blue;
+                possible_boundary_color2 = __COLOR::green;
+            } else if (jsc == __COLOR::blue) {
+                possible_boundary_color1 = __COLOR::red;
+                possible_boundary_color2 = __COLOR::green;
+            } else {
+                possible_boundary_color1 = __COLOR::red;
+                possible_boundary_color2 = __COLOR::blue;
             }
-            std::cout << "\n";
+            for (uint i = 1; i < path.size(); i++) {
+                auto vx = path[i-1];
+                auto vy = path[i];
+                
+                uint64_t dx = vx->id;
+                uint64_t dy = vy->id;
+                if (dx == BOUNDARY_INDEX)   std::swap(dx, dy);
+                dx = from_rlatt[std::make_pair(dx, dec_index)];
+                __COLOR dx_color = color_map[dx];
+                __COLOR dy_color;
+                if (dy == BOUNDARY_INDEX) {
+                    if (dx_color == possible_boundary_color1) {
+                        dy_color = possible_boundary_color2;
+                    } else {
+                        dy_color = possible_boundary_color1;
+                    }
+                } else {
+                    dy = from_rlatt[std::make_pair(dy, dec_index)];
+                    dy_color = color_map[dy];
+                }
+#ifdef DEBUG
+                std::cout << "\t\t\t\t(" << dx << ", " << dy << ")";
 #endif
-            auto frame_changes = gr.get_error_chain_data(v1, v2).frame_changes;
-            /*
-            if ((cd1.first == BOUNDARY_INDEX || cd2.first == BOUNDARY_INDEX)
-                    && cd1.second != cd2.second) 
-            {
-                frame_changes.insert(0);
-            }
-            */
-            if (frame_changes.empty())  continue;
-            auto old_d1_color = detector_to_color.count(cd1)
-                                    ? detector_to_color[cd1] : __COLOR::none;
-            auto old_d2_color = detector_to_color.count(cd2)
-                                    ? detector_to_color[cd2] : __COLOR::none;
-            detector_to_color[cd1] = restricted_color;
-            detector_to_color[cd2] = restricted_color;
+                if (dx_color != jsc && dy_color != jsc) {
+#ifdef DEBUG
+                    std::cout << "\n";
+#endif
+                    continue;
+                }
+                auto e = gr.get_edge(vx, vy);
+                if (e->frames.empty()) {
+#ifdef DEBUG
+                    std::cout << "\n";
+#endif
+                    continue;
+                }
+                cdet_t cdx = std::make_pair(dx, dx_color);
+                cdet_t cdy = std::make_pair(dy, dx_color);
+                __COLOR old_dx_incident_color = detector_to_incident_color.count(cdx)
+                                                    ? detector_to_incident_color[cdx]
+                                                    : __COLOR::none;
+                __COLOR old_dy_incident_color = detector_to_incident_color.count(cdy)
+                                                    ? detector_to_incident_color[cdy]
+                                                    : __COLOR::none;
 
-            if (old_d1_color != __COLOR::none) {
-                if (old_d1_color != restricted_color) {
+                if (old_dx_incident_color != __COLOR::none) {
+                    if (old_dx_incident_color != restricted_color) {
 #ifdef DEBUG
-                    std::cout << "\t\t\tjammed!\n";
+                        std::cout << "\tJ\n";
 #endif
-                    detector_to_color.erase(cd1);
-                    detector_to_color.erase(cd2);
-                    continue;
+                        detector_to_incident_color.erase(cdx);
+                        detector_to_incident_color.erase(cdy);
+                        continue;
+                    }
                 }
-            }
-            if (old_d2_color != __COLOR::none) {
-                if (old_d2_color != restricted_color) {
+                if (old_dy_incident_color != __COLOR::none) {
+                    if (old_dy_incident_color != restricted_color) {
 #ifdef DEBUG
-                    std::cout << "\t\t\tjammed!\n";
+                        std::cout << "\tJ\n";
 #endif
-                    detector_to_color.erase(cd1);
-                    detector_to_color.erase(cd2);
-                    continue;
+                        detector_to_incident_color.erase(cdx);
+                        detector_to_incident_color.erase(cdy);
+                        continue;
+                    }
                 }
-            }
-            for (auto f : frame_changes) {
-                corr[f] ^= 1;                
+                detector_to_incident_color[cdx] = restricted_color;
+                detector_to_incident_color[cdy] = restricted_color;
+                for (auto f : e->frames) {
+                    corr[f] ^= 1;                
 #ifdef DEBUG
-                std::cout << "\t\t\tfr" << f << "\n";
+                    std::cout << "\tFR" << f;
+#endif
+                }
+#ifdef DEBUG
+                std::cout << "\n";
 #endif
             }
         }
