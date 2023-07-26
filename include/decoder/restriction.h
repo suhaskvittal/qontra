@@ -24,6 +24,14 @@ namespace decoder {
 
 #define __COLOR graph::decoding::vertex_t::Color
 
+inline int c2i(__COLOR x) {
+    if (x == __COLOR::red)      return 0;
+    if (x == __COLOR::green)    return 1;
+    if (x == __COLOR::blue)     return 2;
+    std::cout << "NONE OF THE COLORS?\n";
+    return -1;
+}
+
 class RestrictionDecoder : public Decoder {
 public:
     RestrictionDecoder(const stim::Circuit&);
@@ -39,6 +47,13 @@ private:
     // The decode_restricted_lattice function decodes the restricted lattice that
     // restricts the passed in color.
     Decoder::result_t   decode_restricted_lattice(const std::vector<uint>&, __COLOR);
+
+    typedef std::pair<uint, __COLOR>    cdet_t;
+    uint64_t cdet_to_id(cdet_t x) {
+        uint64_t base = x.first;
+        if (base == graph::BOUNDARY_INDEX) base = circuit.count_detectors();
+        return base | ((uint64_t)c2i(x.second) << 60);
+    }
 
     std::array<MWPMDecoder*, 3> rlatt_dec;  // Three MWPM decoders, each of which responsible
                                             // for decoding a different restricted lattice.
@@ -58,14 +73,6 @@ private:
 
     std::map<uint, __COLOR>   color_map;
 };
-
-inline int c2i(__COLOR x) {
-    if (x == __COLOR::red)      return 0;
-    if (x == __COLOR::green)    return 1;
-    if (x == __COLOR::blue)     return 2;
-    std::cout << "NONE OF THE COLORS?\n";
-    return -1;
-}
 
 }   // decoder
 }   // qontra

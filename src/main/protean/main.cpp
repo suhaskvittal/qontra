@@ -110,7 +110,8 @@ help_exit:
                             msimd.operands.push_back(j);
                             // If this is a gauge qubit, then color it differently than
                             // tv.
-                            measurement_to_color_id[mctr+i] = (tv->id % 3 + inst.metadata.is_for_flag) % 3;
+                            measurement_to_color_id[mctr+i] = 
+                                (tv->id % 3 + inst.metadata.is_for_flag) % 3;
                         }
                         mctr += inst.get_qubit_operands().size();
                         // Update the measurement order.
