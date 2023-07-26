@@ -252,10 +252,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #ifdef DEBUG
     std::cout << "Jamming sets:\n";
 #endif
+    // We track the incident colors for each detector
+    std::map<cdet_t, __COLOR> detector_to_incident_color;
     for (auto& p1 : jamming_sets) {
-        // We track the incident colors for each detector
-        std::map<cdet_t, __COLOR> detector_to_incident_color;
-
         auto& js = p1.first;
         __COLOR jsc = p1.second;
 #ifdef DEBUG
@@ -285,14 +284,15 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             // Perform frame changes along the path provided one of the detectors
             // has the same color as the jamming set.
 #ifdef DEBUG
-            std::cout << "\t\t\tpath:\n";
+            std::cout << "\t\t\tpath (length = "
+                << gr.get_error_chain_data(v1, v2).chain_length<< "):\n";
 #endif
             auto path = gr.get_error_chain_data(v1, v2).error_chain;
             __COLOR possible_boundary_color1, possible_boundary_color2;
-            if (jsc == __COLOR::red) {
+            if (restricted_color == __COLOR::red) {
                 possible_boundary_color1 = __COLOR::blue;
                 possible_boundary_color2 = __COLOR::green;
-            } else if (jsc == __COLOR::blue) {
+            } else if (restricted_color == __COLOR::blue) {
                 possible_boundary_color1 = __COLOR::red;
                 possible_boundary_color2 = __COLOR::green;
             } else {
@@ -320,7 +320,8 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                     dy_color = color_map[dy];
                 }
 #ifdef DEBUG
-                std::cout << "\t\t\t\t(" << dx << ", " << dy << ")";
+                std::cout << "\t\t\t\tE : " << dx << "(" << c2i(dx_color) << ") , " 
+                    << dy << "(" << c2i(dy_color) << ")";
 #endif
                 if (dx_color != jsc && dy_color != jsc) {
 #ifdef DEBUG
@@ -336,21 +337,20 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                     continue;
                 }
                 cdet_t cdx = std::make_pair(dx, dx_color);
-                cdet_t cdy = std::make_pair(dy, dx_color);
+                cdet_t cdy = std::make_pair(dy, dy_color);
                 __COLOR old_dx_incident_color = detector_to_incident_color.count(cdx)
                                                     ? detector_to_incident_color[cdx]
                                                     : __COLOR::none;
                 __COLOR old_dy_incident_color = detector_to_incident_color.count(cdy)
                                                     ? detector_to_incident_color[cdy]
                                                     : __COLOR::none;
-
+                detector_to_incident_color[cdx] = restricted_color;
+                detector_to_incident_color[cdy] = restricted_color;
                 if (old_dx_incident_color != __COLOR::none) {
                     if (old_dx_incident_color != restricted_color) {
 #ifdef DEBUG
                         std::cout << "\tJ\n";
 #endif
-                        detector_to_incident_color.erase(cdx);
-                        detector_to_incident_color.erase(cdy);
                         continue;
                     }
                 }
@@ -359,13 +359,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #ifdef DEBUG
                         std::cout << "\tJ\n";
 #endif
-                        detector_to_incident_color.erase(cdx);
-                        detector_to_incident_color.erase(cdy);
                         continue;
                     }
                 }
-                detector_to_incident_color[cdx] = restricted_color;
-                detector_to_incident_color[cdy] = restricted_color;
                 for (auto f : e->frames) {
                     corr[f] ^= 1;                
 #ifdef DEBUG
