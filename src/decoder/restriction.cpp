@@ -288,6 +288,15 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             if (restricted_color == jsc) {
                 continue;
             }
+        
+            if (cd1.second != cd2.second) {
+                bool jam = is_adjacent_to_any(cd1, detector_to_incident_detectors[cd2])
+                            || is_adjacent_to_any(cd2, detector_to_incident_detectors[cd1]);
+                detector_to_incident_detectors[cd1].insert(cd2);
+                detector_to_incident_detectors[cd2].insert(cd1);
+                if (jam)    continue;
+            }
+
             auto path = gr.get_error_chain_data(v1, v2).error_chain;
             __COLOR possible_boundary_color1, possible_boundary_color2;
             if (restricted_color == __COLOR::red) {
@@ -324,23 +333,15 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 std::cout << "\t\t\t\tE : " << dx << "(" << c2i(dx_color) << ") , " 
                     << dy << "(" << c2i(dy_color) << ")";
 #endif
-                auto e = gr.get_edge(vx, vy);
-                cdet_t cdx = std::make_pair(dx, dx_color);
-                cdet_t cdy = std::make_pair(dy, dy_color);
-                if (dx_color != dy_color) {
-                    // Check if we need to jam.
-                    bool jam = is_adjacent_to_any(cdx, detector_to_incident_detectors[cdy])
-                                || is_adjacent_to_any(cdy, detector_to_incident_detectors[cdx]);
-                    detector_to_incident_detectors[cdx].insert(cdy);
-                    detector_to_incident_detectors[cdy].insert(cdx);
-                    if (jam)    continue;
-                }
+
                 if (dx_color != jsc && dy_color != jsc) {
 #ifdef DEBUG
                     std::cout << "\tS\n";
 #endif
                     continue;
                 }
+
+                auto e = gr.get_edge(vx, vy);
                 // Now, check if cdy is 
                 for (auto f : e->frames) {
                     corr[f] ^= 1;                
