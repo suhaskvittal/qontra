@@ -252,9 +252,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #ifdef DEBUG
     std::cout << "Jamming sets:\n";
 #endif
-    // We track the incident colors for each detector
-    std::map<cdet_t, __COLOR> detector_to_incident_color;
     for (auto& p1 : jamming_sets) {
+        // We track the incident colors for each detector
+        std::map<cdet_t, __COLOR> detector_to_incident_color;
         auto& js = p1.first;
         __COLOR jsc = p1.second;
 #ifdef DEBUG
@@ -325,14 +325,14 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #endif
                 if (dx_color != jsc && dy_color != jsc) {
 #ifdef DEBUG
-                    std::cout << "\n";
+                    std::cout << "S\n";
 #endif
                     continue;
                 }
                 auto e = gr.get_edge(vx, vy);
-                if (e->frames.empty()) {
+                if (e->frames.empty() && dx != BOUNDARY_INDEX && dy != BOUNDARY_INDEX) {
 #ifdef DEBUG
-                    std::cout << "\n";
+                    std::cout << "E\n";
 #endif
                     continue;
                 }
@@ -414,7 +414,26 @@ RestrictionDecoder::decode_restricted_lattice(
     std::cout << "\tAssignments on lattice restricting color " 
         << c2i(restricted_color) << ":\n";
 #endif
-    for (auto& aa : res.error_assignments) {
+    // First, filter out any assignments that go through the boundary.
+    std::vector<Decoder::assign_t>  new_assignments;
+    DecodingGraph& gr = dec->decoding_graph;
+    for (auto aa : res.error_assignments) {
+        uint d1 = std::get<0>(aa);
+        uint d2 = std::get<1>(aa);
+        if (d1 != BOUNDARY_INDEX && d2 != BOUNDARY_INDEX) {
+            auto v1 = gr.get_vertex(d1);
+            auto v2 = gr.get_vertex(d2);
+            if (gr.get_error_chain_data(v1, v2).error_chain_runs_through_boundary) {
+                new_assignments.push_back(std::make_tuple(d1, BOUNDARY_INDEX, std::get<2>(aa)));
+                new_assignments.push_back(std::make_tuple(d2, BOUNDARY_INDEX, std::get<2>(aa)));
+            } else {
+                new_assignments.push_back(aa);
+            }
+        } else {
+            new_assignments.push_back(aa);
+        }
+    }
+    for (auto& aa : new_assignments) {
         uint& d1 = std::get<0>(aa);
         uint& d2 = std::get<1>(aa);
         if (d1 != BOUNDARY_INDEX)   d1 = from_rlatt[std::make_pair(d1, i)];
@@ -423,6 +442,7 @@ RestrictionDecoder::decode_restricted_lattice(
         std::cout << "\t\t" << d1 << " <----> " << d2 << "\n";
 #endif
     }
+    res.error_assignments = new_assignments;
     return res;
 }
 

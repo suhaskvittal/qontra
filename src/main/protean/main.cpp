@@ -116,8 +116,7 @@ help_exit:
                         mctr += inst.get_qubit_operands().size();
                         // Update the measurement order.
                         if (r == 0) {
-                            meas_order.push_back(std::make_pair(tv, inst.metadata.is_for_flag));
-                        }
+                            meas_order.push_back(std::make_pair(tv, inst.metadata.is_for_flag)); }
                     } else if (inst.name == "h") {
                         for (uint i : inst.operands) {
                             hsimd.operands.push_back(i);
@@ -144,6 +143,8 @@ help_exit:
                 if (tv->qubit_type == tanner::vertex_t::XPARITY)  continue;
                 
                 detector_to_color_id[ectr] = measurement_to_color_id[moffset + i];
+
+                std::cout << "(r = " << r << ") M" << (tv->id & 255) << " ---> E" << ectr << "\n";
 
                 Instruction det;
                 det.name = "event";
@@ -209,6 +210,10 @@ help_exit:
         //
         // Simple version: uniform model.
         tables::ErrorAndTiming et;
+        et.e_ro = 0.0;
+        et.e_g2q = 0.0;
+        et.e_g1q = 0.0;
+        et = et * 50;
         ErrorTable errors;
         TimeTable timing;
         tables::populate(n_qubits, errors, timing, et);
