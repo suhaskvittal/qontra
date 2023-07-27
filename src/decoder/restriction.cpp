@@ -253,8 +253,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     std::cout << "Jamming sets:\n";
 #endif
     for (auto& p1 : jamming_sets) {
-        // We track the incident colors for each detector
-        std::map<cdet_t, __COLOR> detector_to_incident_color;
+        // Once a detector is matched to another detector, we track
+        // the incident detector to detect faces.
+        std::map<cdet_t, std::set<cdet_t>> detector_to_incident_detectors;
         auto& js = p1.first;
         __COLOR jsc = p1.second;
 #ifdef DEBUG
@@ -269,9 +270,6 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 << cd2.first << "(" << c2i(cd2.second) << ")\t COLOR = " 
                 << c2i(restricted_color) << "\n";
 #endif
-            if (restricted_color == jsc) {
-                continue;
-            }
             // Now get decoding graph.
             const uint dec_index = 2 - c2i(restricted_color);
             DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
@@ -287,6 +285,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             std::cout << "\t\t\tpath (length = "
                 << gr.get_error_chain_data(v1, v2).chain_length<< "):\n";
 #endif
+            if (restricted_color == jsc) {
+                continue;
+            }
             auto path = gr.get_error_chain_data(v1, v2).error_chain;
             __COLOR possible_boundary_color1, possible_boundary_color2;
             if (restricted_color == __COLOR::red) {
@@ -323,45 +324,24 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 std::cout << "\t\t\t\tE : " << dx << "(" << c2i(dx_color) << ") , " 
                     << dy << "(" << c2i(dy_color) << ")";
 #endif
-                if (dx_color != jsc && dy_color != jsc) {
-#ifdef DEBUG
-                    std::cout << "S\n";
-#endif
-                    continue;
-                }
                 auto e = gr.get_edge(vx, vy);
-                if (e->frames.empty() && dx != BOUNDARY_INDEX && dy != BOUNDARY_INDEX) {
-#ifdef DEBUG
-                    std::cout << "E\n";
-#endif
-                    continue;
-                }
                 cdet_t cdx = std::make_pair(dx, dx_color);
                 cdet_t cdy = std::make_pair(dy, dy_color);
-                __COLOR old_dx_incident_color = detector_to_incident_color.count(cdx)
-                                                    ? detector_to_incident_color[cdx]
-                                                    : __COLOR::none;
-                __COLOR old_dy_incident_color = detector_to_incident_color.count(cdy)
-                                                    ? detector_to_incident_color[cdy]
-                                                    : __COLOR::none;
-                detector_to_incident_color[cdx] = restricted_color;
-                detector_to_incident_color[cdy] = restricted_color;
-                if (old_dx_incident_color != __COLOR::none) {
-                    if (old_dx_incident_color != restricted_color) {
-#ifdef DEBUG
-                        std::cout << "\tJ\n";
-#endif
-                        continue;
-                    }
+                if (dx_color != dy_color) {
+                    // Check if we need to jam.
+                    bool jam = is_adjacent_to_any(cdx, detector_to_incident_detectors[cdy])
+                                || is_adjacent_to_any(cdy, detector_to_incident_detectors[cdx]);
+                    detector_to_incident_detectors[cdx].insert(cdy);
+                    detector_to_incident_detectors[cdy].insert(cdx);
+                    if (jam)    continue;
                 }
-                if (old_dy_incident_color != __COLOR::none) {
-                    if (old_dy_incident_color != restricted_color) {
+                if (dx_color != jsc && dy_color != jsc) {
 #ifdef DEBUG
-                        std::cout << "\tJ\n";
+                    std::cout << "\tS\n";
 #endif
-                        continue;
-                    }
+                    continue;
                 }
+                // Now, check if cdy is 
                 for (auto f : e->frames) {
                     corr[f] ^= 1;                
 #ifdef DEBUG
@@ -393,21 +373,11 @@ RestrictionDecoder::decode_restricted_lattice(
 
     syndrome_t restricted_syndrome(n_detectors+n_observables);
     restricted_syndrome.clear();
-#ifdef DEBUG
-    std::cout << "\tDetectors on lattice restricting color "
-            << c2i(restricted_color) << ":";
-#endif
     for (uint d : detectors) {
         if (color_map[d] == restricted_color)   continue;
         uint dd = to_rlatt[d][i];
         restricted_syndrome[dd] = 1;
-#ifdef DEBUG
-        std::cout << " " << d;
-#endif
     }
-#ifdef DEBUG
-    std::cout << "\n";
-#endif
     auto res = dec->decode_error(restricted_syndrome);
     // Convert the error assignments to the original circuit's detectors.
 #ifdef DEBUG
@@ -444,6 +414,42 @@ RestrictionDecoder::decode_restricted_lattice(
     }
     res.error_assignments = new_assignments;
     return res;
+}
+
+bool
+RestrictionDecoder::is_adjacent_to_any(cdet_t x, const std::set<cdet_t>& from) {
+    __COLOR restricted_color1;
+    __COLOR restricted_color2;
+    if (x.second == __COLOR::red) {
+        restricted_color1 = __COLOR::green;
+        restricted_color2 = __COLOR::blue;
+    } else if (x.second == __COLOR::green) {
+        restricted_color1 = __COLOR::red;
+        restricted_color2 = __COLOR::blue;
+    } else {
+        restricted_color1 = __COLOR::red;
+        restricted_color2 = __COLOR::green;
+    }
+
+    for (auto y : from) {
+        if (x.second == y.second)   continue; 
+        __COLOR restricted_color = y.second == restricted_color1 
+                                    ? restricted_color2 : restricted_color1;
+        const uint i = 2 - c2i(restricted_color);
+        DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
+        uint64_t ddx = x.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[x.first][i];
+        uint64_t ddy = y.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[y.first][i];
+        if (ddx == ddy)             return true;
+        auto vx = gr.get_vertex(ddx);
+        auto vy = gr.get_vertex(ddy);
+        if (gr.contains(vx, vy)) {
+#ifdef DEBUG
+            std::cout << "\t\tJ on " << y.first << "(" << c2i(y.second) << ")\n";
+#endif
+            return true;
+        }
+    }
+    return false;
 }
 
 }   // decoder

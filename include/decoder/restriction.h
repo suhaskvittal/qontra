@@ -48,6 +48,8 @@ private:
     Decoder::result_t   decode_restricted_lattice(const std::vector<uint>&, __COLOR);
 
     typedef std::pair<uint, __COLOR>    cdet_t;
+    bool    is_adjacent_to_any(cdet_t, const std::set<cdet_t>&);
+
     uint64_t cdet_to_id(cdet_t x) {
         uint64_t base = x.first;
         if (base == graph::BOUNDARY_INDEX) base = circuit.count_detectors();
