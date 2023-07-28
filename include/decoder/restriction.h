@@ -31,6 +31,30 @@ inline int c2i(__COLOR x) {
     return -1;
 }
 
+inline __COLOR i2c(int x) {
+    if (x == 0) return __COLOR::red;
+    if (x == 1) return __COLOR::green;
+    if (x == 2) return __COLOR::blue;
+    return __COLOR::none;
+}
+
+inline __COLOR get_remaining_color(__COLOR c1, __COLOR c2) {
+    uint8_t available = 0x7;
+    available &= ~(c1 == __COLOR::red || c2 == __COLOR::red);
+    available &= ~((c1 == __COLOR::green || c2 == __COLOR::green) << 1);
+    available &= ~((c1 == __COLOR::blue || c2 == __COLOR::blue) << 2);
+    if (available & 0x1)   return __COLOR::red;
+    if (available & 0x2)   return __COLOR::green;
+    if (available & 0x4)   return __COLOR::blue;
+    return __COLOR::none;
+}
+
+typedef std::pair<uint, __COLOR>                    cdet_t;
+typedef std::tuple<cdet_t, cdet_t, __COLOR>         match_t;
+typedef std::pair<std::vector<match_t>, __COLOR>    component_t;
+
+typedef std::pair<cdet_t, cdet_t>                   cdetpair_t;
+
 class RestrictionDecoder : public Decoder {
 public:
     RestrictionDecoder(const stim::Circuit&);
@@ -47,8 +71,10 @@ private:
     // restricts the passed in color.
     Decoder::result_t   decode_restricted_lattice(const std::vector<uint>&, __COLOR);
 
-    typedef std::pair<uint, __COLOR>    cdet_t;
-    bool    is_adjacent_to_any(cdet_t, const std::set<cdet_t>&);
+    std::set<cdetpair_t>        get_all_edges_in_component(const std::vector<match_t>&);
+    std::set<cdet_t>            get_common_neighbors(cdet_t, cdet_t);
+    std::set<cdet_t>            get_neighbors(cdet_t);
+    stim::simd_bits             get_correction_for_face(cdet_t, cdet_t, cdet_t);
 
     uint64_t cdet_to_id(cdet_t x) {
         uint64_t base = x.first;

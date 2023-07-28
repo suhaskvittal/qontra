@@ -35,14 +35,14 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
             std::string gate_name(op.gate->name);
             if (gate_name == "DETECTOR") {
                 int color_id = (int) op.target_data.args[0];
-                if (colors[color_id] != restricted_color) {
+                if (i2c(color_id) != restricted_color) {
                     sub_circuit.append_operation(op);
 
                     to_rlatt[det_ctr][i] = subdet_ctr;
                     from_rlatt[std::make_pair(subdet_ctr, i)] = det_ctr;
                     subdet_ctr++;
                 }
-                color_map[det_ctr++] = colors[color_id];
+                color_map[det_ctr++] = i2c(color_id);
             } else {
                 sub_circuit.append_operation(op);
             }
@@ -90,13 +90,8 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     Decoder::result_t* res_array[] = { &r_lattRG, &r_lattRB, &r_lattGB };
 
     const __COLOR restricted_colors[] = {__COLOR::blue, __COLOR::green, __COLOR::red};
-    const __COLOR rlatt_c1_array[] = { __COLOR::red, __COLOR::red, __COLOR::green };
-    const __COLOR rlatt_c2_array[] = { __COLOR::green, __COLOR::blue, __COLOR::blue };
     for (uint i = 0; i < 3; i++) {
         auto res_p = res_array[i];
-        __COLOR first_possible_color = rlatt_c1_array[i];
-        __COLOR second_possible_color = rlatt_c2_array[i];
-
         for (auto aa : res_p->error_assignments) {
             uint d1 = std::get<0>(aa);
             uint d2 = std::get<1>(aa);
@@ -117,8 +112,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 // color as d1. Otherwise, it is the opposite color.
                 uint len = ec_data.chain_length;
                 if (len & 0x1) {
-                    if (c1 == first_possible_color) c2 = second_possible_color;
-                    else                            c2 = first_possible_color;
+                    c2 = get_remaining_color(c1, restricted_colors[i]);
                 } else {
                     c2 = c1;
                 }
@@ -156,18 +150,12 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     // Here, we will partition the syndrome into two parts:
     //  (1) Syndrome bits not in a connected component with the red boundary.
     //  (2) Everything else.
-    // Then, we will "jam" matchings in each partition separately. Jamming is essentially
-    // when a detector has matchings in two different colors (i.e. G and B). Then, we ignore
-    // one of the incident frame changes as this implies that we are at a face.
-    typedef std::tuple<cdet_t, cdet_t, __COLOR>         match_t;
-    typedef std::pair<std::vector<match_t>, __COLOR>    jamming_set_t;
-    
     cdet_t red_boundary = std::make_pair(BOUNDARY_INDEX, __COLOR::red);
     auto rbv = connection_graph.get_vertex(cdet_to_id(red_boundary));
 
     std::set<cdet_t> in_connected_components{red_boundary};
 
-    std::vector<jamming_set_t> jamming_sets;
+    std::vector<component_t> connected_components;
     if (rbv != nullptr) {
         // Perform a DFS to get paths from the red boundary to any other boundary.
         //
@@ -177,24 +165,14 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 
         std::set<cv_t*> visited;
         std::map<cv_t*, cv_t*> prev;
-#ifdef DEBUG
-        std::cout << "\tCC dfs:\n";
-#endif
         while (dfs.size()) {
             auto v = dfs.back();
             dfs.pop_back();
             if (visited.count(v))   continue;
             visited.insert(v);
-#ifdef DEBUG
-            auto vd = v->detector;
-            std::cout << "\t\t" << vd.first << "(" << c2i(vd.second) << ") to";
-#endif
             for (auto w : connection_graph.get_neighbors(v)) {
                 if (w == prev[v])   continue;
                 cdet_t wd = w->detector;
-#ifdef DEBUG
-                std::cout << " " << wd.first << "(" << c2i(wd.second) << ")";
-#endif
                 if (wd.first == BOUNDARY_INDEX) {
                     // This is one connected component.
                     std::vector<match_t> cc;
@@ -210,25 +188,16 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                         cc.push_back(std::make_tuple(p->detector, curr->detector, e->color));
                         curr = p;
                     }
-                    __COLOR cc_color;
-                    if (wd.second == __COLOR::red || wd.second == __COLOR::blue)  {
-                        cc_color = __COLOR::green;
-                    } else {
-                        cc_color = __COLOR::blue;
-                    }
-                    jamming_set_t js = std::make_pair(cc, cc_color);
-                    jamming_sets.push_back(js);
+                    __COLOR cc_color = get_remaining_color(__COLOR::red, wd.second);
+                    connected_components.push_back(std::make_pair(cc, cc_color));
                 } else if (!visited.count(w)) {
                     prev[w] = v;
                     dfs.push_back(w);
                 }
             }
-#ifdef DEBUG
-            std::cout << "\n";
-#endif
         }
     }
-    // Add everything not in a connected components to its own jamming set.
+    // Add everything not in a connected components to its own component.
     std::vector<match_t> not_cc;
     std::set<cdet_t> visited;
     for (uint d : detectors) {
@@ -245,116 +214,66 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
         }
         visited.insert(det);
     }
-    jamming_sets.push_back(std::make_pair(not_cc, __COLOR::red));
-    // Compute correction using the jamming sets.
+    connected_components.push_back(std::make_pair(not_cc, __COLOR::red));
     stim::simd_bits corr(n_observables);
     corr.clear();
+
 #ifdef DEBUG
-    std::cout << "Jamming sets:\n";
+    std::cout << "Connected Components:\n";
 #endif
-    for (auto& p1 : jamming_sets) {
-        // Once a detector is matched to another detector, we track
-        // the incident detector to detect faces.
-        std::map<cdet_t, std::set<cdet_t>> detector_to_incident_detectors;
-        auto& js = p1.first;
-        __COLOR jsc = p1.second;
+    for (auto& pair : connected_components) {
+        auto cc = pair.first;
+        auto cc_color = pair.second;
+
+        std::set<cdetpair_t> in_face;
+
 #ifdef DEBUG
-        std::cout << "\tColor: " << c2i(jsc) << "\n";
+        std::cout << "\tColor " << c2i(cc_color) << ":\n";
 #endif
-        for (auto p2 : js) {
-            cdet_t cd1 = std::get<0>(p2);
-            cdet_t cd2 = std::get<1>(p2);
-            __COLOR restricted_color = std::get<2>(p2);
-#ifdef DEBUG
-            std::cout << "\t\t" << cd1.first << "(" << c2i(cd1.second) << ") <----> "
-                << cd2.first << "(" << c2i(cd2.second) << ")\t COLOR = " 
-                << c2i(restricted_color) << "\n";
-#endif
-            // Now get decoding graph.
-            const uint dec_index = 2 - c2i(restricted_color);
-            DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
-            uint rlatt_d1 = cd1.first == BOUNDARY_INDEX ? 
-                                BOUNDARY_INDEX : to_rlatt[cd1.first][dec_index];
-            uint rlatt_d2 = cd2.first == BOUNDARY_INDEX ? 
-                                BOUNDARY_INDEX : to_rlatt[cd2.first][dec_index];
-            auto v1 = gr.get_vertex(rlatt_d1);
-            auto v2 = gr.get_vertex(rlatt_d2);
-            // Perform frame changes along the path provided one of the detectors
-            // has the same color as the jamming set.
-#ifdef DEBUG
-            std::cout << "\t\t\tpath (length = "
-                << gr.get_error_chain_data(v1, v2).chain_length<< "):\n";
-#endif
-            if (restricted_color == jsc) {
-                continue;
-            }
         
-            if (cd1.second != cd2.second) {
-                bool jam = is_adjacent_to_any(cd1, detector_to_incident_detectors[cd2])
-                            || is_adjacent_to_any(cd2, detector_to_incident_detectors[cd1]);
-                detector_to_incident_detectors[cd1].insert(cd2);
-                detector_to_incident_detectors[cd2].insert(cd1);
-                if (jam)    continue;
-            }
+        auto flipped_edges = get_all_edges_in_component(cc);
+        for (cdetpair_t edge : flipped_edges) {
+            cdet_t cdx = edge.first;
+            cdet_t cdy = edge.second;
+            if (cdx.second == cdy.second)   continue;
+#ifdef DEBUG
+            std::cout << "\t\tedge between " << cdx.first << "(" << c2i(cdx.second) << ")"
+                << " and " << cdy.first << "(" << c2i(cdy.second) << ")\n";
+#endif
+            
+            if (in_face.count(std::make_pair(cdx, cdy))
+                    || in_face.count(std::make_pair(cdy, cdx))) continue;
 
-            auto path = gr.get_error_chain_data(v1, v2).error_chain;
-            __COLOR possible_boundary_color1, possible_boundary_color2;
-            if (restricted_color == __COLOR::red) {
-                possible_boundary_color1 = __COLOR::blue;
-                possible_boundary_color2 = __COLOR::green;
-            } else if (restricted_color == __COLOR::blue) {
-                possible_boundary_color1 = __COLOR::red;
-                possible_boundary_color2 = __COLOR::green;
-            } else {
-                possible_boundary_color1 = __COLOR::red;
-                possible_boundary_color2 = __COLOR::blue;
-            }
-            for (uint i = 1; i < path.size(); i++) {
-                auto vx = path[i-1];
-                auto vy = path[i];
-                
-                uint64_t dx = vx->id;
-                uint64_t dy = vy->id;
-                if (dx == BOUNDARY_INDEX)   std::swap(dx, dy);
-                dx = from_rlatt[std::make_pair(dx, dec_index)];
-                __COLOR dx_color = color_map[dx];
-                __COLOR dy_color;
-                if (dy == BOUNDARY_INDEX) {
-                    if (dx_color == possible_boundary_color1) {
-                        dy_color = possible_boundary_color2;
-                    } else {
-                        dy_color = possible_boundary_color1;
-                    }
-                } else {
-                    dy = from_rlatt[std::make_pair(dy, dec_index)];
-                    dy_color = color_map[dy];
-                }
-#ifdef DEBUG
-                std::cout << "\t\t\t\tE : " << dx << "(" << c2i(dx_color) << ") , " 
-                    << dy << "(" << c2i(dy_color) << ")";
-#endif
+            auto common = get_common_neighbors(cdx, cdy);
+            for (cdet_t cdz : common) {
+                if (cdx.second != cc_color
+                        && cdy.second != cc_color
+                        && cdz.second != cc_color)  continue;
+                auto cdx_cdz = std::make_pair(cdx, cdz);
+                auto cdz_cdx = std::make_pair(cdz, cdx);
 
-                if (dx_color != jsc && dy_color != jsc) {
-#ifdef DEBUG
-                    std::cout << "\tS\n";
-#endif
-                    continue;
-                }
+                auto cdy_cdz = std::make_pair(cdy, cdz);
+                auto cdz_cdy = std::make_pair(cdz, cdy);
 
-                auto e = gr.get_edge(vx, vy);
-                // Now, check if cdy is 
-                for (auto f : e->frames) {
-                    corr[f] ^= 1;                
-#ifdef DEBUG
-                    std::cout << "\tFR" << f;
-#endif
+                if (in_face.count(cdx_cdz) || in_face.count(cdz_cdx))   continue;
+                if (in_face.count(cdy_cdz) || in_face.count(cdz_cdy))   continue;
+                // Mark face edges. They should only appear in one face.
+                in_face.insert(edge);
+                if (flipped_edges.count(cdx_cdz) || flipped_edges.count(cdz_cdx)) {
+                    in_face.insert(cdx_cdz);
+                    in_face.insert(cdz_cdx);
                 }
-#ifdef DEBUG
-                std::cout << "\n";
-#endif
+                if (flipped_edges.count(cdy_cdz) || flipped_edges.count(cdz_cdy)) {
+                    in_face.insert(cdy_cdz);
+                    in_face.insert(cdz_cdy);
+                }
+                // Apply the face correction.
+                corr ^= get_correction_for_face(cdx, cdy, cdz);
+                break;  // We are done for this edge. Move on.
             }
         }
     }
+
 #ifdef DEBUG
     std::cout << "\tis error : " << is_error(corr, syndrome) << "\n";
 #endif
@@ -417,40 +336,146 @@ RestrictionDecoder::decode_restricted_lattice(
     return res;
 }
 
-bool
-RestrictionDecoder::is_adjacent_to_any(cdet_t x, const std::set<cdet_t>& from) {
-    __COLOR restricted_color1;
-    __COLOR restricted_color2;
-    if (x.second == __COLOR::red) {
-        restricted_color1 = __COLOR::green;
-        restricted_color2 = __COLOR::blue;
-    } else if (x.second == __COLOR::green) {
-        restricted_color1 = __COLOR::red;
-        restricted_color2 = __COLOR::blue;
-    } else {
-        restricted_color1 = __COLOR::red;
-        restricted_color2 = __COLOR::green;
-    }
+std::set<cdetpair_t>
+RestrictionDecoder::get_all_edges_in_component(const std::vector<match_t>& comp) {
+    std::set<cdetpair_t> edges;
+    for (match_t mate : comp) {
+        cdet_t cdx = std::get<0>(mate);
+        cdet_t cdy = std::get<1>(mate);
+        __COLOR restricted_color = std::get<2>(mate);
 
-    for (auto y : from) {
-        if (x.second == y.second)   continue; 
-        __COLOR restricted_color = y.second == restricted_color1 
-                                    ? restricted_color2 : restricted_color1;
-        const uint i = 2 - c2i(restricted_color);
-        DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
-        uint64_t ddx = x.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[x.first][i];
-        uint64_t ddy = y.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[y.first][i];
-        if (ddx == ddy)             return true;
+        uint dec_index = 2 - c2i(restricted_color);
+        DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
+        uint64_t ddx = cdx.first == BOUNDARY_INDEX ? cdx.first : to_rlatt[cdx.first][dec_index];
+        uint64_t ddy = cdy.first == BOUNDARY_INDEX ? cdy.first : to_rlatt[cdy.first][dec_index];
+
         auto vx = gr.get_vertex(ddx);
         auto vy = gr.get_vertex(ddy);
-        if (gr.contains(vx, vy)) {
+        auto error_chain = gr.get_error_chain_data(vx, vy).error_chain;
+        for (uint i = 1; i < error_chain.size(); i++) {
+            auto v1 = error_chain[i-1];
+            auto v2 = error_chain[i];
+
+            uint64_t d1 = v1->id;
+            uint64_t d2 = v2->id;
+            if (d1 == BOUNDARY_INDEX)   std::swap(d1, d2);
+            d1 = from_rlatt[std::make_pair(d1, dec_index)];
+            __COLOR c1 = color_map[d1];
+            cdet_t cd1 = std::make_pair(d1, c1);
+            __COLOR c2;
+            if (d2 == BOUNDARY_INDEX) {
+                c2 = get_remaining_color(c1, restricted_color);
+                // We also need to check if this is necessarily a direct connection or an
+                // indirect connection (through another boundary).
+                cdet_t cb = std::make_pair(d2, c2);
+                auto common = get_common_neighbors(cd1, cb);
 #ifdef DEBUG
-            std::cout << "\t\tJ on " << y.first << "(" << c2i(y.second) << ")\n";
+                std::cout << "\t\t\tcommon with B(" << c2i(c2) << "):";
+                for (auto x : common) {
+                    std::cout << " " << x.first << "(" << c2i(x.second) << ")";
+                }
+                std::cout << "\n";
 #endif
-            return true;
+                if (common.size() == 1) {
+                    auto singleton = *common.begin();
+                    edges.insert(std::make_pair(cd1, singleton));
+                    edges.insert(std::make_pair(singleton, cb));
+                }
+            } else {
+                d2 = from_rlatt[std::make_pair(d2, dec_index)];
+                c2 = color_map[d2];
+            }
+            cdet_t cd2 = std::make_pair(d2, c2);
+            edges.insert(std::make_pair(cd1, cd2));
         }
     }
-    return false;
+    return edges;
+}
+
+std::set<cdet_t>
+RestrictionDecoder::get_common_neighbors(cdet_t cdx, cdet_t cdy) {
+    auto adjx = get_neighbors(cdx);
+    auto adjy = get_neighbors(cdy);
+
+    std::set<cdet_t> common;
+    std::set_intersection(adjx.begin(), adjx.end(), adjy.begin(), adjy.end(),
+                            std::inserter(common, common.begin()));
+    // Filter out all detectors with the same color as either cdx or cdy
+    for (auto it = common.begin(); it != common.end(); ) {
+        if (it->second == cdx.second || it->second == cdy.second)   it = common.erase(it);
+        else                                                        it++;
+    }
+    return common;
+}
+
+std::set<cdet_t>
+RestrictionDecoder::get_neighbors(cdet_t cd) {
+    std::set<cdet_t> neighbors;
+    for (uint i = 0; i < 3; i++) {
+        if (c2i(cd.second) == i)    continue;
+        __COLOR restricted_color = i2c(i);
+        uint dec_index = 2 - i;
+        DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
+
+        uint64_t dv = cd.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[cd.first][dec_index];
+        auto v = gr.get_vertex(dv);
+        for (auto w : gr.get_neighbors(v)) {
+            uint64_t dw = w->id;
+            __COLOR cw;
+            if (dw == BOUNDARY_INDEX) {
+                cw = get_remaining_color(cd.second, restricted_color);
+            } else {
+                dw = from_rlatt[std::make_pair(dw, dec_index)];
+                cw = color_map[dw];
+            }
+            neighbors.insert(std::make_pair(dw, cw));
+        }
+        if (cd.first == BOUNDARY_INDEX) {
+            __COLOR cb = get_remaining_color(cd.second, restricted_color);
+            neighbors.insert(std::make_pair(BOUNDARY_INDEX, cb));
+        }
+    }
+    return neighbors;
+}
+
+stim::simd_bits
+RestrictionDecoder::get_correction_for_face(cdet_t x, cdet_t y, cdet_t z) {
+    const std::vector<cdet_t> detectors{x, y, z};
+
+    stim::simd_bits corr(circuit.count_observables());
+    corr.clear();
+#ifdef DEBUG
+    std::cout << "\t\t\tApplying corrections on face " 
+                << x.first << "(" << c2i(x.second) << "), "
+                << y.first << "(" << c2i(y.second) << "), "
+                << z.first << "(" << c2i(z.second) << "):";
+#endif
+    for (uint i = 0; i < detectors.size(); i++) {
+        cdet_t cd1 = detectors[i];
+        for (uint j = i+1; j < detectors.size(); j++) {
+            cdet_t cd2 = detectors[j];
+            __COLOR restricted_color = get_remaining_color(cd1.second, cd2.second);
+            uint dec_index = 2 - c2i(restricted_color);
+            DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
+
+            uint64_t dd1 = cd1.first == BOUNDARY_INDEX 
+                                ? BOUNDARY_INDEX : to_rlatt[cd1.first][dec_index];
+            uint64_t dd2 = cd2.first == BOUNDARY_INDEX 
+                                ? BOUNDARY_INDEX : to_rlatt[cd2.first][dec_index];
+            auto v1 = gr.get_vertex(dd1);
+            auto v2 = gr.get_vertex(dd2);
+            for (auto fr : gr.get_error_chain_data(v1, v2).frame_changes) {
+                corr[fr] ^= 1;
+#ifdef DEBUG
+                std::cout << " FR" << fr;
+#endif
+            }
+        }
+    }
+#ifdef DEBUG
+    std::cout << "\n";
+#endif
+    return corr;
 }
 
 }   // decoder

@@ -180,6 +180,7 @@ help_exit:
             data_qubit_meas_order[dv] = i;
         }
         mexp.push_back(dqmeas);
+        /*
         // Add detection events for measurement errors.
         for (uint i = 0; i < meas_order.size(); i++) {
             auto tv = meas_order[i].first;
@@ -201,6 +202,7 @@ help_exit:
             }
             mexp.push_back(det);
         }
+        */
         mexp.push_back(obs);
         mexp.push_back((Instruction){"done", {}});
 
