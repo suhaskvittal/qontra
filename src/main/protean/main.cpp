@@ -240,7 +240,7 @@ help_exit:
                     }
                 });
         circuit = annotated_circuit;
-        if (n_qubits == 10) {
+        if (n_qubits == 28) {
             std::ofstream error_model_out(folder_out + "/error_model.stim");
             error_model_out << circuit << "\n";
         }
@@ -259,8 +259,6 @@ help_exit:
 
     // Define any constraints here.
     compiler::constraint_t con;
-    con.max_connectivity = 4;
-    con.max_thickness = 1;
 
     // Declare compiler and run it.
     Compiler compiler(con, cf);

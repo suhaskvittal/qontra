@@ -232,44 +232,78 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #endif
         
         auto flipped_edges = get_all_edges_in_component(cc);
-        for (cdetpair_t edge : flipped_edges) {
+        std::set<cdet_t> vertices_in_flips; // of the same color as the component.
+        std::map<cdet_t, cdet_t> starting_neighbor;
+#ifdef DEBUG
+        std::cout << "\t\tEdges:\n";
+#endif
+        for (cdetpair_t edge : flipped_edges) { 
             cdet_t cdx = edge.first;
             cdet_t cdy = edge.second;
-            if (cdx.second == cdy.second)   continue;
 #ifdef DEBUG
-            std::cout << "\t\tedge between " << cdx.first << "(" << c2i(cdx.second) << ")"
-                << " and " << cdy.first << "(" << c2i(cdy.second) << ")\n";
+            std::cout << "\t\t" << cdx.first << "(" << c2i(cdx.second) << ")"
+                        << ", " << cdy.first << "(" << c2i(cdy.second) << ")\n";
 #endif
-            
-            if (in_face.count(std::make_pair(cdx, cdy))
-                    || in_face.count(std::make_pair(cdy, cdx))) continue;
+            if (cdx.second == cdy.second)   continue;
+            if (cdx.second == cc_color) {
+                vertices_in_flips.insert(cdx);
+                starting_neighbor[cdx] = cdy;
+            } 
+            if (cdy.second == cc_color) {
+                vertices_in_flips.insert(cdy);
+                starting_neighbor[cdy] = cdx;
+            }
+        }
+        // Now, we will apply corrections on faces around each vertex.
+        for (cdet_t cdx : vertices_in_flips) {
+#ifdef DEBUG
+            std::cout << "\t\tChecking vertex " << cdx.first << "(" << c2i(cdx.second) << "):\n";
+#endif
+            auto neighbors = get_neighbors(cdx);
+#ifdef DEBUG
+            std::cout << "\t\t\tneighbors:";
+            for (auto x : neighbors) std::cout << " " << x.first << "(" << c2i(x.second) << ")";
+            std::cout << "\n";
+#endif
+            auto cdy = starting_neighbor[cdx];
+            while (neighbors.size()) {
+                // Get common neighbor of cdx and cdy.
+                neighbors.erase(cdy);
+                auto n = get_neighbors(cdy);
+                std::set<cdet_t> common;
+                std::set_intersection(neighbors.begin(), neighbors.end(),
+                                        n.begin(), n.end(),
+                                        std::inserter(common, common.begin()));
+                if (common.empty()) break;
+                auto cdz = *common.begin();
+                auto e_xy = std::make_pair(cdx, cdy);
+                auto e_xz = std::make_pair(cdx, cdz);
+                auto e_yz = std::make_pair(cdy, cdz);
 
-            auto common = get_common_neighbors(cdx, cdy);
-            for (cdet_t cdz : common) {
-                if (cdx.second != cc_color
-                        && cdy.second != cc_color
-                        && cdz.second != cc_color)  continue;
-                auto cdx_cdz = std::make_pair(cdx, cdz);
-                auto cdz_cdx = std::make_pair(cdz, cdx);
+                auto e_yx = std::make_pair(cdy, cdx);
+                auto e_zx = std::make_pair(cdz, cdx);
+                auto e_zy = std::make_pair(cdz, cdy);
 
-                auto cdy_cdz = std::make_pair(cdy, cdz);
-                auto cdz_cdy = std::make_pair(cdz, cdy);
-
-                if (in_face.count(cdx_cdz) || in_face.count(cdz_cdx))   continue;
-                if (in_face.count(cdy_cdz) || in_face.count(cdz_cdy))   continue;
-                // Mark face edges. They should only appear in one face.
-                in_face.insert(edge);
-                if (flipped_edges.count(cdx_cdz) || flipped_edges.count(cdz_cdx)) {
-                    in_face.insert(cdx_cdz);
-                    in_face.insert(cdz_cdx);
+                if (in_face.count(e_xy) || in_face.count(e_yx)
+                    || in_face.count(e_xz) || in_face.count(e_zx)
+                    || in_face.count(e_yz) || in_face.count(e_zy))
+                {
+                    break;
                 }
-                if (flipped_edges.count(cdy_cdz) || flipped_edges.count(cdz_cdy)) {
-                    in_face.insert(cdy_cdz);
-                    in_face.insert(cdz_cdy);
-                }
-                // Apply the face correction.
                 corr ^= get_correction_for_face(cdx, cdy, cdz);
-                break;  // We are done for this edge. Move on.
+                if (flipped_edges.count(e_xy) || flipped_edges.count(e_yx)) {
+                    in_face.insert(e_xy);
+                    in_face.insert(e_yx);
+                }
+                if (flipped_edges.count(e_xz) || flipped_edges.count(e_zx)) {
+                    in_face.insert(e_xz);
+                    in_face.insert(e_zx);
+                }
+                if (flipped_edges.count(e_yz) || flipped_edges.count(e_zy)) {
+                    in_face.insert(e_yz);
+                    in_face.insert(e_zy);
+                }
+                cdy = cdz;
             }
         }
     }
@@ -365,22 +399,6 @@ RestrictionDecoder::get_all_edges_in_component(const std::vector<match_t>& comp)
             __COLOR c2;
             if (d2 == BOUNDARY_INDEX) {
                 c2 = get_remaining_color(c1, restricted_color);
-                // We also need to check if this is necessarily a direct connection or an
-                // indirect connection (through another boundary).
-                cdet_t cb = std::make_pair(d2, c2);
-                auto common = get_common_neighbors(cd1, cb);
-#ifdef DEBUG
-                std::cout << "\t\t\tcommon with B(" << c2i(c2) << "):";
-                for (auto x : common) {
-                    std::cout << " " << x.first << "(" << c2i(x.second) << ")";
-                }
-                std::cout << "\n";
-#endif
-                if (common.size() == 1) {
-                    auto singleton = *common.begin();
-                    edges.insert(std::make_pair(cd1, singleton));
-                    edges.insert(std::make_pair(singleton, cb));
-                }
             } else {
                 d2 = from_rlatt[std::make_pair(d2, dec_index)];
                 c2 = color_map[d2];
@@ -428,6 +446,7 @@ RestrictionDecoder::get_neighbors(cdet_t cd) {
                 dw = from_rlatt[std::make_pair(dw, dec_index)];
                 cw = color_map[dw];
             }
+            if (cd.second == cw)    continue;
             neighbors.insert(std::make_pair(dw, cw));
         }
         if (cd.first == BOUNDARY_INDEX) {
