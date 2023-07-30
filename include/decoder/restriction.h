@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   19 July 2023
  *
  *  An implementation of Kubica and Delfosse's
@@ -23,6 +22,8 @@ namespace qontra {
 namespace decoder {
 
 #define __COLOR graph::decoding::vertex_t::Color
+
+namespace restriction {
 
 inline int c2i(__COLOR x) {
     if (x == __COLOR::red)      return 0;
@@ -55,6 +56,25 @@ typedef std::pair<std::vector<match_t>, __COLOR>    component_t;
 
 typedef std::pair<cdet_t, cdet_t>                   cdetpair_t;
 
+// Structure Graph:
+struct stv_t : graph::base::vertex_t {
+    cdet_t  detector;
+};
+
+struct ste_t : graph::base::edge_t {};
+
+typedef graph::Graph<stv_t, ste_t>  StructureGraph;
+
+void    inherit_neighbors(StructureGraph&, stv_t*, stv_t*, std::function<bool(stv_t*)> inherit_cb);
+                // The first vertex will get all the neighbors of the second vertex.
+                // If a neighbor of the second vertex returns true in the callback, then
+                // we also call inherit_neighbors recursively between the first vertex
+                // and that neighbor.
+
+}   // restriction
+
+#define CDET_TO_ID(x)   (((x).first) | (((uint64_t)(x).second) << 60))
+
 class RestrictionDecoder : public Decoder {
 public:
     RestrictionDecoder(const stim::Circuit&);
@@ -71,16 +91,18 @@ private:
     // restricts the passed in color.
     Decoder::result_t   decode_restricted_lattice(const std::vector<uint>&, __COLOR);
 
-    std::set<cdetpair_t>        get_all_edges_in_component(const std::vector<match_t>&);
-    std::set<cdet_t>            get_common_neighbors(cdet_t, cdet_t);
-    std::set<cdet_t>            get_neighbors(cdet_t);
-    stim::simd_bits             get_correction_for_face(cdet_t, cdet_t, cdet_t);
+    std::set<restriction::cdetpair_t>        
+        get_all_edges_in_component(const std::vector<restriction::match_t>&);
+    std::set<restriction::cdet_t>            
+        get_common_neighbors(restriction::cdet_t, restriction::cdet_t);
+    std::set<restriction::cdet_t>            
+        get_neighbors(restriction::cdet_t);
+    stim::simd_bits             
+        get_correction_for_face(restriction::cdet_t, restriction::cdet_t, restriction::cdet_t);
 
-    uint64_t cdet_to_id(cdet_t x) {
-        uint64_t base = x.first;
-        if (base == graph::BOUNDARY_INDEX) base = circuit.count_detectors();
-        return base | ((uint64_t)c2i(x.second) << 60);
-    }
+    restriction::StructureGraph     lattice_structure;
+    std::array<std::set<restriction::cdet_t>, 3>
+                                    boundary_adjacent;
 
     std::array<MWPMDecoder*, 3> rlatt_dec;  // Three MWPM decoders, each of which responsible
                                             // for decoding a different restricted lattice.

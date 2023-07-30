@@ -23,6 +23,8 @@
 using namespace qontra;
 using namespace graph;
 using namespace protean;
+using namespace decoder;
+using namespace restriction;
 
 int main(int argc, char* argv[]) {
     CmdParser parser(argc, argv);
@@ -116,7 +118,8 @@ help_exit:
                         mctr += inst.get_qubit_operands().size();
                         // Update the measurement order.
                         if (r == 0) {
-                            meas_order.push_back(std::make_pair(tv, inst.metadata.is_for_flag)); }
+                            meas_order.push_back(std::make_pair(tv, inst.metadata.is_for_flag)); 
+                        }
                     } else if (inst.name == "h") {
                         for (uint i : inst.operands) {
                             hsimd.operands.push_back(i);
@@ -246,7 +249,7 @@ help_exit:
         }
 
         // Build a decoder, and then benchmark it with a memory experiment.
-        decoder::RestrictionDecoder dec(circuit);
+        RestrictionDecoder dec(circuit);
         experiments::memory_params_t params;
         params.shots = shots;
         auto mexp_res = memory_experiment(&dec, params);

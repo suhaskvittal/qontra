@@ -12,42 +12,249 @@
 namespace qontra {
 namespace decoder {
 
+namespace restriction {
+
+void
+inherit_neighbors(StructureGraph& gr, stv_t* v, stv_t* w, std::function<bool(stv_t*)> inherit_cb) {
+    for (auto u : gr.get_neighbors(w)) {
+        if (u == v || gr.contains(v, u))    continue;
+        ste_t* e = new ste_t;
+        e->src = v;
+        e->dst = u;
+        e->is_undirected = true;
+        gr.add_edge(e);
+        if (inherit_cb(u))   inherit_neighbors(gr, v, u, inherit_cb);
+    }
+}
+
+}   // restriction
+
+
+
 using namespace graph;
+using namespace restriction;
+
+// TODO when finally adding measurement errors, do the following:
+//  (1) Modify the constructor to request detectors per round.
+//  (2) Modify StructureGraph construction to avoid creating new vertices
+//      each round.
+//  (3) Modify get_all_edges_in_component to flatten measurement results.
 
 RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
     :Decoder(circuit, false),
+    lattice_structure(),
+    boundary_adjacent(),
     rlatt_dec(),
     to_rlatt(),
     from_rlatt(),
     color_map()
 {
+    boundary_adjacent.fill(std::set<cdet_t>());
     // Restricted lattice order: RG (so blue is restricted), RB, GB
     const __COLOR colors[3] = { __COLOR::blue, __COLOR::green, __COLOR::red };
     // Create new Stim circuits for each restricted color.
-    for (uint i = 0; i < 3; i++) {
-        uint det_ctr = 0;
-        uint subdet_ctr = 0;
+    //
+    // Also build the StructureGraph. We do so by infering connectivity
+    // from the CNOT operations. Initially the IDs will be the qubit numbers
+    // in the Stim circuit, but we will convert them to match the colored
+    // detector values.
+    std::set<stv_t*> unused; // We will delete all vertices in this set afterwards.
+    for (uint i = 0; i < circuit.count_qubits(); i++) {
+        stv_t* v = new stv_t;
+        v->id = i;
+        v->detector = std::make_pair(i, __COLOR::none);
+        unused.insert(v);
+        lattice_structure.add_vertex(v);
+    }
+    std::deque<stv_t*> measurement_queue;
 
-        __COLOR restricted_color = colors[i];
-        stim::Circuit sub_circuit;
-        // Only keep detection events whose color is NOT blue.
-        circuit.for_each_operation([&] (stim::Operation op) {
-            std::string gate_name(op.gate->name);
-            if (gate_name == "DETECTOR") {
-                int color_id = (int) op.target_data.args[0];
+    uint det_ctr = 0;
+
+    std::array<uint, 3> subdet_ctr;
+    subdet_ctr.fill(0);
+
+    std::array<stim::Circuit, 3> subcircuits;
+    subcircuits.fill(stim::Circuit());
+
+    circuit.for_each_operation([&] (stim::Operation op) {
+        std::string gate_name(op.gate->name);
+        if (gate_name == "DETECTOR") {
+            int color_id = (int) op.target_data.args[0];
+            // Add to subcircuit
+            for (uint i = 0; i < 3; i++) {
+                __COLOR restricted_color = colors[i];
+                stim::Circuit& subcircuit = subcircuits[i];
                 if (i2c(color_id) != restricted_color) {
-                    sub_circuit.append_operation(op);
+                    subcircuit.append_operation(op);
 
-                    to_rlatt[det_ctr][i] = subdet_ctr;
-                    from_rlatt[std::make_pair(subdet_ctr, i)] = det_ctr;
-                    subdet_ctr++;
+                    to_rlatt[det_ctr][i] = subdet_ctr[i];
+                    from_rlatt[std::make_pair(subdet_ctr[i], i)] = det_ctr;
+                    subdet_ctr[i]++;
                 }
-                color_map[det_ctr++] = i2c(color_id);
-            } else {
-                sub_circuit.append_operation(op);
             }
-        });
-        rlatt_dec[i] = new MWPMDecoder(sub_circuit);
+            // Modify vertex in structure graph and remove the vertex from the
+            // unused set.
+            uint64_t offset = op.target_data.targets[0].data & ~stim::TARGET_RECORD_BIT;
+            stv_t* v = measurement_queue[measurement_queue.size() - offset];
+            cdet_t cd = std::make_pair(det_ctr, i2c(color_id));
+            v->detector = cd;
+            lattice_structure.change_id(v, CDET_TO_ID(cd));
+            unused.erase(v);
+            color_map[det_ctr++] = i2c(color_id);
+            return;
+        } else if (gate_name == "M" || gate_name == "MR") {
+            const auto& targets = op.target_data.targets;
+            for (uint i = 0; i < targets.size(); i++) {
+                auto v = lattice_structure.get_vertex(targets[i].data);
+                measurement_queue.push_back(v); 
+            }
+        } else if (gate_name == "CX") {
+            const auto& targets = op.target_data.targets;
+            for (uint i = 0; i < targets.size(); i += 2) {
+                uint q1 = targets[i].data;
+                uint q2 = targets[i+1].data;
+                auto v1 = lattice_structure.get_vertex(q1);
+                auto v2 = lattice_structure.get_vertex(q2);
+                if (!lattice_structure.contains(v1, v2)) {
+                    ste_t* e = new ste_t;
+                    e->src = v1;
+                    e->dst = v2;
+                    e->is_undirected = true;
+                    lattice_structure.add_edge(e);
+                }
+            }
+        }
+        for (uint i = 0; i < 3; i++) {
+            subcircuits[i].append_operation(op);
+        }
+    });
+    // If two used vertices are already connected, then one of them is a gauge and 
+    // both inherit each others unused vertices: we must check for this first. 
+    //
+    // Now, we need to create edges between the used vertices in the StructureGraph.
+    // We do this by connecting two vertices if they share another vertex in common.
+    //
+    // We will also add three boundaries and connect used vertices
+    // if necessary.
+    for (auto v : lattice_structure.get_vertices()) {
+        if (unused.count(v))    continue;
+        for (auto w : lattice_structure.get_neighbors(v)) {
+            if (unused.count(w))    continue;
+            inherit_neighbors(lattice_structure, v, w, [&] (stv_t* u) {
+                return !unused.count(u);
+            });
+        }
+    }
+
+    // Add boundaries and connect them to one another.
+    for (uint i = 0; i < 3; i++) {
+        __COLOR boundary_color = i2c(i);
+        cdet_t cd = std::make_pair(BOUNDARY_INDEX, boundary_color);
+        stv_t* v = new stv_t;
+        v->id = CDET_TO_ID(cd);
+        v->detector = cd;
+        lattice_structure.add_vertex(v);
+    }
+    for (uint i = 0; i < 3; i++) {
+        cdet_t x = std::make_pair(BOUNDARY_INDEX, i2c(i));
+        auto bv = lattice_structure.get_vertex(CDET_TO_ID(x));
+        for (uint j = i+1; j < 3; j++) {
+            cdet_t y = std::make_pair(BOUNDARY_INDEX, i2c(i));
+            auto bw = lattice_structure.get_vertex(CDET_TO_ID(y));
+            ste_t* e = new ste_t;
+            e->src = bv;
+            e->dst = bw;
+            e->is_undirected = true;
+            lattice_structure.add_edge(e);
+
+            boundary_adjacent[i].insert(y);
+            boundary_adjacent[j].insert(x);
+        }
+    }
+
+    for (auto v : lattice_structure.get_vertices()) {
+        if (unused.count(v))    continue;
+        if (v->detector.first == BOUNDARY_INDEX)    continue;
+        auto tmp = lattice_structure.get_neighbors(v);
+        std::set<stv_t*> vadj(tmp.begin(), tmp.end());
+        for (auto w : lattice_structure.get_vertices()) {
+            if (unused.count(w))    continue;
+            if (v == w || lattice_structure.contains(v, w)) continue;
+            if (w->detector.first == BOUNDARY_INDEX)    continue;
+            tmp = lattice_structure.get_neighbors(w);
+            std::set<stv_t*> wadj(tmp.begin(), tmp.end());
+            
+            bool intersects = false;
+            for (auto x : vadj) {
+                if (wadj.count(x) && unused.count(x)) {
+                    intersects = true;
+                    break;
+                }
+            }
+            if (intersects) {
+                ste_t* e = new ste_t;
+                e->src = v;
+                e->dst = w;
+                e->is_undirected = true;
+                if (!lattice_structure.add_edge(e)) std::cout << "\t\tHUHHH?\n";
+            }
+        }
+        
+        // Check if we need to add a boundary connection. This is only required if
+        // the number of adjacent detectors is less than the number of adjacent data
+        // qubits (that is, adjacent used < adjacent unused).
+        uint number_of_adjacent_unused = 0;
+        std::array<uint, 3> number_of_adjacent_used;    // one for each color.
+        number_of_adjacent_used.fill(0);
+        for (auto w : lattice_structure.get_neighbors(v)) {
+            if (unused.count(w))    number_of_adjacent_unused++;
+            else {
+                int i = c2i(w->detector.second);
+                number_of_adjacent_used[i]++;
+            }
+        }
+        uint sum_number_of_adjacent_used = 
+            number_of_adjacent_used[0] + number_of_adjacent_used[1] + number_of_adjacent_used[2];
+        if (number_of_adjacent_unused > sum_number_of_adjacent_used) {
+            __COLOR zero_color = v->detector.second;    // As expected, we should not be
+                                                        // adjacent to any detectors of the same
+                                                        // color.
+            const uint half_sum = number_of_adjacent_unused >> 1;
+            for (uint i = 0; i < 3; i++) {
+                __COLOR c = i2c(i);
+                if (c == zero_color)    continue;
+                if (number_of_adjacent_used[i] < half_sum) {
+                    cdet_t cb = std::make_pair(BOUNDARY_INDEX, c);
+                    auto wb = lattice_structure.get_vertex(CDET_TO_ID(cb));
+                    ste_t* e = new ste_t;
+                    e->src = v;
+                    e->dst = wb;
+                    e->is_undirected = true;
+                    lattice_structure.add_edge(e);
+                    boundary_adjacent[i].insert(v->detector);
+                }
+            }
+        }
+    }
+    // Delete all unused.
+    for (auto x : unused) {
+        lattice_structure.delete_vertex(x);
+    }
+#ifdef DEBUG
+    std::cout << "***Lattice structure:\n";
+    for (auto v : lattice_structure.get_vertices()) {
+        auto cd1 = v->detector;
+        std::cout << cd1.first << "(" << c2i(cd1.second) << "):";
+        for (auto w : lattice_structure.get_neighbors(v)) {
+            auto cd2 = w->detector;
+            std::cout << " " << cd2.first << "(" << c2i(cd2.second) << ")";
+        }
+        std::cout << "\n";
+    }
+#endif
+
+    for (uint i = 0; i < 3; i++) {
+        rlatt_dec[i] = new MWPMDecoder(subcircuits[i]);
     }
 }
 
@@ -125,8 +332,8 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             // Create any vertices if they do not exist.
             cv_t* v1;
             cv_t* v2;
-            uint64_t id1 = cdet_to_id(cd1);
-            uint64_t id2 = cdet_to_id(cd2);
+            uint64_t id1 = CDET_TO_ID(cd1);
+            uint64_t id2 = CDET_TO_ID(cd2);
             if ((v1=connection_graph.get_vertex(id1)) == nullptr) {
                 v1 = new cv_t;
                 v1->id = id1;
@@ -151,7 +358,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     //  (1) Syndrome bits not in a connected component with the red boundary.
     //  (2) Everything else.
     cdet_t red_boundary = std::make_pair(BOUNDARY_INDEX, __COLOR::red);
-    auto rbv = connection_graph.get_vertex(cdet_to_id(red_boundary));
+    auto rbv = connection_graph.get_vertex(CDET_TO_ID(red_boundary));
 
     std::set<cdet_t> in_connected_components{red_boundary};
 
@@ -205,7 +412,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
         cdet_t det = std::make_pair(d, c);
         if (in_connected_components.count(det))    continue;
 
-        auto v = connection_graph.get_vertex(cdet_to_id(det));
+        auto v = connection_graph.get_vertex(CDET_TO_ID(det));
         for (auto w : connection_graph.get_neighbors(v)) {
             if (visited.count(w->detector))   continue;        
             if (in_connected_components.count(w->detector)) continue;
@@ -275,21 +482,27 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                                         n.begin(), n.end(),
                                         std::inserter(common, common.begin()));
                 if (common.empty()) break;
-                auto cdz = *common.begin();
-                auto e_xy = std::make_pair(cdx, cdy);
-                auto e_xz = std::make_pair(cdx, cdz);
-                auto e_yz = std::make_pair(cdy, cdz);
+                cdet_t cdz;
+                cdetpair_t e_xy, e_xz, e_yz, e_yx, e_zx, e_zy;
+                for (auto it = common.begin(); it != common.end(); it++) {
+                    cdz = *it;
+                    e_xy = std::make_pair(cdx, cdy);
+                    e_xz = std::make_pair(cdx, cdz);
+                    e_yz = std::make_pair(cdy, cdz);
 
-                auto e_yx = std::make_pair(cdy, cdx);
-                auto e_zx = std::make_pair(cdz, cdx);
-                auto e_zy = std::make_pair(cdz, cdy);
+                    e_yx = std::make_pair(cdy, cdx);
+                    e_zx = std::make_pair(cdz, cdx);
+                    e_zy = std::make_pair(cdz, cdy);
 
-                if (in_face.count(e_xy) || in_face.count(e_yx)
-                    || in_face.count(e_xz) || in_face.count(e_zx)
-                    || in_face.count(e_yz) || in_face.count(e_zy))
-                {
-                    break;
+                    if (!(in_face.count(e_xy) || in_face.count(e_yx)
+                        || in_face.count(e_xz) || in_face.count(e_zx)
+                        || in_face.count(e_yz) || in_face.count(e_zy)))
+                    {
+                        goto cdz_is_valid;
+                    }
                 }
+                break;
+cdz_is_valid:
                 corr ^= get_correction_for_face(cdx, cdy, cdz);
                 if (flipped_edges.count(e_xy) || flipped_edges.count(e_yx)) {
                     in_face.insert(e_xy);
@@ -399,6 +612,27 @@ RestrictionDecoder::get_all_edges_in_component(const std::vector<match_t>& comp)
             __COLOR c2;
             if (d2 == BOUNDARY_INDEX) {
                 c2 = get_remaining_color(c1, restricted_color);
+                // Check if d1 is even adjacent to this boundary.
+                cdet_t cb1 = std::make_pair(d2, c2);
+                if (!boundary_adjacent[c2i(c2)].count(cd1)) {
+                    // Then, this path must pass through another boundary.
+                    int option1 = (c2i(c2) + 1) % 3;
+                    int option2 = (c2i(c2) + 2) % 3;
+                    __COLOR b2c;
+                    if (boundary_adjacent[option1].count(cd1)) {
+                        b2c = i2c(option1);
+                    } else {
+                        b2c = i2c(option2);
+                    }
+                    cdet_t cb2 = std::make_pair(BOUNDARY_INDEX, b2c);
+                    // Get common neighbor between the two boundaries.
+                    auto common = get_common_neighbors(cb1, cb2);
+                    cdet_t idet = *common.begin();
+                    edges.insert(std::make_pair(cd1, cb2));
+                    edges.insert(std::make_pair(cb2, idet));
+                    edges.insert(std::make_pair(idet, cb1));
+                    continue;
+                }
             } else {
                 d2 = from_rlatt[std::make_pair(d2, dec_index)];
                 c2 = color_map[d2];
@@ -429,30 +663,9 @@ RestrictionDecoder::get_common_neighbors(cdet_t cdx, cdet_t cdy) {
 std::set<cdet_t>
 RestrictionDecoder::get_neighbors(cdet_t cd) {
     std::set<cdet_t> neighbors;
-    for (uint i = 0; i < 3; i++) {
-        if (c2i(cd.second) == i)    continue;
-        __COLOR restricted_color = i2c(i);
-        uint dec_index = 2 - i;
-        DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
-
-        uint64_t dv = cd.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[cd.first][dec_index];
-        auto v = gr.get_vertex(dv);
-        for (auto w : gr.get_neighbors(v)) {
-            uint64_t dw = w->id;
-            __COLOR cw;
-            if (dw == BOUNDARY_INDEX) {
-                cw = get_remaining_color(cd.second, restricted_color);
-            } else {
-                dw = from_rlatt[std::make_pair(dw, dec_index)];
-                cw = color_map[dw];
-            }
-            if (cd.second == cw)    continue;
-            neighbors.insert(std::make_pair(dw, cw));
-        }
-        if (cd.first == BOUNDARY_INDEX) {
-            __COLOR cb = get_remaining_color(cd.second, restricted_color);
-            neighbors.insert(std::make_pair(BOUNDARY_INDEX, cb));
-        }
+    stv_t* v = lattice_structure.get_vertex(CDET_TO_ID(cd));
+    for (auto w : lattice_structure.get_neighbors(v)) {
+        neighbors.insert(w->detector);
     }
     return neighbors;
 }

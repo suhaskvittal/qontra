@@ -65,6 +65,13 @@ public:
         }
     }
 
+    virtual void
+    change_id(V_t* v, uint64_t to) {
+        id_to_vertex.erase(v->id);
+        v->id = to;
+        id_to_vertex[to] = v;
+    }
+
     virtual bool
     contains(uint64_t id) {
         return id_to_vertex.count(id);
