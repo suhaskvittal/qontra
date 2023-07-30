@@ -120,7 +120,11 @@ private:
     fwdetmap_t  to_rlatt; 
     bwdetmap_t  from_rlatt;
 
-    std::map<uint, __COLOR>   color_map;
+    std::map<uint64_t, __COLOR>     color_map;
+
+    std::map<uint64_t, uint64_t>    detector_to_base;   // A map to the base detector, which is
+                                                        // the lowest round detector (essentially,
+                                                        // detector modulo measurement).
 };
 
 }   // decoder

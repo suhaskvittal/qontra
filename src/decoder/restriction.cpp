@@ -30,7 +30,6 @@ inherit_neighbors(StructureGraph& gr, stv_t* v, stv_t* w, std::function<bool(stv
 }   // restriction
 
 
-
 using namespace graph;
 using namespace restriction;
 
@@ -47,8 +46,10 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
     rlatt_dec(),
     to_rlatt(),
     from_rlatt(),
-    color_map()
+    color_map(),
+    detector_to_base()
 {
+    detector_to_base[BOUNDARY_INDEX] = BOUNDARY_INDEX;
     boundary_adjacent.fill(std::set<cdet_t>());
     // Restricted lattice order: RG (so blue is restricted), RB, GB
     const __COLOR colors[3] = { __COLOR::blue, __COLOR::green, __COLOR::red };
@@ -66,7 +67,7 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
         unused.insert(v);
         lattice_structure.add_vertex(v);
     }
-    std::deque<stv_t*> measurement_queue;
+    std::deque<uint64_t> measurement_queue;
 
     uint det_ctr = 0;
 
@@ -92,21 +93,51 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
                     subdet_ctr[i]++;
                 }
             }
+            color_map[det_ctr] = i2c(color_id);
             // Modify vertex in structure graph and remove the vertex from the
             // unused set.
-            uint64_t offset = op.target_data.targets[0].data & ~stim::TARGET_RECORD_BIT;
-            stv_t* v = measurement_queue[measurement_queue.size() - offset];
-            cdet_t cd = std::make_pair(det_ctr, i2c(color_id));
-            v->detector = cd;
-            lattice_structure.change_id(v, CDET_TO_ID(cd));
-            unused.erase(v);
-            color_map[det_ctr++] = i2c(color_id);
+            uint64_t offset;
+            if (op.target_data.targets.size() == 1) {
+                offset = op.target_data.targets[0].data & ~stim::TARGET_RECORD_BIT;
+                detector_to_base[det_ctr] = det_ctr;
+            } else if (op.target_data.targets.size() == 2) {
+                uint64_t off1 = op.target_data.targets[0].data & ~stim::TARGET_RECORD_BIT;
+                uint64_t off2 = op.target_data.targets[1].data & ~stim::TARGET_RECORD_BIT;
+                if (off1 < off2) {
+                    offset = off1;
+                    detector_to_base[det_ctr] = detector_to_base[det_ctr - off2 - off1];
+                } else {
+                    offset = off2;
+                    detector_to_base[det_ctr] = detector_to_base[det_ctr - off1 - off2];
+                }
+            } else {
+                // Get the maximum offset.
+                offset = 0;
+                for (uint j = 0; j < op.target_data.targets.size(); j++) {
+                    uint64_t off = op.target_data.targets[j].data & ~stim::TARGET_RECORD_BIT;
+                    offset = off > offset ? off : offset;
+                }
+                uint64_t parent = measurement_queue[measurement_queue.size() - offset];
+                detector_to_base[det_ctr] = detector_to_base[parent];
+                det_ctr++;
+                return;
+            }
+            // Modify existing vertex and update its id.
+            uint64_t q = measurement_queue[measurement_queue.size() - offset];
+            stv_t* v = lattice_structure.get_vertex(q);
+            if (v != nullptr) {
+                cdet_t cd = std::make_pair(det_ctr, i2c(color_id));
+                v->detector = cd;
+                lattice_structure.change_id(v, CDET_TO_ID(cd));
+                unused.erase(v);
+            }
+            measurement_queue[measurement_queue.size() - offset] = det_ctr;
+            det_ctr++;
             return;
         } else if (gate_name == "M" || gate_name == "MR") {
             const auto& targets = op.target_data.targets;
             for (uint i = 0; i < targets.size(); i++) {
-                auto v = lattice_structure.get_vertex(targets[i].data);
-                measurement_queue.push_back(v); 
+                measurement_queue.push_back(targets[i].data); 
             }
         } else if (gate_name == "CX") {
             const auto& targets = op.target_data.targets;
@@ -115,6 +146,7 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
                 uint q2 = targets[i+1].data;
                 auto v1 = lattice_structure.get_vertex(q1);
                 auto v2 = lattice_structure.get_vertex(q2);
+                if (v1 == nullptr || v2 == nullptr) continue;
                 if (!lattice_structure.contains(v1, v2)) {
                     ste_t* e = new ste_t;
                     e->src = v1;
@@ -196,7 +228,7 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
                 e->src = v;
                 e->dst = w;
                 e->is_undirected = true;
-                if (!lattice_structure.add_edge(e)) std::cout << "\t\tHUHHH?\n";
+                lattice_structure.add_edge(e);
             }
         }
         
@@ -250,6 +282,10 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
             std::cout << " " << cd2.first << "(" << c2i(cd2.second) << ")";
         }
         std::cout << "\n";
+    }
+    std::cout << "***Detectors to base:\n";
+    for (auto pair : detector_to_base) {
+        std::cout << "\t" << pair.first << " ---> " << pair.second << "\n";
     }
 #endif
 
@@ -589,6 +625,11 @@ RestrictionDecoder::get_all_edges_in_component(const std::vector<match_t>& comp)
     for (match_t mate : comp) {
         cdet_t cdx = std::get<0>(mate);
         cdet_t cdy = std::get<1>(mate);
+        cdx.first = detector_to_base[cdx.first];
+        cdy.first = detector_to_base[cdy.first];
+
+        if (cdx == cdy) continue;
+
         __COLOR restricted_color = std::get<2>(mate);
 
         uint dec_index = 2 - c2i(restricted_color);
@@ -638,7 +679,10 @@ RestrictionDecoder::get_all_edges_in_component(const std::vector<match_t>& comp)
                 c2 = color_map[d2];
             }
             cdet_t cd2 = std::make_pair(d2, c2);
-            edges.insert(std::make_pair(cd1, cd2));
+            cdetpair_t e1 = std::make_pair(cd1, cd2);
+            cdetpair_t e2 = std::make_pair(cd2, cd1);
+            if (edges.count(e1) || edges.count(e2)) edges.erase(e1);
+            else                                    edges.insert(e1);
         }
     }
     return edges;
