@@ -216,7 +216,7 @@ help_exit:
         et.e_ro = 0.0;
         et.e_g2q = 0.0;
         et.e_g1q = 0.0;
-        et = et * 50;
+        et = et * 100;
         ErrorTable errors;
         TimeTable timing;
         tables::populate(n_qubits, errors, timing, et);

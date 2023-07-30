@@ -56,6 +56,25 @@ typedef std::pair<std::vector<match_t>, __COLOR>    component_t;
 
 typedef std::pair<cdet_t, cdet_t>                   cdetpair_t;
 
+inline void
+insert_pair_into(std::set<cdetpair_t>& s, cdetpair_t x) {
+    cdetpair_t ix = std::make_pair(x.second, x.first);
+    s.insert(x);
+    s.insert(ix);
+}
+
+inline void
+xor_pair_into(std::set<cdetpair_t>& s, cdetpair_t x) {
+    cdetpair_t ix = std::make_pair(x.second, x.first);
+    if (s.count(ix) || s.count(x)) {
+        s.erase(ix);
+        s.erase(x);
+    } else {
+        s.insert(x);
+        s.insert(ix);
+    }
+}
+
 // Structure Graph:
 struct stv_t : graph::base::vertex_t {
     cdet_t  detector;
@@ -92,7 +111,7 @@ private:
     Decoder::result_t   decode_restricted_lattice(const std::vector<uint>&, __COLOR);
 
     std::set<restriction::cdetpair_t>        
-        get_all_edges_in_component(const std::vector<restriction::match_t>&);
+        get_all_edges_in_component(const restriction::component_t&);
     std::set<restriction::cdet_t>            
         get_common_neighbors(restriction::cdet_t, restriction::cdet_t);
     std::set<restriction::cdet_t>            

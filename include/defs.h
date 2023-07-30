@@ -54,6 +54,7 @@ put(TwoLevelMap<T, U, V>& m, T x, U y, V z) {
 //  safe_create_directory creates folders for a directory (and any necessary parent folders).
 //
 //  is_subset_of checks if container A is a subset of container B.
+//  xor_into add an element to a container if it does not exist, and removes it if it does.
 //  to_vlw converts a stim::simd_bits or stim::simd_bits_range_ref object to a vlw_t
 
 inline void
@@ -75,7 +76,12 @@ is_subset_of(T c1, U c2) {
     return tmp.size() == c1.size();
 }
 
-}  // qontra
+template <class T> inline void
+xor_into(std::set<T>& s, T x) {
+    if (s.count(x)) s.erase(x);
+    else            s.insert(x);
+}
+
 
  // T must either be stim::simd_bits or stim::simd_bits_range_ref
 template <class T> inline vlw_t
@@ -85,5 +91,7 @@ to_vlw(T x, uint64_t len) {
     for (uint i = 0; i < n; i++)    w[i] = x.u64[i];
     return w;
 } 
+
+}  // qontra
 
 #endif
