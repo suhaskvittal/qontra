@@ -639,7 +639,6 @@ RestrictionDecoder::decode_restricted_lattice(
     // First, filter out any assignments that go through the boundary.
     std::vector<Decoder::assign_t>  new_assignments;
     DecodingGraph& gr = dec->decoding_graph;
-    /*
     for (auto aa : res.error_assignments) {
         uint d1 = std::get<0>(aa);
         uint d2 = std::get<1>(aa);
@@ -656,8 +655,7 @@ RestrictionDecoder::decode_restricted_lattice(
             new_assignments.push_back(aa);
         }
     }
-    */
-    new_assignments = res.error_assignments;
+//  new_assignments = res.error_assignments;
     for (auto& aa : new_assignments) {
         uint& d1 = std::get<0>(aa);
         uint& d2 = std::get<1>(aa);

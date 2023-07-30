@@ -68,150 +68,17 @@ help_exit:
     if (!parser.get_uint32("rounds", rounds) || !parser.get_uint64("shots", shots)) goto help_exit;
 
     // Define the cost function here.
+    bool is_first_call = true;
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
         auto tanner_graph = ir->curr_spec;
         auto arch = ir->arch;
         auto dgr = ir->dependency_graph;
-        
-        // Generate memory experiment circuit.
-        schedule_t mexp;
-        //
-        // PROLOGUE: initialization.
-        //
+
         const uint n_qubits = arch->get_vertices().size();
-        Instruction init_reset;
-        init_reset.name = "reset";
-        for (uint i = 0; i < n_qubits; i++) {
-            init_reset.operands.push_back(i);
-        }
-        mexp.push_back(init_reset);
         //
-        // Syndrome extraction
+        // Define the error model here:
         //
-        uint mctr = 0;
-        uint ectr = 0;
-        std::vector<std::pair<tanner::vertex_t*, bool>> meas_order;
-        // We also want to track colors.
-        std::map<uint, uint> detector_to_color_id;
-        std::map<uint, uint> measurement_to_color_id;
-        for (uint r = 0; r < rounds; r++) {
-            uint moffset = mctr;
-            for (uint d = 1; d <= dgr->get_depth(); d++) {
-                Instruction hsimd = {"h", {}};
-                Instruction cxsimd = {"cx", {}};
-                Instruction msimd = {"mrc", {mctr}};
-                Instruction rsimd = {"reset", {}};
-                for (auto v : dgr->get_vertices_at_depth(d)) {
-                    auto inst = *(v->inst_p);
-                    if (inst.name == "mnrc") {
-                        auto tv = tanner_graph->get_vertex(inst.metadata.owning_check_id);
-                        // Convert this to an mrc instruction.
-                        for (uint i = 0; i < inst.operands.size(); i++) {
-                            uint j = inst.operands[i];
-                            msimd.operands.push_back(j);
-                            // If this is a gauge qubit, then color it differently than
-                            // tv.
-                            measurement_to_color_id[mctr+i] = 
-                                (tv->id % 3 + inst.metadata.is_for_flag) % 3;
-                        }
-                        mctr += inst.get_qubit_operands().size();
-                        // Update the measurement order.
-                        if (r == 0) {
-                            meas_order.push_back(std::make_pair(tv, inst.metadata.is_for_flag)); 
-                        }
-                    } else if (inst.name == "h") {
-                        for (uint i : inst.operands) {
-                            hsimd.operands.push_back(i);
-                        }
-                    } else if (inst.name == "cx") {
-                        for (uint i : inst.operands) {
-                            cxsimd.operands.push_back(i);
-                        }
-                    } else if (inst.name == "reset") {
-                        for (uint i : inst.operands) {
-                            rsimd.operands.push_back(i);
-                        }
-                    }
-                }    
-                std::vector<Instruction*> simd_ops{&hsimd, &cxsimd, &msimd, &rsimd};
-                for (auto inst_p : simd_ops) {
-                    if (inst_p->get_qubit_operands().size()) mexp.push_back(*inst_p);
-                }
-            }
-            // Add detection events.
-            for (uint i = 0; i < meas_order.size(); i++) {
-                auto tv = meas_order[i].first;
-                bool is_for_flag = meas_order[i].second;
-                if (tv->qubit_type == tanner::vertex_t::XPARITY)  continue;
-                
-                detector_to_color_id[ectr] = measurement_to_color_id[moffset + i];
-
-                std::cout << "(r = " << r << ") M" << (tv->id & 255) << " ---> E" << ectr << "\n";
-
-                Instruction det;
-                det.name = "event";
-                det.operands.push_back(ectr++);
-                det.operands.push_back(moffset + i);
-                if (r > 0) {
-                    det.operands.push_back(moffset + i - meas_order.size());
-                }
-                mexp.push_back(det);
-            }
-        }
-        //
-        // Epilogue
-        //
-        Instruction dqmeas;
-        Instruction obs;
-        dqmeas.name = "mrc";
-        dqmeas.operands.push_back(mctr);
-
-        obs.name = "obs";
-        obs.operands.push_back(0);
-
-        std::map<tanner::vertex_t*, uint> data_qubit_meas_order;
-
-        auto data_qubits = tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA);
-        for (uint i = 0; i < data_qubits.size(); i++) {
-            auto dv = data_qubits[i];
-            auto pv = arch->get_vertex(dv->id);
-            uint x = ir->qubit_labels[pv];
-            dqmeas.operands.push_back(x);
-            obs.operands.push_back(mctr + i);
-
-            data_qubit_meas_order[dv] = i;
-        }
-        mexp.push_back(dqmeas);
-        // Add detection events for measurement errors.
-        for (uint i = 0; i < meas_order.size(); i++) {
-            auto tv = meas_order[i].first;
-            bool is_for_flag = meas_order[i].second;
-            if (tv->qubit_type == tanner::vertex_t::XPARITY || is_for_flag) {
-                continue;
-            }
-
-            detector_to_color_id[ectr] = measurement_to_color_id[mctr + i - meas_order.size()];
-
-            Instruction det;
-            det.name = "event";
-            det.operands.push_back(ectr++);
-            det.operands.push_back(mctr + i - meas_order.size());
-
-            for (auto dv : tanner_graph->get_neighbors(tv)) {
-                uint j = data_qubit_meas_order[dv];
-                det.operands.push_back(mctr + j);
-            }
-            mexp.push_back(det);
-        }
-        mexp.push_back(obs);
-        mexp.push_back((Instruction){"done", {}});
-
-        // Now that we have the memory experiment schedule, build the error
-        // model. Then, use the Control Simulator to generate a canonical circuit
-        // for evaluation.
-        //
-        // Simple version: uniform model.
         tables::ErrorAndTiming et;
         et.e_ro = 0.0;
         et.e_g2q = 0.0;
@@ -220,30 +87,151 @@ help_exit:
         ErrorTable errors;
         TimeTable timing;
         tables::populate(n_qubits, errors, timing, et);
-        stim::Circuit circuit = fast_convert_to_stim(mexp, errors, timing);
-        // Add color annotations to stim circuit.
-        ectr = 0;
-        stim::Circuit annotated_circuit;
-        circuit.for_each_operation([&] (const stim::Operation& op)
-                {
-                    std::string opname(op.gate->name);
-                    if (opname == "DETECTOR") {
-                        std::vector<uint> operands;
-                        for (auto it = op.target_data.targets.begin(); 
-                                it != op.target_data.targets.end(); it++) 
-                        {
-                            operands.push_back(it->data);
-                        }
-                        annotated_circuit.append_op(
-                                "DETECTOR", operands, detector_to_color_id[ectr++]);
-                    } else {
-                        annotated_circuit.append_operation(op);
+
+        // Generate memory experiment circuit.
+        stim::Circuit circuit;
+        //
+        // PROLOGUE: initialization.
+        //
+        for (uint i = 0; i < n_qubits; i++) {
+            circuit.append_op("R", {i});
+            circuit.append_op("X_ERROR", {i}, errors.op1q["reset"][i]);
+        }
+        //
+        // Syndrome extraction
+        //
+        uint mctr = 0;
+        std::vector<std::pair<tanner::vertex_t*, bool>> meas_order;
+        // We also want to track colors.
+        std::map<uint, uint> measurement_to_color_id;
+        // Create the main body.
+        stim::Circuit body;
+        fp_t round_time = 0.0;
+        for (uint d = 1; d <= dgr->get_depth(); d++) {
+            fp_t layer_time = 0.0;
+            for (auto v : dgr->get_vertices_at_depth(d)) {
+                auto inst = *(v->inst_p);
+                if (inst.name == "mnrc") {
+                    auto tv = tanner_graph->get_vertex(inst.metadata.owning_check_id);
+                    // Convert this to an mrc instruction.
+                    for (uint i = 0; i < inst.operands.size(); i++) {
+                        uint j = inst.operands[i];
+                        body.append_op("X_ERROR", {j}, errors.op1q["m"][j]);
+                        body.append_op("M", {j});
+                        // If this is a gauge qubit, then color it differently than
+                        // tv.
+                        measurement_to_color_id[mctr+i] = 
+                            (tv->id % 3 + inst.metadata.is_for_flag) % 3;
+
+                        fp_t t = timing.op1q["m"][j];
+                        if (t > layer_time) layer_time = t;
                     }
-                });
-        circuit = annotated_circuit;
-        if (n_qubits == 10) {
+                    mctr += inst.get_qubit_operands().size();
+                    // Update the measurement order.
+                    meas_order.push_back(std::make_pair(tv, inst.metadata.is_for_flag)); 
+                } else if (inst.name == "h") {
+                    for (uint i : inst.operands) {
+                        body.append_op("H", {i});
+                        body.append_op("DEPOLARIZE1", {i}, errors.op1q["h"][i]);
+
+                        fp_t t = timing.op1q["h"][i];
+                        if (t > layer_time) layer_time = t;
+                    }
+                } else if (inst.name == "cx") {
+                    for (uint i = 0; i < inst.operands.size(); i += 2) {
+                        uint j1 = inst.operands[i];
+                        uint j2 = inst.operands[i+1];
+                        auto j1_j2 = std::make_pair(j1, j2);
+                        body.append_op("CX", {j1, j2});
+                        body.append_op("L_TRANSPORT", {j1, j2}, errors.op2q_leakage_transport["cx"][j1_j2]);
+                        body.append_op("L_ERROR", {j1, j2}, errors.op2q_leakage_injection["cx"][j1_j2]);
+                        body.append_op("DEPOLARIZE2", {j1, j2}, errors.op2q["cx"][j1_j2]);
+
+                        fp_t t = timing.op2q["cx"][j1_j2];
+                        if (t > layer_time) layer_time = t;
+                    }
+                } else if (inst.name == "reset") {
+                    for (uint i : inst.operands) {
+                        body.append_op("R", {i});
+                        body.append_op("X_ERROR", {i}, errors.op1q["reset"][i]);
+
+                        fp_t t = timing.op1q["reset"][i];
+                        if (t > layer_time) layer_time = t;
+                    }
+                }
+            }    
+            round_time += layer_time;
+        }
+        uint ectr = 0;
+        for (uint r = 0; r < rounds; r++) {
+            // Add detection events.
+            for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
+                auto pv = arch->get_vertex(tv->id);
+                uint i = ir->qubit_labels[pv];
+
+                fp_t e1 = (1 - exp(-round_time/timing.t1[i])) * 0.25;
+                fp_t e2 = (1 - exp(-round_time/timing.t2[i])) * 0.5 - (1 - exp(-round_time/timing.t1[i])) * 0.25;
+                circuit.append_op("X_ERROR", {i}, e1);
+                circuit.append_op("Y_ERROR", {i}, e1);
+                circuit.append_op("Z_ERROR", {i}, e2);
+            }
+            circuit += body;
+            for (uint i = 0; i < meas_order.size(); i++) {
+                auto tv = meas_order[i].first;
+                bool is_for_flag = meas_order[i].second;
+                if (tv->qubit_type == tanner::vertex_t::XPARITY)  continue;
+
+                std::cout << "(r = " << r << ") M" << (tv->id & 255) << " ---> E" << ectr << "\n";
+
+                uint det1 = (mctr - i) | stim::TARGET_RECORD_BIT;
+                if (r == 0) {
+                    circuit.append_op("DETECTOR", {det1}, measurement_to_color_id[i]);
+                } else {
+                    uint det2 = (mctr - i + meas_order.size()) | stim::TARGET_RECORD_BIT;
+                    circuit.append_op("DETECTOR", {det1, det2}, measurement_to_color_id[i]);
+                }
+                ectr++;
+            }
+        }
+        //
+        // Epilogue
+        //
+        // Measure all the data qubits.
+        std::map<tanner::vertex_t*, uint> data_qubit_meas_order;
+        auto data_qubits = tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA);
+        std::vector<uint> epilogue_obs_operands;
+        for (uint i = 0; i < data_qubits.size(); i++) {
+            auto dv = data_qubits[i];
+            auto pv = arch->get_vertex(dv->id);
+            uint x = ir->qubit_labels[pv];
+
+            circuit.append_op("X_ERROR", {x}, errors.op1q["m"][x]);
+            circuit.append_op("M", {x});
+
+            data_qubit_meas_order[dv] = i;
+            epilogue_obs_operands.push_back((data_qubits.size() - i) | stim::TARGET_RECORD_BIT);
+        }
+        // Add detection events for measurement errors.
+        for (uint i = 0; i < meas_order.size(); i++) {
+            auto tv = meas_order[i].first;
+            bool is_for_flag = meas_order[i].second;
+            if (tv->qubit_type == tanner::vertex_t::XPARITY || is_for_flag) {
+                continue;
+            }
+
+            uint base_det = (mctr - i + data_qubits.size()) | stim::TARGET_RECORD_BIT;
+            std::vector<uint> detectors{base_det};
+            for (auto dv : tanner_graph->get_neighbors(tv)) {
+                uint j = data_qubit_meas_order[dv];
+                detectors.push_back((data_qubits.size() - j) | stim::TARGET_RECORD_BIT);
+            }
+            circuit.append_op("DETECTOR", detectors, measurement_to_color_id[i]);
+        }
+        circuit.append_op("OBSERVABLE_INCLUDE", epilogue_obs_operands, 0);
+        if (is_first_call) {
             std::ofstream error_model_out(folder_out + "/error_model.stim");
             error_model_out << circuit << "\n";
+            is_first_call = false;
         }
 
         // Build a decoder, and then benchmark it with a memory experiment.
