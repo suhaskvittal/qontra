@@ -520,104 +520,56 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             for (auto x : neighbors) std::cout << " " << x.first << "(" << c2i(x.second) << ")";
             std::cout << "\n";
 #endif
-            for (auto cdy : neighbors) {
-                // Get common neighbor of cdx and cdy.
-                auto n = get_neighbors(cdy);
-                std::set<cdet_t> common;
-                std::set_intersection(neighbors.begin(), neighbors.end(),
-                                        n.begin(), n.end(),
-                                        std::inserter(common, common.begin()));
-                for (auto it = common.begin(); it != common.end(); it++) {
-                    cdet_t cdz = *it;
-                    if (cdz == cdy) continue;
-                    face_t f0 = std::make_tuple(cdx, cdy, cdz);
-                    face_t f1 = std::make_tuple(cdx, cdz, cdy); // Make sure we are not double
-                                                                // counting.
-                    if (!all_faces.count(f0) && !all_faces.count(f1)) {
-                        all_faces.insert(f0);
+            while (incident_vertices.size() && neighbors.size()) {
+                auto cdy = *incident_vertices[cdx].begin();
+                incident_vertices.erase(cdy);
+
+                bool valid = false;
+                stim::simd_bits local_corr(n_observables);
+                local_corr.clear();
+                while (neighbors.size()) {
+                    neighbors.erase(cdy);
+                    auto n = get_neighbors(cdy);
+                    std::set<cdet_t> common;
+                    std::set_intersection(neighbors.begin(), neighbors.end(),
+                                            n.begin(), n.end(),
+                                            std::inserter(common, common.begin()));
+                    if (common.empty()) break;
+                    cdet_t cdz;
+                    cdetpair_t e_xy, e_xz, e_yz;
+                    for (auto it = common.begin(); it != common.end(); it++) {
+                        cdz = *it;
+                        e_xy = std::make_pair(cdx, cdy);
+                        e_xz = std::make_pair(cdx, cdz);
+                        e_yz = std::make_pair(cdy, cdz);
+                        if (!pair_is_in(in_face, e_xy)
+                                && !pair_is_in(in_face, e_xz)
+                                && !pair_is_in(in_face, e_yz)) 
+                        {
+                            goto cdz_is_valid;
+                        }
                     }
-                }
-            }
-#ifdef DEBUG
-            std::cout << "\t\t\t" << all_faces.size() << " faces.\n";
-#endif
-            // Now, compute the best subset of faces via exhaustive search.
-            uint64_t max_satisfied_edges = 0;
-            uint64_t best_ctr_num_faces = 0;
-            uint64_t best_ctr = 0;
-            uint64_t ctr = 0;
-            const uint64_t max_ctr = 1 << all_faces.size();
-            while (ctr < max_ctr) {
-                std::set<cdetpair_t> boundary_edges;    
-                        // The edges on the boundary of the face subset.
-                uint64_t i = 0;
-                uint64_t num_faces_used = 0;
-                for (auto it = all_faces.begin(); it != all_faces.end(); it++) {
-                    if (!(ctr & (1 << (i++)))) {
-                        continue;
+                    break;
+cdz_is_valid:
+                    local_corr ^= get_correction_for_face(cdx, cdy, cdz);
+                    if (pair_is_in(flipped_edges, e_xy)) {
+                        insert_pair_into(in_face, e_xy);
                     }
-                    num_faces_used++;
-                    face_t f = *it;
-                    cdet_t x = std::get<0>(f), y = std::get<1>(f), z = std::get<2>(f);
-                    auto xy = std::make_pair(x, y);
-                    auto xz = std::make_pair(x, z);
-                    auto yz = std::make_pair(y, z);
-                    std::vector<cdetpair_t> edges_of_face{xy, xz, yz};
-                    for (auto e : edges_of_face) {
-                        xor_pair_into(boundary_edges, e);
+                    if (pair_is_in(flipped_edges, e_xz)) {
+                        insert_pair_into(in_face, e_xz);
                     }
-                }
-                // Now, check how many flipped edges are on the boundary.
-                // If any edges are already in a face, then this is invalid.
-                uint64_t satisfied_edges = 0;
-                bool any_in_face = false;
-                bool any_incident_not_flipped = false;
-                for (auto e : boundary_edges) {
-                    any_in_face |= in_face.count(e);
-                    if (e.first == cdx || e.second == cdx) {
-                        any_incident_not_flipped |= !flipped_edges.count(e)
-                                                        && (e.first.first != BOUNDARY_INDEX
-                                                            && e.second.first != BOUNDARY_INDEX);
+                    if (pair_is_in(flipped_edges, e_yz)) {
+                        insert_pair_into(in_face, e_yz);
                     }
-                    satisfied_edges += flipped_edges.count(e);
+                    if (incident_vertices[cdx].count(cdz)) {
+                        valid = true;
+                        incident_vertices[cdx].erase(cdz);
+                        break;
+                    }
+                    cdy = cdz;
                 }
-                if (any_in_face || any_incident_not_flipped) {
-                    ctr++;
-                    continue;
-                }
-                if (satisfied_edges > max_satisfied_edges
-                    || (satisfied_edges == max_satisfied_edges
-                        && num_faces_used < best_ctr_num_faces)) 
-                {
-                    best_ctr = ctr;
-                    max_satisfied_edges = satisfied_edges;
-                    best_ctr_num_faces = num_faces_used;
-                }
-                ctr++;
-            }
-            // Now, update the correction as well as which edges are in a face.
-            if (best_ctr == 0) {
-#ifdef DEBUG
-                std::cout << "\t\t\tno good local correction.\n";
-#endif
-                continue;
-            }
-            uint i = 0;
-            for (auto it = all_faces.begin(); it != all_faces.end(); it++) {
-                if (!(best_ctr & (1 << (i++)))) continue;
-                face_t f = *it;
-                cdet_t x = std::get<0>(f), y = std::get<1>(f), z = std::get<2>(f);
-                corr ^= get_correction_for_face(x, y, z);
-                auto xy = std::make_pair(x, y);
-                auto yx = std::make_pair(y, x);
-                auto xz = std::make_pair(x, z);
-                auto zx = std::make_pair(z, x);
-                auto yz = std::make_pair(y, z);
-                auto zy = std::make_pair(z, y);
-                std::vector<cdetpair_t> edges_of_face{xy, yx, xz, zx, yz, zy};
-                for (auto e : edges_of_face) {
-                    if (flipped_edges.count(e)) insert_pair_into(in_face, e);
-                }
+                if (valid)  corr ^= local_corr;
+                else        break;
             }
         }
     }
@@ -770,7 +722,7 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
 #ifdef DEBUG
                     std::cout << " [ " << cd1.first << "(" << c2i(cd1.second) << ") , "
                             << cb2.first << "(" << c2i(cb2.second) << ") , "
-                            << idet.first << "(" << c2i(idet.second) << ") , "
+//                          << idet.first << "(" << c2i(idet.second) << ") , "
                             << cb1.first << "(" << c2i(cb1.second) << ") ]";
 #endif
                     xor_pair_into(edges, std::make_pair(cd1, cb2));
@@ -817,12 +769,11 @@ RestrictionDecoder::get_common_neighbors(cdet_t cdx, cdet_t cdy) {
 std::set<cdet_t>
 RestrictionDecoder::get_neighbors(cdet_t cd) {
     std::set<cdet_t> neighbors;
-    /*
     stv_t* v = lattice_structure.get_vertex(CDET_TO_ID(cd));
     for (auto w : lattice_structure.get_neighbors(v)) {
         neighbors.insert(w->detector);
     }
-    */
+    /*
     for (uint i = 0; i < 3; i++) {
         __COLOR restricted_color = i2c(2 - i);
         if (cd.second == restricted_color)   continue;
@@ -838,12 +789,14 @@ RestrictionDecoder::get_neighbors(cdet_t cd) {
             __COLOR cw;
             if (dw == BOUNDARY_INDEX) {
                 cw = get_remaining_color(cd.second, restricted_color);
+                if (!boundary_adjacent[c2i(cw)].count(cd))  continue;
             } else {
                 cw = color_map[dw];
             }
             neighbors.insert(std::make_pair(dw, cw));
         }
     }
+    */
     return neighbors;
 }
 

@@ -56,6 +56,12 @@ typedef std::pair<std::vector<match_t>, __COLOR>    component_t;
 
 typedef std::pair<cdet_t, cdet_t>                   cdetpair_t;
 
+inline bool
+pair_is_in(std::set<cdetpair_t>& s, cdetpair_t x) {
+    cdetpair_t ix = std::make_pair(x.second, x.first);
+    return s.count(x) || s.count(ix);
+}
+
 inline void
 insert_pair_into(std::set<cdetpair_t>& s, cdetpair_t x) {
     cdetpair_t ix = std::make_pair(x.second, x.first);
