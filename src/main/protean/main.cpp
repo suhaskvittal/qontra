@@ -139,9 +139,12 @@ help_exit:
                         uint j2 = inst.operands[i+1];
                         auto j1_j2 = std::make_pair(j1, j2);
                         body.append_op("CX", {j1, j2});
-                        body.append_op("L_TRANSPORT", {j1, j2}, errors.op2q_leakage_transport["cx"][j1_j2]);
-                        body.append_op("L_ERROR", {j1, j2}, errors.op2q_leakage_injection["cx"][j1_j2]);
-                        body.append_op("DEPOLARIZE2", {j1, j2}, errors.op2q["cx"][j1_j2]);
+                        body.append_op("L_TRANSPORT", {j1, j2}, 
+                                        errors.op2q_leakage_transport["cx"][j1_j2]);
+                        body.append_op("L_ERROR", {j1, j2}, 
+                                        errors.op2q_leakage_injection["cx"][j1_j2]);
+                        body.append_op("DEPOLARIZE2", {j1, j2}, 
+                                        errors.op2q["cx"][j1_j2]);
 
                         fp_t t = timing.op2q["cx"][j1_j2];
                         if (t > layer_time) layer_time = t;
@@ -166,7 +169,8 @@ help_exit:
                 uint i = ir->qubit_labels[pv];
 
                 fp_t e1 = (1 - exp(-round_time/timing.t1[i])) * 0.25;
-                fp_t e2 = (1 - exp(-round_time/timing.t2[i])) * 0.5 - (1 - exp(-round_time/timing.t1[i])) * 0.25;
+                fp_t e2 = (1 - exp(-round_time/timing.t2[i])) * 0.5 
+                            - (1 - exp(-round_time/timing.t1[i])) * 0.25;
                 circuit.append_op("X_ERROR", {i}, e1);
                 circuit.append_op("Y_ERROR", {i}, e1);
                 circuit.append_op("Z_ERROR", {i}, e2);
@@ -203,8 +207,6 @@ help_exit:
 
             circuit.append_op("X_ERROR", {x}, errors.op1q["m"][x]);
             circuit.append_op("M", {x});
-
-            std::cout << "D" << x << " --> " << i << "\n";
 
             data_qubit_meas_order[dv] = i;
             epilogue_obs_operands.push_back((data_qubits.size() - i) | stim::TARGET_RECORD_BIT);

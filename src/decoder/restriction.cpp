@@ -7,7 +7,7 @@
 
 #include <assert.h>
 
-//#define DEBUG
+#define DEBUG
 
 namespace qontra {
 namespace decoder {
@@ -105,10 +105,12 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
                 uint64_t off2 = op.target_data.targets[1].data & ~stim::TARGET_RECORD_BIT;
                 if (off1 < off2) {
                     offset = off1;
-                    detector_to_base[det_ctr] = detector_to_base[det_ctr - off2 - off1];
+                    detector_to_base[det_ctr] = 
+                        detector_to_base[measurement_queue[measurement_queue.size() - off2]];
                 } else {
                     offset = off2;
-                    detector_to_base[det_ctr] = detector_to_base[det_ctr - off1 - off2];
+                    detector_to_base[det_ctr] = 
+                        detector_to_base[measurement_queue[measurement_queue.size() - off1]];
                 }
             } else {
                 // Get the maximum offset.
@@ -536,6 +538,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                     }
                 }
             }
+#ifdef DEBUG
+            std::cout << "\t\t\t" << all_faces.size() << " faces.\n";
+#endif
             // Now, compute the best subset of faces via exhaustive search.
             uint64_t max_satisfied_edges = 0;
             uint64_t best_ctr_num_faces = 0;
@@ -570,7 +575,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 for (auto e : boundary_edges) {
                     any_in_face |= in_face.count(e);
                     if (e.first == cdx || e.second == cdx) {
-                        any_incident_not_flipped |= !flipped_edges.count(e);
+                        any_incident_not_flipped |= !flipped_edges.count(e)
+                                                        && (e.first.first != BOUNDARY_INDEX
+                                                            && e.second.first != BOUNDARY_INDEX);
                     }
                     satisfied_edges += flipped_edges.count(e);
                 }
@@ -627,7 +634,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
         if (i == 0)  std::cout << "|";
     }
     std::cout << "\n";
-    std::cout << "\tis error : " << (corr[0] != syndrome[n_detectors]) << "\n";
+    std::cout << "\tis error : " << is_error(corr, syndrome) << "\n";
 #endif
     fp_t t = (fp_t)timer.clk_end();
     return (Decoder::result_t) { t, corr, is_error(corr, syndrome) };
@@ -698,15 +705,18 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
     for (match_t mate : comp.first) {
         cdet_t cdx = std::get<0>(mate);
         cdet_t cdy = std::get<1>(mate);
-        cdx.first = detector_to_base[cdx.first];
-        cdy.first = detector_to_base[cdy.first];
-
-        if (cdx == cdy) continue;
-
 #ifdef DEBUG
         std::cout << "\t\t" << cdx.first << "(" << c2i(cdx.second) << ") <----> "
+            << cdy.first << "(" << c2i(cdy.second) << ")";
+#endif
+        cdx.first = detector_to_base[cdx.first];
+        cdy.first = detector_to_base[cdy.first];
+#ifdef DEBUG
+        std::cout << "\tnow: " << cdx.first << "(" << c2i(cdx.second) << ") <----> "
             << cdy.first << "(" << c2i(cdy.second) << ")\n";
 #endif
+
+        if (cdx == cdy) continue;
 
         __COLOR restricted_color = std::get<2>(mate);
         if (restricted_color == cc_color)   continue;
@@ -739,7 +749,7 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
                 cdet_t cb1 = std::make_pair(d2, c2);
                 if (prev_boundary_color != __COLOR::none && prev_boundary_color != c2) {
                     cdet_t tmp = std::make_pair(BOUNDARY_INDEX, prev_boundary_color);
-                    insert_pair_into(edges, std::make_pair(cb1, tmp));
+                    xor_pair_into(edges, std::make_pair(cb1, tmp));
                 }
                 prev_boundary_color = c2;
                 // Check if d1 is even adjacent to this boundary.
@@ -763,9 +773,10 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
                             << idet.first << "(" << c2i(idet.second) << ") , "
                             << cb1.first << "(" << c2i(cb1.second) << ") ]";
 #endif
-                    insert_pair_into(edges, std::make_pair(cd1, cb2));
-                    insert_pair_into(edges, std::make_pair(cb2, idet));
-                    insert_pair_into(edges, std::make_pair(idet, cb1));
+                    xor_pair_into(edges, std::make_pair(cd1, cb2));
+//                  xor_pair_into(edges, std::make_pair(cb2, idet));
+//                  xor_pair_into(edges, std::make_pair(idet, cb1));
+                    xor_pair_into(edges, std::make_pair(cb2, cb1));
                     continue;
                 }
             } else {
@@ -778,7 +789,7 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
             std::cout << " [ " << cd1.first << "(" << c2i(cd1.second) << ") , "
                     << cd2.first << "(" << c2i(cd2.second) << ") ]";
 #endif
-            insert_pair_into(edges, e);
+            xor_pair_into(edges, e);
         }
 #ifdef DEBUG
         std::cout << "\n";
@@ -806,9 +817,32 @@ RestrictionDecoder::get_common_neighbors(cdet_t cdx, cdet_t cdy) {
 std::set<cdet_t>
 RestrictionDecoder::get_neighbors(cdet_t cd) {
     std::set<cdet_t> neighbors;
+    /*
     stv_t* v = lattice_structure.get_vertex(CDET_TO_ID(cd));
     for (auto w : lattice_structure.get_neighbors(v)) {
         neighbors.insert(w->detector);
+    }
+    */
+    for (uint i = 0; i < 3; i++) {
+        __COLOR restricted_color = i2c(2 - i);
+        if (cd.second == restricted_color)   continue;
+        uint dv = detector_to_base[cd.first];
+        uint ddv = dv == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[dv][i];
+        
+        DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
+        auto v = gr.get_vertex(ddv);
+        for (auto w : gr.get_neighbors(v)) {
+            uint dw = w->id == BOUNDARY_INDEX ? w->id : from_rlatt[std::make_pair(w->id, i)];
+            dw = detector_to_base[dw];
+            if (dw == dv)   continue;
+            __COLOR cw;
+            if (dw == BOUNDARY_INDEX) {
+                cw = get_remaining_color(cd.second, restricted_color);
+            } else {
+                cw = color_map[dw];
+            }
+            neighbors.insert(std::make_pair(dw, cw));
+        }
     }
     return neighbors;
 }
