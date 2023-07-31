@@ -80,10 +80,6 @@ help_exit:
         // Define the error model here:
         //
         tables::ErrorAndTiming et;
-        et.e_ro = 0.0;
-        et.e_g2q = 0.0;
-        et.e_g1q = 0.0;
-        et = et * 100;
         ErrorTable errors;
         TimeTable timing;
         tables::populate(n_qubits, errors, timing, et);
@@ -208,6 +204,8 @@ help_exit:
             circuit.append_op("X_ERROR", {x}, errors.op1q["m"][x]);
             circuit.append_op("M", {x});
 
+            std::cout << "D" << x << " --> " << i << "\n";
+
             data_qubit_meas_order[dv] = i;
             epilogue_obs_operands.push_back((data_qubits.size() - i) | stim::TARGET_RECORD_BIT);
         }
@@ -228,6 +226,11 @@ help_exit:
             circuit.append_op("DETECTOR", detectors, measurement_to_color_id[i]);
         }
         circuit.append_op("OBSERVABLE_INCLUDE", epilogue_obs_operands, 0);
+        /*
+        for (uint i = 0; i < epilogue_obs_operands.size(); i++) {
+            circuit.append_op("OBSERVABLE_INCLUDE", {epilogue_obs_operands[i]}, i+1);
+        }
+        */
         if (is_first_call) {
             std::ofstream error_model_out(folder_out + "/error_model.stim");
             error_model_out << circuit << "\n";

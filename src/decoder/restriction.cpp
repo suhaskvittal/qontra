@@ -7,7 +7,7 @@
 
 #include <assert.h>
 
-#define DEBUG
+//#define DEBUG
 
 namespace qontra {
 namespace decoder {
@@ -566,11 +566,15 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 // If any edges are already in a face, then this is invalid.
                 uint64_t satisfied_edges = 0;
                 bool any_in_face = false;
+                bool any_incident_not_flipped = false;
                 for (auto e : boundary_edges) {
                     any_in_face |= in_face.count(e);
+                    if (e.first == cdx || e.second == cdx) {
+                        any_incident_not_flipped |= !flipped_edges.count(e);
+                    }
                     satisfied_edges += flipped_edges.count(e);
                 }
-                if (any_in_face) {
+                if (any_in_face || any_incident_not_flipped) {
                     ctr++;
                     continue;
                 }
@@ -585,7 +589,12 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 ctr++;
             }
             // Now, update the correction as well as which edges are in a face.
-            if (best_ctr == 0)   continue;
+            if (best_ctr == 0) {
+#ifdef DEBUG
+                std::cout << "\t\t\tno good local correction.\n";
+#endif
+                continue;
+            }
             uint i = 0;
             for (auto it = all_faces.begin(); it != all_faces.end(); it++) {
                 if (!(best_ctr & (1 << (i++)))) continue;
@@ -607,7 +616,18 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     }
 
 #ifdef DEBUG
-    std::cout << "\tis error : " << is_error(corr, syndrome) << "\n";
+    std::cout << "\tobs =";
+    for (uint i = 0; i < n_observables; i++) {
+        std::cout << syndrome[n_detectors+i]+0;
+        if (i == 0)  std::cout << "|";
+    }
+    std::cout << "\tcorr =";
+    for (uint i = 0; i < n_observables; i++) {
+        std::cout << corr[i]+0;
+        if (i == 0)  std::cout << "|";
+    }
+    std::cout << "\n";
+    std::cout << "\tis error : " << (corr[0] != syndrome[n_detectors]) << "\n";
 #endif
     fp_t t = (fp_t)timer.clk_end();
     return (Decoder::result_t) { t, corr, is_error(corr, syndrome) };
@@ -639,6 +659,7 @@ RestrictionDecoder::decode_restricted_lattice(
     // First, filter out any assignments that go through the boundary.
     std::vector<Decoder::assign_t>  new_assignments;
     DecodingGraph& gr = dec->decoding_graph;
+    /*
     for (auto aa : res.error_assignments) {
         uint d1 = std::get<0>(aa);
         uint d2 = std::get<1>(aa);
@@ -655,7 +676,8 @@ RestrictionDecoder::decode_restricted_lattice(
             new_assignments.push_back(aa);
         }
     }
-//  new_assignments = res.error_assignments;
+    */
+    new_assignments = res.error_assignments;
     for (auto& aa : new_assignments) {
         uint& d1 = std::get<0>(aa);
         uint& d2 = std::get<1>(aa);
@@ -715,6 +737,10 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
             if (d2 == BOUNDARY_INDEX) {
                 c2 = get_remaining_color(c1, restricted_color);
                 cdet_t cb1 = std::make_pair(d2, c2);
+                if (prev_boundary_color != __COLOR::none && prev_boundary_color != c2) {
+                    cdet_t tmp = std::make_pair(BOUNDARY_INDEX, prev_boundary_color);
+                    insert_pair_into(edges, std::make_pair(cb1, tmp));
+                }
                 prev_boundary_color = c2;
                 // Check if d1 is even adjacent to this boundary.
                 if (!boundary_adjacent[c2i(c2)].count(cd1)) {
