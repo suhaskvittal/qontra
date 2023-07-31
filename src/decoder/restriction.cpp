@@ -520,13 +520,17 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             for (auto x : neighbors) std::cout << " " << x.first << "(" << c2i(x.second) << ")";
             std::cout << "\n";
 #endif
-            while (incident_vertices.size() && neighbors.size()) {
+            while (incident_vertices[cdx].size() && neighbors.size()) {
                 auto cdy = *incident_vertices[cdx].begin();
-                incident_vertices.erase(cdy);
+                incident_vertices[cdx].erase(cdy);
 
                 bool valid = false;
                 stim::simd_bits local_corr(n_observables);
                 local_corr.clear();
+#ifdef DEBUG
+                std::cout << "\t\t\tRotating around face from " << cdy.first << "("
+                    << c2i(cdy.second) << "):\n";
+#endif
                 while (neighbors.size()) {
                     neighbors.erase(cdy);
                     auto n = get_neighbors(cdy);
@@ -535,21 +539,39 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                                             n.begin(), n.end(),
                                             std::inserter(common, common.begin()));
                     if (common.empty()) break;
+#ifdef DEBUG
+                    std::cout << "\t\t\t\tcommon with " << cdy.first 
+                                << "(" << c2i(cdy.second) << "):";
+                    for (auto x: common) std::cout << " " << x.first << "(" << c2i(x.second) << ")";
+                    std::cout << "\n";
+#endif
+                    bool found_incident = false;
                     cdet_t cdz;
                     cdetpair_t e_xy, e_xz, e_yz;
+                    // Go check if there is an incident vertex in common. If so, set cdz to 
+                    // that vertex.
                     for (auto it = common.begin(); it != common.end(); it++) {
-                        cdz = *it;
-                        e_xy = std::make_pair(cdx, cdy);
-                        e_xz = std::make_pair(cdx, cdz);
-                        e_yz = std::make_pair(cdy, cdz);
-                        if (!pair_is_in(in_face, e_xy)
-                                && !pair_is_in(in_face, e_xz)
-                                && !pair_is_in(in_face, e_yz)) 
-                        {
-                            goto cdz_is_valid;
+                        if (incident_vertices[cdx].count(*it)) {
+                            cdz = *it;
+                            found_incident = true;
+                            break;
                         }
                     }
-                    break;
+                    if (!found_incident) {
+                        for (auto it = common.begin(); it != common.end(); it++) {
+                            cdz = *it;
+                            e_xy = std::make_pair(cdx, cdy);
+                            e_xz = std::make_pair(cdx, cdz);
+                            e_yz = std::make_pair(cdy, cdz);
+                            if (!pair_is_in(in_face, e_xy)
+                                    && !pair_is_in(in_face, e_xz)
+                                    && !pair_is_in(in_face, e_yz)) 
+                            {
+                                goto cdz_is_valid;
+                            }
+                        }
+                        break;
+                    }
 cdz_is_valid:
                     local_corr ^= get_correction_for_face(cdx, cdy, cdz);
                     if (pair_is_in(flipped_edges, e_xy)) {
@@ -561,9 +583,13 @@ cdz_is_valid:
                     if (pair_is_in(flipped_edges, e_yz)) {
                         insert_pair_into(in_face, e_yz);
                     }
-                    if (incident_vertices[cdx].count(cdz)) {
+                    if (found_incident) {
                         valid = true;
                         incident_vertices[cdx].erase(cdz);
+#ifdef DEBUG
+                        std::cout << "\t\t\t\tfound incident " << cdz.first << "("
+                                    << c2i(cdz.second) << ")\n";
+#endif
                         break;
                     }
                     cdy = cdz;
@@ -807,7 +833,7 @@ RestrictionDecoder::get_correction_for_face(cdet_t x, cdet_t y, cdet_t z) {
     stim::simd_bits corr(circuit.count_observables());
     corr.clear();
 #ifdef DEBUG
-    std::cout << "\t\t\tApplying corrections on face " 
+    std::cout << "\t\t\t\tApplying corrections on face " 
                 << x.first << "(" << c2i(x.second) << "), "
                 << y.first << "(" << c2i(y.second) << "), "
                 << z.first << "(" << c2i(z.second) << "):";

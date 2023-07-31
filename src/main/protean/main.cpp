@@ -24,7 +24,6 @@ using namespace qontra;
 using namespace graph;
 using namespace protean;
 using namespace decoder;
-using namespace restriction;
 
 int main(int argc, char* argv[]) {
     CmdParser parser(argc, argv);
@@ -80,6 +79,10 @@ help_exit:
         // Define the error model here:
         //
         tables::ErrorAndTiming et;
+        et.e_ro = 0.0;
+        et.e_g2q = 0.0;
+        et.e_g1q = 0.0;
+        et = et * 10;
         ErrorTable errors;
         TimeTable timing;
         tables::populate(n_qubits, errors, timing, et);
