@@ -68,6 +68,7 @@ help_exit:
 
     // Define the cost function here.
     bool is_first_call = true;
+    uint run = 0;
     compiler::cost_t cf = [&] (compiler::ir_t* ir)
     {
         auto tanner_graph = ir->curr_spec;
@@ -79,10 +80,12 @@ help_exit:
         // Define the error model here:
         //
         tables::ErrorAndTiming et;
+        /*
         et.e_ro = 0.0;
         et.e_g2q = 0.0;
         et.e_g1q = 0.0;
-        et = et * 10;
+        et = et * 5;
+        */
         ErrorTable errors;
         TimeTable timing;
         tables::populate(n_qubits, errors, timing, et);
@@ -184,8 +187,9 @@ help_exit:
                 auto tv = meas_order[i].first;
                 bool is_for_flag = meas_order[i].second;
                 if ((tv->qubit_type == tanner::vertex_t::XPARITY) ^ is_for_flag) continue;
-
-                std::cout << "(r = " << r << ") M" << (tv->id & 255) << "("
+                std::cout << "(r = " << r << ") M"
+                        << (tv->qubit_type == tanner::vertex_t::XPARITY ? "X" : "Z")
+                        << (tv->id & 255) << "("
                         << is_for_flag << ") ---> E" << ectr << "\n";
 
                 uint det1 = (mctr - i) | stim::TARGET_RECORD_BIT;
@@ -239,7 +243,8 @@ help_exit:
             circuit.append_op("OBSERVABLE_INCLUDE", {epilogue_obs_operands[i]}, i+1);
         }
         */
-        std::ofstream error_model_out(folder_out + "/error_model.stim");
+        std::ofstream error_model_out(folder_out 
+                                        + "/error_model_r" + std::to_string(run) +".stim");
         error_model_out << circuit << "\n";
 
         // Build a decoder, and then benchmark it with a memory experiment.
@@ -250,6 +255,8 @@ help_exit:
 
         std::cout << "\tLogical error rate: " << mexp_res.logical_error_rate << "\n";
         
+        run++;
+
         return ir->arch->get_mean_connectivity();
     };
     experiments::G_USE_MPI = false;
