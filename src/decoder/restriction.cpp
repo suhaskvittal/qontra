@@ -17,7 +17,7 @@ namespace restriction {
 void
 inherit_neighbors(StructureGraph& gr, stv_t* v, stv_t* w, std::function<bool(stv_t*)> inherit_cb) {
     for (auto u : gr.get_neighbors(w)) {
-        if (u == v || gr.contains(v, u))    continue;
+        if (u == v || u->qubit == v->qubit || gr.contains(v, u))    continue;
         ste_t* e = new ste_t;
         e->src = v;
         e->dst = u;
@@ -39,7 +39,7 @@ using namespace restriction;
 //      each round.
 //  (3) Modify get_all_edges_in_component to flatten measurement results.
 
-RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
+RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit, std::set<uint> flag_list)
     :Decoder(circuit, false),
     lattice_structure(),
     boundary_adjacent(),
@@ -63,6 +63,7 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
     for (uint i = 0; i < circuit.count_qubits(); i++) {
         stv_t* v = new stv_t;
         v->id = i;
+        v->qubit = i;
         v->detector = std::make_pair(i, __COLOR::none);
         unused.insert(v);
         lattice_structure.add_vertex(v);
@@ -129,9 +130,19 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
             stv_t* v = lattice_structure.get_vertex(q);
             if (v != nullptr) {
                 cdet_t cd = std::make_pair(det_ctr, i2c(color_id));
-                v->detector = cd;
-                lattice_structure.change_id(v, CDET_TO_ID(cd));
-                unused.erase(v);
+                // Create new vertex.
+                stv_t* w = new stv_t;
+                w->id = CDET_TO_ID(cd);
+                w->qubit = q;
+                w->detector = cd;
+                lattice_structure.add_vertex(w);
+                for (auto u : lattice_structure.get_neighbors(v)) {
+                    ste_t* e = new ste_t;
+                    e->src = w;
+                    e->dst = u;
+                    e->is_undirected = true;
+                    lattice_structure.add_edge(e);
+                }
             }
             measurement_queue[measurement_queue.size() - offset] = det_ctr;
             det_ctr++;
@@ -171,11 +182,11 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
     // We will also add three boundaries and connect used vertices
     // if necessary.
     for (auto v : lattice_structure.get_vertices()) {
-        if (unused.count(v))    continue;
+        if (unused.count(v) || flag_list.count(v->detector.first))  continue;
         for (auto w : lattice_structure.get_neighbors(v)) {
-            if (unused.count(w))    continue;
+            if (unused.count(w) || !flag_list.count(w->detector.first)) continue;
             inherit_neighbors(lattice_structure, v, w, [&] (stv_t* u) {
-                return !unused.count(u);
+                return !unused.count(u) && flag_list.count(u->detector.first);
             });
         }
     }
@@ -242,7 +253,7 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit)
         number_of_adjacent_used.fill(0);
         for (auto w : lattice_structure.get_neighbors(v)) {
             if (unused.count(w))    number_of_adjacent_unused++;
-            else {
+            else if (!flag_list.count(w->detector.first)) {
                 int i = c2i(w->detector.second);
                 number_of_adjacent_used[i]++;
             }

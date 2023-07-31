@@ -103,6 +103,7 @@ help_exit:
         std::vector<std::pair<tanner::vertex_t*, bool>> meas_order;
         // We also want to track colors.
         std::map<uint, uint> measurement_to_color_id;
+        std::set<uint> flag_list;
         // Create the main body.
         stim::Circuit body;
         fp_t round_time = 0.0;
@@ -182,9 +183,10 @@ help_exit:
             for (uint i = 0; i < meas_order.size(); i++) {
                 auto tv = meas_order[i].first;
                 bool is_for_flag = meas_order[i].second;
-                if (tv->qubit_type == tanner::vertex_t::XPARITY)  continue;
+                if ((tv->qubit_type == tanner::vertex_t::XPARITY) ^ is_for_flag) continue;
 
-                std::cout << "(r = " << r << ") M" << (tv->id & 255) << " ---> E" << ectr << "\n";
+                std::cout << "(r = " << r << ") M" << (tv->id & 255) << "("
+                        << is_for_flag << ") ---> E" << ectr << "\n";
 
                 uint det1 = (mctr - i) | stim::TARGET_RECORD_BIT;
                 if (r == 0) {
@@ -193,6 +195,7 @@ help_exit:
                     uint det2 = (mctr - i + meas_order.size()) | stim::TARGET_RECORD_BIT;
                     circuit.append_op("DETECTOR", {det1, det2}, measurement_to_color_id[i]);
                 }
+                if (is_for_flag)    flag_list.insert(ectr);
                 ectr++;
             }
         }
@@ -236,21 +239,18 @@ help_exit:
             circuit.append_op("OBSERVABLE_INCLUDE", {epilogue_obs_operands[i]}, i+1);
         }
         */
-        if (is_first_call) {
-            std::ofstream error_model_out(folder_out + "/error_model.stim");
-            error_model_out << circuit << "\n";
-            is_first_call = false;
-        }
+        std::ofstream error_model_out(folder_out + "/error_model.stim");
+        error_model_out << circuit << "\n";
 
         // Build a decoder, and then benchmark it with a memory experiment.
-        RestrictionDecoder dec(circuit);
+        RestrictionDecoder dec(circuit, flag_list);
         experiments::memory_params_t params;
         params.shots = shots;
         auto mexp_res = memory_experiment(&dec, params);
 
         std::cout << "\tLogical error rate: " << mexp_res.logical_error_rate << "\n";
         
-        return n_qubits;
+        return ir->arch->get_mean_connectivity();
     };
     experiments::G_USE_MPI = false;
 

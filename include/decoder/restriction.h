@@ -83,6 +83,7 @@ xor_pair_into(std::set<cdetpair_t>& s, cdetpair_t x) {
 
 // Structure Graph:
 struct stv_t : graph::base::vertex_t {
+    uint    qubit;
     cdet_t  detector;
 };
 
@@ -98,11 +99,11 @@ void    inherit_neighbors(StructureGraph&, stv_t*, stv_t*, std::function<bool(st
 
 }   // restriction
 
-#define CDET_TO_ID(x)   (((x).first) | (((uint64_t)(x).second) << 60))
+#define CDET_TO_ID(x)   (((x).first) | (((uint64_t)(x).second + 1) << 48))
 
 class RestrictionDecoder : public Decoder {
 public:
-    RestrictionDecoder(const stim::Circuit&);
+    RestrictionDecoder(const stim::Circuit&, std::set<uint> flag_list);
 
     ~RestrictionDecoder(void) {
         for (auto dec : rlatt_dec)  delete dec;
