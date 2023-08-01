@@ -91,11 +91,9 @@ struct ste_t : graph::base::edge_t {};
 
 typedef graph::Graph<stv_t, ste_t>  StructureGraph;
 
-void    inherit_neighbors(StructureGraph&, stv_t*, stv_t*, std::function<bool(stv_t*)> inherit_cb);
-                // The first vertex will get all the neighbors of the second vertex.
-                // If a neighbor of the second vertex returns true in the callback, then
-                // we also call inherit_neighbors recursively between the first vertex
-                // and that neighbor.
+void    inherit_neighbors(StructureGraph&, stv_t*, stv_t*, 
+                        std::function<bool(stv_t*)> when_to_add,
+                        std::function<bool(stv_t*)> when_to_call);
 
 }   // restriction
 

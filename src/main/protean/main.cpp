@@ -187,10 +187,12 @@ help_exit:
                 auto tv = meas_order[i].first;
                 bool is_for_flag = meas_order[i].second;
                 if ((tv->qubit_type == tanner::vertex_t::XPARITY) ^ is_for_flag) continue;
-                std::cout << "(r = " << r << ") M"
-                        << (tv->qubit_type == tanner::vertex_t::XPARITY ? "X" : "Z")
-                        << (tv->id & 255) << "("
-                        << is_for_flag << ") ---> E" << ectr << "\n";
+                if (r == 0) {
+                    std::cout << "(r = " << r << ") M"
+                            << (tv->qubit_type == tanner::vertex_t::XPARITY ? "X" : "Z")
+                            << (tv->id & 255) << "("
+                            << is_for_flag << ") ---> E" << ectr << "\n";
+                }
 
                 uint det1 = (mctr - i) | stim::TARGET_RECORD_BIT;
                 if (r == 0) {
@@ -245,6 +247,7 @@ help_exit:
         */
         std::ofstream error_model_out(folder_out 
                                         + "/error_model_r" + std::to_string(run) +".stim");
+        write_ir_to_folder(ir, std::string("tmp/round_") + std::to_string(run));
         error_model_out << circuit << "\n";
 
         // Build a decoder, and then benchmark it with a memory experiment.

@@ -15,9 +15,13 @@ namespace decoder {
 namespace restriction {
 
 void
-inherit_neighbors(StructureGraph& gr, stv_t* v, stv_t* w, std::function<bool(stv_t*)> inherit_cb) {
+inherit_neighbors(StructureGraph& gr, stv_t* v, stv_t* w, 
+        std::function<bool(stv_t*)> when_to_add,
+        std::function<bool(stv_t*)> when_to_call) 
+{
     for (auto u : gr.get_neighbors(w)) {
         if (u == v || u->qubit == v->qubit || gr.contains(v, u))    continue;
+        if (!when_to_add(u))    continue;
         ste_t* e = new ste_t;
         e->src = v;
         e->dst = u;
@@ -30,7 +34,7 @@ inherit_neighbors(StructureGraph& gr, stv_t* v, stv_t* w, std::function<bool(stv
                 << " from " << w->detector.first << "(" << c2i(w->detector.second) << ")\n";
         }
 #endif
-        if (inherit_cb(u))   inherit_neighbors(gr, v, u, inherit_cb);
+        if (when_to_call(u))   inherit_neighbors(gr, v, u, when_to_add, when_to_call);
     }
 }
 
@@ -75,12 +79,18 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit, std::set<ui
         unused.insert(v);
         lattice_structure.add_vertex(v);
     }
-    std::deque<uint64_t> measurement_queue;
+    struct mqdata_t {
+        uint64_t det;
+        std::vector<stv_t*> neighbors;
+    };
+    std::deque<mqdata_t> measurement_queue;
 
     uint det_ctr = 0;
 
     std::array<uint, 3> subdet_ctr;
     subdet_ctr.fill(0);
+
+    std::map<stv_t*, stv_t*> qubit_to_detector;
 
     std::array<stim::Circuit, 3> subcircuits;
     subcircuits.fill(stim::Circuit());
@@ -104,6 +114,7 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit, std::set<ui
             color_map[det_ctr] = i2c(color_id);
             // Modify vertex in structure graph and remove the vertex from the
             // unused set.
+            const uint mqs = measurement_queue.size();
             uint64_t offset;
             if (op.target_data.targets.size() == 1) {
                 offset = op.target_data.targets[0].data & ~stim::TARGET_RECORD_BIT;
@@ -114,11 +125,11 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit, std::set<ui
                 if (off1 < off2) {
                     offset = off1;
                     detector_to_base[det_ctr] = 
-                        detector_to_base[measurement_queue[measurement_queue.size() - off2]];
+                        detector_to_base[measurement_queue[mqs - off2].det];
                 } else {
                     offset = off2;
                     detector_to_base[det_ctr] = 
-                        detector_to_base[measurement_queue[measurement_queue.size() - off1]];
+                        detector_to_base[measurement_queue[mqs - off1].det];
                 }
             } else {
                 // Get the maximum offset.
@@ -127,13 +138,13 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit, std::set<ui
                     uint64_t off = op.target_data.targets[j].data & ~stim::TARGET_RECORD_BIT;
                     offset = off > offset ? off : offset;
                 }
-                uint64_t parent = measurement_queue[measurement_queue.size() - offset];
+                uint64_t parent = measurement_queue[mqs - offset].det;
                 detector_to_base[det_ctr] = detector_to_base[parent];
                 det_ctr++;
                 return;
             }
             // Modify existing vertex and update its id.
-            uint64_t q = measurement_queue[measurement_queue.size() - offset];
+            uint64_t q = measurement_queue[mqs - offset].det;
             stv_t* v = lattice_structure.get_vertex(q);
             if (op.target_data.targets.size() == 1) {
                 cdet_t cd = std::make_pair(det_ctr, i2c(color_id));
@@ -143,21 +154,33 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit, std::set<ui
                 w->qubit = q;
                 w->detector = cd;
                 lattice_structure.add_vertex(w);
-                for (auto u : lattice_structure.get_neighbors(v)) {
+                for (auto u : measurement_queue[mqs - offset].neighbors) {
+                    if (qubit_to_detector.count(u)) u = qubit_to_detector[u];
                     ste_t* e = new ste_t;
                     e->src = w;
                     e->dst = u;
                     e->is_undirected = true;
                     lattice_structure.add_edge(e);
                 }
+                qubit_to_detector[v] = w;
             }
-            measurement_queue[measurement_queue.size() - offset] = det_ctr;
+            measurement_queue[mqs - offset].det = det_ctr;
             det_ctr++;
             return;
         } else if (gate_name == "M" || gate_name == "MR") {
             const auto& targets = op.target_data.targets;
             for (uint i = 0; i < targets.size(); i++) {
-                measurement_queue.push_back(targets[i].data); 
+                auto v = lattice_structure.get_vertex(targets[i].data);
+                measurement_queue.push_back({ targets[i].data, lattice_structure.get_neighbors(v) }); 
+            }
+        } else if (gate_name == "R") {
+            const auto& targets = op.target_data.targets;
+            for (uint i = 0; i < targets.size(); i++) {
+                auto v = lattice_structure.get_vertex(targets[i].data);
+                for (auto w : lattice_structure.get_neighbors(v)) {
+                    auto e = lattice_structure.get_edge(v, w);
+                    lattice_structure.delete_edge(e);
+                }
             }
         } else if (gate_name == "CX") {
             const auto& targets = op.target_data.targets;
@@ -192,7 +215,10 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit, std::set<ui
         if (unused.count(v) || flag_list.count(v->detector.first))  continue;
         for (auto w : lattice_structure.get_neighbors(v)) {
             if (unused.count(w) || !flag_list.count(w->detector.first)) continue;
-            inherit_neighbors(lattice_structure, v, w, [&] (stv_t* u) {
+            inherit_neighbors(lattice_structure, v, w, 
+            [&] (stv_t* u) {
+                return unused.count(u) || flag_list.count(u->detector.first);
+            }, [&] (stv_t* u) {
                 return !unused.count(u) && flag_list.count(u->detector.first);
             });
         }
@@ -225,12 +251,12 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit, std::set<ui
     }
 
     for (auto v : lattice_structure.get_vertices()) {
-        if (unused.count(v))    continue;
+        if (unused.count(v) || flag_list.count(v->detector.first))  continue;
         if (v->detector.first == BOUNDARY_INDEX)    continue;
         auto tmp = lattice_structure.get_neighbors(v);
         std::set<stv_t*> vadj(tmp.begin(), tmp.end());
         for (auto w : lattice_structure.get_vertices()) {
-            if (unused.count(w))    continue;
+            if (unused.count(w) || flag_list.count(w->detector.first))  continue;
             if (v == w || lattice_structure.contains(v, w)) continue;
             if (w->detector.first == BOUNDARY_INDEX)    continue;
             tmp = lattice_structure.get_neighbors(w);
@@ -302,10 +328,6 @@ RestrictionDecoder::RestrictionDecoder(const stim::Circuit& circuit, std::set<ui
             std::cout << " " << cd2.first << "(" << c2i(cd2.second) << ")";
         }
         std::cout << "\n";
-    }
-    std::cout << "***Detectors to base:\n";
-    for (auto pair : detector_to_base) {
-        std::cout << "\t" << pair.first << " ---> " << pair.second << "\n";
     }
 #endif
 
@@ -818,15 +840,6 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
         std::cout << "\t\t" << cdx.first << "(" << c2i(cdx.second) << ") <----> "
             << cdy.first << "(" << c2i(cdy.second) << ")";
 #endif
-        cdx.first = detector_to_base[cdx.first];
-        cdy.first = detector_to_base[cdy.first];
-#ifdef DEBUG
-        std::cout << "\tnow: " << cdx.first << "(" << c2i(cdx.second) << ") <----> "
-            << cdy.first << "(" << c2i(cdy.second) << ")\n";
-#endif
-
-        if (cdx == cdy) continue;
-
         __COLOR restricted_color = std::get<2>(mate);
         if (restricted_color == cc_color)   continue;
 
@@ -873,18 +886,15 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
                         b2c = i2c(option2);
                     }
                     cdet_t cb2 = std::make_pair(BOUNDARY_INDEX, b2c);
-                    // Get common neighbor between the two boundaries.
-                    auto common = get_common_neighbors(cb1, cb2);
-                    cdet_t idet = *common.begin();
 #ifdef DEBUG
                     std::cout << " [ " << cd1.first << "(" << c2i(cd1.second) << ") , "
                             << cb2.first << "(" << c2i(cb2.second) << ") , "
-//                          << idet.first << "(" << c2i(idet.second) << ") , "
                             << cb1.first << "(" << c2i(cb1.second) << ") ]";
 #endif
+                    cd1.first = detector_to_base[cd1.first];
+                    // As cb1 and cb2 are boundaries, there is not need to map them
+                    // to a base detector.
                     xor_pair_into(edges, std::make_pair(cd1, cb2));
-//                  xor_pair_into(edges, std::make_pair(cb2, idet));
-//                  xor_pair_into(edges, std::make_pair(idet, cb1));
                     xor_pair_into(edges, std::make_pair(cb2, cb1));
                     continue;
                 }
@@ -893,6 +903,11 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
                 c2 = color_map[d2];
             }
             cdet_t cd2 = std::make_pair(d2, c2);
+            // Convert to base detectors.
+            cd1.first = detector_to_base[cd1.first];
+            cd2.first = detector_to_base[cd2.first];
+            if (cd1 == cd2) continue;   // This will happen on a measurement error.
+
             cdetpair_t e = std::make_pair(cd1, cd2);
 #ifdef DEBUG
             std::cout << " [ " << cd1.first << "(" << c2i(cd1.second) << ") , "
