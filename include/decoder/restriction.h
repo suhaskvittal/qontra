@@ -91,17 +91,15 @@ struct ste_t : graph::base::edge_t {};
 
 typedef graph::Graph<stv_t, ste_t>  StructureGraph;
 
-void    inherit_neighbors(StructureGraph&, stv_t*, stv_t*, 
-                        std::function<bool(stv_t*)> when_to_add,
-                        std::function<bool(stv_t*)> when_to_call);
-
 }   // restriction
 
 #define CDET_TO_ID(x)   (((x).first) | (((uint64_t)(x).second + 1) << 48))
 
 class RestrictionDecoder : public Decoder {
 public:
-    RestrictionDecoder(const stim::Circuit&, std::set<uint> flag_list);
+    RestrictionDecoder(const stim::Circuit&, 
+                        restriction::StructureGraph*,
+                        const std::map<uint64_t, uint64_t>& detector_to_base);
 
     ~RestrictionDecoder(void) {
         for (auto dec : rlatt_dec)  delete dec;
@@ -124,7 +122,7 @@ private:
     stim::simd_bits             
         get_correction_for_face(restriction::cdet_t, restriction::cdet_t, restriction::cdet_t);
 
-    restriction::StructureGraph     lattice_structure;
+    restriction::StructureGraph*    lattice_structure;
     std::array<std::set<restriction::cdet_t>, 3>
                                     boundary_adjacent;
 

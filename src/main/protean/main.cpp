@@ -103,10 +103,10 @@ help_exit:
         // Syndrome extraction
         //
         uint mctr = 0;
-        std::vector<std::pair<tanner::vertex_t*, bool>> meas_order;
+        typedef std::tuple<tanner::vertex_t*, tanner::vertex_t*, bool>  meas_data_t;
+        std::vector<meas_data_t> meas_order;
         // We also want to track colors.
         std::map<uint, uint> measurement_to_color_id;
-        std::set<uint> flag_list;
         // Create the main body.
         stim::Circuit body;
         fp_t round_time = 0.0;
@@ -116,6 +116,9 @@ help_exit:
                 auto inst = *(v->inst_p);
                 if (inst.name == "mnrc") {
                     auto tv = tanner_graph->get_vertex(inst.metadata.owning_check_id);
+                    auto tg = inst.metadata.is_for_flag ? 
+                                    tanner_graph->get_vertex(inst.metadata.gauge_check_id)
+                                    : nullptr;
                     // Convert this to an mrc instruction.
                     for (uint i = 0; i < inst.operands.size(); i++) {
                         uint j = inst.operands[i];
@@ -131,7 +134,7 @@ help_exit:
                     }
                     mctr += inst.get_qubit_operands().size();
                     // Update the measurement order.
-                    meas_order.push_back(std::make_pair(tv, inst.metadata.is_for_flag)); 
+                    meas_order.push_back(std::make_tuple(tv, tg, inst.metadata.is_for_flag)); 
                 } else if (inst.name == "h") {
                     for (uint i : inst.operands) {
                         body.append_op("H", {i});
@@ -168,7 +171,15 @@ help_exit:
             }    
             round_time += layer_time;
         }
+        std::set<tanner::vertex_t*> used_checks;
+        std::map<tanner::vertex_t*, uint64_t> check_to_base;
+        std::map<tanner::vertex_t*, __COLOR> check_to_color;
+        std::map<tanner::vertex_t*, std::vector<uint64_t>> check_to_gauge_base;
+        std::map<uint64_t, __COLOR> gauge_to_color;
+
+        std::map<uint64_t, uint64_t> detector_to_base;
         uint ectr = 0;
+        uint64_t detectors_per_round = 0;
         for (uint r = 0; r < rounds; r++) {
             // Add detection events.
             for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
@@ -184,8 +195,8 @@ help_exit:
             }
             circuit += body;
             for (uint i = 0; i < meas_order.size(); i++) {
-                auto tv = meas_order[i].first;
-                bool is_for_flag = meas_order[i].second;
+                auto tv = std::get<0>(meas_order[i]);
+                bool is_for_flag = std::get<2>(meas_order[i]);
                 if ((tv->qubit_type == tanner::vertex_t::XPARITY) ^ is_for_flag) continue;
                 if (r == 0) {
                     std::cout << "(r = " << r << ") M"
@@ -193,15 +204,28 @@ help_exit:
                             << (tv->id & 255) << "("
                             << is_for_flag << ") ---> E" << ectr << "\n";
                 }
-
                 uint det1 = (mctr - i) | stim::TARGET_RECORD_BIT;
                 if (r == 0) {
                     circuit.append_op("DETECTOR", {det1}, measurement_to_color_id[i]);
+                    if (!is_for_flag) {
+                        check_to_base[tv] = ectr;
+                    }
+                    detector_to_base[ectr] = ectr;
+                    detectors_per_round++;
                 } else {
                     uint det2 = (mctr - i + meas_order.size()) | stim::TARGET_RECORD_BIT;
                     circuit.append_op("DETECTOR", {det1, det2}, measurement_to_color_id[i]);
+                    detector_to_base[ectr] = detector_to_base[ectr - detectors_per_round];
                 }
-                if (is_for_flag)    flag_list.insert(ectr);
+                if (r == 0) {
+                    if (is_for_flag) {
+                        gauge_to_color[ectr] = restriction::i2c(measurement_to_color_id[i]);  
+                        check_to_gauge_base[tv].push_back(ectr);
+                    } else {
+                        used_checks.insert(tv);
+                        check_to_color[tv] = restriction::i2c(measurement_to_color_id[i]);
+                    }
+                }
                 ectr++;
             }
         }
@@ -225,8 +249,8 @@ help_exit:
         }
         // Add detection events for measurement errors.
         for (uint i = 0; i < meas_order.size(); i++) {
-            auto tv = meas_order[i].first;
-            bool is_for_flag = meas_order[i].second;
+            auto tv = std::get<0>(meas_order[i]);
+            bool is_for_flag = std::get<1>(meas_order[i]);
             if (tv->qubit_type == tanner::vertex_t::XPARITY || is_for_flag) {
                 continue;
             }
@@ -238,20 +262,122 @@ help_exit:
                 detectors.push_back((data_qubits.size() - j) | stim::TARGET_RECORD_BIT);
             }
             circuit.append_op("DETECTOR", detectors, measurement_to_color_id[i]);
+            detector_to_base[ectr++] = check_to_base[tv];
         }
         circuit.append_op("OBSERVABLE_INCLUDE", epilogue_obs_operands, 0);
-        /*
-        for (uint i = 0; i < epilogue_obs_operands.size(); i++) {
-            circuit.append_op("OBSERVABLE_INCLUDE", {epilogue_obs_operands[i]}, i+1);
-        }
-        */
+        // Write error model to a file for logging.
         std::ofstream error_model_out(folder_out 
                                         + "/error_model_r" + std::to_string(run) +".stim");
         write_ir_to_folder(ir, std::string("tmp/round_") + std::to_string(run));
         error_model_out << circuit << "\n";
-
         // Build a decoder, and then benchmark it with a memory experiment.
-        RestrictionDecoder dec(circuit, flag_list);
+        // 
+        // Build structure graph for restriction decoder.
+        restriction::StructureGraph stgr;
+        // Build boundary first.
+        std::vector<restriction::stv_t*> boundary_vertices;
+        for (uint i = 0; i < 3; i++) {
+            auto bv = new restriction::stv_t;
+            restriction::cdet_t boundary = std::make_pair(BOUNDARY_INDEX, restriction::i2c(i));
+            bv->id = CDET_TO_ID(boundary);
+            bv->detector = boundary;
+
+            boundary_vertices.push_back(bv);
+            stgr.add_vertex(bv);
+        }
+        for (uint i = 0; i < 3; i++) {
+            for (uint j = i+1; j < 3; j++) {
+                auto be = new restriction::ste_t;
+                be->src = boundary_vertices[i];
+                be->dst = boundary_vertices[j];
+                be->is_undirected = true;
+                stgr.add_edge(be);
+            }
+        }
+        for (auto tx : used_checks) {
+            uint64_t d = check_to_base[tx];
+            __COLOR c = check_to_color[tx];
+            restriction::cdet_t cd = std::make_pair(d, c);
+            auto v = new restriction::stv_t;
+            v->id = CDET_TO_ID(cd);
+            v->detector = cd;
+            stgr.add_vertex(v);
+            // Add vertices for the check's gauges and connect them to the check.
+            for (auto dg : check_to_gauge_base[tx]) {
+                __COLOR cg = gauge_to_color[dg];
+                auto cdg = std::make_pair(dg, cg);
+                auto w = new restriction::stv_t;
+                w->id = CDET_TO_ID(cdg);
+                w->detector = cdg;
+                stgr.add_vertex(w);
+                auto e = new restriction::ste_t;
+                e->src = v;
+                e->dst = w;
+                stgr.add_edge(e);
+            }
+        }
+            
+        for (auto tx : used_checks) {
+            restriction::cdet_t cdv = std::make_pair(
+                                        check_to_base[tx], check_to_color[tx]);
+            auto v = stgr.get_vertex(CDET_TO_ID(cdv));
+            
+            auto tx_neighbors = tanner_graph->get_neighbors(tx);
+
+            std::array<uint, 3> neighboring_checks;
+            neighboring_checks.fill(0);
+            for (auto ty : used_checks) {
+                if (tx == ty) continue;
+                auto ty_neighbors = tanner_graph->get_neighbors(ty);
+                for (auto td : tx_neighbors) {
+                    if (std::find(ty_neighbors.begin(), ty_neighbors.end(), td)
+                            != ty_neighbors.end())
+                    {
+                        goto found_common_neighbor;   
+                    }
+                }
+                continue;
+found_common_neighbor:
+                restriction::cdet_t cdw = std::make_pair(
+                                            check_to_base[ty], check_to_color[ty]);
+                auto w = stgr.get_vertex(CDET_TO_ID(cdw));
+                auto e = new restriction::ste_t;
+                e->src = v;
+                e->dst = w;
+                e->is_undirected = true;
+                stgr.add_edge(e);
+
+                if (ty->qubit_type != tanner::vertex_t::GAUGE) {
+                    neighboring_checks[restriction::c2i(w->detector.second)]++;
+                }
+            }
+            // Add boundary vertices if necessary.
+            if (tx->qubit_type == tanner::vertex_t::GAUGE)  continue;
+            const uint sum_neighboring_checks = neighboring_checks[0]
+                                                + neighboring_checks[1];
+                                                + neighboring_checks[2];
+            std::cout << "neighbors of " << v->detector.first << ": " 
+                    << tx_neighbors.size() << "\n";
+            const uint h = tx_neighbors.size() >> 1;
+            if (sum_neighboring_checks < tx_neighbors.size()) {
+                for (uint i = 0; i < 3; i++) {
+                    std::cout << "\tneighbors(" << i << "): " << neighboring_checks[i] << "\n";
+                    if (i == restriction::c2i(v->detector.second))  continue;
+                    if (neighboring_checks[i] < h) {
+                        auto b = boundary_vertices[i];
+                        auto e = new restriction::ste_t;
+                        e->src = v;
+                        e->dst = b;
+                        e->is_undirected = true;
+                        stgr.add_edge(e);
+                    }
+                }
+            }
+        }
+
+
+        // Run the memory experiment.
+        RestrictionDecoder dec(circuit, &stgr, detector_to_base);
         experiments::memory_params_t params;
         params.shots = shots;
         auto mexp_res = memory_experiment(&dec, params);
