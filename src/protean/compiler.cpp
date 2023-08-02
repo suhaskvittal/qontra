@@ -765,6 +765,11 @@ Compiler::xform_schedule(ir_t* curr_ir) {
                 }
                 if (inst.name == "mnrc") {
                     new_inst.metadata.owning_check_id = tcheck->id;
+                    bool is_x_operator = tcheck->qubit_type == tanner::vertex_t::XPARITY;
+                    for (auto tv : tanner_graph->get_neighbors(tcheck)) {
+                        new_inst.metadata.operators.push_back(
+                                std::make_pair(tv->id, is_x_operator));
+                    }
                 }
                 body.push_back(new_inst);
             }
@@ -780,16 +785,21 @@ Compiler::xform_schedule(ir_t* curr_ir) {
             // Fill out metadata for measurement.
             meas.metadata.owning_check_id = tcheck->id;
             meas.metadata.is_for_flag = true;
-            // Figure out which gauge this is.
-            auto pred = tanner_graph->get_predecessors(tcheck);
+            
+            auto tcheck_neighbors = tanner_graph->get_neighbors(tcheck);
             for (auto tx : curr_ir->qubit_to_roles[px]) {
-                auto it = std::find(pred.begin(), pred.end(), tx);
-                if (it != pred.end()) {
-                    meas.metadata.gauge_check_id = (*it)->id;
-                    break;
+                auto adj = tanner_graph->get_neighbors(tx);
+                for (auto td : tcheck_neighbors) {
+                    if (std::find(adj.begin(), adj.end(), td) != adj.end()) {
+                        // Note that the flag qubit attempts to detect errors
+                        // that commute through the check.
+                        bool is_x_operator = tcheck->qubit_type != tanner::vertex_t::XPARITY;
+                        meas.metadata.operators.push_back(
+                                std::make_pair(td->id, is_x_operator));
+                    }
                 }
             }
-
+            
             Instruction reset = {"reset", {pv_to_qubitno[px]}};
             epilogue.push_back(meas);
             epilogue.push_back(reset);

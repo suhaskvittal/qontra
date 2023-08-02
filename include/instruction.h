@@ -115,8 +115,10 @@ struct Instruction {
         uint64_t    owning_check_id = 0;    // The id of the tanner graph vertex
                                             // for which this Instruction is executing
                                             // the check.
-        uint64_t    gauge_check_id = 0;     // Id of the tanner graph vertex's gauge qubit.
         bool        is_for_flag = false;
+
+        std::vector<std::pair<uint64_t, bool>>  operators;  // i.e. X1X2X3X4 would be 
+                                                            // (1, true), (2, true), etc.
     } metadata;
 
     std::vector<uint>   get_qubit_operands(void) const;

@@ -11,6 +11,7 @@
 #include "decoder/mwpm.h"
 #include "defs.h"
 #include "graph/graph.h"
+#include "graph/algorithms/distance.h"
 
 #include <deque>
 #include <set>
@@ -85,11 +86,13 @@ xor_pair_into(std::set<cdetpair_t>& s, cdetpair_t x) {
 struct stv_t : graph::base::vertex_t {
     uint    qubit;
     cdet_t  detector;
+    bool    is_flag;
 };
 
 struct ste_t : graph::base::edge_t {};
 
 typedef graph::Graph<stv_t, ste_t>  StructureGraph;
+typedef graph::distance::DistanceMatrix<stv_t, std::vector<stv_t*>>  StructureMatrix;
 
 }   // restriction
 
@@ -115,6 +118,8 @@ private:
 
     std::set<restriction::cdetpair_t>        
         get_all_edges_in_component(const restriction::component_t&);
+    std::vector<restriction::cdet_t>
+        get_detectors_between(restriction::cdet_t, restriction::cdet_t);
     std::set<restriction::cdet_t>            
         get_common_neighbors(restriction::cdet_t, restriction::cdet_t);
     std::set<restriction::cdet_t>            
@@ -123,6 +128,8 @@ private:
         get_correction_for_face(restriction::cdet_t, restriction::cdet_t, restriction::cdet_t);
 
     restriction::StructureGraph*    lattice_structure;
+    restriction::StructureMatrix    lattice_matrix;
+
     std::array<std::set<restriction::cdet_t>, 3>
                                     boundary_adjacent;
 

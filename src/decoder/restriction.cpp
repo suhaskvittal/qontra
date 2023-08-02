@@ -27,6 +27,7 @@ RestrictionDecoder::RestrictionDecoder(
         const std::map<uint64_t, uint64_t>& d2b)
     :Decoder(circuit, false),
     lattice_structure(stgr),
+    lattice_matrix(),
     boundary_adjacent(),
     rlatt_dec(),
     to_rlatt(),
@@ -34,6 +35,22 @@ RestrictionDecoder::RestrictionDecoder(
     color_map(),
     detector_to_base(d2b)
 {
+    // Build the lattice structure matrix.
+    distance::callback_t<stv_t, std::vector<stv_t*>> d_cb = 
+        [] (stv_t* v1, stv_t* v2, const std::map<stv_t*, fp_t>& dist,
+                const std::map<stv_t*, stv_t*>& pred)
+        {
+            std::vector<stv_t*> path;
+            auto curr = v2;
+            while (curr != v1) {
+                path.push_back(curr);
+                curr = pred.at(curr);
+            }
+            path.push_back(v1);
+            std::reverse(path.begin(), path.end());
+            return path;
+        };
+    lattice_matrix = distance::create_distance_matrix(stgr, unit_ewf_t<stv_t>(), d_cb);
     detector_to_base[BOUNDARY_INDEX] = BOUNDARY_INDEX;
     boundary_adjacent.fill(std::set<cdet_t>());
     // Restricted lattice order: RG (so blue is restricted), RB, GB
@@ -70,6 +87,11 @@ RestrictionDecoder::RestrictionDecoder(
             }
         }
     });
+
+    for (uint i = 0; i < 3; i++) {
+        rlatt_dec[i] = new MWPMDecoder(subcircuits[i]);
+    }
+
 #ifdef DEBUG
     std::cout << "***Lattice structure:\n";
     for (auto v : lattice_structure->get_vertices()) {
@@ -80,6 +102,20 @@ RestrictionDecoder::RestrictionDecoder(
             std::cout << " " << cd2.first << "(" << c2i(cd2.second) << ")";
         }
         std::cout << "\n";
+        if (v->is_flag) {
+            for (uint i = 0; i < 3; i++) {
+                __COLOR restricted_color = i2c(2 - i);
+                if (cd1.second == restricted_color) continue;
+                std::cout << "\tFlag detector adj " << i << ":\n";
+                DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
+                uint vdd = to_rlatt[cd1.first][i];
+                auto vv = gr.get_vertex(vdd);
+                for (auto ww : gr.get_neighbors(vv)) {
+                    uint wd = from_rlatt[std::make_pair(ww->id, i)];
+                    std::cout << "\t\t" << wd << "(" << c2i(color_map[wd]) << ")\n";
+                }
+            }
+        }
     }
 #endif
     // Check boundary adjacency.
@@ -91,10 +127,6 @@ RestrictionDecoder::RestrictionDecoder(
                 boundary_adjacent[i].insert(bw->detector);
             }
         }
-    }
-
-    for (uint i = 0; i < 3; i++) {
-        rlatt_dec[i] = new MWPMDecoder(subcircuits[i]);
     }
 }
 
@@ -609,6 +641,12 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
 #endif
             continue;
         }
+        if (cdy.first == BOUNDARY_INDEX) {
+            // If cdx is a flag qubit, then do nothing.
+            auto base = std::make_pair(detector_to_base[cdx.first], cdx.second);
+            stv_t* vx = lattice_structure->get_vertex(CDET_TO_ID(base));
+            if (vx != nullptr && vx->is_flag)    continue;
+        }
 
         uint dec_index = 2 - c2i(restricted_color);
         DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
@@ -687,6 +725,16 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
 #endif
     }
     return edges;
+}
+
+std::vector<cdet_t>
+RestrictionDecoder::get_detectors_between(cdet_t cd1, cdet_t cd2) {
+    auto v1 = lattice_structure->get_vertex(CDET_TO_ID(cd1));
+    auto v2 = lattice_structure->get_vertex(CDET_TO_ID(cd2));
+    auto path = lattice_matrix[v1][v2];
+    std::vector<cdet_t> path_w_cdet;
+    for (auto x : path) path_w_cdet.push_back(x->detector);
+    return path_w_cdet;
 }
 
 std::set<cdet_t>
