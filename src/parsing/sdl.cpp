@@ -96,11 +96,12 @@ build_schedule_graph_from_sdl(std::string filename) {
         uint32_t ch = pair.second;
         auto dep = dependences[pair.first];
         if (dep.empty())    sat_checks.push_back(ch);
-        remaining_dependences[ch] = std::set<uint32_t>();
+        remaining_dependences[pair.first] = std::set<uint32_t>();
         for (auto x : dep) {
-            remaining_dependences[ch].insert(x);
+            remaining_dependences[pair.first].insert(x);
         }
     }
+    std::map<uint64_t, sdvertex_t*> id_to_vertex;
     while (sat_checks.size()) {
         uint32_t ch = sat_checks.front();
         sat_checks.pop_front();
@@ -121,6 +122,7 @@ build_schedule_graph_from_sdl(std::string filename) {
         }
         v->sch = sch;
         graph.add_vertex(v);
+        id_to_vertex[id] = v;
         // Add an edge with the root.
         auto re = new sdedge_t;
         re->src = root;
@@ -129,8 +131,7 @@ build_schedule_graph_from_sdl(std::string filename) {
         graph.add_edge(re);
 
         for (auto d : dependences[id]) {
-            uint32_t x = id_to_check[d];
-            auto w = graph.get_vertex(x);
+            auto w = id_to_vertex[d];
             auto e = new sdedge_t;
             e->src = w;
             e->dst = v;
@@ -139,10 +140,9 @@ build_schedule_graph_from_sdl(std::string filename) {
         }
 
         for (auto d : dependents[id]) {
-            uint32_t x = id_to_check[d];
-            remaining_dependences[x].erase(ch);            
-            if (remaining_dependences[x].empty()) {
-                sat_checks.push_back(x);
+            remaining_dependences[d].erase(id);
+            if (remaining_dependences[d].empty()) {
+                sat_checks.push_back(id_to_check[d]);
             }
         }
     }

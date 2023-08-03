@@ -88,6 +88,9 @@ help_exit:
         // Define the error model here:
         //
         tables::ErrorAndTiming et;
+
+        et = et * 0.5;
+
         ErrorTable errors;
         TimeTable timing;
         tables::populate(n_qubits, errors, timing, et);
@@ -209,13 +212,14 @@ help_exit:
                 }
 
                 uint det1 = (mctr - i) | stim::TARGET_RECORD_BIT;
+                std::vector<fp_t> det_args{measurement_to_color_id[i], ectr};
                 if (r == 0) {
-                    circuit.append_op("DETECTOR", {det1}, measurement_to_color_id[i]);
+                    circuit.append_op("DETECTOR", {det1}, det_args);
                     detector_to_base[ectr] = ectr;
                     detectors_per_round++;
                 } else {
                     uint det2 = (mctr - i + meas_order.size()) | stim::TARGET_RECORD_BIT;
-                    circuit.append_op("DETECTOR", {det1, det2}, measurement_to_color_id[i]);
+                    circuit.append_op("DETECTOR", {det1, det2}, det_args);
                     detector_to_base[ectr] = detector_to_base[ectr - detectors_per_round];
                 }
                 if (r == 0) {
@@ -262,7 +266,8 @@ help_exit:
                 uint j = data_qubit_meas_order[dv];
                 detectors.push_back((data_qubits.size() - j) | stim::TARGET_RECORD_BIT);
             }
-            circuit.append_op("DETECTOR", detectors, measurement_to_color_id[i]);
+            std::vector<fp_t> det_args{measurement_to_color_id[i], ectr};
+            circuit.append_op("DETECTOR", detectors, det_args);
             detector_to_base[ectr++] = check_to_base[tv];
         }
         circuit.append_op("OBSERVABLE_INCLUDE", epilogue_obs_operands, 0);

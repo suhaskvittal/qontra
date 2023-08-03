@@ -650,23 +650,6 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
         if (detector_to_base[cdx.first] == detector_to_base[cdy.first]) continue;
 
         if (is_flag(cdx))   std::swap(cdx, cdy);
-        if (is_flag(cdy) && !is_flag(cdx)) {
-            if (flag_table.count(cdy)) {
-                cdy = flag_table[cdy];
-                flag_table.erase(cdy);
-#ifdef DEBUG
-                std::cout << "\n\t\t\tnow pairing " << "\t\t" 
-                    << cdx.first << "(" << c2i(cdx.second) << ") <----> "
-                    << cdy.first << "(" << c2i(cdy.second) << ")";
-#endif
-            } else {
-                flag_table[cdy] = cdx;
-#ifdef DEBUG
-                std::cout << "\tF\n";
-#endif
-                continue;
-            }
-        }
 
         uint dec_index = 2 - c2i(restricted_color);
         DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
@@ -675,6 +658,30 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
 
         auto vx = gr.get_vertex(ddx);
         auto vy = gr.get_vertex(ddy);
+        if (is_flag(cdy) && !is_flag(cdx)) {
+            if (gr.get_error_chain_data(vx, vy).error_chain_runs_through_boundary) {
+                cdy = std::make_pair(BOUNDARY_INDEX, 
+                                    get_remaining_color(restricted_color, cdx.second));
+#ifdef DEBUG
+                std::cout << "\t\t\tcdy is now " << BOUNDARY_INDEX << "("
+                            << c2i(cdy.second) << ").\n";
+#endif
+                vy = gr.get_vertex(BOUNDARY_INDEX);
+            } else {
+                if (flag_table.count(cdy)) {
+                    cdy = flag_table[cdy];
+                    flag_table.erase(cdy);
+#ifdef DEBUG
+                    std::cout << "\t\t\tnow pairing " << "\t\t" 
+                        << cdx.first << "(" << c2i(cdx.second) << ") <----> "
+                        << cdy.first << "(" << c2i(cdy.second) << ")";
+#endif
+                } else {
+                    flag_table[cdy] = cdx;
+                    continue;
+                }
+            }
+        }
         auto error_chain = gr.get_error_chain_data(vx, vy).error_chain;
         if (error_chain[0] == vy)   std::reverse(error_chain.begin(), error_chain.end());
         // Now, we must convert the error chain to a path of detectors.
