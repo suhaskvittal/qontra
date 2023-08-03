@@ -572,7 +572,7 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
 #ifdef DEBUG
                 std::cout << "\t\t\tnow pairing " << "\t\t" 
                     << cdx.first << "(" << c2i(cdx.second) << ") <----> "
-                    << cdy.first << "(" << c2i(cdy.second) << ")";
+                    << cdy.first << "(" << c2i(cdy.second) << ")\n";
 #endif
             } else {
                 flag_table[cdy] = cdx;
@@ -590,61 +590,65 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
         auto error_chain = gr.get_error_chain_data(vx, vy).error_chain;
         if (error_chain[0] == vy)   std::reverse(error_chain.begin(), error_chain.end());
         // Now, we must convert the error chain to a path of detectors.
-        std::vector<cdet_t> path;
+#ifdef DEBUG
+        std::cout << "\t\t\tPath:";
+#endif
+        __COLOR prev_boundary_color = __COLOR::none;
         for (uint i = 1; i < error_chain.size(); i++) {
             auto v1 = error_chain[i-1];
             auto v2 = error_chain[i];
 
             uint64_t d1 = v1->id;
             uint64_t d2 = v2->id;
-            bool reversed_d1_d2 = false;
-            if (d1 == BOUNDARY_INDEX) {
-                reversed_d1_d2 = true;
-                std::swap(d1, d2);
-            }
+            if (d1 == BOUNDARY_INDEX)   std::swap(d1, d2);
             d1 = detector_to_base[from_rlatt[std::make_pair(d1, dec_index)]];
             __COLOR c1 = color_map[d1];
             cdet_t cd1 = std::make_pair(d1, c1);
             __COLOR c2;
             if (d2 == BOUNDARY_INDEX) {
                 c2 = get_remaining_color(c1, restricted_color);
+                cdet_t cb1 = std::make_pair(d2, c2);
+                if (prev_boundary_color != __COLOR::none && prev_boundary_color != c2) {
+                    cdet_t tmp = std::make_pair(BOUNDARY_INDEX, prev_boundary_color);
+                    insert_pair_into(edges, std::make_pair(cb1, tmp));
+                }
+                prev_boundary_color = c2;
+                // Check if d1 is even adjacent to this boundary.
+                if (!boundary_adjacent[c2i(c2)].count(cd1)) {
+                    // Then, this path must pass through another boundary.
+                    int option1 = (c2i(c2) + 1) % 3;
+                    int option2 = (c2i(c2) + 2) % 3;
+                    __COLOR b2c;
+                    if (boundary_adjacent[option1].count(cd1)) {
+                        b2c = i2c(option1);
+                    } else {
+                        b2c = i2c(option2);
+                    }
+                    cdet_t cb2 = std::make_pair(BOUNDARY_INDEX, b2c);
+#ifdef DEBUG
+                    std::cout << " [ " << cd1.first << "(" << c2i(cd1.second) << ") , "
+                            << cb2.first << "(" << c2i(cb2.second) << ") , "
+                            << cb1.first << "(" << c2i(cb1.second) << ") ]";
+#endif
+                    xor_pair_into(edges, std::make_pair(cd1, cb2));
+                    xor_pair_into(edges, std::make_pair(cb2, cb1));
+                    continue;
+                }
             } else {
                 d2 = detector_to_base[from_rlatt[std::make_pair(d2, dec_index)]];
                 c2 = color_map[d2];
             }
             cdet_t cd2 = std::make_pair(d2, c2);
-            // Convert to base detectors.
-            cd1.first = detector_to_base[cd1.first];
-            cd2.first = detector_to_base[cd2.first];
-            if (reversed_d1_d2) std::swap(cd1, cd2);
-            auto btwn = get_detectors_between(cd1, cd2);
-            if (btwn[0] == cd2) std::reverse(btwn.begin(), btwn.end());
+            cdetpair_t e = std::make_pair(cd1, cd2);
 #ifdef DEBUG
-            std::cout << "\t\t\tSubpath:";
+            std::cout << " [ " << cd1.first << "(" << c2i(cd1.second) << ") , "
+                    << cd2.first << "(" << c2i(cd2.second) << ") ]";
 #endif
-            for (auto x : btwn) {
-#ifdef DEBUG
-                std::cout << " " << x.first << "(" << c2i(x.second) << ")";
-#endif
-                if (path.size() > 0 && path.back() == x)   continue;
-                path.push_back(x);
-            }
-#ifdef DEBUG
-            std::cout << "\n";
-#endif
+            xor_pair_into(edges, e);
         }
 #ifdef DEBUG
-        std::cout << "\t\t\tPath:";
-        for (auto x : path) {
-            std::cout << " " << x.first << "(" << c2i(x.second) << ")";
-        }
         std::cout << "\n";
 #endif
-        for (uint i = 1; i < path.size(); i++) {
-            cdet_t cd1 = path[i-1];
-            cdet_t cd2 = path[i];
-            xor_pair_into(edges, std::make_pair(cd1, cd2));
-        }
     }
     return edges;
 }
