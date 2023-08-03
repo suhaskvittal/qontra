@@ -77,7 +77,7 @@ set_all_2q(uint n_qubits,
 }
 
 struct ErrorAndTiming {
-    fp_t e_g1q = 1e-5;
+    fp_t e_g1q = 1e-3;
     fp_t e_g2q = 1e-3;
     fp_t e_ro = 1e-3;
     fp_t t_g1q = 30;    // in nanoseconds.

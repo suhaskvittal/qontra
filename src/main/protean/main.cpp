@@ -92,6 +92,7 @@ help_exit:
         tables::ErrorAndTiming et;
 
         et = et * p*1000.0;
+        et.e_g2q = 0;
 
         ErrorTable errors;
         TimeTable timing;
@@ -190,13 +191,15 @@ help_exit:
             for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
                 auto pv = arch->get_vertex(tv->id);
                 uint i = ir->qubit_labels[pv];
-
+                /*
                 fp_t e1 = (1 - exp(-round_time/timing.t1[i])) * 0.25;
                 fp_t e2 = (1 - exp(-round_time/timing.t2[i])) * 0.5 
                             - (1 - exp(-round_time/timing.t1[i])) * 0.25;
                 circuit.append_op("X_ERROR", {i}, e1);
                 circuit.append_op("Y_ERROR", {i}, e1);
                 circuit.append_op("Z_ERROR", {i}, e2);
+                */
+                circuit.append_op("DEPOLARIZE1", {i}, p);
             }
             circuit += body;
             for (uint i = 0; i < meas_order.size(); i++) {
