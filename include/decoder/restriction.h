@@ -116,6 +116,8 @@ private:
     // restricts the passed in color.
     Decoder::result_t   decode_restricted_lattice(const std::vector<uint>&, __COLOR);
 
+    bool
+        is_flag(restriction::cdet_t);
     std::set<restriction::cdetpair_t>        
         get_all_edges_in_component(const restriction::component_t&);
     std::vector<restriction::cdet_t>
