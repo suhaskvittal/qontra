@@ -27,7 +27,7 @@ namespace decoding {
 #define N_COORD    16
 
 struct vertex_t : base::vertex_t {
-    enum class Color { none, red, blue, green };
+    enum class Color { none, red, blue, green, notred, notblue, notgreen };
 
     std::array<fp_t, N_COORD>    coords;
     Color                   color;

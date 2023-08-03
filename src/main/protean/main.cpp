@@ -128,8 +128,7 @@ help_exit:
                         body.append_op("M", {j});
                         // If this is a gauge qubit, then color it differently than
                         // tv.
-                        measurement_to_color_id[mctr+i] = 
-                            (tv->id % 3 + inst.metadata.is_for_flag) % 3;
+                        measurement_to_color_id[mctr+i] = (tv->id % 3) % 3;
 
                         fp_t t = timing.op1q["m"][j];
                         if (t > layer_time) layer_time = t;
@@ -213,10 +212,14 @@ help_exit:
 
                 uint det1 = (mctr - i) | stim::TARGET_RECORD_BIT;
                 std::vector<fp_t> det_args{measurement_to_color_id[i], ectr};
-                if (r == 0) {
+                if (r == 0 || is_for_flag) {
                     circuit.append_op("DETECTOR", {det1}, det_args);
-                    detector_to_base[ectr] = ectr;
-                    detectors_per_round++;
+                    if (r == 0) {
+                        detector_to_base[ectr] = ectr;
+                        detectors_per_round++;
+                    } else {
+                        detector_to_base[ectr] = detector_to_base[ectr - detectors_per_round];
+                    }
                 } else {
                     uint det2 = (mctr - i + meas_order.size()) | stim::TARGET_RECORD_BIT;
                     circuit.append_op("DETECTOR", {det1, det2}, det_args);

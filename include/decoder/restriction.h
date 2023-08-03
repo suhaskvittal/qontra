@@ -13,6 +13,7 @@
 #include "graph/graph.h"
 #include "graph/algorithms/distance.h"
 
+#include <bitset>
 #include <deque>
 #include <set>
 #include <tuple>
@@ -30,6 +31,9 @@ inline int c2i(__COLOR x) {
     if (x == __COLOR::red)      return 0;
     if (x == __COLOR::green)    return 1;
     if (x == __COLOR::blue)     return 2;
+    if (x == __COLOR::notred)   return 3;
+    if (x == __COLOR::notgreen) return 4;
+    if (x == __COLOR::notblue)  return 5;
     return -1;
 }
 
@@ -37,6 +41,9 @@ inline __COLOR i2c(int x) {
     if (x == 0) return __COLOR::red;
     if (x == 1) return __COLOR::green;
     if (x == 2) return __COLOR::blue;
+    if (x == 3) return __COLOR::notred;
+    if (x == 4) return __COLOR::notgreen;
+    if (x == 5) return __COLOR::notblue;
     return __COLOR::none;
 }
 

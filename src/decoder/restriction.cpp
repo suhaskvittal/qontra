@@ -132,7 +132,15 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #ifdef DEBUG
     std::cout << "======================================\n";
     std::cout << "Detectors:";
-    for (auto x : detectors) std::cout << " " << x << "(" << c2i(color_map[x]) << ")";
+    std::vector<uint> no_flag_detectors;
+    for (auto x : detectors) {
+        std::cout << " " << x << "(" << c2i(color_map[x]) << ")";
+        cdet_t base = std::make_pair(detector_to_base[x], color_map[x]);
+        stv_t* v = lattice_structure->get_vertex(CDET_TO_ID(base));
+        if (v->is_flag) std::cout << "(F)";
+        else            no_flag_detectors.push_back(x);
+    }
+    detectors = no_flag_detectors;
     std::cout << "\n";
 #endif
 
@@ -451,99 +459,6 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 }
             }
         }
-        /*
-        for (cdet_t cdx : vertices_in_flips) {
-#ifdef DEBUG
-            std::cout << "\t\tChecking vertex " << cdx.first << "(" << c2i(cdx.second) << "):\n";
-#endif
-            // Get all the faces incident to cdx.
-            typedef std::tuple<cdet_t, cdet_t, cdet_t>  face_t;
-            std::set<face_t> all_faces;
-            auto neighbors = get_neighbors(cdx);
-#ifdef DEBUG
-            std::cout << "\t\t\tneighbors:";
-            for (auto x : neighbors) std::cout << " " << x.first << "(" << c2i(x.second) << ")";
-            std::cout << "\n";
-#endif
-            while (incident_vertices[cdx].size() && neighbors.size()) {
-                auto cdy = *incident_vertices[cdx].begin();
-                incident_vertices[cdx].erase(cdy);
-
-                bool valid = false;
-                stim::simd_bits local_corr(n_observables);
-                local_corr.clear();
-#ifdef DEBUG
-                std::cout << "\t\t\tRotating around face from " << cdy.first << "("
-                    << c2i(cdy.second) << "):\n";
-#endif
-                while (neighbors.size()) {
-                    neighbors.erase(cdy);
-                    auto n = get_neighbors(cdy);
-                    std::set<cdet_t> common;
-                    std::set_intersection(neighbors.begin(), neighbors.end(),
-                                            n.begin(), n.end(),
-                                            std::inserter(common, common.begin()));
-                    if (common.empty()) break;
-#ifdef DEBUG
-                    std::cout << "\t\t\t\tcommon with " << cdy.first 
-                                << "(" << c2i(cdy.second) << "):";
-                    for (auto x: common) std::cout << " " << x.first << "(" << c2i(x.second) << ")";
-                    std::cout << "\n";
-#endif
-                    bool found_incident = false;
-                    cdet_t cdz;
-                    cdetpair_t e_xy, e_xz, e_yz;
-                    // Go check if there is an incident vertex in common. If so, set cdz to 
-                    // that vertex.
-                    for (auto it = common.begin(); it != common.end(); it++) {
-                        if (incident_vertices[cdx].count(*it)) {
-                            cdz = *it;
-                            found_incident = true;
-                            break;
-                        }
-                    }
-                    if (!found_incident) {
-                        for (auto it = common.begin(); it != common.end(); it++) {
-                            cdz = *it;
-                            e_xy = std::make_pair(cdx, cdy);
-                            e_xz = std::make_pair(cdx, cdz);
-                            e_yz = std::make_pair(cdy, cdz);
-                            if (!pair_is_in(in_face, e_xy)
-                                    && !pair_is_in(in_face, e_xz)
-                                    && !pair_is_in(in_face, e_yz)) 
-                            {
-                                goto cdz_is_valid;
-                            }
-                        }
-                        break;
-                    }
-cdz_is_valid:
-                    local_corr ^= get_correction_for_face(cdx, cdy, cdz);
-                    if (pair_is_in(flipped_edges, e_xy)) {
-                        insert_pair_into(in_face, e_xy);
-                    }
-                    if (pair_is_in(flipped_edges, e_xz)) {
-                        insert_pair_into(in_face, e_xz);
-                    }
-                    if (pair_is_in(flipped_edges, e_yz)) {
-                        insert_pair_into(in_face, e_yz);
-                    }
-                    if (found_incident) {
-                        valid = true;
-                        incident_vertices[cdx].erase(cdz);
-#ifdef DEBUG
-                        std::cout << "\t\t\t\tfound incident " << cdz.first << "("
-                                    << c2i(cdz.second) << ")\n";
-#endif
-                        break;
-                    }
-                    cdy = cdz;
-                }
-                if (valid)  corr ^= local_corr;
-                else        break;
-            }
-        }
-        */
     }
 
 #ifdef DEBUG
@@ -650,6 +565,20 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
         if (detector_to_base[cdx.first] == detector_to_base[cdy.first]) continue;
 
         if (is_flag(cdx))   std::swap(cdx, cdy);
+        if (is_flag(cdy) && !is_flag(cdx)) {
+            if (flag_table.count(cdy)) {
+                cdy = flag_table[cdy];
+                flag_table.erase(cdy);
+#ifdef DEBUG
+                std::cout << "\t\t\tnow pairing " << "\t\t" 
+                    << cdx.first << "(" << c2i(cdx.second) << ") <----> "
+                    << cdy.first << "(" << c2i(cdy.second) << ")";
+#endif
+            } else {
+                flag_table[cdy] = cdx;
+                continue;
+            }
+        }
 
         uint dec_index = 2 - c2i(restricted_color);
         DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
@@ -658,30 +587,6 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
 
         auto vx = gr.get_vertex(ddx);
         auto vy = gr.get_vertex(ddy);
-        if (is_flag(cdy) && !is_flag(cdx)) {
-            if (gr.get_error_chain_data(vx, vy).error_chain_runs_through_boundary) {
-                cdy = std::make_pair(BOUNDARY_INDEX, 
-                                    get_remaining_color(restricted_color, cdx.second));
-#ifdef DEBUG
-                std::cout << "\t\t\tcdy is now " << BOUNDARY_INDEX << "("
-                            << c2i(cdy.second) << ").\n";
-#endif
-                vy = gr.get_vertex(BOUNDARY_INDEX);
-            } else {
-                if (flag_table.count(cdy)) {
-                    cdy = flag_table[cdy];
-                    flag_table.erase(cdy);
-#ifdef DEBUG
-                    std::cout << "\t\t\tnow pairing " << "\t\t" 
-                        << cdx.first << "(" << c2i(cdx.second) << ") <----> "
-                        << cdy.first << "(" << c2i(cdy.second) << ")";
-#endif
-                } else {
-                    flag_table[cdy] = cdx;
-                    continue;
-                }
-            }
-        }
         auto error_chain = gr.get_error_chain_data(vx, vy).error_chain;
         if (error_chain[0] == vy)   std::reverse(error_chain.begin(), error_chain.end());
         // Now, we must convert the error chain to a path of detectors.
@@ -775,6 +680,7 @@ RestrictionDecoder::get_neighbors(cdet_t cd) {
     std::set<cdet_t> neighbors;
     stv_t* v = lattice_structure->get_vertex(CDET_TO_ID(cd));
     for (auto w : lattice_structure->get_neighbors(v)) {
+        if (w->is_flag) continue;
         // Filter out neighbors that do not affect the logical state.
         cdet_t cw = w->detector;
         __COLOR restricted_color = get_remaining_color(cd.second, cw.second);
