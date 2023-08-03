@@ -23,8 +23,10 @@ using namespace restriction;
 
 RestrictionDecoder::RestrictionDecoder(
         const stim::Circuit& circuit,
+        const uint detectors_per_round,
         StructureGraph* stgr, 
-        const std::map<uint64_t, uint64_t>& d2b)
+        const std::map<uint64_t, uint64_t>& d2b,
+        const std::map<uint64_t, uint64_t>& f2o)
     :Decoder(circuit, false),
     lattice_structure(stgr),
     lattice_matrix(),
@@ -33,7 +35,9 @@ RestrictionDecoder::RestrictionDecoder(
     to_rlatt(),
     from_rlatt(),
     color_map(),
-    detector_to_base(d2b)
+    detectors_per_round(detectors_per_round),
+    detector_to_base(d2b),
+    flag_to_owner(f2o)
 {
     // Build the lattice structure matrix.
     ewf_t<stv_t> d_w = [&] (stv_t* x, stv_t* y) {
@@ -132,15 +136,97 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #ifdef DEBUG
     std::cout << "======================================\n";
     std::cout << "Detectors:";
+#endif
+    std::map<uint, std::set<uint>> flag_table;
+    std::set<std::pair<uint, uint>> check_with_flag_first;
     std::vector<uint> no_flag_detectors;
     for (auto x : detectors) {
+#ifdef DEBUG
         std::cout << " " << x << "(" << c2i(color_map[x]) << ")";
+#endif
         cdet_t base = std::make_pair(detector_to_base[x], color_map[x]);
         stv_t* v = lattice_structure->get_vertex(CDET_TO_ID(base));
-        if (v->is_flag) std::cout << "(F)";
-        else            no_flag_detectors.push_back(x);
+        if (v->is_flag) {
+#ifdef DEBUG
+            std::cout << "(F)";
+#endif
+            flag_table[x] = std::set<uint>();
+            for (auto w : lattice_structure->get_neighbors(v)) {
+                if (w->is_flag) continue;
+                const uint r = x / detectors_per_round;
+                const uint offset = (r+1) * detectors_per_round;
+                check_with_flag_first.insert(std::make_pair(x, w->detector.first + offset));
+            }
+        } else {
+            // Check if a flag nearby x has been set.
+            bool found_flag = false;
+            for (auto it = check_with_flag_first.begin(); it != check_with_flag_first.end(); ) {
+                uint flag = it->first;
+                uint det = it->second;
+                if (det < x)    it = check_with_flag_first.erase(it);
+                else if (det == x) {
+                    flag_table[flag].insert(detector_to_base[x]); 
+                    found_flag = true;
+                    break;
+                } else {
+                    break;
+                }
+            }
+            if (!found_flag)    no_flag_detectors.push_back(x);
+        }
+    }
+#ifdef DEBUG
+    std::cout << "\n";
+#endif
+    // Now, go through the flag table and include detectors if necessary.
+    for (auto pair : flag_table) {
+        uint flag = pair.first;
+        cdet_t flag_base = std::make_pair(detector_to_base[flag], color_map[flag]);
+        stv_t* vflag = lattice_structure->get_vertex(CDET_TO_ID(flag_base));
+
+#ifdef DEBUG
+        std::cout << "Flag " << flag_base.first 
+            << ", owner = " << flag_to_owner[flag_base.first] << ":";
+#endif
+        const uint r = flag / detectors_per_round;
+        const uint offset = (r+1) * detectors_per_round;
+
+        uint total_nonflag_neighbors = 0;
+        uint nonflag_neighbors_in_syndrome = 0;
+        std::vector<uint> det;
+        bool owner_in_syndrome = pair.second.count(flag_to_owner[flag_base.first]);
+        if (owner_in_syndrome) {
+            // Just dump the associated qubits.
+            for (auto x : pair.second) {
+                no_flag_detectors.push_back(x + offset);
+            }
+#ifdef DEBUG
+            std::cout << "\tfound owner.\n";
+#endif
+            continue;
+        }
+        for (auto w : lattice_structure->get_neighbors(vflag)) {
+            if (w->is_flag) continue;
+            total_nonflag_neighbors++;
+            nonflag_neighbors_in_syndrome += pair.second.count(w->detector.first);
+#ifdef DEBUG
+            if (pair.second.count(w->detector.first)) {
+                std::cout << " " << w->detector.first + offset;
+            }
+#endif
+            det.push_back(w->detector.first + offset);
+        }
+        if (nonflag_neighbors_in_syndrome > (total_nonflag_neighbors>>1)) {
+            for (auto x : det)  no_flag_detectors.push_back(x);
+        }
+#ifdef DEBUG
+        std::cout << "\n";
+#endif
     }
     detectors = no_flag_detectors;
+#ifdef DEBUG
+    std::cout << "Final Detectors:";
+    for (auto x : detectors)    std::cout << " " << x;
     std::cout << "\n";
 #endif
 

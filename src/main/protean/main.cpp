@@ -64,7 +64,9 @@ help_exit:
 
     uint rounds;
     uint64_t shots;
+    fp_t p;
     if (!parser.get_uint32("rounds", rounds) || !parser.get_uint64("shots", shots)) goto help_exit;
+    if (!parser.get_float("p", p))  p = 1e-3;
 
     // Define the cost function here.
     bool is_first_call = true;
@@ -89,7 +91,7 @@ help_exit:
         //
         tables::ErrorAndTiming et;
 
-        et = et * 0.5;
+        et = et * p*1000.0;
 
         ErrorTable errors;
         TimeTable timing;
@@ -176,6 +178,7 @@ help_exit:
         // we need to track what we care about.
         //
         std::map<tanner::vertex_t*, uint64_t> check_to_base;
+        std::map<uint64_t, tanner::vertex_t*> flag_base_to_owner;
         std::map<uint64_t, uint64_t> detector_to_base;
         std::map<uint64_t, std::vector<std::pair<uint64_t, bool>>> base_to_data_qubits;
         std::map<uint64_t, __COLOR> base_to_color;
@@ -231,7 +234,14 @@ help_exit:
                     for (auto x : meas.metadata.operators) {
                         base_to_data_qubits[ectr].push_back(x);                            
                     }
-                    if (is_for_flag)    flag_set.insert(ectr);
+                    if (is_for_flag) {
+                        // Get dual check to tv.
+                        auto tw_id = (ID_MASK & tv->id)
+                                        | (tanner::vertex_t::ZPARITY << ID_TYPE_OFFSET);
+                        auto tw = tanner_graph->get_vertex(tw_id);
+                        if (tw != nullptr)  flag_base_to_owner[ectr] = tw;
+                        flag_set.insert(ectr);
+                    }
                 }
                 ectr++;
             }
@@ -370,9 +380,15 @@ help_exit:
                 }
             }
         }
+        std::map<uint64_t, uint64_t> flag_to_owner;
+        for (auto pair : flag_base_to_owner) {
+            uint64_t f = pair.first;
+            auto tv = pair.second;
+            flag_to_owner[f] = check_to_base[tv];
+        }
 
         // Run the memory experiment.
-        RestrictionDecoder dec(circuit, &stgr, detector_to_base);
+        RestrictionDecoder dec(circuit, detectors_per_round, &stgr, detector_to_base, flag_to_owner);
         experiments::memory_params_t params;
         params.shots = shots;
         auto mexp_res = memory_experiment(&dec, params);

@@ -108,8 +108,10 @@ typedef graph::distance::DistanceMatrix<stv_t, std::vector<stv_t*>>  StructureMa
 class RestrictionDecoder : public Decoder {
 public:
     RestrictionDecoder(const stim::Circuit&, 
+                        const uint detectors_per_round,
                         restriction::StructureGraph*,
-                        const std::map<uint64_t, uint64_t>& detector_to_base);
+                        const std::map<uint64_t, uint64_t>& detector_to_base,
+                        const std::map<uint64_t, uint64_t>& flag_to_owner);
 
     ~RestrictionDecoder(void) {
         for (auto dec : rlatt_dec)  delete dec;
@@ -160,9 +162,12 @@ private:
 
     std::map<uint64_t, __COLOR>     color_map;
 
+    uint                            detectors_per_round;
     std::map<uint64_t, uint64_t>    detector_to_base;   // A map to the base detector, which is
                                                         // the lowest round detector (essentially,
                                                         // detector modulo measurement).
+    std::map<uint64_t, uint64_t>    flag_to_owner;  // A map of the flag's base detector to its
+                                                    // owning check's base detector.
 };
 
 }   // decoder
