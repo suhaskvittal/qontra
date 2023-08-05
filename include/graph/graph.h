@@ -86,13 +86,15 @@ public:
     contains(E_t* e) {
         auto v1 = (V_t*)e->src;
         auto v2 = (V_t*)e->dst;
-        return adjacency_matrix[v1].count(v2)
+        return adjacency_matrix.count(v1)
+                && adjacency_matrix[v1].count(v2)
                 && adjacency_matrix[v1][v2] == e;
     }
 
     virtual bool
     contains(V_t* v1, V_t* v2) {    // O(1) operation
-        return adjacency_matrix[v1].count(v2) 
+        return adjacency_matrix.count(v1)
+                && adjacency_matrix[v1].count(v2) 
                 && (adjacency_matrix[v1][v2] != nullptr);
     }
 

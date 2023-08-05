@@ -674,6 +674,7 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
         auto vx = gr.get_vertex(ddx);
         auto vy = gr.get_vertex(ddy);
         auto error_chain = gr.get_error_chain_data(vx, vy).error_chain;
+        if (error_chain.size() == 0)    continue;
         if (error_chain[0] == vy)   std::reverse(error_chain.begin(), error_chain.end());
         // Now, we must convert the error chain to a path of detectors.
 #ifdef DEBUG

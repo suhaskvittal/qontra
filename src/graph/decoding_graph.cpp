@@ -126,7 +126,7 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
             true,  // fold loops
             true, // allow gauge detectors
             1.0,   // approx disjoint errors threshold
-            false, // ignore decomposition failures
+            true, // ignore decomposition failures
             false
         );
     // Create callbacks.
