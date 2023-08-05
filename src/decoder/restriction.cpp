@@ -187,6 +187,22 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #ifdef DEBUG
         std::cout << "Flag " << flag_base.first 
             << ", owner = " << flag_to_owner[flag_base.first] << ":";
+        // Print neighbors in decoding graphs.
+        std::cout << "\n\tNeighbors:";
+        for (uint i = 0; i < 3; i++) {
+            uint j = c2i(flag_base.second);
+            if (i == 2-j)   continue;
+            DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
+            uint ddv = to_rlatt[flag][i];
+            auto v = gr.get_vertex(ddv);
+            for (auto w : gr.get_neighbors(v)) {
+                uint dw = w->id == BOUNDARY_INDEX ? BOUNDARY_INDEX 
+                                        : from_rlatt[std::make_pair(w->id, i)];
+                auto e = gr.get_edge(v, w);
+                std::cout << " " << dw << "(w = " << e->edge_weight << ")";
+            }
+        }
+        std::cout << "\n";
 #endif
         const uint r = flag / detectors_per_round;
         const uint offset = (r+1) * detectors_per_round;
@@ -200,28 +216,17 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             for (auto x : pair.second) {
                 no_flag_detectors.push_back(x + offset);
             }
-#ifdef DEBUG
-            std::cout << "\tfound owner.\n";
-#endif
             continue;
         }
         for (auto w : lattice_structure->get_neighbors(vflag)) {
             if (w->is_flag) continue;
             total_nonflag_neighbors++;
             nonflag_neighbors_in_syndrome += pair.second.count(w->detector.first);
-#ifdef DEBUG
-            if (pair.second.count(w->detector.first)) {
-                std::cout << " " << w->detector.first + offset;
-            }
-#endif
             det.push_back(w->detector.first + offset);
         }
         if (nonflag_neighbors_in_syndrome > (total_nonflag_neighbors>>1)) {
             for (auto x : det)  no_flag_detectors.push_back(x);
         }
-#ifdef DEBUG
-        std::cout << "\n";
-#endif
     }
     detectors = no_flag_detectors;
 #ifdef DEBUG
