@@ -59,7 +59,6 @@ public:
 
     stim::Circuit       get_circuit(void) { return circuit; }
 protected:
-
     // Other helpful functions:
     //
     // is_error: checks if the provided correction is a logical error.

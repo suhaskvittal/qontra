@@ -32,10 +32,13 @@ MWPMDecoder::decode_error(const syndrome_t& syndrome) {
         for (uint j = i + 1; j < n_vertices; j++) {
             uint dj = detectors[j];
             auto vj = decoding_graph.get_vertex(dj);
+            auto vi_vj = std::make_pair(vi, vj);
             auto error_data = decoding_graph.get_error_chain_data(vi, vj);
+
             wgt_t edge_weight;
-            if (error_data.weight > 1000.0) edge_weight = 10000000;
-            else                            edge_weight = MWPM_TO_INT(error_data.weight);
+            if (override_weights.count(vi_vj))      edge_weight = override_weights[vi_vj];
+            else if (error_data.weight > 1000.0)    edge_weight = 10000000;
+            else                                    edge_weight = MWPM_TO_INT(error_data.weight);
             pm.AddEdge(i, j, edge_weight);
         }
     }

@@ -39,7 +39,12 @@ public:
 
     Decoder::result_t       decode_error(const syndrome_t&) override;
 private:
+    //
+    // Extra functionality for restriction decoder:
+    //
     friend class RestrictionDecoder;
+    std::map<std::pair<graph::decoding::vertex_t*, graph::decoding::vertex_t*>, fp_t> 
+        override_weights;
 };
 
 }   // decoder
