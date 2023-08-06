@@ -77,28 +77,28 @@ RestrictionDecoder::RestrictionDecoder(
         if (gate_name == "DETECTOR") {
             int color_id = (int) op.target_data.args[0];
             // Add to subcircuit
-            for (uint dec_index = 0; dec_index < 3; dec_index++) {
-                __COLOR restricted_color = colors[dec_index];
-                stim::Circuit& subcircuit = subcircuits[dec_index];
+            for (uint i = 0; i < 3; i++) {
+                __COLOR restricted_color = colors[i];
+                stim::Circuit& subcircuit = subcircuits[i];
                 if (i2c(color_id) != restricted_color) {
                     subcircuit.append_operation(op);
 
-                    to_rlatt[det_ctr][dec_index] = subdet_ctr[dec_index];
-                    from_rlatt[std::make_pair(subdet_ctr[dec_index], dec_index)] = det_ctr;
-                    subdet_ctr[dec_index]++;
+                    to_rlatt[det_ctr][i] = subdet_ctr[i];
+                    from_rlatt[std::make_pair(subdet_ctr[i], i)] = det_ctr;
+                    subdet_ctr[i]++;
                 }
             }
             color_map[det_ctr] = i2c(color_id);
             det_ctr++;
         } else {
-            for (uint dec_index = 0; dec_index < 3; dec_index++) {
-                subcircuits[dec_index].append_operation(op);
+            for (uint i = 0; i < 3; i++) {
+                subcircuits[i].append_operation(op);
             }
         }
     });
 
-    for (uint dec_index = 0; dec_index < 3; dec_index++) {
-        rlatt_dec[dec_index] = new MWPMDecoder(subcircuits[dec_index]);
+    for (uint i = 0; i < 3; i++) {
+        rlatt_dec[i] = new MWPMDecoder(subcircuits[i]);
     }
 
 #ifdef DEBUG
@@ -114,12 +114,12 @@ RestrictionDecoder::RestrictionDecoder(
     }
 #endif
     // Check boundary adjacency.
-    for (uint dec_index = 0; dec_index < 3; dec_index++) {
-        cdet_t boundary = std::make_pair(BOUNDARY_INDEX, i2c(dec_index));
+    for (uint i = 0; i < 3; i++) {
+        cdet_t boundary = std::make_pair(BOUNDARY_INDEX, i2c(i));
         auto bv = lattice_structure->get_vertex(CDET_TO_ID(boundary));
         for (auto bw : lattice_structure->get_vertices()) {
             if (lattice_structure->contains(bv, bw)) {
-                boundary_adjacent[dec_index].insert(bw->detector);
+                boundary_adjacent[i].insert(bw->detector);
             }
         }
     }
@@ -137,15 +137,106 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     std::cout << "======================================\n";
     std::cout << "Detectors:";
 #endif
+    std::map<uint, std::set<uint>> flag_table;
+    std::set<std::pair<uint, uint>> check_with_flag_first;
+    std::vector<uint> no_flag_detectors;
     for (auto x : detectors) {
 #ifdef DEBUG
         std::cout << " " << x << "(" << c2i(color_map[x]) << ")";
 #endif
+        cdet_t base = std::make_pair(detector_to_base[x], color_map[x]);
+        stv_t* v = lattice_structure->get_vertex(CDET_TO_ID(base));
+        if (v->is_flag) {
+#ifdef DEBUG
+            std::cout << "(F)";
+#endif
+            flag_table[x] = std::set<uint>();
+            for (auto w : lattice_structure->get_neighbors(v)) {
+                if (w->is_flag) continue;
+                const uint r = x / detectors_per_round;
+                const uint offset = (r+1) * detectors_per_round;
+                check_with_flag_first.insert(std::make_pair(x, w->detector.first + offset));
+            }
+        } else {
+            // Check if a flag nearby x has been set.
+            bool found_flag = false;
+            for (auto it = check_with_flag_first.begin(); it != check_with_flag_first.end(); ) {
+                uint flag = it->first;
+                uint det = it->second;
+                if (det < x)    it = check_with_flag_first.erase(it);
+                else if (det == x) {
+                    flag_table[flag].insert(detector_to_base[x]); 
+                    found_flag = true;
+                    break;
+                } else {
+                    break;
+                }
+            }
+            if (!found_flag)    no_flag_detectors.push_back(x);
+        }
     }
 #ifdef DEBUG
     std::cout << "\n";
 #endif
+    // Now, go through the flag table and include detectors if necessary.
+    for (auto pair : flag_table) {
+        uint flag = pair.first;
+        cdet_t flag_base = std::make_pair(detector_to_base[flag], color_map[flag]);
+        stv_t* vflag = lattice_structure->get_vertex(CDET_TO_ID(flag_base));
 
+#ifdef DEBUG
+        std::cout << "Flag " << flag_base.first 
+            << ", owner = " << flag_to_owner[flag_base.first] << ":";
+        // Print neighbors in decoding graphs.
+        std::cout << "\n\tNeighbors:";
+        for (uint i = 0; i < 3; i++) {
+            uint j = c2i(flag_base.second);
+            if (i == 2-j)   continue;
+            DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
+            uint ddv = to_rlatt[flag][i];
+            auto v = gr.get_vertex(ddv);
+            for (auto w : gr.get_neighbors(v)) {
+                uint dw = w->id == BOUNDARY_INDEX ? BOUNDARY_INDEX 
+                                        : from_rlatt[std::make_pair(w->id, i)];
+                auto e = gr.get_edge(v, w);
+                std::cout << " " << dw << "(w = " << e->edge_weight << ")";
+            }
+        }
+        std::cout << "\n";
+#endif
+        const uint r = flag / detectors_per_round;
+        const uint offset = (r+1) * detectors_per_round;
+
+        uint total_nonflag_neighbors = 0;
+        uint nonflag_neighbors_in_syndrome = 0;
+        std::vector<uint> det;
+        bool owner_in_syndrome = pair.second.count(flag_to_owner[flag_base.first]);
+        if (owner_in_syndrome) {
+            // Just dump the associated qubits.
+            for (auto x : pair.second) {
+                no_flag_detectors.push_back(x + offset);
+            }
+            continue;
+        }
+        for (auto w : lattice_structure->get_neighbors(vflag)) {
+            if (w->is_flag) continue;
+            total_nonflag_neighbors++;
+            nonflag_neighbors_in_syndrome += pair.second.count(w->detector.first);
+            if (pair.second.count(w->detector.first)) {
+                det.push_back(w->detector.first + offset);
+            }
+        }
+        if (nonflag_neighbors_in_syndrome > (total_nonflag_neighbors>>1)) {
+            no_flag_detectors.push_back(flag);
+            for (auto x : det)  no_flag_detectors.push_back(x);
+        }
+    }
+    detectors = no_flag_detectors;
+#ifdef DEBUG
+    std::cout << "Final Detectors:";
+    for (auto x : detectors)    std::cout << " " << x;
+    std::cout << "\n";
+#endif
     // Get matching results for each restricted lattice.
     auto r_lattRG = decode_restricted_lattice(detectors, __COLOR::blue);
     auto r_lattRB = decode_restricted_lattice(detectors, __COLOR::green);
@@ -170,8 +261,8 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     Decoder::result_t* res_array[] = { &r_lattRG, &r_lattRB, &r_lattGB };
 
     const __COLOR restricted_colors[] = {__COLOR::blue, __COLOR::green, __COLOR::red};
-    for (uint dec_index = 0; dec_index < 3; dec_index++) {
-        auto res_p = res_array[dec_index];
+    for (uint i = 0; i < 3; i++) {
+        auto res_p = res_array[i];
         for (auto aa : res_p->error_assignments) {
             uint d1 = std::get<0>(aa);
             uint d2 = std::get<1>(aa);
@@ -182,9 +273,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             // to use d1's color to do so.
             __COLOR c2;
             if (d2 == BOUNDARY_INDEX) {
-                uint rlatt_d1 = to_rlatt[d1][dec_index];
+                uint rlatt_d1 = to_rlatt[d1][i];
                 // Get decoding graph vertices.
-                DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
+                DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
                 auto vd1 = gr.get_vertex(rlatt_d1);
                 auto vd2 = gr.get_vertex(BOUNDARY_INDEX);
                 auto ec_data = gr.get_error_chain_data(vd1, vd2);
@@ -192,7 +283,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 // color as d1. Otherwise, it is the opposite color.
                 uint len = ec_data.chain_length;
                 if (len & 0x1) {
-                    c2 = get_remaining_color(c1, restricted_colors[dec_index]);
+                    c2 = get_remaining_color(c1, restricted_colors[i]);
                 } else {
                     c2 = c1;
                 }
@@ -223,7 +314,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             e->src = v1;
             e->dst = v2;
             e->is_undirected = true;
-            e->color = restricted_colors[dec_index];
+            e->color = restricted_colors[i];
             connection_graph.add_edge(e);
         }
     }
@@ -391,10 +482,10 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             while (ctr < max_ctr) {
                 std::set<cdetpair_t> boundary_edges;    
                         // The edges on the boundary of the face subset.
-                uint64_t dec_index = 0;
+                uint64_t i = 0;
                 uint64_t num_faces_used = 0;
                 for (auto it = all_faces.begin(); it != all_faces.end(); it++) {
-                    if (!(ctr & (1 << (dec_index++)))) {
+                    if (!(ctr & (1 << (i++)))) {
                         continue;
                     }
                     num_faces_used++;
@@ -443,9 +534,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #endif
                 continue;
             }
-            uint dec_index = 0;
+            uint i = 0;
             for (auto it = all_faces.begin(); it != all_faces.end(); it++) {
-                if (!(best_ctr & (1 << (dec_index++)))) continue;
+                if (!(best_ctr & (1 << (i++)))) continue;
                 face_t f = *it;
                 cdet_t x = std::get<0>(f), y = std::get<1>(f), z = std::get<2>(f);
                 corr ^= get_correction_for_face(x, y, z);
@@ -465,14 +556,14 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 
 #ifdef DEBUG
     std::cout << "\tobs =";
-    for (uint dec_index = 0; dec_index < n_observables; dec_index++) {
-        std::cout << syndrome[n_detectors+dec_index]+0;
-        if (dec_index == 0)  std::cout << "|";
+    for (uint i = 0; i < n_observables; i++) {
+        std::cout << syndrome[n_detectors+i]+0;
+        if (i == 0)  std::cout << "|";
     }
     std::cout << "\tcorr =";
-    for (uint dec_index = 0; dec_index < n_observables; dec_index++) {
-        std::cout << corr[dec_index]+0;
-        if (dec_index == 0)  std::cout << "|";
+    for (uint i = 0; i < n_observables; i++) {
+        std::cout << corr[i]+0;
+        if (i == 0)  std::cout << "|";
     }
     std::cout << "\n";
     std::cout << "\tis error : " << is_error(corr, syndrome) << "\n";
@@ -528,6 +619,9 @@ RestrictionDecoder::decode_restricted_lattice(
             vertices_in_syndrome.push_back(dv);
         }
     }
+    if (vertices_in_syndrome.size() & 0x1) {
+        vertices_in_syndrome.push_back(gr.get_vertex(BOUNDARY_INDEX));
+    }
 
     dec->override_weights.clear();
 
@@ -565,7 +659,9 @@ RestrictionDecoder::decode_restricted_lattice(
         << c2i(restricted_color) << ":\n";
 #endif
     // First, filter out any assignments that go through the boundary.
-    for (auto& aa : res.error_assignments) {
+    std::vector<Decoder::assign_t>  new_assignments;
+    new_assignments = res.error_assignments;
+    for (auto& aa : new_assignments) {
         uint& d1 = std::get<0>(aa);
         uint& d2 = std::get<1>(aa);
         if (d1 != BOUNDARY_INDEX)   d1 = from_rlatt[std::make_pair(d1, dec_index)];
@@ -574,6 +670,7 @@ RestrictionDecoder::decode_restricted_lattice(
         std::cout << "\t\t" << d1 << " <----> " << d2 << "\n";
 #endif
     }
+    res.error_assignments = new_assignments;
     return res;
 }
 
@@ -635,9 +732,9 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
         std::cout << "\t\t\tPath:";
 #endif
         __COLOR prev_boundary_color = __COLOR::none;
-        for (uint dec_index = 1; dec_index < error_chain.size(); dec_index++) {
-            auto v1 = error_chain[dec_index-1];
-            auto v2 = error_chain[dec_index];
+        for (uint i = 1; i < error_chain.size(); i++) {
+            auto v1 = error_chain[i-1];
+            auto v2 = error_chain[i];
 
             uint64_t d1 = v1->id;
             uint64_t d2 = v2->id;
@@ -729,10 +826,10 @@ RestrictionDecoder::get_neighbors(cdet_t cd) {
         // Filter out neighbors that do not affect the logical state.
         cdet_t cw = w->detector;
         __COLOR restricted_color = get_remaining_color(cd.second, cw.second);
-        int dec_index = 2 - c2i(restricted_color);
-        uint64_t ddv = cd.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[cd.first][dec_index];
-        uint64_t ddw = cw.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[cw.first][dec_index];
-        DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
+        int i = 2 - c2i(restricted_color);
+        uint64_t ddv = cd.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[cd.first][i];
+        uint64_t ddw = cw.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[cw.first][i];
+        DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
         auto vv = gr.get_vertex(ddv);
         auto ww = gr.get_vertex(ddw);
         if (gr.get_error_chain_data(vv, ww).frame_changes.size()
@@ -756,9 +853,9 @@ RestrictionDecoder::get_correction_for_face(cdet_t x, cdet_t y, cdet_t z) {
                 << y.first << "(" << c2i(y.second) << "), "
                 << z.first << "(" << c2i(z.second) << "):";
 #endif
-    for (uint dec_index = 0; dec_index < detectors.size(); dec_index++) {
-        cdet_t cd1 = detectors[dec_index];
-        for (uint j = dec_index+1; j < detectors.size(); j++) {
+    for (uint i = 0; i < detectors.size(); i++) {
+        cdet_t cd1 = detectors[i];
+        for (uint j = i+1; j < detectors.size(); j++) {
             cdet_t cd2 = detectors[j];
             __COLOR restricted_color = get_remaining_color(cd1.second, cd2.second);
             uint dec_index = 2 - c2i(restricted_color);
