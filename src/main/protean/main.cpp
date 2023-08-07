@@ -338,27 +338,29 @@ help_exit:
                 uint64_t d2 = p2.first;
                 restriction::cdet_t cd2 = std::make_pair(d2, base_to_color[d2]);
                 auto v2 = stgr.get_vertex(CDET_TO_ID(cd2));
+
+                if (v2->is_flag)    continue;
+
                 if (stgr.contains(v1, v2)) {
-                    if (!v2->is_flag) {
-                        neighboring_checks[restriction::c2i(v2->detector.second)]++;
-                    }
+                    neighboring_checks[restriction::c2i(v2->detector.second)]++;
                     continue;
                 }
 
                 auto v2_op = p2.second;
+                uint finds = 0;
                 for (auto x : v1_op) {
                     if (std::find(v2_op.begin(), v2_op.end(), x) != v2_op.end()) {
-                        auto e = new restriction::ste_t;
-                        e->src = v1;
-                        e->dst = v2;
-                        e->is_undirected = true;
-                        stgr.add_edge(e);
-
-                        if (!v2->is_flag) {
-                            neighboring_checks[restriction::c2i(v2->detector.second)]++;
-                        }
-                        break;
+                        finds++;
                     }
+                }
+                if ((finds == 2 && !v1->is_flag) || (finds >= 1 && v1->is_flag)) {
+                    auto e = new restriction::ste_t;
+                    e->src = v1;
+                    e->dst = v2;
+                    e->is_undirected = true;
+                    stgr.add_edge(e);
+
+                    neighboring_checks[restriction::c2i(v2->detector.second)]++;
                 }
             }
             if (v1->is_flag)    continue;

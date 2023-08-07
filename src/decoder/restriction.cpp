@@ -59,7 +59,6 @@ RestrictionDecoder::RestrictionDecoder(
             std::reverse(path.begin(), path.end());
             return path;
         };
-    lattice_matrix = distance::create_distance_matrix(stgr, d_w, d_cb);
     detector_to_base[BOUNDARY_INDEX] = BOUNDARY_INDEX;
     boundary_adjacent.fill(std::set<cdet_t>());
     // Restricted lattice order: RG (so blue is restricted), RB, GB
@@ -130,16 +129,14 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     const uint n_detectors = circuit.count_detectors();
     const uint n_observables = circuit.count_observables();
 
-    timer.clk_start();
     std::vector<uint> detectors = get_nonzero_detectors(syndrome);
+    std::vector<uint> flags;
+    std::vector<uint> no_flag_detectors;
 
 #ifdef DEBUG
     std::cout << "======================================\n";
     std::cout << "Detectors:";
 #endif
-    std::map<uint, std::set<uint>> flag_table;
-    std::set<std::pair<uint, uint>> check_with_flag_first;
-    std::vector<uint> no_flag_detectors;
     for (auto x : detectors) {
 #ifdef DEBUG
         std::cout << " " << x << "(" << c2i(color_map[x]) << ")";
@@ -150,93 +147,19 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #ifdef DEBUG
             std::cout << "(F)";
 #endif
-            flag_table[x] = std::set<uint>();
-            for (auto w : lattice_structure->get_neighbors(v)) {
-                if (w->is_flag) continue;
-                const uint r = x / detectors_per_round;
-                const uint offset = (r+1) * detectors_per_round;
-                check_with_flag_first.insert(std::make_pair(x, w->detector.first + offset));
-            }
+            flags.push_back(x);
         } else {
-            // Check if a flag nearby x has been set.
-            bool found_flag = false;
-            for (auto it = check_with_flag_first.begin(); it != check_with_flag_first.end(); ) {
-                uint flag = it->first;
-                uint det = it->second;
-                if (det < x)    it = check_with_flag_first.erase(it);
-                else if (det == x) {
-                    flag_table[flag].insert(detector_to_base[x]); 
-                    found_flag = true;
-                    break;
-                } else {
-                    break;
-                }
-            }
-            if (!found_flag)    no_flag_detectors.push_back(x);
+            no_flag_detectors.push_back(x);
         }
     }
 #ifdef DEBUG
     std::cout << "\n";
 #endif
-    // Now, go through the flag table and include detectors if necessary.
-    for (auto pair : flag_table) {
-        uint flag = pair.first;
-        cdet_t flag_base = std::make_pair(detector_to_base[flag], color_map[flag]);
-        stv_t* vflag = lattice_structure->get_vertex(CDET_TO_ID(flag_base));
-
-#ifdef DEBUG
-        std::cout << "Flag " << flag_base.first 
-            << ", owner = " << flag_to_owner[flag_base.first] << ":";
-        // Print neighbors in decoding graphs.
-        std::cout << "\n\tNeighbors:";
-        for (uint i = 0; i < 3; i++) {
-            uint j = c2i(flag_base.second);
-            if (i == 2-j)   continue;
-            DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
-            uint ddv = to_rlatt[flag][i];
-            auto v = gr.get_vertex(ddv);
-            for (auto w : gr.get_neighbors(v)) {
-                uint dw = w->id == BOUNDARY_INDEX ? BOUNDARY_INDEX 
-                                        : from_rlatt[std::make_pair(w->id, i)];
-                auto e = gr.get_edge(v, w);
-                std::cout << " " << dw << "(w = " << e->edge_weight << ")";
-            }
-        }
-        std::cout << "\n";
-#endif
-        const uint r = flag / detectors_per_round;
-        const uint offset = (r+1) * detectors_per_round;
-
-        uint total_nonflag_neighbors = 0;
-        uint nonflag_neighbors_in_syndrome = 0;
-        std::vector<uint> det;
-        bool owner_in_syndrome = pair.second.count(flag_to_owner[flag_base.first]);
-        if (owner_in_syndrome) {
-            // Just dump the associated qubits.
-            for (auto x : pair.second) {
-                no_flag_detectors.push_back(x + offset);
-            }
-            continue;
-        }
-        for (auto w : lattice_structure->get_neighbors(vflag)) {
-            if (w->is_flag) continue;
-            total_nonflag_neighbors++;
-            nonflag_neighbors_in_syndrome += pair.second.count(w->detector.first);
-            if (pair.second.count(w->detector.first)) {
-                det.push_back(w->detector.first + offset);
-            }
-        }
-        if (nonflag_neighbors_in_syndrome > (total_nonflag_neighbors>>1)) {
-            no_flag_detectors.push_back(flag);
-            for (auto x : det)  no_flag_detectors.push_back(x);
-        }
-    }
     detectors = no_flag_detectors;
-#ifdef DEBUG
-    std::cout << "Final Detectors:";
-    for (auto x : detectors)    std::cout << " " << x;
-    std::cout << "\n";
-#endif
+    update_weights(flags);
+
+    timer.clk_start();
+
     // Get matching results for each restricted lattice.
     auto r_lattRG = decode_restricted_lattice(detectors, __COLOR::blue);
     auto r_lattRB = decode_restricted_lattice(detectors, __COLOR::green);
@@ -569,6 +492,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     std::cout << "\tis error : " << is_error(corr, syndrome) << "\n";
 #endif
     fp_t t = (fp_t)timer.clk_end();
+    
+    revert_weights();
+
     return (Decoder::result_t) { t, corr, is_error(corr, syndrome) };
 }
 
@@ -587,69 +513,10 @@ RestrictionDecoder::decode_restricted_lattice(
     syndrome_t restricted_syndrome(n_detectors+n_observables);
     restricted_syndrome.clear();
 
-    std::set<std::pair<decoding::vertex_t*, decoding::vertex_t*>> updated_edges;
-    std::vector<decoding::vertex_t*> vertices_in_syndrome;
     for (uint di : detectors) {
         if (color_map[di] == restricted_color)   continue;
         uint ddi = to_rlatt[di][dec_index];
-        // Check if d is a flag. If so, make changes to the weights of the decoder.
-        cdet_t cdi = std::make_pair(detector_to_base[di], color_map[di]); 
-        stv_t* lattice_v = lattice_structure->get_vertex(CDET_TO_ID(cdi));
-
-        decoding::vertex_t* dv = gr.get_vertex(ddi);
-        if (lattice_v->is_flag) {
-            std::set<decoding::vertex_t*> affected;
-            for (auto dw : gr.get_neighbors(dv)) {
-                if (dw->id == BOUNDARY_INDEX)   continue;
-                uint dj = from_rlatt[std::make_pair(dw->id, dec_index)];
-                cdet_t cdj = std::make_pair(detector_to_base[dj], color_map[dj]);
-                stv_t* lattice_w = lattice_structure->get_vertex(CDET_TO_ID(cdj));
-                if (!lattice_w->is_flag)    affected.insert(dw);
-            }
-            for (auto dw : affected) {
-                updated_edges.insert(std::make_pair(dv, dw));
-                updated_edges.insert(std::make_pair(dw, dv));
-                for (auto du : affected) {
-                    if (dw == du)   continue;
-                    updated_edges.insert(std::make_pair(dw, du));
-                }
-            }
-        } else {
-            restricted_syndrome[ddi] = 1;
-            vertices_in_syndrome.push_back(dv);
-        }
-    }
-    if (vertices_in_syndrome.size() & 0x1) {
-        vertices_in_syndrome.push_back(gr.get_vertex(BOUNDARY_INDEX));
-    }
-
-    dec->override_weights.clear();
-
-    for (uint i = 0; i < vertices_in_syndrome.size(); i++) {
-        auto dv = vertices_in_syndrome[i];
-        for (uint j = i+1; j < vertices_in_syndrome.size(); j++) {
-            auto dw = vertices_in_syndrome[j]; 
-            auto error_data = gr.get_error_chain_data(dv, dw);
-            auto error_chain = error_data.error_chain;
-
-            bool any_modifications = false;
-            fp_t updated_weight = 0.0;
-            for (uint k = 1; k < error_chain.size(); k++) {
-                auto dx = error_chain[k-1];
-                auto dy = error_chain[k];
-                auto e = gr.get_edge(dx, dy);
-                if (updated_edges.count(std::make_pair(dx, dy))) {
-                    any_modifications = true;
-                    updated_weight += e->edge_weight * 0.5;
-                } else {
-                    updated_weight += e->edge_weight;
-                }
-            }
-            if (any_modifications) {
-                dec->override_weights[std::make_pair(dv, dw)] = updated_weight;
-                dec->override_weights[std::make_pair(dw, dv)] = updated_weight;
-            }
-        }
+        restricted_syndrome[ddi] = 1;
     }
 
     auto res = dec->decode_error(restricted_syndrome);
@@ -674,6 +541,78 @@ RestrictionDecoder::decode_restricted_lattice(
     return res;
 }
 
+void
+RestrictionDecoder::update_weights(const std::vector<uint>& flags) {
+    edge_to_old_weight.clear();
+    affected_decoding_graphs.clear();
+    for (uint i = 0; i < 3; i++) {
+        DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
+        __COLOR restricted_color = i2c(2 - i); 
+        bool any_change = false;
+        for (uint f : flags) {
+            const uint basef = detector_to_base[f];
+            cdet_t cf = std::make_pair(basef, color_map[f]);
+            const uint r = f / detectors_per_round;
+            const uint offset = (r+1) * detectors_per_round;
+            
+            const uint owner_det = flag_to_owner[basef] + offset;
+            __COLOR owner_color = color_map[owner_det];
+            if (owner_color == restricted_color)    continue;
+#ifdef DEBUG
+            std::cout << "(flag) updating " << owner_det << "(" 
+                    << c2i(color_map[owner_det]) << ":\n";
+#endif
+
+            const uint ddi = to_rlatt[owner_det][i];
+            auto vi = gr.get_vertex(ddi);
+            for (cdet_t x : get_neighbors(cf)) {
+                std::cout << "\tchecking neighbor " << x.first << "(" << c2i(x.second) << ")\n";
+                uint true_det = x.first + offset; 
+                __COLOR c = x.second;
+                if (c == restricted_color) {
+                    std::cout << "\t\tedge with " << true_det << " is restricted.\n";
+                    continue;
+                }
+
+                uint ddj = to_rlatt[true_det][i];
+
+                auto vj = gr.get_vertex(ddj);
+                auto e = gr.get_edge(vi, vj);
+                if (e == nullptr) {
+#ifdef DEBUG
+                    std::cout << "\t\tedge with " << true_det << " does not exist.\n";
+#endif
+                    continue;
+                }
+#ifdef DEBUG
+                std::cout << "\t\tupdated edge " << owner_det << ", " << true_det << "\n";
+#endif
+                edge_to_old_weight[e] = e->edge_weight;
+                e->edge_weight *= 0.5;
+                any_change = true;
+            }
+        }
+        if (any_change) {
+            gr.force_update_state();
+            affected_decoding_graphs.push_back(i);
+        }
+    }
+}
+
+void
+RestrictionDecoder::revert_weights() {
+    if (edge_to_old_weight.empty()) return;
+    for (auto pair : edge_to_old_weight) {
+        pair.first->edge_weight = pair.second;
+    }
+    for (uint i : affected_decoding_graphs) {
+        DecodingGraph& gr = rlatt_dec[i]->decoding_graph;
+        gr.force_update_state();
+    }
+    edge_to_old_weight.clear();
+    affected_decoding_graphs.clear();
+}
+
 bool
 RestrictionDecoder::is_flag(cdet_t cd) {
     cd.first = detector_to_base[cd.first];
@@ -696,26 +635,13 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
 #endif
         __COLOR restricted_color = std::get<2>(mate);
         if (restricted_color == cc_color)  {
+#ifdef DEBUG
+            std::cout << "\t\t\tskipping as color is restricted.\n";
+#endif
             continue;
         }
 
         if (detector_to_base[cdx.first] == detector_to_base[cdy.first]) continue;
-
-        if (is_flag(cdx))   std::swap(cdx, cdy);
-        if (is_flag(cdy) && !is_flag(cdx)) {
-            if (flag_table.count(cdy)) {
-                cdy = flag_table[cdy];
-                flag_table.erase(cdy);
-#ifdef DEBUG
-                std::cout << "\t\t\tnow pairing " << "\t\t" 
-                    << cdx.first << "(" << c2i(cdx.second) << ") <----> "
-                    << cdy.first << "(" << c2i(cdy.second) << ")\n";
-#endif
-            } else {
-                flag_table[cdy] = cdx;
-                continue;
-            }
-        }
 
         uint dec_index = 2 - c2i(restricted_color);
         DecodingGraph& gr = rlatt_dec[dec_index]->decoding_graph;
@@ -725,11 +651,17 @@ RestrictionDecoder::get_all_edges_in_component(const component_t& comp) {
         auto vx = gr.get_vertex(ddx);
         auto vy = gr.get_vertex(ddy);
         auto error_chain = gr.get_error_chain_data(vx, vy).error_chain;
-        if (error_chain.size() == 0)    continue;
+        if (error_chain.size() == 0) {
+#ifdef DEBUG
+            std::cout << "\t\t\terror chain does not exist?\n";
+#endif
+            continue;
+        }
         if (error_chain[0] == vy)   std::reverse(error_chain.begin(), error_chain.end());
         // Now, we must convert the error chain to a path of detectors.
 #ifdef DEBUG
-        std::cout << "\t\t\tPath:";
+        std::cout << "\t\t\tPath (w = " 
+            << gr.get_error_chain_data(vx, vy).weight << "):";
 #endif
         __COLOR prev_boundary_color = __COLOR::none;
         for (uint i = 1; i < error_chain.size(); i++) {
@@ -825,6 +757,7 @@ RestrictionDecoder::get_neighbors(cdet_t cd) {
         if (w->is_flag) continue;
         // Filter out neighbors that do not affect the logical state.
         cdet_t cw = w->detector;
+        /*
         __COLOR restricted_color = get_remaining_color(cd.second, cw.second);
         int i = 2 - c2i(restricted_color);
         uint64_t ddv = cd.first == BOUNDARY_INDEX ? BOUNDARY_INDEX : to_rlatt[cd.first][i];
@@ -835,8 +768,9 @@ RestrictionDecoder::get_neighbors(cdet_t cd) {
         if (gr.get_error_chain_data(vv, ww).frame_changes.size()
             || ddw == BOUNDARY_INDEX) 
         {
+        */
             neighbors.insert(w->detector);
-        }
+        //}
     }
     return neighbors;
 }

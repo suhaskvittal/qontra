@@ -125,6 +125,9 @@ private:
     // restricts the passed in color.
     Decoder::result_t   decode_restricted_lattice(const std::vector<uint>&, __COLOR);
 
+    void    update_weights(const std::vector<uint>& flags);
+    void    revert_weights(void);
+
     bool
         is_flag(restriction::cdet_t);
     std::set<restriction::cdetpair_t>        
@@ -168,6 +171,8 @@ private:
                                                         // detector modulo measurement).
     std::map<uint64_t, uint64_t>    flag_to_owner;  // A map of the flag's base detector to its
                                                     // owning check's base detector.
+    std::map<graph::decoding::edge_t*, fp_t>    edge_to_old_weight;
+    std::vector<uint>                           affected_decoding_graphs;
 };
 
 }   // decoder
