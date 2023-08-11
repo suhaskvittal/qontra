@@ -322,6 +322,7 @@ help_exit:
     compiler::constraint_t con;
     con.max_connectivity = 4;
     con.max_thickness = 1;
+    con.max_ops = 1600;
 
     // Declare compiler and run it.
     Compiler compiler(con, cf);

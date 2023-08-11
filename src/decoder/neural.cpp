@@ -40,7 +40,7 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
     y.reshape(obs, shots_elapsed);
 
     ens::Adam opt(1e-3, 64);
-    opt.MaxIterations() = shots_elapsed*20;
+    opt.MaxIterations() = shots_elapsed*50;
 
     model.Train(data_matrix, y, opt, ens::ProgressBar(), ens::PrintLoss());
 }

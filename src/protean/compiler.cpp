@@ -906,7 +906,9 @@ Compiler::score(ir_t* curr_ir) {
     curr_ir->valid = !check_connectivity_violation(curr_ir)
                 && !check_size_violation(curr_ir)
                 && curr_ir->arch->get_thickness() <= constraints.max_thickness;
-    curr_ir->score = objective(curr_ir);
+    if (compile_round == 0 || curr_ir->valid) {
+        curr_ir->score = objective(curr_ir);
+    }
 }
 
 bool

@@ -100,6 +100,9 @@ namespace compiler {
         uint max_connectivity   = std::numeric_limits<uint>::max();
         uint max_thickness      = std::numeric_limits<uint>::max();
 
+        uint max_ops            = std::numeric_limits<uint>::max();
+        uint max_depth          = std::numeric_limits<uint>::max();
+
         fp_t max_mean_connectivity =    std::numeric_limits<fp_t>::max();
     } constraint_t;
 }   // compiler
@@ -141,6 +144,11 @@ private:
 
     bool check_thickness_violation(compiler::ir_t* ir) {
         return ir->arch->get_thickness() > constraints.max_thickness;
+    }
+
+    bool check_schedule_violation(compiler::ir_t* ir) {
+        return ir->schedule.size() > constraints.max_ops
+                && ir->dependency_graph->get_depth() > constraints.max_depth;
     }
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
