@@ -118,12 +118,15 @@ public:
                                                                 // if either arg precedes the
                                                                 // other.
     bool                    has_copy_in_gauges(const std::vector<tanner::vertex_t*>& adj);
-    
+
     std::vector<tanner::vertex_t*>  get_vertices_by_type(uint8_t t) {
         const std::vector<tanner::vertex_t*> arr[] = 
                 { data_qubits, gauge_qubits, x_parity_checks, z_parity_checks };
         return arr[t];
     }
+
+    std::vector<tanner::vertex_t*>  x_obs;
+    std::vector<tanner::vertex_t*>  z_obs;
 private:
     std::vector<tanner::vertex_t*>  data_qubits;
     std::vector<tanner::vertex_t*>  gauge_qubits;

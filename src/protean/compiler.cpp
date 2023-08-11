@@ -162,7 +162,7 @@ __score:
     }
     if (!ir->valid) {
         rounds_without_progress++;
-        if (rounds_without_progress >= 10) return best_result;
+        if (rounds_without_progress > 1) return best_result;
     }
     // Reset ir (except Tanner graph).
     ir_t* new_ir = new ir_t;

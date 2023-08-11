@@ -156,7 +156,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     std::cout << "\n";
 #endif
     detectors = no_flag_detectors;
-    update_weights(flags);
+//  update_weights(flags);
 
     timer.clk_start();
 
@@ -588,7 +588,7 @@ RestrictionDecoder::update_weights(const std::vector<uint>& flags) {
                 std::cout << "\t\tupdated edge " << owner_det << ", " << true_det << "\n";
 #endif
                 edge_to_old_weight[e] = e->edge_weight;
-                e->edge_weight *= 0.5;
+                e->edge_weight *= 0.75;
                 any_change = true;
             }
         }
