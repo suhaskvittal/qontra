@@ -53,6 +53,25 @@ build_circuit(compiler::ir_t* ir, uint rounds, fp_t p) {
     TimeTable timing;
     tables::populate(n_qubits, errors, timing, et);
 
+    /*
+    for (auto e : arch->get_edges()) {
+        auto v = (proc3d::vertex_t*)e->src;
+        auto w = (proc3d::vertex_t*)e->dst;
+        uint vdeg = arch->get_degree(v);
+        uint wdeg = arch->get_degree(w);
+        uint maxdeg = vdeg > wdeg ? vdeg : wdeg;
+
+        uint q1 = ir->qubit_labels[v];
+        uint q2 = ir->qubit_labels[w];
+        errors.op2q["cx"][std::make_pair(q1, q2)] *= pow(10, (maxdeg-3.0)/3.0);
+        errors.op2q["cx"][std::make_pair(q2, q1)] *= pow(10, (maxdeg-3.0)/3.0);
+    }
+    */
+#ifdef NOISE_MODEL_CC
+    et.e_g2q = 0.0;
+    et.e_ro = 0.0;
+#endif
+
     // Generate memory experiment circuit.
     stim::Circuit circuit;
     //
@@ -182,6 +201,7 @@ build_circuit(compiler::ir_t* ir, uint rounds, fp_t p) {
         data_qubit_meas_order[dv] = i;
     }
     // Add detection events for measurement errors.
+#ifndef NOISE_MODEL_CC
     for (uint i = 0; i < meas_order.size(); i++) {
         Instruction& meas = meas_order[i];
         auto tv = tanner_graph->get_vertex(meas.metadata.owning_check_id);
@@ -199,6 +219,7 @@ build_circuit(compiler::ir_t* ir, uint rounds, fp_t p) {
         std::vector<fp_t> det_args{(fp_t)measurement_to_color_id[i]};
         circuit.append_op("DETECTOR", detectors, det_args);
     }
+#endif
     // Build observable
     std::vector<uint> epilogue_obs_operands;
     for (auto tv : tanner_graph->z_obs) {

@@ -99,6 +99,7 @@ __place:
         std::cout << "[ unify ] ---------------------\n";
     }
     unify(ir);
+    uint attempts_to_update = 0;
 __reduce:
     if (params.verbose) {
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
@@ -115,8 +116,14 @@ __reduce:
                     << ir->arch->get_max_connectivity() << "\n";
         std::cout << "\tthickness = " << ir->arch->get_thickness() << "\n";
     }
+    if (attempts_to_update == 30) {
+        // No point in trying again. Just return.
+        delete ir;
+        return best_result;
+    }
 __constraints:
     if (rounds_without_progress > 0) {
+        attempts_to_update++;
         if (check_size_violation(ir)) {
             if (params.verbose) std::cout << "[ merge ] ---------------------\n";
             if (merge(ir))  goto __reduce;
@@ -619,6 +626,7 @@ Compiler::flatten(ir_t* curr_ir) {
     mm_dst->dst = dst;
 
     arch->delete_edge(violator);
+    arch->add_vertex(mm);
     arch->add_edge(src_mm);
     arch->add_edge(mm_dst);
     return true;
