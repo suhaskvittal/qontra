@@ -107,10 +107,21 @@ struct Instruction {
     std::string name;
     std::vector<uint> operands;
 
-    // Extra metadata
-    bool    is_measuring_x_check;
+    // Extra metadata (not necessary for general use).
+    //
+    // Usually, applications will fill this out for their own use.
+    // The user should not need to modify this.
+    struct {
+        uint64_t    owning_check_id = 0;    // The id of the tanner graph vertex
+                                            // for which this Instruction is executing
+                                            // the check.
+        bool        is_for_flag = false;
 
-    std::vector<uint>   get_qubit_operands(void);
+        std::vector<std::pair<uint64_t, bool>>  operators;  // i.e. X1X2X3X4 would be 
+                                                            // (1, true), (2, true), etc.
+    } metadata;
+
+    std::vector<uint>   get_qubit_operands(void) const;
 
     std::string str(void) const {
         std::string out = name;
@@ -144,15 +155,22 @@ typedef std::vector<Instruction>    schedule_t;
 //  error signatures (set these in the simulator) and other operations such
 //  as coordinate declarations. The output is the max number of qubits in the
 //  circuit.
-// to_canonical_circuit translates a schedule to a stim circuit. As many operations
-//  in the ISA have no equivalent (see mnrc, branch/jmps, and others), this is
-//  really only useful for building a decoder.
+// fast_convert_to_stim translates a schedule to a stim circuit and injects errors
+//  according to the error and timing information provided. Note that this is approximate
+//  and assumes that each instruction is a discrete time step. For more accurate
+//  error models, use the ControlSimulator's build_error_model function. Note that the
+//  ControlSimulator is also much slower.
 
 std::string     schedule_to_text(const schedule_t&);
 
 schedule_t      schedule_from_stim(const stim::Circuit&);
 schedule_t      relabel_operands(const schedule_t&);
 schedule_t      schedule_from_file(std::string fname);
+schedule_t      schedule_from_text(std::string);
+
+schedule_t      schedule_after_parse(void);
+
+stim::Circuit   fast_convert_to_stim(const schedule_t&, ErrorTable&, TimeTable&);
 
 }   // qontra
 

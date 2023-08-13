@@ -13,6 +13,11 @@
 #include <set>
 #include <vector>
 
+#include <lemon/list_graph.h>
+#include <lemon/planarity.h>
+
+#include <math.h>
+
 namespace qontra {
 namespace protean {
 
@@ -77,9 +82,11 @@ public:
     }
 
     bool    add_vertex(proc3d::vertex_t*) override;
-    bool    add_edge(proc3d::edge_t*) override;
+    bool    add_edge(proc3d::edge_t*, bool force_out_of_plane);
     void    delete_vertex(proc3d::vertex_t*) override;
     void    delete_edge(proc3d::edge_t*) override;
+
+    bool    add_edge(proc3d::edge_t* e) override { return add_edge(e, false); }
 
     void    reallocate_edges(void); // This function greedily tries to add vertical edges
                                     // to the main processor.
@@ -95,6 +102,8 @@ public:
                 { auto e = get_edge(v1, v2); return has_complex_coupling(e); }
     bool    has_complex_coupling(proc3d::edge_t* e) { return coupling_to_edges[e].size() > 1; }
 
+    void    force_out_of_plane(proc3d::edge_t*);
+
     // The main processor contains the physical qubits and some couplings. The other
     // processor layers contains couplings enabled by TSVs. Each of the processor layers 
     // is guaranteed to be planar. Note that we only need to track planarity for the main
@@ -103,6 +112,21 @@ public:
     graph::CouplingGraph    get_main_processor(void) { return main_processor; }
     graph::CouplingGraph    get_processor_layer(uint k) { return processor_layers[k]; }
     uint                    get_thickness(void) { return processor_layers.size(); }
+
+    void    compute_coupling_lengths(void);
+
+    std::map<proc3d::edge_t*, fp_t> get_coupling_lengths(void) {
+        update_state();
+        return coupling_lengths; 
+    }
+
+    fp_t get_mean_coupling_length() {
+        fp_t sum = 0.0;
+        for (auto pair : coupling_lengths) {
+            sum += pair.second;   
+        }
+        return sum / coupling_lengths.size();
+    }
 private:
     int     find_open_layer(proc3d::vertex_t*, proc3d::vertex_t*, std::set<uint> exclude);  
                                                     // Gets open layer for edge. Returns -1
@@ -133,6 +157,7 @@ private:
                                                     // A coupling requiring TSVs will
                                                     // map three edges (two vertical,
                                                     // one horizontal).
+    std::map<proc3d::edge_t*, fp_t> coupling_lengths;
 };
 
 }   // protean

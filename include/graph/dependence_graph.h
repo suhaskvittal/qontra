@@ -31,6 +31,9 @@ struct edge_t : base::edge_t {
 // Two instructions have an edge in the DAG if they share an
 // operand. The direction of the edge points in the direction
 // of the later operation.
+//
+// Only supports dependences between qubit operands for now.
+
 class DependenceGraph : public __DependenceGraphParent {
 public:
     DependenceGraph(void)
@@ -64,57 +67,9 @@ public:
         barrier_index(other.barrier_index)
     {}
 
-    ~DependenceGraph(void) {
-        if (this->dealloc_on_delete) {
-            for (auto v : this->vertices) delete v->inst_p;
-        }
-    }
+    ~DependenceGraph(void) {}
 
-    bool add_vertex(dep::vertex_t* v) override {
-        if (!__DependenceGraphParent::add_vertex(v))  return false;
-
-        std::map<uint, dep::vertex_t*> operand_to_ancestor;
-        for (uint x : v->inst_p->operands)  operand_to_ancestor[x] = root;
-        // Get ancestors via BFS.
-        search::callback_t<dep::vertex_t> cb = 
-        [&] (dep::vertex_t* v1, dep::vertex_t* v2)
-        {
-            for (uint x : v2->inst_p->operands) operand_to_ancestor[x] = v2;
-        };
-        search::xfs(this, root, cb, false);
-        // Connect v to all ancestors
-        std::set<dep::vertex_t*> already_connected;
-        uint max_ancestor_depth = 0;
-        for (uint x : v->inst_p->operands) {
-            auto a = operand_to_ancestor[x];
-            if (already_connected.count(a)) continue;
-
-            dep::edge_t* e = new dep::edge_t;
-            e->src = a;
-            e->dst = v;
-            e->is_undirected = false;
-            __DependenceGraphParent::add_edge(e);
-
-            already_connected.insert(a);
-
-            if (vertex_to_depth[a] > max_ancestor_depth) {
-                max_ancestor_depth = vertex_to_depth[a];
-            }
-        }
-        vertex_to_depth[v] = max_ancestor_depth+1;
-        if (vertex_to_depth[v] > depth) depth = vertex_to_depth[v];
-        return true;
-    }
-
-    void add_barrier(const std::vector<uint>& operands) {
-        Instruction* barrier = new Instruction;
-        barrier->name = "NOP";
-        barrier->operands = operands; 
-        auto vb = new dep::vertex_t;
-        vb->id = (barrier_index++) | (1 << 31);
-        vb->inst_p = barrier;
-        add_vertex(vb);
-    }
+    bool    add_vertex(dep::vertex_t*) override;
 
     // Adding edges manually is disabled to maintain the DAG property.
     bool add_edge(dep::edge_t*)     { return false; }
@@ -124,13 +79,10 @@ public:
         schedule_t sch;
 
         // Add the instructions through a BFS.
-        std::set<dep::vertex_t*> visited;
         search::callback_t<dep::vertex_t> cb = 
         [&] (dep::vertex_t* v1, dep::vertex_t* v2)
         {
-            if (visited.count(v2))  return;
             sch.push_back(*(v2->inst_p));
-            visited.insert(v2);
         };
         search::xfs(this, root, cb, false);
         return sch;

@@ -28,7 +28,7 @@ public:
                     Decoder* base,
                     uint commit_window, 
                     uint detectors_per_round)
-        :Decoder(backing_circuit),
+        :Decoder(backing_circuit, false),
         base_decoder(base),
         commit_window(commit_window),
         detectors_per_round(detectors_per_round)

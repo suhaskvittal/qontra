@@ -29,7 +29,7 @@ namespace base {
 // should subclass base::vertex_t and
 // base::edge_t
 struct vertex_t {
-    uint id;
+    uint64_t id;
 };
 
 struct edge_t {
@@ -65,6 +65,13 @@ public:
         }
     }
 
+    virtual void
+    change_id(V_t* v, uint64_t to) {
+        id_to_vertex.erase(v->id);
+        v->id = to;
+        id_to_vertex[to] = v;
+    }
+
     virtual bool
     contains(uint64_t id) {
         return id_to_vertex.count(id);
@@ -79,13 +86,15 @@ public:
     contains(E_t* e) {
         auto v1 = (V_t*)e->src;
         auto v2 = (V_t*)e->dst;
-        return adjacency_matrix[v1].count(v2)
+        return adjacency_matrix.count(v1)
+                && adjacency_matrix[v1].count(v2)
                 && adjacency_matrix[v1][v2] == e;
     }
 
     virtual bool
     contains(V_t* v1, V_t* v2) {    // O(1) operation
-        return adjacency_matrix[v1].count(v2) 
+        return adjacency_matrix.count(v1)
+                && adjacency_matrix[v1].count(v2) 
                 && (adjacency_matrix[v1][v2] != nullptr);
     }
 
@@ -102,6 +111,7 @@ public:
     add_edge(E_t* e) {              // O(1) operation
         auto src = (V_t*)e->src;
         auto dst = (V_t*)e->dst;
+        if (src == dst)                         return false;
         if (!contains(src) || !contains(dst))   return false;
         if (contains(src, dst))                 return false;
         edges.push_back(e);
@@ -117,7 +127,7 @@ public:
     }
 
     virtual V_t*
-    get_vertex(uint id) {        // O(1) operation
+    get_vertex(uint64_t id) {        // O(1) operation
         if (!id_to_vertex.count(id))    return nullptr;
         return id_to_vertex[id];
     }
@@ -136,26 +146,30 @@ public:
             else            it++;
         }
 
-        for (auto w : adjacency_lists[v]) {
-            auto& adj = adjacency_lists[w];
-            for (auto it = adj.begin(); it != adj.end();) {
-                if (*it == v)   it = adj.erase(it);
-                else            it++;
-            }
-            adjacency_matrix[v][w] = nullptr;
-            adjacency_matrix[w][v] = nullptr;
-        }
-        adjacency_lists.erase(v);
         for (auto it = edges.begin(); it != edges.end();) {
             auto e = *it;
             auto u1 = (V_t*)e->src;
             auto u2 = (V_t*)e->dst;
             if (u1 == v || u2 == v) { 
+                // Delete v from the adjacency list of the other vertex.
+                V_t* other = u1;
+                if (u1 == v)    other = u2;
+                auto& adj = adjacency_lists[other];
+                for (auto it = adj.begin(); it != adj.end();) {
+                    if (*it == v)   it = adj.erase(it);
+                    else            it++;
+                }
+                adjacency_matrix[other][v] = nullptr;
+                if (e->is_undirected)   adjacency_matrix[v][other] = nullptr;
+                
+                
+                // Now delete the edge itself.
                 it = edges.erase(it); 
                 if (dealloc_on_delete)  delete e;
             }
             else                    it++;
         }
+        adjacency_lists.erase(v);
         graph_has_changed = true;
         if (dealloc_on_delete)  delete v;
     }
@@ -202,6 +216,8 @@ public:
                             { update_state(); return max_degree; }
 
     bool    dealloc_on_delete;  // Deletes vertices and edges on delete functions if set.
+
+    void    force_update_state(void) { graph_has_changed = true; update_state(); }
 protected:
     // Updates graph if graph_has_changed is set.
     // Subclasses should override this method if they track state in any way.
@@ -222,7 +238,7 @@ protected:
 
     TwoLevelMap<V_t*, V_t*, E_t*>       adjacency_matrix;
     std::map<V_t*, std::vector<V_t*>>   adjacency_lists;
-    std::map<uint, V_t*>                id_to_vertex;
+    std::map<uint64_t, V_t*>            id_to_vertex;
 
     bool    graph_has_changed;  // Tracks if the graph has changed. May be useful
                                 // for subclasses that need to track state.

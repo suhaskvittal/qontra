@@ -16,18 +16,27 @@
 #include <string>
 #include <vector>
 
+#define ID_TYPE_OFFSET  62
+#define ID_GEN_OFFSET   40
+#define ID_GEN_MASK     ((1L << 22)-1L)
+#define ID_MASK         ((1L << 32)-1L)
+
+#define PRINT_V(id)  (id >> ID_TYPE_OFFSET) << "|"\
+                        << ((id >> ID_GEN_OFFSET) & ID_GEN_MASK)\
+                        << "|" << (id & ID_MASK)
+
 namespace qontra {
 namespace graph {
 
 namespace tanner {
 
 struct vertex_t : graph::base::vertex_t {
-    uint8_t qubit_type; // 00 = Data, 01 = Gauge, 11 = X parity, 10 = Z parity
+    uint64_t qubit_type; // 00 = Data, 01 = Gauge, 11 = X parity, 10 = Z parity
 
-    const static uint8_t DATA =     0x0;
-    const static uint8_t GAUGE =    0x1;
-    const static uint8_t XPARITY =  0x2;
-    const static uint8_t ZPARITY =  0x3;
+    const static uint64_t DATA =    0x0;
+    const static uint64_t GAUGE =   0x1;
+    const static uint64_t XPARITY = 0x2;
+    const static uint64_t ZPARITY = 0x3;
 };
 
 struct edge_t : graph::base::edge_t {
@@ -109,20 +118,23 @@ public:
                                                                 // if either arg precedes the
                                                                 // other.
     bool                    has_copy_in_gauges(const std::vector<tanner::vertex_t*>& adj);
-    
+
     std::vector<tanner::vertex_t*>  get_vertices_by_type(uint8_t t) {
         const std::vector<tanner::vertex_t*> arr[] = 
                 { data_qubits, gauge_qubits, x_parity_checks, z_parity_checks };
         return arr[t];
     }
+
+    std::vector<tanner::vertex_t*>  x_obs;
+    std::vector<tanner::vertex_t*>  z_obs;
 private:
     std::vector<tanner::vertex_t*>  data_qubits;
     std::vector<tanner::vertex_t*>  gauge_qubits;
     std::vector<tanner::vertex_t*>  x_parity_checks;
     std::vector<tanner::vertex_t*>  z_parity_checks;
 
-    uint induced_gauge_index;
-    const static uint INDUCED_GAUGE_INDEX_FLAG = 1 << 24;
+    uint64_t induced_gauge_index;
+    const static uint64_t INDUCED_GAUGE_INDEX_FLAG = ID_GEN_MASK << ID_GEN_OFFSET;
 };
 
 namespace io {

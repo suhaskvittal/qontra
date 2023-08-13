@@ -1,4 +1,5 @@
-/* author: Suhas Vittal
+/* 
+ *  author: Suhas Vittal
  *  date:   31 May 2023
  * */
 
@@ -32,53 +33,63 @@
 #include <set>
 #include <vector>
 #include <utility>
+#include <tuple>
 
 #include <math.h>
+
+#define SDGRAPH_ROOT_ID     0
 
 namespace qontra {
 namespace protean {
 
 namespace compiler {
+    struct sdvertex_t : graph::base::vertex_t {
+        schedule_t sch;
+    };
+
+    typedef graph::base::edge_t sdedge_t;
+    typedef graph::Graph<sdvertex_t, sdedge_t>  SDGraph;
+
+    SDGraph     build_schedule_graph_from_sdl(std::string filename);
+    SDGraph*    alloc_sdgraph_deep_copy(SDGraph&);
+
+    std::map<sdvertex_t*, uint> get_sdv_depths(SDGraph&);
+    
     struct ir_t {
         ~ir_t(void) {
             delete arch;
+            delete schedule_graph;
             delete dependency_graph;
         }
 
         graph::TannerGraph* curr_spec;
         Processor3D*        arch;
+        SDGraph*            schedule_graph;
         schedule_t          schedule;
         fp_t                score;
         bool                valid;
+
+        std::map<proc3d::vertex_t*, uint>       qubit_labels;
+
+        graph::DependenceGraph*                 dependency_graph;
+
         // Data structures:
         std::map<graph::tanner::vertex_t*, proc3d::vertex_t*>
                                                 role_to_qubit;
         std::map<proc3d::vertex_t*, std::vector<graph::tanner::vertex_t*>>
                                                 qubit_to_roles;
-                                                        // During the "reduce"  pass, a qubit
-                                                        // may take on multiple roles due to a
-                                                        // contraction. For example, a parity
-                                                        // check qubit may need to take on the
-                                                        // role of a gauge qubit later.
+                                                    // During the "reduce"  pass, a qubit
+                                                    // may take on multiple roles due to a
+                                                    // contraction. For example, a parity
+                                                    // check qubit may need to take on the
+                                                    // role of a gauge qubit later.
         std::set<proc3d::vertex_t*> is_gauge_only;  // Keep track of pure gauge qubits for
                                                     // operations like reduce.
 
-        std::map<graph::tanner::vertex_t*, schedule_t>  
-                                            check_to_impl;  
-                                                // Contains micro-schedules which
-                                                // implement each parity check.
-        std::set<std::pair<graph::tanner::vertex_t*, graph::tanner::vertex_t*>>
-                                            conflicting_checks;
-                                                // A set of checks that cannot be
-                                                // scheduled concurrently.
-        graph::DependenceGraph*             dependency_graph;
-                                                // Defines the dependence relation
-                                                // for the instrucitons in the 
-                                                // macro-schedule.
         std::set<graph::tanner::vertex_t*>  sparsen_visited_set;
 
         bool is_data(proc3d::vertex_t* v) {
-            return (v->id >> 30) == graph::tanner::vertex_t::DATA;
+            return (v->id >> ID_TYPE_OFFSET) == graph::tanner::vertex_t::DATA;
         }
     };
 
@@ -88,6 +99,9 @@ namespace compiler {
         uint max_qubits         = std::numeric_limits<uint>::max();
         uint max_connectivity   = std::numeric_limits<uint>::max();
         uint max_thickness      = std::numeric_limits<uint>::max();
+
+        uint max_ops            = std::numeric_limits<uint>::max();
+        uint max_depth          = std::numeric_limits<uint>::max();
 
         fp_t max_mean_connectivity =    std::numeric_limits<fp_t>::max();
     } constraint_t;
@@ -112,9 +126,9 @@ public:
     void            set_seed(uint64_t s) { rng.seed(s); }
 
     // The compiler takes in a Tanner graph, which defines the QEC code,
-    // and an idealized syndrome extraction schedule. The schedule should
-    // NOT contain any gauge qubits.
-    compiler::ir_t* run(graph::TannerGraph*, const schedule_t& ideal_sch);
+    // and an idealized syndrome extraction schedule defined in the
+    // corresponding SDL file. The schedule should NOT contain any gauge qubits.
+    compiler::ir_t* run(graph::TannerGraph*, std::string sdl_file);
 
     params_t    params;
 private:
@@ -130,6 +144,11 @@ private:
 
     bool check_thickness_violation(compiler::ir_t* ir) {
         return ir->arch->get_thickness() > constraints.max_thickness;
+    }
+
+    bool check_schedule_violation(compiler::ir_t* ir) {
+        return ir->schedule.size() > constraints.max_ops
+                && ir->dependency_graph->get_depth() > constraints.max_depth;
     }
     // Compiler passes:
     //  (1) Place       -- creates a architectural description for the current Tanner graph.
@@ -155,24 +174,17 @@ private:
     //      Jump to (3).
     //
     //  (5) Xform-Schedule  -- transforms the ideal schedule to fit on the architecture.
-    //
-    //  (5) Micro-Schedule  -- schedules the operations for each check.
-    //  (6) Macro-Schedule  -- schedules the order of computing each check such that depth is
-    //                          minimized.
     //  
-    //  (6) Score   -- check if IR is valid. If not, jump to 7.
-    //  If Observable is defined:
-    //      (a) Find the best CNOT order by repeatedly calling the score function.
-    //  Else:
-    //      (b) Score normally.
+    //  (6) Score   -- check if IR is valid.
     //
     //  (7) Induce      -- induces predecessors onto the Tanner graph.
     //
     //  If Induce fails:
     //      (8) Sparsen -- if a gauge/parity qubit has too many connections, then split them
     //                      into groups of 2 by using intermediate gauge qubits.
+    //  
     //  If Sparsen fails:
-    //      (9) Linearize -- linearize data connections in the exist architecture. Jump to (3).
+    //      (9) Raise   -- move longest couplings to upper layers. Goto (4).
     //
     //  We repeat the following until we exit at (4). We assume that the optimization space is
     //  "smooth", so modifications do not chaotically affect the score.
@@ -183,11 +195,10 @@ private:
     bool    split(compiler::ir_t*);
     bool    flatten(compiler::ir_t*);
     void    xform_schedule(compiler::ir_t*);
-    void    schedule(compiler::ir_t*);
     void    score(compiler::ir_t*);
     bool    induce(compiler::ir_t*);
     bool    sparsen(compiler::ir_t*);
-    void    linearize(compiler::ir_t*);
+    void    raise(compiler::ir_t*);
 
     const compiler::constraint_t    constraints;
     const compiler::cost_t          objective;
@@ -200,8 +211,6 @@ private:
     std::mt19937_64 rng;
 };
 
-void    print_connectivity(Processor3D*);
-void    print_schedule(const schedule_t&);
 
 // build_stim_circuit writes a memory experiment Stim spec for a given IR 
 // and Z/X observable. The user must provide:

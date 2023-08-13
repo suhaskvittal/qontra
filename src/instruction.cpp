@@ -8,12 +8,11 @@
 namespace qontra {
 
 std::vector<uint>
-Instruction::get_qubit_operands() {
+Instruction::get_qubit_operands() const {
     // Note: this is for qubit operands that are physically interacted with!
     //
-    // Do not include instructions like lckqifmspc which do not interact
+    // Do not include instructions like lockq or unlockq which do not interact
     // with qubits directly.
-
     if (ONLY_HAS_QUBIT_OPERANDS.count(name)) {
         return operands;
     } else if (name == "mrc") {
@@ -121,6 +120,99 @@ relabel_operands(const schedule_t& sch) {
     }
 
     return new_sch;
+}
+
+stim::Circuit
+fast_convert_to_stim(const schedule_t& prog, ErrorTable& errors, TimeTable& timing) {
+    stim::Circuit circuit;
+    uint mctr = 0;
+    for (const auto& inst : prog) {
+        // If it is a measurement, inject a measurement error here.
+        if (inst.name == "mrc") {
+            for (uint i : inst.get_qubit_operands()) {
+                circuit.append_op("X_ERROR", {i}, errors.op1q["m"][i]);
+            }
+        }
+
+        if (inst.name == "x") {
+            circuit.append_op("X", inst.get_qubit_operands());
+        } else if (inst.name == "z") {
+            circuit.append_op("Z", inst.get_qubit_operands());
+        } else if (inst.name == "h") {
+            circuit.append_op("H", inst.get_qubit_operands());
+        } else if (inst.name == "s") {
+            circuit.append_op("S", inst.get_qubit_operands());
+        } else if (inst.name == "cx") {
+            circuit.append_op("CX", inst.get_qubit_operands());
+        } else if (inst.name == "mrc") {
+            circuit.append_op("M", inst.get_qubit_operands());
+            mctr += inst.get_qubit_operands().size();
+        } else if (inst.name == "reset") {
+            circuit.append_op("R", inst.get_qubit_operands());
+        } else if (inst.name == "event") {
+            std::vector<uint32_t> components;
+            for (uint i = 1; i < inst.operands.size(); i++) {
+                components.push_back(stim::TARGET_RECORD_BIT | (mctr - inst.operands[i]));
+            }
+            circuit.append_op("DETECTOR", components);
+        } else if (inst.name == "obs") {
+            std::vector<uint32_t> components;
+            for (uint i = 1; i < inst.operands.size(); i++) {
+                components.push_back(stim::TARGET_RECORD_BIT | (mctr - inst.operands[i]));
+            }
+            circuit.append_op("OBSERVABLE_INCLUDE", components, inst.operands[0]);
+        }
+        
+        // Add other operation errors and decoherence/dephasing errors
+        std::map<uint, fp_t> qubit_to_delay;
+        if (inst.name == "cx") {
+            for (uint i = 0; i < inst.operands.size(); i += 2) {
+                uint j1 = inst.operands[i];
+                uint j2 = inst.operands[i+1];
+                auto j1_j2 = std::make_pair(j1, j2);
+
+                fp_t dp2 = errors.op2q["cx"][j1_j2];
+                fp_t li = errors.op2q_leakage_injection["cx"][j1_j2];
+                fp_t lt = errors.op2q_leakage_transport["cx"][j1_j2];
+
+                circuit.append_op("L_TRANSPORT", {j1, j2}, lt);
+                circuit.append_op("L_ERROR", {j1, j2}, li);
+                circuit.append_op("DEPOLARIZE2", {j1, j2}, dp2);
+
+                fp_t cx_t = timing.op2q["cx"][j1_j2];
+                qubit_to_delay[j1] = cx_t;
+                qubit_to_delay[j2] = cx_t;
+            }
+        } else {
+            if (inst.name != "mrc") {
+                if (!errors.op1q.count(inst.name))   continue;
+                for (uint i : inst.operands) {
+                    fp_t e = errors.op1q[inst.name][i];
+                    if (inst.name == "reset") {
+                        circuit.append_op("X_ERROR", {i}, e);
+                    } else {
+                        circuit.append_op("DEPOLARIZE1", {i}, e);
+                    }
+                    fp_t t = timing.op1q[inst.name][i];
+                    qubit_to_delay[i] = t;
+                }
+            } else {
+                for (uint i : inst.get_qubit_operands()) {
+                    fp_t t = timing.op1q["m"][i];
+                    qubit_to_delay[i] = t;
+                }
+            }
+        }
+
+        for (auto pair : qubit_to_delay) {
+            uint i = pair.first;
+            fp_t t = pair.second;
+            fp_t mean_t = (timing.t1[i] + timing.t2[i])*0.5;
+            fp_t e = 1 - exp(-t/mean_t);
+            circuit.append_op("DEPOLARIZE1", {i}, e);
+        }
+    }
+    return circuit;
 }
 
 }   // qontra

@@ -7,6 +7,8 @@
 
 %option noyywrap noinput nounput
 
+%option prefix="asm_yy"
+
 %{
 
 #include "parsing/asm/parser.tab.h"
@@ -15,6 +17,8 @@
 #include <string.h>
 
 void    force_lowercase(char*, int);
+
+#define yylval  asm_yylval
 
 %}
 
@@ -51,8 +55,13 @@ void force_lowercase(char* text, int len) {
     }
 }
 
-void asm_yystart(FILE* fin) {
-    // Reset parser.
-    reset_parser();
-    yyrestart(fin);
+void asm_yystart_file(FILE* fin) {
+    asm_reset_parser();
+    asm_yyrestart(fin);
 }
+
+void asm_yystart_str(const char* text) {
+    asm_reset_parser();
+    asm_yy_scan_string(text);
+}
+

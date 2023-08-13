@@ -8,8 +8,6 @@
 namespace qontra {
 namespace graph {
 
-#define N_COORD 3
-
 typedef std::function<void(fp_t, std::vector<uint>, std::set<uint>)>
     error_callback_t;
 typedef std::function<void(uint, std::array<fp_t, N_COORD>)>
@@ -25,6 +23,7 @@ using namespace decoding;
 
 void
 DecodingGraph::build_distance_matrix() {
+    std::cout << "(decoding) building dmatrix.\n";
     ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
     {
         auto e = this->get_edge(v1, v2);
@@ -44,12 +43,16 @@ DecodingGraph::build_distance_matrix() {
         std::set<uint> frames;
 
         fp_t weight = dist.at(dst);
+        bool found_boundary = false;
+        std::vector<vertex_t*> path;
         if (weight < 1000) {
             auto curr = dst;
             while (curr != src) {
                 auto next = pred.at(curr);
                 if (curr == next) {
                     weight = 1000000000;
+                    path.clear();
+                    found_boundary = false;
                     goto failed;
                 }
                 auto e = this->get_edge(next, curr);
@@ -61,13 +64,17 @@ DecodingGraph::build_distance_matrix() {
                 // Update data
                 frames = new_frames;
                 length++;
+                path.push_back(curr);
+                found_boundary |= (curr->id == BOUNDARY_INDEX);
                 curr = next;
             }
+            path.push_back(src);
+            found_boundary |= (src->id == BOUNDARY_INDEX);
         }
 failed:
         fp_t prob = pow(10, -weight);
 
-        return (matrix_entry_t) {length, prob, weight, frames};
+        return (matrix_entry_t) {length, prob, weight, frames, path, found_boundary};
     };
 
     distance_matrix = distance::create_distance_matrix(this, w, cb);
@@ -118,9 +125,9 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
             qec_circ,
             true,  // decompose_errors
             true,  // fold loops
-            false, // allow gauge detectors
+            true, // allow gauge detectors
             1.0,   // approx disjoint errors threshold
-            false, // ignore decomposition failures
+            true, // ignore decomposition failures
             false
         );
     // Create callbacks.
@@ -185,8 +192,7 @@ to_decoding_graph(const stim::Circuit& qec_circ) {
     std::array<fp_t, N_COORD> coord_offset;
     coord_offset.fill(0);  // Zero initialize.
     // Use callbacks to build graph.
-    read_detector_error_model(dem, 1, det_offset, coord_offset,
-                                err_f, det_f);
+    read_detector_error_model(dem, 1, det_offset, coord_offset, err_f, det_f);
     return graph;
 }
 

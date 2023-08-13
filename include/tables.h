@@ -77,7 +77,7 @@ set_all_2q(uint n_qubits,
 }
 
 struct ErrorAndTiming {
-    fp_t e_g1q = 1e-5;
+    fp_t e_g1q = 1e-3;
     fp_t e_g2q = 1e-3;
     fp_t e_ro = 1e-3;
     fp_t t_g1q = 30;    // in nanoseconds.
@@ -85,6 +85,24 @@ struct ErrorAndTiming {
     fp_t t_ro = 600;
     fp_t t1 = 1000e3;
     fp_t t2 = 500e3;
+
+    ErrorAndTiming operator*(fp_t x) {
+        this->e_g1q *= x;
+        this->e_g2q *= x;
+        this->e_ro *= x;
+        this->t1 *= 1.0/x;
+        this->t2 *= 1.0/x;
+        return *this;
+    }
+
+    ErrorAndTiming operator+(fp_t x) {
+        this->e_g1q += x;
+        this->e_g2q += x;
+        this->e_ro += x;
+        this->t1 += x;
+        this->t2 += x;
+        return *this;
+    }
 };
 
 inline void

@@ -2,6 +2,9 @@
  *  date:   12 June 2023
  * */
 
+#ifndef EXPERIMENTS_h
+#define EXPERIMENTS_h
+
 #include "decoder/decoder.h"
 #include "defs.h"
 
@@ -32,7 +35,7 @@ typedef std::function<void(stim::simd_bits_range_ref&)>         cb_t1;
 typedef std::function<void(const decoder::Decoder::result_t&)>  cb_t2;
 
 typedef struct {
-    cb_t1   prologue = [&] (stim::simd_bits_range_ref& x) {};
+    cb_t1   prologue = [&] (stim::simd_bits_range_ref x) {};
     cb_t2   epilogue = [&] (const decoder::Decoder::result_t& res) {};
 } callback_t;
 
@@ -101,3 +104,5 @@ experiments::memory_result_t
 memory_experiment(decoder::Decoder*, experiments::memory_params_t);
 
 }   // qontra
+
+#endif  // EXPERIMENTS_h

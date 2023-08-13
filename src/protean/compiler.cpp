@@ -7,32 +7,91 @@
 namespace qontra {
 namespace protean {
 
-static uint MIDDLEMAN_INDEX = 0;
+namespace compiler {
 
-#define PRINT_V(id)  (id >> 30) << "|" << ((id >> 24) & 0x3f) << "|" << (id & 0x00ff'ffff)
+SDGraph*
+alloc_sdgraph_deep_copy(SDGraph& graph) {
+    SDGraph* new_graph = new SDGraph;
+
+    for (auto v : graph.get_vertices()) {
+        auto nv = new sdvertex_t;
+        nv->id = v->id;
+        nv->sch = v->sch;
+        new_graph->add_vertex(nv);
+    }
+
+    for (auto e : graph.get_edges()) {
+        auto ne = new sdedge_t;
+
+        auto esrc = (sdvertex_t*)e->src;
+        auto edst = (sdvertex_t*)e->dst;
+
+        ne->src = new_graph->get_vertex(esrc->id);
+        ne->dst = new_graph->get_vertex(edst->id);
+        ne->is_undirected = e->is_undirected;
+        new_graph->add_edge(ne);
+    }
+    return new_graph;
+}
+
+std::map<sdvertex_t*, uint>
+get_sdv_depths(SDGraph& graph) {
+    std::map<sdvertex_t*, uint> sdv_to_layer;
+
+    sdvertex_t* root = graph.get_vertex(SDGRAPH_ROOT_ID);
+    for (auto v : graph.get_vertices()) {
+        sdv_to_layer[v] = 0;
+    }
+
+    // We need a custom version of BFS for this:
+    std::deque<sdvertex_t*> bfs;
+    bfs.push_back(root);
+    while (bfs.size()) {
+        auto v = bfs.front();
+        bfs.pop_front();
+
+        for (auto w : graph.get_neighbors(v)) {
+            if (sdv_to_layer[w] < sdv_to_layer[v]+1) {
+                sdv_to_layer[w] = sdv_to_layer[v] + 1; 
+                bfs.push_back(w);   
+            }
+        }
+    }
+
+    return sdv_to_layer;
+}
+
+}   // compiler
+
+static uint64_t MIDDLEMAN_INDEX = 1;
 
 using namespace graph;
 using namespace compiler;
 
+#define ID32_TO_ID64(x) (((x) & ((1L<<30)-1)) | (((x) >> 30) << ID_TYPE_OFFSET))
+
 ir_t*
-Compiler::run(TannerGraph* tanner_graph, const schedule_t& ideal_sch) {
+Compiler::run(TannerGraph* tanner_graph, std::string sdl_file) {
     // Set state variables to initial values.
     compile_round = 0;
 
     uint rounds_without_progress = 0;
 
+    // Initialize IR.
+    SDGraph ideal_sch = build_schedule_graph_from_sdl(sdl_file);
+
     ir_t* best_result = nullptr;
     ir_t* ir = new ir_t;
     ir->curr_spec = tanner_graph;
     ir->arch = new Processor3D;
-    ir->schedule = ideal_sch;
+    ir->schedule_graph = alloc_sdgraph_deep_copy(ideal_sch);
+    std::cout << "ideal_sch: |V| = " << ideal_sch.get_vertices().size() << "\n";
 __place:
     if (params.verbose) {
         std::cout << "[ place ] ---------------------\n";
     }
     place(ir);
     if (params.verbose) {
-        std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
@@ -40,9 +99,9 @@ __place:
         std::cout << "[ unify ] ---------------------\n";
     }
     unify(ir);
+    uint attempts_to_update = 0;
 __reduce:
     if (params.verbose) {
-        std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
@@ -52,13 +111,19 @@ __reduce:
     reduce(ir);
     // Check if we need to call merge or split
     if (params.verbose) {
-        std::cout << "\tcost = " << objective(ir) << "\n";
         std::cout << "\tnumber of qubits = " << ir->arch->get_vertices().size() << "\n";
         std::cout << "\tconnectivity = " << ir->arch->get_mean_connectivity() << ", max = "
                     << ir->arch->get_max_connectivity() << "\n";
         std::cout << "\tthickness = " << ir->arch->get_thickness() << "\n";
     }
+    if (attempts_to_update == 30) {
+        // No point in trying again. Just return.
+        delete ir;
+        return best_result;
+    }
+__constraints:
     if (rounds_without_progress > 0) {
+        attempts_to_update++;
         if (check_size_violation(ir)) {
             if (params.verbose) std::cout << "[ merge ] ---------------------\n";
             if (merge(ir))  goto __reduce;
@@ -79,10 +144,11 @@ __schedule:
     xform_schedule(ir);
     if (params.verbose) {
         std::cout << "\t#ops = " << ir->schedule.size() << "\n";
-//      std::cout << "\tdepth = " << ir->dependency_graph->get_depth() << "\n";
+        std::cout << "\tdepth = " << ir->dependency_graph->get_depth() << "\n";
 
         std::cout << "[ score ] ---------------------\n";
     }
+__score:
     score(ir);
     if (params.verbose) {
         std::cout << "\tcost = " << ir->score << ", valid = " << ir->valid << "\n";
@@ -97,19 +163,19 @@ __schedule:
     } else if (ir->score <= best_result->score + 1e-2) {
         std::cout << "\tNO PROGRESS.\n";
         rounds_without_progress++;
-        if (rounds_without_progress >= 2) return best_result;
+        if (rounds_without_progress >= 10) return best_result;
     } else if (ir->score > best_result->score) {
         return best_result;
     }
     if (!ir->valid) {
         rounds_without_progress++;
-        if (rounds_without_progress >= 10) return best_result;
+        if (rounds_without_progress > 1) return best_result;
     }
     // Reset ir (except Tanner graph).
     ir_t* new_ir = new ir_t;
     new_ir->curr_spec = ir->curr_spec;
     new_ir->arch = new Processor3D;
-    new_ir->schedule = ideal_sch;
+    new_ir->schedule_graph = alloc_sdgraph_deep_copy(ideal_sch);
     // Perform transformations on Tanner graph.
     compile_round++;
     if (params.verbose)      std::cout << "[ induce ] ---------------------\n";
@@ -120,10 +186,17 @@ __schedule:
     }
 
     if (params.verbose)      std::cout << "[ sparsen ] ---------------------\n";
-    sparsen(ir);
-    if (best_result != ir) delete ir;
-    ir = new_ir;
-    goto __place;
+    if (sparsen(new_ir)) {
+        if (best_result != ir) delete ir;
+        ir = new_ir;
+        goto __place;
+    }
+
+    delete new_ir;
+
+    if (params.verbose)      std::cout << "[ raise ] -----------------------\n";
+    raise(ir);
+    goto __constraints;
 }
 
 void
@@ -278,10 +351,6 @@ Compiler::unify(ir_t* curr_ir) {
                     // Delete the second check and merge the roles.
                     auto pv = curr_ir->role_to_qubit[tv];
                     auto pw = curr_ir->role_to_qubit[tw];
-                    if (params.verbose) {
-                        std::cout << "\tMerging " << PRINT_V(pw->id) << " with "
-                                << PRINT_V(pv->id) << "\n";
-                    }
                     curr_ir->role_to_qubit[tw] = pv;
                     
                     for (auto tu : curr_ir->qubit_to_roles[pw]) {
@@ -349,9 +418,6 @@ Compiler::reduce(ir_t* curr_ir) {
         if (!any_nondata_neighbors) {
             if (!curr_ir->is_gauge_only.count(pv))   goto reduce_do_not_remove_nondata;
             // Otherwise delete the qubit.
-            if (params.verbose) {
-                std::cout << "\tDeleting qubit " << PRINT_V(pv->id) << "\n";
-            }
             for (auto tv : curr_ir->qubit_to_roles[pv]) {
                 curr_ir->role_to_qubit.erase(tv);
             }
@@ -431,17 +497,13 @@ reduce_do_not_remove_nondata:
         }
         curr_ir->qubit_to_roles.erase(pv);
 
-        if (params.verbose) {
-            std::cout << "\tReducing " << PRINT_V(pv->id) << " to " << PRINT_V(pw->id) << "\n";
-        }
-        
         visited.insert(pv);
         visited.insert(pw);
         deallocated.insert(pv);
     }
     for (auto pv : deallocated) arch->delete_vertex(pv);
-    arch->reallocate_edges();
     for (auto e : new_edges)    arch->add_edge(e);
+    arch->reallocate_edges();
 }
 
 bool
@@ -480,10 +542,6 @@ Compiler::merge(ir_t* curr_ir) {
         curr_ir->qubit_to_roles[v1].push_back(tv);
         curr_ir->role_to_qubit[tv] = v1;
     }
-    if (params.verbose) {
-        std::cout << "\tDeleted qubit " << PRINT_V(v2->id) << " and merged it with "
-                << PRINT_V(v1->id) << ".\n";
-    }
     arch->delete_vertex(v2);
     // Add new edges
     for (auto f : new_edges)    arch->add_edge(f);
@@ -507,9 +565,9 @@ Compiler::split(ir_t* curr_ir) {
 
     // Create the partner qubit
     proc3d::vertex_t* dup = new proc3d::vertex_t;
-    dup->id = ((target->id & 0x00ff'ffff) << 6) 
+    dup->id = ((target->id & ID_MASK) << ID_GEN_OFFSET) 
                 | MIDDLEMAN_INDEX++ 
-                | (tanner::vertex_t::GAUGE << 30);
+                | (tanner::vertex_t::GAUGE << ID_TYPE_OFFSET);
     arch->add_vertex(dup);
     auto target_dup = new proc3d::edge_t;
     target_dup->src = target;
@@ -555,12 +613,11 @@ Compiler::flatten(ir_t* curr_ir) {
     proc3d::vertex_t* src = (proc3d::vertex_t*)violator->src;
     proc3d::vertex_t* dst = (proc3d::vertex_t*)violator->dst;
     proc3d::vertex_t* mm = new proc3d::vertex_t;
-    mm->id = ((src->id & 0x00ff'ffff) << 6)
+    mm->id = ((src->id & ID_MASK) << ID_GEN_OFFSET)
                 | MIDDLEMAN_INDEX++
-                | (tanner::vertex_t::GAUGE << 30);
-    arch->add_vertex(mm);
+                | (tanner::vertex_t::GAUGE << ID_TYPE_OFFSET);
     curr_ir->qubit_to_roles[mm] = std::vector<tanner::vertex_t*>();
-    
+
     auto src_mm = new proc3d::edge_t;
     src_mm->src = src;
     src_mm->dst = mm;
@@ -569,6 +626,7 @@ Compiler::flatten(ir_t* curr_ir) {
     mm_dst->dst = dst;
 
     arch->delete_edge(violator);
+    arch->add_vertex(mm);
     arch->add_edge(src_mm);
     arch->add_edge(mm_dst);
     return true;
@@ -576,18 +634,281 @@ Compiler::flatten(ir_t* curr_ir) {
 
 void
 Compiler::xform_schedule(ir_t* curr_ir) {
+    // Transform the existing schedule graph so it can be run on
+    // the defined coupling graph.
+    TannerGraph* tanner_graph = curr_ir->curr_spec;
+    Processor3D* arch = curr_ir->arch;
+    SDGraph* sch_graph = curr_ir->schedule_graph;
+
+    arch->reallocate_edges();   // Make sure the architecture's edges are finalized.
+
+    distance::callback_t<proc3d::vertex_t, std::vector<proc3d::vertex_t*>> d_cb 
+        = [&] (proc3d::vertex_t* v1, 
+            proc3d::vertex_t* v2,
+            const std::map<proc3d::vertex_t*, fp_t> dist,
+            const std::map<proc3d::vertex_t*, proc3d::vertex_t*> prev)
+    {
+        std::vector<proc3d::vertex_t*> path;
+        auto curr = v2;
+        while (curr != v1) {
+            path.push_back(curr);
+            curr = prev.at(curr);
+        }
+        path.push_back(v1);
+        std::reverse(path.begin(), path.end());
+        return path;
+    };
+    auto path_table = distance::create_distance_matrix(
+                                arch, 
+                                unit_ewf_t<proc3d::vertex_t>(),
+                                d_cb);
+
+    std::map<proc3d::vertex_t*, uint32_t>   pv_to_qubitno;
+    uint32_t pvid = 0;
+    for (auto pv : arch->get_vertices()) {
+        pv_to_qubitno[pv] = pvid++;
+    }
+
+    std::map<sdvertex_t*, std::set<proc3d::vertex_t*>>  sch_to_uses;
+
+    for (auto sdv : sch_graph->get_vertices()) {
+        if (sdv->id == SDGRAPH_ROOT_ID) continue;
+
+        auto sch = sdv->sch;
+        schedule_t new_sch;
+
+        auto tcheck = tanner_graph->get_vertex(sdv->id);
+
+        // We will maintain prologue and epilogue instructions to add
+        // to the schedule for flag qubits.
+        std::deque<Instruction> prologue;
+        std::deque<Instruction> epilogue;
+        std::deque<Instruction> body;
+
+        std::set<proc3d::vertex_t*> visited;
+        // First, run through the schedule once to figure out how many qubits
+        // each gauge qubit supports.
+        for (auto& inst : sch) {
+            std::vector<proc3d::vertex_t*> physical_qubits;
+            if (inst.name == "cx") {
+                for (uint i = 0; i < inst.operands.size(); i += 2) {
+                    uint64_t q1 = inst.operands[i];
+                    uint64_t q2 = inst.operands[i+1];
+                    auto tv1 = tanner_graph->get_vertex(ID32_TO_ID64(q1));
+                    auto tv2 = tanner_graph->get_vertex(ID32_TO_ID64(q2));
+                    // Get corresponding physical qubits.
+                    proc3d::vertex_t* pv1;
+                    proc3d::vertex_t* pv2;
+                    bool data_qubit_is_control;
+                    // We want to grow the path from the data qubit.
+                    //
+                    // If there are gauge qubits in the path, as follows:
+                    //      D, G1, G2, P
+                    // Then, in the schedule body, we will add a CNOT between
+                    // D and G1 (preserving orientation). In the prologue and epilogue,
+                    // we will add CNOTs between G1, G2 and G2, P.
+                    //
+                    // We will further mark G1 and G2 as visited to avoid redundant
+                    // operations in the prologue/epilogue.
+                    if (tv1->qubit_type == tanner::vertex_t::DATA) {
+                        pv1 = arch->get_vertex(tv1->id);
+                        pv2 = curr_ir->role_to_qubit[tv2];
+                        data_qubit_is_control = true;
+                    } else {
+                        pv1 = arch->get_vertex(tv2->id);
+                        pv2 = curr_ir->role_to_qubit[tv1];
+                        data_qubit_is_control = false;
+                    }
+                    auto path = path_table[pv1][pv2];
+                    // First, mark all non-data qubits as uses in the schedule
+                    for (auto px : path) {
+                        if (!curr_ir->is_data(px))  sch_to_uses[sdv].insert(px);
+                    }
+
+                    auto pv3 = path[1]; // This may very well just be pv2.
+                    Instruction first_cx = {"cx", {}};
+                    if (data_qubit_is_control) {
+                        first_cx.operands.push_back(pv_to_qubitno[pv1]);
+                        first_cx.operands.push_back(pv_to_qubitno[pv3]);
+                    } else {
+                        first_cx.operands.push_back(pv_to_qubitno[pv3]);
+                        first_cx.operands.push_back(pv_to_qubitno[pv1]);
+                    }
+                    body.push_back(first_cx);
+                    // Add remainder of the path to the prologue and epilogue
+                    std::deque<Instruction> cx_along_path;
+                    for (uint j = 2; j < path.size(); j++) {
+                        auto px = path[j-1];
+                        auto py = path[j];
+                        if (visited.count(px))  break;
+
+                        Instruction cx = {"cx", {}};
+                        if (data_qubit_is_control) {
+                            cx.operands.push_back(pv_to_qubitno[px]);
+                            cx.operands.push_back(pv_to_qubitno[py]);
+                        } else {
+                            cx.operands.push_back(pv_to_qubitno[py]);
+                            cx.operands.push_back(pv_to_qubitno[px]);
+                        }
+                        cx_along_path.push_front(cx);
+                        visited.insert(px);
+                    }
+
+                    for (auto& new_inst : cx_along_path) {
+                        prologue.push_back(new_inst);
+                        epilogue.push_front(new_inst);
+                    }
+                }
+            } else {
+                Instruction new_inst = {inst.name, {}};
+                for (uint64_t q : inst.operands) {
+                    auto tv = tanner_graph->get_vertex(ID32_TO_ID64(q));
+                    proc3d::vertex_t* pv;
+                    if (tv->qubit_type == tanner::vertex_t::DATA) {
+                        pv = arch->get_vertex(tv->id);
+                    } else {
+                        pv = curr_ir->role_to_qubit[tv];
+                    }
+                    new_inst.operands.push_back(pv_to_qubitno[pv]);
+                }
+                if (inst.name == "mnrc") {
+                    new_inst.metadata.owning_check_id = tcheck->id;
+                    bool is_x_operator = tcheck->qubit_type == tanner::vertex_t::XPARITY;
+                    for (auto tv : tanner_graph->get_neighbors(tcheck)) {
+                        new_inst.metadata.operators.push_back(
+                                std::make_pair(tv->id, is_x_operator));
+                    }
+                }
+                body.push_back(new_inst);
+            }
+        }
+        // Add measurements for the flag qubits.
+        for (auto px : visited) {
+            if (tcheck->qubit_type == tanner::vertex_t::ZPARITY) {
+                Instruction h = {"h", {pv_to_qubitno[px]}};
+                prologue.push_front(h);
+                epilogue.push_back(h);
+            }
+            Instruction meas = {"mnrc", {pv_to_qubitno[px]}};
+            // Fill out metadata for measurement.
+            meas.metadata.owning_check_id = tcheck->id;
+            meas.metadata.is_for_flag = true;
+            
+            auto tcheck_neighbors = tanner_graph->get_neighbors(tcheck);
+            for (auto tx : curr_ir->qubit_to_roles[px]) {
+                auto adj = tanner_graph->get_neighbors(tx);
+                for (auto td : tcheck_neighbors) {
+                    if (std::find(adj.begin(), adj.end(), td) != adj.end()) {
+                        // Note that the flag qubit attempts to detect errors
+                        // that commute through the check.
+                        bool is_x_operator = tcheck->qubit_type != tanner::vertex_t::XPARITY;
+                        meas.metadata.operators.push_back(
+                                std::make_pair(td->id, is_x_operator));
+                    }
+                }
+            }
+            
+            Instruction reset = {"reset", {pv_to_qubitno[px]}};
+            epilogue.push_back(meas);
+            epilogue.push_back(reset);
+        }
+        // Replace the schedule for the SDGraph vertex.
+        for (auto& inst : body) {
+            if (inst.name == "prologue") {
+                for (auto& x : prologue) new_sch.push_back(x);
+            } else if (inst.name == "epilogue") {
+                for (auto& x : epilogue) new_sch.push_back(x);
+            } else {
+                new_sch.push_back(inst);
+            }
+        }
+        sdv->sch = new_sch;
+    }
+    // Now, create new edges in the scheduling graph based on use conflicts.
+    auto sdv_to_layer = get_sdv_depths(*sch_graph);
+    for (auto sdv : sch_graph->get_vertices()) {
+        auto v_uses = sch_to_uses[sdv];
+        for (auto sdw : sch_graph->get_vertices()) {
+            if (sdv == sdw) continue;
+            auto w_uses = sch_to_uses[sdw];
+            std::set<proc3d::vertex_t*> intersect;
+            std::set_intersection(v_uses.begin(), v_uses.end(),
+                                    w_uses.begin(), w_uses.end(),
+                                    std::inserter(intersect, intersect.begin()));
+            if (intersect.empty())  continue;
+            auto e = new sdedge_t;
+            // If v is above w, keep it that way.
+            if (sdv_to_layer[sdv] <= sdv_to_layer[sdw]) {
+                e->src = sdv;
+                e->dst = sdw;
+            } else {
+                e->src = sdw;
+                e->dst = sdv;
+            }
+            e->is_undirected = false;
+            sch_graph->add_edge(e);
+            // Update depths.
+            sdv_to_layer = get_sdv_depths(*sch_graph);
+        }
+    }
+    // Finally, perform a BFS on the schedule description graph (SDGraph)
+    // to obtain the final schedule.
+    //
+    // Create a dependence graph first, and then convert this to a schedule.
+    DependenceGraph* dgr = new DependenceGraph();
+
+    std::vector<std::vector<sdvertex_t*>>   scheduling_layers;  // We will try and parallelize
+                                                                // operations for schedules in
+                                                                // the same layer.
+    auto root = sch_graph->get_vertex(SDGRAPH_ROOT_ID);
+    for (auto v : sch_graph->get_vertices()) {
+        if (v == root)  continue;
+        if (sdv_to_layer[v] > scheduling_layers.size()) {
+            scheduling_layers.push_back(std::vector<sdvertex_t*>());
+        }
+        scheduling_layers[sdv_to_layer[v]-1].push_back(v);
+    }
+
+    // Now, merge the layers together.
+    uint dvid = 0;
+    for (auto& sdlayer : scheduling_layers) {
+        uint opnum = 0;
+        bool all_done = false;
+        while (!all_done) {
+            all_done = true;
+            for (auto sdv : sdlayer) {
+                auto& sch = sdv->sch;
+                if (opnum >= sch.size())    continue;
+                Instruction& inst = sch[opnum];
+//              if (inst.name == "nop") continue;
+                auto dv = new dep::vertex_t;
+                dv->id = dvid++;
+                dv->inst_p = &inst;
+                dgr->add_vertex(dv);
+
+                all_done = false;
+            }
+            opnum++;
+        }
+    }
+
+    schedule_t composite_sch = dgr->to_schedule();
+    // Update IR.
+    curr_ir->qubit_labels = pv_to_qubitno;
+    curr_ir->dependency_graph = dgr;
+    curr_ir->schedule = composite_sch;
 }
 
 
 void
 Compiler::score(ir_t* curr_ir) {
-    curr_ir->arch->reallocate_edges();
     // Check if constraints are maintained.
     curr_ir->valid = !check_connectivity_violation(curr_ir)
                 && !check_size_violation(curr_ir)
                 && curr_ir->arch->get_thickness() <= constraints.max_thickness;
-    // If constraints are maintained, score the IR.
-    if (curr_ir->valid)  curr_ir->score = objective(curr_ir);
+    if (compile_round == 0 || curr_ir->valid) {
+        curr_ir->score = objective(curr_ir);
+    }
 }
 
 bool
@@ -611,11 +932,6 @@ Compiler::induce(ir_t* curr_ir) {
                 uint d = tanner_graph->get_degree(ti);
                 if (d < new_max_cw) new_max_cw = d;
                 any_change = true;
-                if (params.verbose) {
-                    std::cout << "\tInduced gauge " << PRINT_V(ti->id)
-                                << " on " << PRINT_V(tv->id) << " and " << PRINT_V(tw->id)
-                                << " succeeded.\n";
-                }
             }
         }
     }
@@ -652,8 +968,8 @@ Compiler::sparsen(ir_t* curr_ir) {
         if (tanner_graph->has_copy_in_gauges(tg_adj)) continue;
         // Create a new gauge qubit.
         tanner::vertex_t* tg = new tanner::vertex_t;
-        uint index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
-        tg->id = (index) | (tanner::vertex_t::GAUGE << 30);
+        uint64_t index = tanner_graph->get_vertices_by_type(tanner::vertex_t::GAUGE).size();
+        tg->id = (index) | (tanner::vertex_t::GAUGE << ID_TYPE_OFFSET);
         tg->qubit_type = tanner::vertex_t::GAUGE;
         tanner_graph->add_vertex(tg);
         // Add corresponding edges.
@@ -666,224 +982,27 @@ Compiler::sparsen(ir_t* curr_ir) {
         ty_tg->src = (void*)ty;
         ty_tg->dst = (void*)tg;
         tanner_graph->add_edge(ty_tg);
-        
-        if (params.verbose) {
-            std::cout << "\t( " << PRINT_V(target->id) << " ) Added new gauge between " 
-                            << PRINT_V(tx->id) << " and "
-                            << PRINT_V(ty->id) << "\n";
-        }
     }
     return true;
 }
 
 void
-print_connectivity(Processor3D* arch) {
-    std::cout << "Connections:\n";
-    for (auto v : arch->get_vertices()) {
-        std::cout << "\tQubit " << PRINT_V(v->id) << ":\t";
-        for (auto w : arch->get_neighbors(v)) {
-            std::cout << " " << PRINT_V(w->id);
-            if (w->is_tsv_junction())   std::cout << "(V)";
-        }
-        std::cout << "\n";
-    }
-}
-
-void
-print_schedule(const schedule_t& sched) {
-    std::cout << "Schedule:\n";
-    for (auto op : sched) {
-        std::cout << "\t" << op.name;
-        for (uint x : op.operands) {
-            std::cout << " " << PRINT_V(x);
-        }
-        std::cout << "\n";
-    }
-}
-
-stim::Circuit
-build_stim_circuit(
-        compiler::ir_t* ir, 
-        uint rounds, 
-        const std::vector<uint>& obs, 
-        bool is_memory_x,
-        ErrorTable& errors,
-        TimeTable& times) 
-{
-    auto tanner_graph = ir->curr_spec;
-    auto arch = ir->arch;
-    auto dependency_graph = ir->dependency_graph;
-    // First assign data qubits, then assign other qubits.    
-    // This will keep the numbering consistent with the spec provided by the user.
-    uint k = 0;
-    std::map<uint, uint> id_to_num;
-    for (auto v : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
-        id_to_num[v->id] = v->id;   // Note that data qubits have the same ID as
-                                    // in the physical architecture.
-        if (v->id > k)  k = v->id;
-    }
-    const uint n_data = k+1;
-    for (auto v : arch->get_vertices()) {
-        if (ir->is_data(v)) continue;
-        id_to_num[v->id] = ++k;
-    }
-    const uint n_nondata = k - n_data;
-    const uint n = k;
-
-    // Print out ID mapping (debug)
-    for (auto pair : id_to_num) {
-        std::cout << PRINT_V(pair.first) << " --> " << pair.second << "\n";
+Compiler::raise(ir_t* curr_ir) {
+    Processor3D* arch = curr_ir->arch;
+    auto cpl_length_table = arch->get_coupling_lengths();
+    std::vector<proc3d::edge_t*> in_plane_edges;
+    for (auto e : arch->get_edges()) {
+        if (!arch->has_complex_coupling(e)) in_plane_edges.push_back(e);
     }
 
-    stim::Circuit circuit;
-    // Add initialization for memory experiment.
-    for (auto v : arch->get_vertices()) {
-        uint i = id_to_num[v->id];
-        circuit.append_op("R", {i});
-#ifndef DISABLE_ERRORS
-        circuit.append_op("X_ERROR", {i}, errors.op1q["R"][v->id]); 
-#endif
-        if (is_memory_x && i < n_data) {
-            circuit.append_op("H", {i});
-#ifndef DISABLE_ERRORS
-            circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][v->id]); 
-#endif
-        }
-    }
-    // Add syndrome extraction rounds to circuit. 
-    // Note that the schedule is one round.
-    fp_t prev_round_length = 0.0;
-    uint prev_round_meas = 0;
-    for (uint r = 0; r < rounds; r++) {
-        circuit.append_op("TICK", {});
-        // Apply decoherence on data qubits.
-        for (uint i = 0; i < n_data; i++) {
-            fp_t e = 1.0 - exp(-prev_round_length / times.t1[i]);
-#ifndef DISABLE_ERRORS
-            circuit.append_op("DEPOLARIZE1", {i}, e);
-#endif
-        }
-        // Schedule operations by depth in the circuit.
-        prev_round_length = 0.0;
-
-        uint this_round_meas = 0;
-        std::vector<uint> meas_events;
-        for (uint d = 1; d <= dependency_graph->get_depth(); d++) {
-            circuit.append_op("TICK", {});
-
-            auto ops = dependency_graph->get_vertices_at_depth(d);
-            fp_t layer_length = 0.0;
-            for (auto v : ops) {
-                Instruction* inst = v->inst_p;
-                if (inst->name == "NOP")    continue;
-
-                std::vector<uint> operands = inst->operands;
-                // Add operation and add errors depending on which operation it is.
-                fp_t max_opt = 0;
-                if (inst->name == "CX") {
-                    for (uint j = 0; j < operands.size(); j += 2) {
-                        uint x1 = operands[j];
-                        uint x2 = operands[j+1];
-                        auto x1_x2 = std::make_pair(x1, x2);
-
-                        uint i1 = id_to_num[x1];
-                        uint i2 = id_to_num[x2];
-
-                        circuit.append_op(inst->name, {i1, i2});
-#ifndef DISABLE_ERRORS
-                        circuit.append_op("L_TRANSPORT", {i1, i2},
-                                errors.op2q_leakage_transport["CX"][x1_x2]);
-                        circuit.append_op("L_ERROR", {i1, i2},
-                                errors.op2q_leakage_injection["CX"][x1_x2]);
-                        circuit.append_op("DEPOLARIZE2", {i1, i2},
-                                errors.op2q["CX"][x1_x2]);
-#endif
-                        // To implement crosstalk, we will just apply depolarizing
-                        // errors on nearby qubits.
-                        /*
-                        auto pv1 = arch->get_vertex(x1);
-                        auto pv2 = arch->get_vertex(x2);
-                        for (auto pw : arch->get_neighbors(pv1)) {
-                            if (pw == pv2)  continue;
-                            uint iw = id_to_num[pw->id];
-                            circuit.append_op("DEPOLARIZE1", {iw}, 
-                                    errors.op2q_crosstalk["CX"][x1_x2]);
-                        }
-                        for (auto pw : arch->get_neighbors(pv2)) {
-                            if (pw == pv1)  continue;
-                            uint iw = id_to_num[pw->id];
-                            circuit.append_op("DEPOLARIZE1", {iw}, 
-                                    errors.op2q_crosstalk["CX"][x1_x2]);
-                        }
-                        fp_t t = times.op2q["CX"][x1_x2];
-                        if (t > max_opt)    max_opt = t;
-                        */
-                    }
-                } else {
-                    for (uint x : operands) {
-                        uint i = id_to_num[x];
-                        if (inst->name == "Mrc" || inst->name == "Mnrc") {
-#ifndef DISABLE_ERRORS
-                            circuit.append_op("X_ERROR", {i}, errors.op1q["Mrc"][x]);
-#endif
-                            circuit.append_op("M", {i});
-
-                            // If this measuring the same check as the memory experiment
-                            // targets, then mark it as a recorded detection event.
-                            if (inst->is_measuring_x_check == is_memory_x) {
-                                meas_events.push_back(this_round_meas);
-                            }
-                            this_round_meas++;
-                        } else if (inst->name == "R") {
-                            circuit.append_op(inst->name, {i});
-#ifndef DISABLE_ERRORS
-                            circuit.append_op("X_ERROR", {i}, errors.op1q["R"][x]);
-#endif
-                        } else {
-                            circuit.append_op(inst->name, {i});
-#ifndef DISABLE_ERRORS
-                            circuit.append_op("DEPOLARIZE1", {i}, errors.op1q["H"][x]);
-#endif
-                        }
-                        fp_t t = times.op1q[inst->name][x];
-                        if (t > max_opt)    max_opt = t;
-                    }
-                }
-                if (layer_length < max_opt) layer_length = max_opt;
-            }
-            prev_round_length += layer_length;
-        }
-        // Add error detection events.
-        if (r == 0) {
-            for (uint m : meas_events) {
-                circuit.append_op("DETECTOR", 
-                        { (this_round_meas - m) | stim::TARGET_RECORD_BIT });
-            }
-        } else {
-            for (uint m : meas_events) {
-                circuit.append_op("DETECTOR", 
-                    { (this_round_meas - m) | stim::TARGET_RECORD_BIT,
-                        (this_round_meas - m + prev_round_meas) | stim::TARGET_RECORD_BIT });
-            }
-        }
-        prev_round_meas = this_round_meas;
-    }
-    // Finally, measure all the data qubits.
-    for (uint i = 0; i < n_data; i++) {
-        // Don't have any errors -- makes life easier.
-        if (is_memory_x) {
-            circuit.append_op("H", {i});
-        }
-        circuit.append_op("M", {i});
-    }
-    // Record observable.
-    std::vector<uint> obs_inc;
-    for (uint i : obs) {
-        obs_inc.push_back((n_data - i) | stim::TARGET_RECORD_BIT);
-    }
-    std::sort(obs_inc.begin(), obs_inc.end());
-    circuit.append_op("OBSERVABLE_INCLUDE", obs_inc, 0);
-    return circuit;
+    auto cmp = [&] (proc3d::edge_t* e1, proc3d::edge_t* e2) {
+        return cpl_length_table[e1] > cpl_length_table[e2];
+    };
+    auto longest_coupling = *(std::min_element(
+                                    in_plane_edges.begin(),
+                                    in_plane_edges.end(),
+                                    cmp));
+    arch->force_out_of_plane(longest_coupling);
 }
 
 void
@@ -899,7 +1018,7 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
     TannerGraph* tanner_graph = ir->curr_spec;
     for (auto tv : tanner_graph->get_vertices()) {
         if (tv->qubit_type == tanner::vertex_t::DATA)   continue;
-        spec_out << "GXZ"[tv->qubit_type-1] << (tv->id & 0x00ff'ffff);
+        spec_out << "GXZ"[tv->qubit_type-1] << (tv->id & ID_MASK);
         for (auto tw : tanner_graph->get_neighbors(tv)) {
             spec_out << "," << tw->id;
         }
@@ -914,22 +1033,20 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
     
     Processor3D* arch = ir->arch;
     // First, organize the qubits into more appropriate ids.
-    std::map<uint, uint> id_to_num;
-    uint k = 0;
-    for (auto v : arch->get_vertices())  id_to_num[v->id] = k++;
+    auto qubit_labels = ir->qubit_labels;
     // Now, write the architecture.
     for (auto e : arch->get_edges()) {
         auto pv = (proc3d::vertex_t*)e->src;
         auto pw = (proc3d::vertex_t*)e->dst;
         // Flat map is pretty straightforward.
-        flat_map_out << id_to_num[pv->id] << "," << id_to_num[pw->id] << "\n";
+        flat_map_out << qubit_labels[pv] << "," << qubit_labels[pw] << "\n";
         // Check if the connection is complex.
         auto impl = arch->get_physical_edges(pv, pw);
-        d3d_map_out << id_to_num[pv->id];
+        d3d_map_out << qubit_labels[pv];
         if (impl.size() > 1) {
             d3d_map_out << ",L" << impl[1]->processor_layer;
         }
-        d3d_map_out << "," << id_to_num[pw->id] << "\n";
+        d3d_map_out << "," << qubit_labels[pw] << "\n";
     }
     // Write Tanner vertex to physical qubit mapping.
     std::filesystem::path labels = folder/"labels.txt";
@@ -940,397 +1057,24 @@ write_ir_to_folder(ir_t* ir, std::string folder_name) {
         auto tv = pair.first;
         auto pv = pair.second;
         label_out << "DGXZ"[tv->qubit_type];
-        label_out << (tv->id & 0x00ff'ffff) << "," << id_to_num[pv->id] << "\n";
+        label_out << (tv->id & ID_MASK) << "," << qubit_labels[pv] << "\n";
     }
     // Also write data qubits
     for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::DATA)) {
-        label_out << "D" << (tv->id & 0x00ff'ffff) << "," << id_to_num[tv->id] << "\n";
+        auto pv = arch->get_vertex(tv->id);
+        label_out << "D" << (pv->id & ID_MASK) << "," << qubit_labels[pv] << "\n";
     }
     // Write schedule of operations
-    std::filesystem::path sched = folder/"schedule.qasm";
+    std::filesystem::path sched = folder/"schedule.asm";
     std::ofstream sched_out(sched);
-
-    uint cbit = 0;
-    std::string sched_str;
-    for (auto inst : ir->schedule) {
-        if (inst.name == "NOP") continue;
-        if (inst.name == "Mrc") {
-            sched_str += "measure q[" + std::to_string(id_to_num[inst.operands[0]]) 
-                + "] -> c[" + std::to_string(cbit++) + "];\n";
-        } else {
-            std::string opname;
-            if (inst.name == "R")   opname = "reset";
-            else {
-                for (auto x : inst.name)    opname.push_back(std::tolower(x));
-            }
-            uint ops_per_call = opname == "cx" ? 2 : 1;
-            for (uint i = 0; i < inst.operands.size(); i += ops_per_call) {
-                sched_str += opname + " q[" + std::to_string(id_to_num[inst.operands[i]]) + "]";
-                if (ops_per_call == 2) {
-                    sched_str += ",q[" + std::to_string(id_to_num[inst.operands[i+1]]) + "]";
-                }
-                sched_str += ";\n";
-            }
+    auto dgr = ir->dependency_graph;
+    for (uint i = 1; i <= dgr->get_depth(); i++) {
+        sched_out << "\n####\tLAYER " << i << "\t####\n\n";
+        for (auto v : dgr->get_vertices_at_depth(i)) {
+            sched_out << v->inst_p->str() << "\n";
         }
     }
-    sched_out << "OPENQASM 2.0;\n"
-                << "include \"qelib1.inc\";\n"
-                << "qreg q[" << arch->get_vertices().size() << "];\n"
-                << "creg c[" << cbit << "];\n"
-                << sched_str;
 }
 
 }   // protean
 }   // qontra
-
-/*
-
-void
-Compiler::micro_schedule(ir_t* curr_ir) {
-    // Here, we will create schedules for computing each parity check qubit.
-    // In macro_schedule, we will combine these schedules in a way that minimizes 
-    // depth.
-    TannerGraph* tanner_graph = curr_ir->curr_spec;
-    Processor3D* arch = curr_ir->arch;
-
-    std::vector<tanner::vertex_t*>  all_checks;
-    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::XPARITY)) {
-        all_checks.push_back(tv);
-    }
-    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
-        all_checks.push_back(tv);
-    }
-    // We will use Dijkstra's algorithm to get a table of shortest paths from each data qubit
-    // to any check. When trying to execute a check, we will attempt to merge paths from
-    // multiple data qubits to compute the CNOT schedule.
-    using namespace graph;
-
-    typedef struct {
-        std::vector<proc3d::vertex_t*> path;
-        bool valid;
-    } entry_t;
-
-    distance::callback_t<proc3d::vertex_t, entry_t> d_cb = 
-    [&] (proc3d::vertex_t* v1, proc3d::vertex_t* v2,
-        const std::map<proc3d::vertex_t*, fp_t>& dist,
-        const std::map<proc3d::vertex_t*, proc3d::vertex_t*>& pred)
-    {
-        entry_t x;
-        if (v2 == pred.at(v2)) {
-            x.valid = false;
-            return x;
-        }
-        
-        auto curr = v2;
-        while (curr != v1) {
-            x.path.push_back(curr);
-            curr = pred.at(curr);
-        }
-        x.path.push_back(v1);
-        std::reverse(x.path.begin(), x.path.end());
-        x.valid = true;
-        return x;
-    };
-
-    schedule_t schedule;
-    std::deque<Instruction> schedule_buffer;
-    
-    // To schedule the CNOTs for measuring each parity check, we will create graphs
-    // (schedule_graph_t) and perform BFS on them. The idea is that these graphs should be
-    // acycle such that the sinks are data qubits and the source is the parity qubit being
-    // measured. Then, we only need to reverse the visiting order to figure out the CNOT
-    // schedule.
-
-    typedef Graph<proc3d::vertex_t, base::edge_t> schedule_graph_t;
-
-    // set_x_parity, curr_check, and curr_parity_qubit are state variables that are used to adopt
-    // the callback to the graph without making a callback for every parity check.
-    bool set_x_parity = false;
-    tanner::vertex_t* curr_check;
-    proc3d::vertex_t* curr_parity_qubit;
-
-    std::map<proc3d::vertex_t*, std::vector<tanner::vertex_t*>> qubit_to_users; 
-                                                        // Maps gauge/parity qubits
-                                                        // to the checks that require
-                                                        // them.
-    search::callback_t<proc3d::vertex_t> s_cb =
-    [&] (proc3d::vertex_t* v1, proc3d::vertex_t* v2)
-    {
-        // Note that this function is called in reverse order, so
-        // v1 is towards the parity qubit, and v2 is away from the parity qubit.
-        // 
-        // Thus, parity qubits can only be v1, and data qubits can only be v2.
-
-        Instruction inst;
-        inst.name = "CX";
-        if (set_x_parity)   inst.operands = std::vector<uint>{v1->id, v2->id};
-        else                inst.operands = std::vector<uint>{v2->id, v1->id};
-        schedule_buffer.push_front(inst);
-
-        // We also need to include undo operations at the end.
-        if (v1 != curr_parity_qubit)    schedule_buffer.push_back(inst);
-
-        qubit_to_users[v1].push_back(curr_check);
-    };
-
-    auto distance_matrix = distance::create_distance_matrix(
-            arch, unit_ewf_t<proc3d::vertex_t>(), d_cb);
-    for (auto tv : all_checks) {
-        schedule_graph_t scheduling_graph;
-        std::set<proc3d::vertex_t*> non_data_qubits;
-
-        auto pv = curr_ir->role_to_qubit[tv];
-        auto tv_adj = tanner_graph->get_neighbors(tv);
-        for (auto td : tv_adj) {
-            auto pd = arch->get_vertex(td->id);
-            if (!distance_matrix[pd][pv].valid) {
-                std::cerr << "ERROR: cannot schedule check " << PRINT_V(tv->id)
-                        << " [@" << PRINT_V(pv->id) << "] because data qubit " 
-                        << PRINT_V(td->id) << " [@" << PRINT_V(pd->id) << "] has no path "
-                        << "to the parity check.\n";
-                continue;
-            }
-            auto path = distance_matrix[pd][pv].path;
-            scheduling_graph.add_vertex(pd);
-            for (uint i = 1; i < path.size(); i++) {
-                auto px = path[i-1];
-                auto py = path[i];
-
-                scheduling_graph.add_vertex(py);
-                auto e = new base::edge_t;
-                e->src = (void*)py; // Reverse the order for BFS
-                e->dst = (void*)px;
-                e->is_undirected = false;
-                if (!scheduling_graph.add_edge(e))  delete e;
-                non_data_qubits.insert(py);
-            }
-        }
-        // Set callback state variables.
-        set_x_parity = tv->qubit_type == tanner::vertex_t::XPARITY;
-        curr_check = tv;
-        curr_parity_qubit = pv;
-        // Create H and Mrc gates beforehand
-        Instruction h;
-        Instruction meas;
-        Instruction reset;
-
-        h.name = std::string("H");
-        for (auto p : non_data_qubits) {
-            h.operands.push_back(p->id);
-        }
-
-        meas.name = std::string("Mrc");
-        meas.operands.push_back(pv->id);
-        meas.is_measuring_x_check = set_x_parity;
-
-        reset.name = std::string("R");
-        reset.operands.push_back(pv->id);
-
-        schedule_t schedule;
-        // Add the gates to the schedule.
-        if (set_x_parity) {
-            schedule.push_back(h);
-        }
-        search::xfs(&scheduling_graph, pv, s_cb, false);
-        for (auto inst : schedule_buffer) schedule.push_back(inst);
-        if (set_x_parity) {
-            schedule.push_back(h);
-        }
-        schedule.push_back(meas);
-        schedule.push_back(reset);
-        // Define the micro schedule.
-        curr_ir->check_to_impl[tv] = schedule;
-        // Clear the scheduling buffer for the next qubit.
-        schedule_buffer.clear();
-        // Deallocate entries in scheduling graph manually: we want to destroy
-        // the edges but not the vertices.
-        scheduling_graph.dealloc_on_delete = false;
-        for (auto e : scheduling_graph.get_edges()) delete e;
-    }
-    // Now, identify the conflicting parity checks from qubit_to_users.
-    for (auto pair : qubit_to_users) {
-        const auto& checks = pair.second;
-        for (uint i = 0; i < checks.size(); i++) {
-            auto c1 = checks[i];
-            for (uint j = i+1; j < checks.size(); j++) {
-                auto c2 = checks[j];
-                curr_ir->conflicting_checks.insert(std::make_pair(c1, c2));
-                curr_ir->conflicting_checks.insert(std::make_pair(c2, c1));
-            }
-        }
-    }
-}
-
-void
-Compiler::macro_schedule(ir_t* curr_ir) {
-    using namespace graph;
-
-    TannerGraph* tanner_graph = curr_ir->curr_spec;
-    Processor3D* arch = curr_ir->arch;
-
-    // Now, given the micro-schedules, we want to design the final schedule that measures
-    // all checks.
-    auto dependency_graph = new graph::DependenceGraph;
-    uint opcount = 0;
-    // Create conflict graph between the checks. Two checks have an edge in the
-    // conflict graph if they are conflicting.
-    typedef Graph<tanner::vertex_t, base::edge_t> ConflictGraph;
-    ConflictGraph confg;
-    confg.dealloc_on_delete = false;
-    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::XPARITY)) {
-        confg.add_vertex(tv);
-    }
-    for (auto tv : tanner_graph->get_vertices_by_type(tanner::vertex_t::ZPARITY)) {
-        confg.add_vertex(tv);
-    }
-
-    // Create barrier operands for easy access.
-    std::vector<uint> barrier_operands;
-    for (auto v : arch->get_vertices()) barrier_operands.push_back(v->id);
-
-    std::vector<base::edge_t*> confg_edges;
-    for (auto pair : curr_ir->conflicting_checks) {
-        auto e = new base::edge_t;
-        e->src = (void*)pair.first;
-        e->dst = (void*)pair.second;
-        confg.add_edge(e);
-        confg_edges.push_back(e);
-    }
-    while (confg.get_vertices().size()) {
-        // Compute MIS on the remaining checks to get a maximal set to schedule.
-        auto indep = mis::approx_greedy(&confg);
-
-        // Remove larger part from conflict graph and get the micro-schedules for each check.
-        std::vector<schedule_t> micro_sched;
-        for (auto v : indep) {
-            confg.delete_vertex(v);
-            micro_sched.push_back(curr_ir->check_to_impl[v]);
-        }
-
-        // Perform any H gates in these schedules.
-        for (auto& sch : micro_sched) {
-            while (sch.front().name == "H") {
-                const auto& tmp = sch.front();
-                // The instruction may be SIMD-like, so we must split it up.
-                for (auto op : tmp.operands) {
-                    Instruction* h = new Instruction;
-                    h->name = "H";
-                    h->operands = std::vector<uint>{op};
-                    h->exclude_trials = tmp.exclude_trials;
-
-                    auto vh = new dep::vertex_t;
-                    vh->id = opcount++;
-                    vh->inst_p = h;
-                    dependency_graph->add_vertex(vh);
-                }
-                sch.erase(sch.begin());
-            }
-        }
-        dependency_graph->add_barrier(barrier_operands);
-
-        // Collect the set of CNOTs required to complete the checks.
-        // Now, perform maximum matching to identify what operations to perform.
-        lemon::ListGraph mg;
-        // Each listgraph node will be in either of these maps.
-        std::map<lemon::ListGraph::Node, proc3d::vertex_t*> node_to_qubit;
-        std::map<proc3d::vertex_t*, lemon::ListGraph::Node> qubit_to_node;
-
-        std::map<lemon::ListGraph::Edge, Instruction>   edge_to_op;
-
-        for (auto& sch : micro_sched) {
-            while (sch.front().name == "CX") {
-                const Instruction& cx = sch.front();
-                // Instruction may be SIMD-like, so split it up.
-                for (uint i = 0; i < cx.operands.size(); i++) {
-                    uint operand = cx.operands[i];
-                    // Create listgraph node if it does not exist.
-                    proc3d::vertex_t* voperand = arch->get_vertex(operand);
-                    lemon::ListGraph::Node op_node;
-                    if (!qubit_to_node.count(voperand)) {
-                        // Create listgraph node.
-                        op_node = mg.addNode();
-                        node_to_qubit[op_node] = voperand;
-                        qubit_to_node[voperand] = op_node;
-                    } else {
-                        op_node = qubit_to_node[voperand];
-                    }
-                    // Create edge if i is odd.
-                    if (i & 0x1) {
-                        proc3d::vertex_t* woperand = arch->get_vertex(cx.operands[i-1]);
-                        lemon::ListGraph::Node other_op_node = qubit_to_node[woperand];
-
-                        auto e = mg.addEdge(op_node, other_op_node);
-                        edge_to_op[e] = (Instruction) {
-                            "CX",
-                            std::vector<uint>{cx.operands[i-1], operand},
-                            cx.exclude_trials
-                        };
-                    }
-                }
-                sch.erase(sch.begin());
-            }
-        }
-
-        // Perform maximum matching until cx nodes are removed.
-        while (edge_to_op.size()) {
-            lemon::MaxMatching mm(mg);
-            mm.run();
-            std::set<proc3d::vertex_t*> visited;
-            for (auto it = edge_to_op.begin(); it != edge_to_op.end(); ) {
-                const auto& op_edge = it->first;
-                const auto& inst = it->second;
-
-                if (mm.matching(op_edge)) {
-                    // Delete edge from listgraph and from edge_to_op.
-                    mg.erase(op_edge);
-                    // Add operation to dependency graph.
-                    Instruction* cx = new Instruction;
-                    cx->name = "CX";
-                    cx->operands = inst.operands;
-                    cx->exclude_trials = inst.exclude_trials;
-
-                    auto cxv = new dep::vertex_t;
-                    cxv->id = opcount++;
-                    cxv->inst_p = cx;
-                    dependency_graph->add_vertex(cxv);
-                    it = edge_to_op.erase(it);
-                } else {
-                    it++;
-                }
-            }
-        }
-        dependency_graph->add_barrier(barrier_operands);
-
-        std::string op_order[3] = {"H", "Mrc", "R"};
-        // Add the remaining operations for the chosen checks.
-        for (uint ord = 0; ord < 3; ord++) {
-            for (auto& sch : micro_sched) {
-                while (sch.front().name == op_order[ord]) {
-                    const auto& tmp = sch.front();
-
-                    Instruction* m = new Instruction;
-                    m->name = tmp.name;
-                    m->operands = tmp.operands;
-                    m->exclude_trials = tmp.exclude_trials;
-                    m->is_measuring_x_check = tmp.is_measuring_x_check;
-
-                    auto vm = new dep::vertex_t;
-                    vm->id = opcount++;
-                    vm->inst_p = m;
-                    dependency_graph->add_vertex(vm);
-
-                    sch.erase(sch.begin());
-                }
-            }
-            dependency_graph->add_barrier(barrier_operands);
-        }
-    }
-
-    // Only deallocate the edges in the conflict graph.
-    for (auto e : confg_edges)   delete e;
-    // Update IR.
-    curr_ir->dependency_graph = dependency_graph;
-    curr_ir->schedule = curr_ir->dependency_graph->to_schedule();
-}
-
-*/

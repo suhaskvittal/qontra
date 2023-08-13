@@ -47,7 +47,9 @@ TannerGraph::induce_predecessor(vertex_t* v1, vertex_t* v2) {
     // If there is any intersection, create a vertex and add it and the edges to the graph.
     auto w = new vertex_t;
     w->qubit_type = vertex_t::GAUGE;
-    w->id = (induced_gauge_index++) | INDUCED_GAUGE_INDEX_FLAG | (w->qubit_type << 30);
+    w->id = (induced_gauge_index++) 
+            | INDUCED_GAUGE_INDEX_FLAG 
+            | (w->qubit_type << ID_TYPE_OFFSET);
     add_vertex(w);
     for (auto u : induced_adj) {
         auto e = new edge_t;
@@ -79,19 +81,31 @@ update_tanner_graph(graph::TannerGraph& graph, std::string line) {
     size_t ssi;   // Variable for calculating substring indices.
 
     if (line.size() == 0)   return; // Nothing to be done.
+    bool is_obs = line[0] == 'O';
+    bool is_x_obs = line[1] == 'X';
     bool is_x_check = line[0] == 'X';
     // Get the check id.
+    int check_id;
     ssi = line.find(",", 1);
     if (ssi == std::string::npos)   return;
-    uint check_id = std::stoi(line.substr(1, ssi));
+    if (is_obs) {
+        check_id = -1;
+    } else {
+        check_id = std::stoi(line.substr(1, ssi));
+    }
 
     // Create check vertex.
-    tanner::vertex_t* check_v = new tanner::vertex_t;
-    check_v->qubit_type = is_x_check ? tanner::vertex_t::XPARITY : tanner::vertex_t::ZPARITY;
-    check_v->id = check_id | (check_v->qubit_type << 30);
-    if (!graph.add_vertex(check_v)) {
-        delete check_v;
-        return;
+    tanner::vertex_t* check_v;
+    if (check_id >= 0) {
+        check_v = new tanner::vertex_t;
+        check_v->qubit_type = is_x_check ? tanner::vertex_t::XPARITY : tanner::vertex_t::ZPARITY;
+        check_v->id = check_id | (check_v->qubit_type << ID_TYPE_OFFSET);
+        if (!graph.add_vertex(check_v)) {
+            delete check_v;
+            return;
+        }
+    } else {
+        check_v = nullptr;
     }
     // Now, parse the data qubits involved in the check.
     uint pssi = ssi+1;
@@ -107,11 +121,20 @@ update_tanner_graph(graph::TannerGraph& graph, std::string line) {
             data_v->qubit_type = tanner::vertex_t::DATA;
             graph.add_vertex(data_v);
         }
-        // Add edge.
-        tanner::edge_t* e = new tanner::edge_t;
-        e->src = check_v;
-        e->dst = data_v;
-        graph.add_edge(e);  // This should never fail.
+        // If this is a check, add an edge between the check and data qubit.
+        // Otherwise, add the data qubit to the observable list.
+        if (is_obs) {
+            if (is_x_obs) {
+                graph.x_obs.push_back(data_v);
+            } else {
+                graph.z_obs.push_back(data_v);
+            }
+        } else {
+            tanner::edge_t* e = new tanner::edge_t;
+            e->src = check_v;
+            e->dst = data_v;
+            graph.add_edge(e);  // This should never fail.
+        }
         pssi = ssi+1;
         if (ssi == line.size()) break;
     } 
