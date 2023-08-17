@@ -31,7 +31,7 @@ void        yyerror(char const*);
 
 %union {
     uint32_t                arg;
-    char                    name[24];
+    char*                   name;
     struct __asm_operand_t  operands;
 }
 
@@ -66,7 +66,8 @@ program:
 }
         | ID ':' program
 {
-    asm_set_label_pc($1, pc);
+    asm_set_label_inv_pc($1, pc);
+    free($1);
 }
         | EOL program
 ;
@@ -75,47 +76,54 @@ instruction:
            INST ';'
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, IDLEN);
+    inst.name = $1;
     inst.operands.size = 0;
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+
+    asm_add_instruction(inst);
+
+    free(inst.name);
 }
            | INST ID ';'
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, IDLEN);
+    inst.name = $1;
 
     int label = asm_get_label_id($2);
-    if (label < 0) {
-        label = asm_record_label($2);    
-    }
     inst.operands.size = 1;
     inst.operands.data = malloc(1 * sizeof(uint32_t));
     inst.operands.data[0] = label;
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+
+    asm_add_instruction(inst);
+
+    free(inst.name);
+    free(inst.operands.data);
 }
            | INST ID SEP operands ';'
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, IDLEN);
+    inst.name = $1;
 
     int label = asm_get_label_id($2);
-    if (label < 0) {
-        label = asm_record_label($2);    
-    }
     inst.operands.size = 1 + $4.size;
     inst.operands.data = malloc(inst.operands.size * sizeof(uint32_t));
     inst.operands.data[0] = label;
     memmove(inst.operands.data+1, $4.data, $4.size*sizeof(uint32_t));
     free($4.data);
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+
+    asm_add_instruction(inst);
+    free(inst.name);
+    free(inst.operands.data);
 }
            | INST operands ';'
 {
     struct __asm_inst_t inst;
-    memcpy(inst.name, $1, IDLEN);
+    inst.name = $1;
     inst.operands.data = $2.data;
     inst.operands.size = $2.size;
-    ASMParserSchedule[ASMParserScheduleLen++] = inst;
+
+    asm_add_instruction(inst);
+    free(inst.name);
+    free(inst.operands.data);
 }
 ;
 
@@ -146,10 +154,6 @@ void
 asm_yyerror(const char* msg) {
     fprintf(stderr, "asm parsing error: %s\n", msg);
 }
-
-/*
-    Wrapping functions because yy renaming did not work :(
-*/
 
 int
 asm_yyparse_safe() {

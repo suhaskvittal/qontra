@@ -14,8 +14,7 @@
 extern "C" {
 #endif
 
-// Externs are in parsing/asm.cpp
-const extern int    IDLEN;
+extern uint64_t pc;
 
 struct __asm_operand_t {
     uint32_t*   data;
@@ -23,23 +22,30 @@ struct __asm_operand_t {
 };
 
 struct __asm_inst_t {
-    char                    name[24];
+    char*                   name;
     struct __asm_operand_t  operands;
 };
 
-// 512 KB for the program (4K instrutions * 128B).
-extern struct __asm_inst_t  ASMParserSchedule[4096];
-extern uint32_t             ASMParserScheduleLen;
-
-extern uint64_t     pc;
+struct __asm_annotation_t {
+    char*   name;
+}
 
 void        asm_reset_parser(void);
 
-void        asm_clear_labels(void);
-void        asm_set_label_pc(char const*, uint64_t);
-int         asm_get_label_id(char const*);
-int         asm_record_label(char const*);
-uint64_t    asm_get_label_pc(int);
+void        asm_add_instruction(struct __asm_inst_t);
+void        asm_add_annotation(struct __asm_annotation_t);
+
+// During parsing, we will replace all label operands with an ID,
+// and go back later and replace them with their PC.
+//
+// A label ID will be negative to indicate it cannot be the PC.
+
+int         asm_declare_label(const char*);
+int         asm_set_label_inv_pc(const char*, uint64_t);    
+                                            // Inverse pc, as the parser goes
+                                            // from bottom to top. We will fix
+                                            // this after parsing finishes.
+uint64_t    asm_get_label_id(const char*);
 
 #ifdef __cplusplus
 }

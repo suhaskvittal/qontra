@@ -39,12 +39,6 @@ set(QONTRA_FILES
     src/graph/coupling_graph.cpp
     src/graph/lattice_graph.cpp
     src/graph/tanner_graph.cpp
-    # Simulation
-    src/sim/components/syndrome_predictors/perceptron.cpp
-    src/sim/clifford_sim.cpp
-    src/sim/control_sim.cpp
-    src/sim/frame_sim.cpp
-    src/sim/state_sim.cpp
     )
 # I've a had a lot of trouble with Bison/Flex files. Only
 # include them if you need them.
@@ -59,22 +53,6 @@ set(SDL_FILES
     ${BISON_SDLParser_OUTPUTS}
     ${FLEX_SDLLexer_OUTPUTS}
     )
-set(PROTEAN_FILES
-    src/protean/compiler.cpp
-    src/protean/proc3d.cpp)
-
-add_library(qontra ${QONTRA_FILES})
-add_executable(memory src/main/memory_experiment.cpp)
-add_executable(circuit src/main/build_circuit.cpp)
-add_executable(stim_to_asm src/main/stim_to_asm.cpp ${ASM_FILES})
-
-### Protean ###
-add_executable(protean_main src/main/protean/main.cpp ${ASM_FILES} ${SDL_FILES} ${PROTEAN_FILES})
-
-### TESTING ###
-add_executable(ctrl src/main/test/ctrlsimtest.cpp ${ASM_FILES})
-add_executable(asmtest src/main/test/asmparsetest.cpp ${ASM_FILES})
-add_executable(perceptron src/main/test/perceptron_test.cpp)
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
     target_compile_options(qontra PUBLIC -O3 -lemon -fno-strict-aliasing)
@@ -96,17 +74,12 @@ target_include_directories(qontra PUBLIC
 add_subdirectory(stim)
 add_subdirectory(blossom5)
 
+add_library(qontra ${QONTRA_FILES})
+add_executable(asm_analyzer src/main/asm_analyzer.cpp ${ASM_FILES})
+
 target_link_libraries(qontra PUBLIC libstim)
 target_link_libraries(qontra PUBLIC libblossom5)
 target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
 target_link_libraries(qontra PUBLIC ${ARMADILLO_LIBRARIES})
 
-target_link_libraries(memory PRIVATE qontra)
-target_link_libraries(circuit PRIVATE qontra)
-target_link_libraries(stim_to_asm PRIVATE qontra)
-
-target_link_libraries(ctrl PRIVATE qontra)
-target_link_libraries(asmtest PRIVATE qontra)
-target_link_libraries(perceptron PRIVATE qontra)
-
-target_link_libraries(protean_main PRIVATE qontra)
+target_link_libraries(asm_analyzer PRIVATE qontra)
