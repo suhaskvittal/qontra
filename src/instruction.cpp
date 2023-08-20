@@ -30,7 +30,7 @@ get_number_of_qubits(const schedule_t& sch) {
             max_q = x > max_q ? x : max_q;
         }
     }
-    return max_q;
+    return max_q+1;
 }
 
 std::string

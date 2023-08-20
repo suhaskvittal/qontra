@@ -39,6 +39,11 @@ set(QONTRA_FILES
     src/graph/coupling_graph.cpp
     src/graph/lattice_graph.cpp
     src/graph/tanner_graph.cpp
+    # Simulators
+    src/sim/clifford_sim.cpp
+    src/sim/frame_sim.cpp
+    src/sim/manager.cpp
+    src/sim/state_sim.cpp
     )
 # I've a had a lot of trouble with Bison/Flex files. Only
 # include them if you need them.
@@ -75,7 +80,9 @@ target_include_directories(qontra PUBLIC
 
 add_subdirectory(stim)
 add_subdirectory(blossom5)
+
 add_executable(asm_analyzer src/main/asm_analyzer.cpp ${ASM_FILES})
+add_executable(sim_test src/main/tests/sim_test.cpp ${ASM_FILES})
 
 target_link_libraries(qontra PUBLIC libstim)
 target_link_libraries(qontra PUBLIC libblossom5)
@@ -83,3 +90,4 @@ target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
 target_link_libraries(qontra PUBLIC ${ARMADILLO_LIBRARIES})
 
 target_link_libraries(asm_analyzer PRIVATE qontra)
+target_link_libraries(sim_test PRIVATE qontra)

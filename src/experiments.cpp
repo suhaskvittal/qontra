@@ -173,7 +173,7 @@ read_syndrome_trace(std::string folder,
 }
 
 memory_result_t
-memory_experiment(decoder::Decoder* dec, experiments::memory_params_t params) {
+memory_experiment(Decoder* dec, experiments::memory_params_t params) {
     const stim::Circuit circuit = dec->get_circuit();
     // Stats that will be placed in memory_result_t
     uint64_t    logical_errors, __logical_errors = 0;

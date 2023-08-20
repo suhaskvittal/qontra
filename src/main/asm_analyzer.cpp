@@ -30,9 +30,9 @@ int main(int argc, char* argv[]) {
         std::cout << "(pc = " << pc << ") " << inst.str();
         std::cout << "\t@[ ";
         for (auto x : inst.annotations) {
-            if (x == Annotation::no_errors) {
+            if (x == Annotation::no_error) {
                 std::cout << "\"no errors\" ";
-            } else if (x == Annotation::inject_timing_errors) {
+            } else if (x == Annotation::inject_timing_error) {
                 std::cout << "\"inject timing errors\" ";
             } else if (x == Annotation::round_start) {
                 std::cout << "\"round start\" ";

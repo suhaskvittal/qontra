@@ -88,9 +88,9 @@ CliffordSimulator::S(std::vector<uint> operands) {
 void
 CliffordSimulator::CX(std::vector<uint> operands) {
     for (uint i = 0; i < 2*n_qubits; i++) {
-        for (uint i = 0; i < operands.size(); i += 2) {
-            uint j1 = operands[i];
-            uint j2 = operands[i+1];
+        for (uint ii = 0; ii < operands.size(); ii += 2) {
+            uint j1 = operands[ii];
+            uint j2 = operands[ii+1];
             uint k1 = i*n_qubits + j1;
             uint k2 = i*n_qubits + j2;
 
@@ -188,35 +188,35 @@ CliffordSimulator::M(
         for (uint64_t t = 0; t < shots; t++) {
             if (!x_table[x_width-1][t]) continue;
             // Find first i where xia = 1 in i = n+1 to 2n. Call this ii.
-            uint i;
+            uint ii;
             for (uint i = n_qubits; i < 2*n_qubits; i++) {
                 uint k = n_qubits*i + j;
                 if (x_table[k][t]) {
-                    i = i;
+                    ii = i;
                     break;
                 }
             }
             // First perform rowsums.
             for (uint i = 0; i < 2*n_qubits; i++) {
                 uint k = n_qubits*i + j;
-                if (i != i && x_table[k][t]) {
-                    rowsum(i, i, t);
+                if (i != ii && x_table[k][t]) {
+                    rowsum(i, ii, t);
                 }
             }
             // Second, swap (ii-n)-th row with ii-th row and clear
             // ii-th row. Set rii to random value.
             for (uint jj = 0; jj < n_qubits; jj++) {
-                x_table[(i-n_qubits)*n_qubits+jj][t] = x_table[i*n_qubits+jj][t];
-                z_table[(i-n_qubits)*n_qubits+jj][t] = z_table[i*n_qubits+jj][t];
-                x_table[i*n_qubits+jj][t] = 0;
-                z_table[i*n_qubits+jj][t] = 0;
+                x_table[(ii-n_qubits)*n_qubits+jj][t] = x_table[ii*n_qubits+jj][t];
+                z_table[(ii-n_qubits)*n_qubits+jj][t] = z_table[ii*n_qubits+jj][t];
+                x_table[ii*n_qubits+jj][t] = 0;
+                z_table[ii*n_qubits+jj][t] = 0;
             }
-            r_table[i-n_qubits][t] = r_table[i][t];
-            r_table[i][t] = rng() & 1;
-            z_table[i*n_qubits+j][t] = 1;
+            r_table[ii-n_qubits][t] = r_table[ii][t];
+            r_table[ii][t] = rng() & 1;
+            z_table[ii*n_qubits+j][t] = 1;
             // For simplicity, copy the rii value (the measurement outcome)
             // to the scratch space (row 2n+1) in r.
-            r_table[2*n_qubits][t] = r_table[i][t];
+            r_table[2*n_qubits][t] = r_table[ii][t];
         }
 
         if (record >= 0) {
@@ -241,7 +241,7 @@ CliffordSimulator::R(std::vector<uint> operands) {
     // Implement as a measure + X gate.
     stim::simd_bits record_0_cpy(record_table[0]);
     for (uint j : operands) {
-        M({j}, 0);
+        M({j}, 0, 0, 0);
         for (uint i = 0; i < 2*n_qubits; i++) {
             uint k = i*n_qubits + j;
             // Rec should be 0 whenever j is locked, so 

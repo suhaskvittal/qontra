@@ -6,6 +6,7 @@
 #ifndef SIM_MANAGER_h
 #define SIM_MANAGER_h
 
+#include "instruction.h"
 #include "sim/state_sim.h"
 #include "experiments.h"
 

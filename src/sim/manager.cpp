@@ -9,7 +9,7 @@ namespace qontra {
 
 using namespace experiments;
 
-histogram_t
+SimManager::result_t
 SimManager::evaluate_monte_carlo(uint64_t shots) {
     int world_rank = 0, world_size = 1;
     if (G_USE_MPI) {
@@ -32,7 +32,7 @@ SimManager::evaluate_monte_carlo(uint64_t shots) {
 
         auto obt_tr = obs_buffer_table.transposed();
         for (uint64_t t = 0; t < shots_this_batch; t++) {
-            vlw_t entry(obt_tr.u64, obt_tr.u64 + n_words_per_obs);
+            vlw_t entry(obt_tr[t].u64, obt_tr[t].u64 + n_words_per_obs);
             local_prob_histogram[entry]++;
         }
 
@@ -86,6 +86,7 @@ void
 SimManager::simulate_batch(uint64_t shots) {
     // Clear structures.
     sim->reset_sim();
+    sim->shots = shots;
     
     timing_table.clear();
 
@@ -97,21 +98,25 @@ SimManager::simulate_batch(uint64_t shots) {
     max_obs_written = 0;
 
     // Execute batch.
-    std::map<uint64_t, stim::simd_bits> pc_to_trials;
+
+    // This wrapper is just to provide a dummy default initialization.
+    struct simd_bits_wrapper { stim::simd_bits payload = stim::simd_bits(1); };
+
+    std::map<uint64_t, simd_bits_wrapper> pc_to_trials;
     // For ease of use, we will say that a shot is at a given
     // pc if the corresponding bit is 0.
-    pc_to_trials[0] = stim::simd_bits(shots);
-    pc_to_trials[0].clear();
+    pc_to_trials[0].payload = stim::simd_bits(shots);
+    pc_to_trials[0].payload.clear();
 
     // br_data_t = (from_pc, to_pc, br_taken_pred)
     typedef std::tuple<uint64_t, uint64_t, stim::simd_bits> br_data_t;
 
     while (pc_to_trials.size()) {
-        std::map<uint64_t, stim::simd_bits> next_pc_to_trials;
+        std::map<uint64_t, simd_bits_wrapper> next_pc_to_trials;
         std::vector<br_data_t> br_buffer;
         for (auto pair : pc_to_trials) {
             uint64_t pc = pair.first;
-            stim::simd_bits shot_mask(pair.second);
+            stim::simd_bits_range_ref shot_mask_ref(pair.second.payload);
             if (pc >= program.size())   continue;
 
             Instruction inst = program[pc];
@@ -126,10 +131,10 @@ SimManager::simulate_batch(uint64_t shots) {
                 const uint64_t br_pc = operands[0];
                 const uint event = operands[1];
                 stim::simd_bits br_taken(event_history_table[event]);
-                if (inst.name == "brifzero")    update_mask.invert_bits();
+                if (inst.name == "brifzero")    br_taken.invert_bits();
                 // Now we must filter out trials in br_taken that are
                 // not at the current pc.
-                br_taken.for_each_word(shot_mask,
+                stim::simd_bits_range_ref(br_taken).for_each_word(shot_mask_ref,
                         [] (auto& brw, auto& smw)
                         {
                             // Keep br_taken = 1 wherever
@@ -144,14 +149,16 @@ SimManager::simulate_batch(uint64_t shots) {
                 sim->H(operands);
             } else if (inst.name == "x") {
                 sim->X(operands);
-            } else if (inst.name == "y") {
-                sim->Y(operands);
             } else if (inst.name == "z") {
                 sim->Z(operands);
             } else if (inst.name == "s") {
                 sim->S(operands);
             } else if (inst.name == "measure") {
-                sim->M(operands, params.errors.meas_record_ctr);
+                sim->M(operands, 
+//                      params.errors.m1w0, 
+//                      params.errors.m0w1, 
+                        0.0, 0.0,
+                        meas_record_ctr);
                 meas_record_ctr += operands.size();
             } else if (inst.name == "reset") {
                 sim->R(operands);
@@ -195,13 +202,13 @@ SimManager::simulate_batch(uint64_t shots) {
             if (is_quantum_inst) {
                 inject_operation_error(inst);
                 timing_table[pc] += get_operation_latency(inst);
-                if (!inst.annotations.count(Annotation::inject_timing_error)) {
+                if (inst.annotations.count(Annotation::inject_timing_error)) {
                     inject_timing_error(timing_table[pc]);
                 }
 
-                sim->rollback_where(shot_mask);
+                sim->rollback_where(shot_mask_ref);
             }
-            next_pc_to_trials[pc+1] = shot_mask;
+            next_pc_to_trials[pc+1].payload = shot_mask_ref;
         }
         pc_to_trials = next_pc_to_trials;
     }
@@ -209,13 +216,13 @@ SimManager::simulate_batch(uint64_t shots) {
 
 fp_t
 SimManager::get_operation_latency(Instruction inst) {
-    if (!IS_QUANTUM_INSTRUCTION.count(inst.name))   continue;
+    if (!IS_QUANTUM_INSTRUCTION.count(inst.name))   return 0.0;
 
     if (inst.annotations.count(Annotation::no_tick))    return 0.0;
 
     std::vector<uint> operands(inst.get_qubit_operands());
     fp_t max_time_taken = 0.0;
-    if (IS_2Q_OPERATION.count(inst.name)) {
+    if (IS_2Q_OPERATOR.count(inst.name)) {
         for (uint i = 0; i < operands.size(); i += 2) {
             uint x = operands[i];
             uint y = operands[i+1];
@@ -234,9 +241,7 @@ SimManager::get_operation_latency(Instruction inst) {
 
 void
 SimManager::inject_operation_error(Instruction inst) {
-    if (!IS_QUANTUM_INSTRUCTION.count(inst.name))   continue;
-
-    bool inject_operation_error = !inst.annotations.count(Annotation::no_error);
+    if (inst.annotations.count(Annotation::no_error))  return;
 
     std::vector<uint> operands(inst.get_qubit_operands());
     if (IS_2Q_OPERATOR.count(inst.name)) {
@@ -251,40 +256,43 @@ SimManager::inject_operation_error(Instruction inst) {
             e_li.push_back(params.errors.op2q_leakage_injection[inst.name][x_y]);
             e_lt.push_back(params.errors.op2q_leakage_transport[inst.name][x_y]);
         }
-        if (inject_operation_error) {
-            sim->error_channel<StateSimulator::eLT>(operands, e_lt);
-            sim->error_channel<StateSimulator::eLI>(operands, e_li);
-            sim->error_channel<StateSimulator::eDP2>(operands, e_dp);
-        }
+        sim->error_channel<&StateSimulator::eLT>(operands, e_lt);
+        sim->error_channel<&StateSimulator::eLI>(operands, e_li);
+        sim->error_channel<&StateSimulator::eDP2>(operands, e_dp);
     } else {
-        fp_t e;
+        std::vector<fp_t> e;
         for (uint x : operands) {
             e.push_back(params.errors.op1q[inst.name][x]);
         }
-        if (inject_operation_error) {
-            if (inst.name == "reset") {
-                sim->error_channel<StateSimulator::eX>(operands, e);
-            } else {
-                sim->error_channel<StateSimulator::eDP1>(operands, e);
-            }
+        if (inst.name == "reset") {
+            sim->error_channel<&StateSimulator::eX>(operands, e);
+        } else {
+            sim->error_channel<&StateSimulator::eDP1>(operands, e);
         }
     }
 }
 
 void
 SimManager::inject_timing_error(fp_t time) {
+    // Amplitude damping is a non-Clifford channel.
+    //
+    // Current implementation (here) is via Pauli twirling:
+    std::vector<fp_t> ex, ey, ez;
+    std::vector<uint> operands;
     for (uint i = 0; i < n_qubits; i++) {
+        operands.push_back(i);
+
         fp_t t1 = params.timing.t1[i];
         fp_t t2 = params.timing.t2[i];
         fp_t e_ad = 0.25*(1 - exp(-time/t1));
         fp_t e_pd = 0.5*(1 - exp(-time/t2));
-        // Amplitude damping is a non-Clifford channel.
-        //
-        // Current implementation (here) is via Pauli twirling:
-        sim->error_channel<StateSimulator::eX>(e_ad);
-        sim->error_channel<StateSimulator::eY>(e_ad);
-        sim->error_channel<StateSImulator::eZ>(e_pd - e_ad);
+        ex.push_back(e_ad);
+        ey.push_back(e_ad);
+        ez.push_back(e_pd - e_ad);
     }
+    sim->error_channel<&StateSimulator::eX>(operands, ex);
+    sim->error_channel<&StateSimulator::eY>(operands, ey);
+    sim->error_channel<&StateSimulator::eZ>(operands, ez);
 }
 
 }   // qontra

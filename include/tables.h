@@ -93,7 +93,8 @@ struct ErrorAndTiming {
     ErrorAndTiming operator*(fp_t x) {
         this->e_g1q *= x;
         this->e_g2q *= x;
-        this->e_ro *= x;
+        this->e_m1w0 *= x;
+        this->e_m0w1 *= x;
         this->t1 *= 1.0/x;
         this->t2 *= 1.0/x;
         return *this;
@@ -102,7 +103,8 @@ struct ErrorAndTiming {
     ErrorAndTiming operator+(fp_t x) {
         this->e_g1q += x;
         this->e_g2q += x;
-        this->e_ro += x;
+        this->e_m1w0 += x;
+        this->e_m0w1 += x;
         this->t1 += x;
         this->t2 += x;
         return *this;
