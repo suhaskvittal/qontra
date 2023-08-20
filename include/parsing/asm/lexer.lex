@@ -9,8 +9,6 @@
 
 %option prefix="asm_yy"
 
-%x ANNOTATION
-
 %{
 
 #include "parsing/asm/parser.tab.h"
@@ -27,26 +25,17 @@ void    force_lowercase(char*, int);
 %%
 
 #.+?\n      { /* this is a comment */ }
-
-@           { } 
+@annotation { return ANNOTATION; }
 [0-9]+      { 
                 yylval.arg = (uint32_t) atoi(yytext); 
-                return NUMBER; 
+                return NUM; 
             }
-<INITIAL>[A-Za-z]+   
-            {
-                memcpy(yylval.name, yytext, 24);
+[A-Za-z_0-9]+  { 
+                yylval.name = malloc(yyleng+1);
+                memcpy(yylval.name, yytext, yyleng);
+                yylval.name[yyleng] = '\0';
                 force_lowercase(yylval.name, yyleng);
-                return INST;
-            }
-<INITIAL>[A-Za-z_0-9]+  
-            { 
-                memcpy(yylval.name, yytext, 24); 
                 return ID; 
-            }
-<ANNOTATION>[A-Za-z_0-9]+
-            {
-
             }
 [ \t]       { /* ignore whitespace */ }
 :           { return ':'; }
@@ -58,7 +47,7 @@ void    force_lowercase(char*, int);
 
 void force_lowercase(char* text, int len) {
     for (int i = 0; i < len; i++) {
-        if (text[i] < 'a') {
+        if (text[i] >= 'A' && text[i] <= 'Z') {
             text[i] += 'a' - 'A';
         }
     }

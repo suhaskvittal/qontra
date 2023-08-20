@@ -12,7 +12,6 @@
 #include <mlpack/methods/ann/ffn.hpp>
 
 namespace qontra {
-namespace decoder {
 
 class NeuralDecoder : public Decoder {
 public:
@@ -28,7 +27,6 @@ public:
     mlpack::FFN<mlpack::MeanSquaredError> model;
 };
 
-}
 }   // qontra
 
 #endif  // NEURAL_DECODER_h

@@ -6,7 +6,6 @@
 #include "decoder/mwpm.h"
 
 namespace qontra {
-namespace decoder {
 
 Decoder::result_t
 MWPMDecoder::decode_error(const syndrome_t& syndrome) {
@@ -77,5 +76,4 @@ MWPMDecoder::decode_error(const syndrome_t& syndrome) {
     return res;
 }
 
-}   // decoder
 }   // qontra

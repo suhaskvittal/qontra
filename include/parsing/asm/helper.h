@@ -28,7 +28,7 @@ struct __asm_inst_t {
 
 struct __asm_annotation_t {
     char*   name;
-}
+};
 
 void        asm_reset_parser(void);
 

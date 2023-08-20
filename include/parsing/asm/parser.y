@@ -33,27 +33,28 @@ void        yyerror(char const*);
     uint32_t                arg;
     char*                   name;
     struct __asm_operand_t  operands;
+    struct __asm_inst_t     instruction;
 }
 
 /*
     Tokens:
-        INST = instructions
-        ID   = text that is not an instruction (i.e. LABEL)
+        ID   = text
         NUM  = numbers
         SEP  = separator (,)
 */
 
-%token INST
 %token ID
 %token NUM
 %token ':'
 %token ';'
+%token ANNOTATION
 %token SEP
 %token EOL
 
 %type<arg>          NUM
-%type<name>         INST
 %type<name>         ID
+
+%type<instruction>  instruction
 %type<operands>     operands
 
 %%
@@ -63,6 +64,18 @@ program:
         | instruction program
 { 
     pc++; 
+    asm_add_instruction($1);
+
+    free($1.name);
+    if ($1.operands.size > 0) {
+        free($1.operands.data); 
+    }
+}
+        | ANNOTATION ID program
+{
+    struct __asm_annotation_t annot = { $2 };
+    asm_add_annotation(annot);
+    free($2);
 }
         | ID ':' program
 {
@@ -73,17 +86,15 @@ program:
 ;
 
 instruction:
-           INST ';'
+           ID ';'
 {
     struct __asm_inst_t inst;
     inst.name = $1;
     inst.operands.size = 0;
 
-    asm_add_instruction(inst);
-
-    free(inst.name);
+    $$ = inst;
 }
-           | INST ID ';'
+           | ID ID ';'
 {
     struct __asm_inst_t inst;
     inst.name = $1;
@@ -93,12 +104,9 @@ instruction:
     inst.operands.data = malloc(1 * sizeof(uint32_t));
     inst.operands.data[0] = label;
 
-    asm_add_instruction(inst);
-
-    free(inst.name);
-    free(inst.operands.data);
+    $$ = inst;
 }
-           | INST ID SEP operands ';'
+           | ID ID SEP operands ';'
 {
     struct __asm_inst_t inst;
     inst.name = $1;
@@ -110,20 +118,16 @@ instruction:
     memmove(inst.operands.data+1, $4.data, $4.size*sizeof(uint32_t));
     free($4.data);
 
-    asm_add_instruction(inst);
-    free(inst.name);
-    free(inst.operands.data);
+    $$ = inst;
 }
-           | INST operands ';'
+           | ID operands ';'
 {
     struct __asm_inst_t inst;
     inst.name = $1;
     inst.operands.data = $2.data;
     inst.operands.size = $2.size;
 
-    asm_add_instruction(inst);
-    free(inst.name);
-    free(inst.operands.data);
+    $$ = inst;
 }
 ;
 

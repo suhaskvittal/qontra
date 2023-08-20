@@ -37,7 +37,7 @@ public:
     void    Z(std::vector<uint>) override;
     void    S(std::vector<uint>) override;
     void    CX(std::vector<uint>) override;
-    void    M(std::vector<uint>, int record=-1) override;
+    void    M(std::vector<uint>, fp_t, fp_t, int record=-1) override;
     void    R(std::vector<uint>) override;
 
     StateSimulator::label_1q_t  eDP1(uint, uint64_t) override;

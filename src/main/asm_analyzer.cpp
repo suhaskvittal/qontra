@@ -9,7 +9,7 @@
 using namespace qontra;
 
 int main(int argc, char* argv[]) {
-    CmdParser pp(argc, arv);
+    CmdParser pp(argc, argv);
 
     std::string help = 
         "Usage: ./asm_analyzer --asm <file>\n";
@@ -27,21 +27,20 @@ int main(int argc, char* argv[]) {
     schedule_t sch = schedule_from_file(file);
     uint64_t pc = 0;
     for (const auto& inst : sch) {
-        std::cout << "(pc = " << pc << ")\t" <<  inst.name;
-        for (auto x : inst.operands) {
-            std::cout <<  " " << x;
-        }
-        std::cout << "\n\tannotations:\n";
+        std::cout << "(pc = " << pc << ") " << inst.str();
+        std::cout << "\t@[ ";
         for (auto x : inst.annotations) {
             if (x == Annotation::no_errors) {
-                std::cout << "\t\tno errors\n";
+                std::cout << "\"no errors\" ";
             } else if (x == Annotation::inject_timing_errors) {
-                std::cout << "\t\tinject timing errors\n";
+                std::cout << "\"inject timing errors\" ";
             } else if (x == Annotation::round_start) {
-                std::cout << "\t\tround start\n";
-            } else if (x == Annotaiton::flag) {
-                std::cout << "\t\tflag\n";
+                std::cout << "\"round start\" ";
+            } else if (x == Annotation::flag) {
+                std::cout << "\"flag\" ";
             }
         }
+        std::cout << "]\n";
+        pc++;
     }
 }

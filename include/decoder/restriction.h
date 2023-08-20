@@ -21,7 +21,6 @@
 #include <vector>
 
 namespace qontra {
-namespace decoder {
 
 #define __COLOR graph::decoding::vertex_t::Color
 
@@ -175,7 +174,6 @@ private:
     std::vector<uint>                           affected_decoding_graphs;
 };
 
-}   // decoder
 }   // qontra
 
 #endif  // RESTRICTION_DECODER_h

@@ -22,6 +22,17 @@ Instruction::get_qubit_operands() const {
     }
 }
 
+uint
+get_number_of_qubits(const schedule_t& sch) {
+    uint max_q = 0;
+    for (const auto& inst : sch) {
+        for (uint x : inst.operands) {
+            max_q = x > max_q ? x : max_q;
+        }
+    }
+    return max_q;
+}
+
 std::string
 schedule_to_text(const schedule_t& sch) {
     std::string out;

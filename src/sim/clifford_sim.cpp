@@ -127,7 +127,12 @@ CliffordSimulator::CX(std::vector<uint> operands) {
 }
 
 void
-CliffordSimulator::M(std::vector<uint> operands, int record) {
+CliffordSimulator::M(
+        std::vector<uint> operands,
+        fp_t m1w0,
+        fp_t m0w1,
+        int record)
+{
     for (uint j : operands) {
         // Clear scratch space
         for (uint i = 2*n_qubits*n_qubits; i < x_width; i++)    x_table[i].clear();
@@ -221,6 +226,7 @@ CliffordSimulator::M(std::vector<uint> operands, int record) {
                         rec |= r & ~lock;
                     });
             r_table[2*n_qubits].clear();
+            error_channel_m(record, m1w0, m0w1, lock_table[j]);
             record++;
         }
     }

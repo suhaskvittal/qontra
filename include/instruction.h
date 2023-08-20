@@ -25,14 +25,29 @@ const std::vector<std::string> ISA{
     "z",
     "cx",
     "s",
-    "measure"
+    "measure",
     "reset",
     "nop",
     // Control Instructions
-    "brifone",    // Branches if measurement is 1 (syntax: brifone LABEL, m-number)
+    "brifone",  // brifone LABEL, event
     "brifzero",
     // Decoding Instructions
-    "event",    // Creates detection event from args
+    "decode",   // decode  frno
+    "event",    // event   eventno, m1, m2, m3, ...
+    "obs",      // obs     obsno, m1, m2, ...
+    "xorfr"     // xorfr   obsno, frno
+};
+
+const std::set<std::string> IS_QUANTUM_INSTRUCTION {
+    "h", "x", "z", "cx", "s", "measure", "reset"
+};
+
+const std::set<std::string> ONLY_HAS_QUBIT_OPERANDS {
+    "h", "x", "z", "s", "cx", "measure", "reset"
+};
+
+const std::set<std::string> IS_2Q_OPERATOR {
+    "cx"
 };
 
 // These instructions have labels in their first operand.
@@ -41,10 +56,21 @@ const std::set<std::string> IS_BR_TYPE1 {
     "brifzero"
 };
 
+// Each instruction can have annotations that indicate
+// properties of the program state. 
+//
+// no_error: do not inject errors for this instruction
+// no_tick: ignore decohering/dephasing effects of this instruction
+// inject_timing_errors: inject decoherence/dephasing errors at this instruction.
+//
+// round_start: round starts at this instruction
+// flag: this is a flag measurement
+
 enum class Annotation {
     // Error annotations
-    no_errors,
-    inject_timing_errors,
+    no_error,
+    no_tick,
+    inject_timing_error,
     // Bookkeeping annotations
     round_start,
     flag
@@ -53,7 +79,7 @@ enum class Annotation {
 struct Instruction {
     std::string name;
     std::vector<uint> operands;
-    std::vector<Annotation> annotations;
+    std::set<Annotation> annotations;
 
     // Extra metadata (not necessary for general use).
     //
@@ -76,7 +102,7 @@ struct Instruction {
         std::string out = name;
         bool first = true;
         for (uint op : operands) {
-            if (first)  out += "\t";
+            if (first)  out += " ";
             else        out += ", ";
             out += std::to_string(op);
             first = false;
@@ -104,6 +130,8 @@ typedef std::vector<Instruction>    schedule_t;
 //  error signatures (set these in the simulator) and other operations such
 //  as coordinate declarations. The output is the max number of qubits in the
 //  circuit.
+
+uint            get_number_of_qubits(const schedule_t&);
 
 std::string     schedule_to_text(const schedule_t&);
 

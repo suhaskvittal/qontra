@@ -54,12 +54,15 @@ asm_add_annotation(struct __asm_annotation_t annot) {
     Instruction& inst = running_schedule.back();
     std::string annot_str(annot.name);
     if (annot_str == "no_error") {
-        inst.annotations.push_back(Annotation::no_error);
+        inst.annotations.insert(Annotation::no_error);
+    } else if (annot_str == "no_tick") {
+        inst.annotations.insert(Annotation::no_tick);
     } else if (annot_str == "round_start") {
-        inst.annotations.push_back(Annotation::round_start);
-        inst.annotations.push_back(Annotation::inject_timing_errors);
+        inst.annotations.insert(Annotation::round_start);
+    } else if (annot_str == "inject_timing_error") {
+        inst.annotations.insert(Annotation::inject_timing_error);
     } else if (annot_str == "flag") {
-        inst.annotations.push_back(Annotation::flag);
+        inst.annotations.insert(Annotation::flag);
     }
 }
 

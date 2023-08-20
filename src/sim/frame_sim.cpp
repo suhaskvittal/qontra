@@ -86,7 +86,12 @@ FrameSimulator::CX(std::vector<uint> operands) {
 }
 
 void
-FrameSimulator::M(std::vector<uint> operands, int record) {
+FrameSimulator::M(
+        std::vector<uint> operands, 
+        fp_t m1w0,
+        fp_t m0w1,
+        int record) 
+{
     for (uint i : operands) {
         x_table[i].for_each_word(leak_table[i], lock_table[i],
         [&] (auto& x, auto& l, auto& lock)
@@ -109,6 +114,7 @@ FrameSimulator::M(std::vector<uint> operands, int record) {
                     {
                         rec = (x & ~lock) | (rec & lock);
                     });
+            error_channel_m(record, m1w0, m0w1, lock_table[i]);
             record++;
         }
     }

@@ -32,6 +32,9 @@ public:
     TwoLevelMap<std::string, uint, fp_t> op1q;
     TwoLevelMap<std::string, std::pair<uint, uint>, fp_t> op2q;
 
+    std::map<uint, fp_t> m1w0;
+    std::map<uint, fp_t> m0w1;
+
     // Other errors: not set by default.
     TwoLevelMap<std::string, std::pair<uint, uint>, fp_t> op2q_leakage_injection;
     TwoLevelMap<std::string, std::pair<uint, uint>, fp_t> op2q_leakage_transport;
@@ -79,7 +82,8 @@ set_all_2q(uint n_qubits,
 struct ErrorAndTiming {
     fp_t e_g1q = 1e-3;
     fp_t e_g2q = 1e-3;
-    fp_t e_ro = 1e-3;
+    fp_t e_m1w0 = 1e-3; // Readout error (read 0 as 1)
+    fp_t e_m0w1 = 1e-3; // Readout error (read 1 as 0)
     fp_t t_g1q = 30;    // in nanoseconds.
     fp_t t_g2q = 40;
     fp_t t_ro = 600;
@@ -122,8 +126,9 @@ populate(
         set_all_1q(n_qubits, params.t_g1q, timing.op1q[g]);
     }
     // Set measurement characteristics independently.
-    set_all_1q(n_qubits, params.e_ro, errors.op1q["m"]);
-    set_all_1q(n_qubits, params.t_ro, timing.op1q["m"]);
+    set_all_1q(n_qubits, params.e_m1w0, errors.m1w0);
+    set_all_1q(n_qubits, params.e_m0w1, errors.m0w1);
+    set_all_1q(n_qubits, params.t_ro, timing.op1q["measure"]);
     for (auto g : g2q) {
         set_all_2q(n_qubits, params.e_g2q, errors.op2q[g]);
         set_all_2q(n_qubits, params.t_g2q, timing.op2q[g]);

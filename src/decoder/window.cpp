@@ -6,7 +6,6 @@
 #include "decoder/window.h"
 
 namespace qontra {
-namespace decoder {
 
 Decoder::result_t
 WindowDecoder::decode_error(const syndrome_t& syndrome) {
@@ -164,5 +163,4 @@ WindowDecoder::retrieve_result_from_base(
     return final_res;
 }
 
-}   // decoder
 }   // qontra

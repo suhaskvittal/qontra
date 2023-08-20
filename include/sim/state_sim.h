@@ -65,8 +65,14 @@ public:
     virtual void    Z(std::vector<uint>) =0;
     virtual void    S(std::vector<uint>) =0;
     virtual void    CX(std::vector<uint>) =0;
-    virtual void    M(std::vector<uint>, int record=-1) =0;
     virtual void    R(std::vector<uint>) =0;
+
+    // Measurement is a special operation. 
+    // The first argument is the operands (as with other operations).
+    // The second and third arguments (mXwY) is the probability that we
+    //  measured a value X but the correct state was Y.
+    // The last value is the location in the record table to store the measurement.
+    virtual void    M(std::vector<uint>, fp_t m1w0, fp_t m0w1, int record=-1) =0;
 
     enum class ErrorLabel { I, X, Y, Z, L };
     // 
@@ -148,6 +154,24 @@ public:
                     });
             no_error_nlog_probability += -log(1 - rates[i>>1]);
         }
+    }
+
+    void
+    error_channel_m(uint64_t rec, fp_t m1w0, fp_t m0w1, 
+            stim::simd_bits_range_ref lock) 
+    {
+        stim::RareErrorIterator::for_samples(m1w0, shots, rng,
+                [&] (size_t t)
+                {
+                    if (lock[t]) return;
+                    if (record_table[rec][t] == 0) record_table[rec][t] = 1;
+                });
+        stim::RareErrorIterator::for_samples(m0w1, shots, rng,
+                [&] (size_t t)
+                {
+                    if (lock[t]) return;
+                    if (record_table[rec][t] == 1) record_table[rec][t] = 0;
+                });
     }
 
     virtual label_1q_t  eDP1(uint, uint64_t) =0;

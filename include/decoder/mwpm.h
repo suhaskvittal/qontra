@@ -22,7 +22,6 @@
 #include <time.h>
 
 namespace qontra {
-namespace decoder {
 
 typedef uint32_t    wgt_t;
 
@@ -47,7 +46,6 @@ private:
         override_weights;
 };
 
-}   // decoder
 }   // qontra
 
 #endif  // DECODER_MWPM_h

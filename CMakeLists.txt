@@ -54,6 +54,8 @@ set(SDL_FILES
     ${FLEX_SDLLexer_OUTPUTS}
     )
 
+add_library(qontra ${QONTRA_FILES})
+
 if(CMAKE_BUILD_TYPE MATCHES Release)
     target_compile_options(qontra PUBLIC -O3 -lemon -fno-strict-aliasing)
 else()
@@ -73,8 +75,6 @@ target_include_directories(qontra PUBLIC
 
 add_subdirectory(stim)
 add_subdirectory(blossom5)
-
-add_library(qontra ${QONTRA_FILES})
 add_executable(asm_analyzer src/main/asm_analyzer.cpp ${ASM_FILES})
 
 target_link_libraries(qontra PUBLIC libstim)

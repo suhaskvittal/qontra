@@ -19,7 +19,6 @@
 #include <strings.h>
 
 namespace qontra {
-namespace decoder {
 
 class Decoder {
 public: 
@@ -105,7 +104,6 @@ protected:
     friend class WindowDecoder;
 };
 
-}   // decoder
 }   // qontra
 
 #endif

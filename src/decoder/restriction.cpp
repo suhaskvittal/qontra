@@ -10,7 +10,6 @@
 #define DEBUG
 
 namespace qontra {
-namespace decoder {
 
 using namespace graph;
 using namespace restriction;
@@ -814,6 +813,4 @@ RestrictionDecoder::get_correction_for_face(cdet_t x, cdet_t y, cdet_t z) {
 #endif
     return corr;
 }
-
-}   // decoder
 }   // qontra

@@ -10,7 +10,6 @@
 #include "decoder/mwpm.h"
 
 namespace qontra {
-namespace decoder {
 
 // This is a class for sliding window decoders.
 // The sliding window decoder uses a "base" decoder.
@@ -64,7 +63,6 @@ private:
     uint        detectors_per_round;
 };
 
-}   // decoder
 }   // qontra
 
 #endif  // DECODER_WINDOW_h

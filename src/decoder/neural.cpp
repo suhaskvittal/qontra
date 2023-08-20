@@ -9,8 +9,6 @@ namespace qontra {
 
 using namespace experiments;
 
-namespace decoder {
-
 void
 NeuralDecoder::train(uint64_t shots, bool verbose) {
     const uint det = circuit.count_detectors();
@@ -71,6 +69,4 @@ NeuralDecoder::decode_error(const syndrome_t& syndrome) {
     };
     return res;
 }
-
-}   // decoder
 }   // qontra
