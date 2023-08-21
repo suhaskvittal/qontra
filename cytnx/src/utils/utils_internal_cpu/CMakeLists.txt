@@ -1,0 +1,29 @@
+target_sources_local(cytnx
+  PRIVATE
+    Alloc_cpu.hpp
+    Cast_cpu.hpp
+    Fill_cpu.hpp
+    GetElems_cpu.hpp
+    GetElems_contiguous_cpu.hpp
+    Movemem_cpu.hpp
+    Range_cpu.hpp
+    SetArange_cpu.hpp
+    SetElems_cpu.hpp
+    SetElems_contiguous_cpu.hpp
+    SetZeros_cpu.hpp
+    Complexmem_cpu.hpp
+    Alloc_cpu.cpp
+    Cast_cpu.cpp
+    Fill_cpu.cpp
+    GetElems_cpu.cpp
+    GetElems_contiguous_cpu.cpp
+    Movemem_cpu.cpp
+    SetArange_cpu.cpp
+    SetElems_cpu.cpp
+    SetElems_contiguous_cpu.cpp
+    SetZeros_cpu.cpp
+    Range_cpu.cpp
+    Complexmem_cpu.cpp
+    blocks_mvelems_cpu.cpp
+    blocks_mvelems_cpu.hpp
+)
