@@ -80,12 +80,14 @@ target_include_directories(qontra PUBLIC
 
 add_subdirectory(stim)
 add_subdirectory(blossom5)
+add_subdirectory(cytnx)
 
 add_executable(asm_analyzer src/main/asm_analyzer.cpp ${ASM_FILES})
 add_executable(sim_test src/main/tests/sim_test.cpp ${ASM_FILES})
 
 target_link_libraries(qontra PUBLIC libstim)
 target_link_libraries(qontra PUBLIC libblossom5)
+target_link_libraries(qontra PUBLIC cytnx)
 target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
 target_link_libraries(qontra PUBLIC ${ARMADILLO_LIBRARIES})
 
