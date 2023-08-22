@@ -112,7 +112,7 @@ public:
     typedef label_1q_t (StateSimulator::*ErrorChannel1Q)(uint, uint64_t);
     typedef label_2q_t (StateSimulator::*ErrorChannel2Q)(uint, uint, uint64_t);
 
-    template <ErrorChannel1Q CH> void 
+    template <ErrorChannel1Q CH> virtual void
     error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
         for (uint i = 0; i < operands.size(); i++) {
             uint j = operands[i];
@@ -133,7 +133,7 @@ public:
         }
     }
 
-    template <ErrorChannel2Q CH> void
+    template <ErrorChannel2Q CH> virtual void
     error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
         for (uint i = 0; i < operands.size(); i += 2) {
             uint j1 = operands[i];
@@ -156,7 +156,7 @@ public:
         }
     }
 
-    void
+    virtual void
     error_channel_m(uint64_t rec, fp_t m1w0, fp_t m0w1, 
             stim::simd_bits_range_ref lock) 
     {
