@@ -67,6 +67,14 @@ public:
     virtual void    CX(std::vector<uint>) =0;
     virtual void    R(std::vector<uint>) =0;
 
+    // As these operations are non-Clifford, we
+    // provide a default implementation that does
+    // nothing.
+    virtual void    T(std::vector<uint>) {}
+    virtual void    RX(std::vector<uint>) {}
+    virtual void    RY(std::vector<uint>) {}
+    virtual void    RZ(std::vector<uint>) {}
+
     // Measurement is a special operation. 
     // The first argument is the operands (as with other operations).
     // The second and third arguments (mXwY) is the probability that we
@@ -106,13 +114,19 @@ public:
     // K-qubit operations can be implemented by adding a new error channel function
     // along with a new typedef (i.e. label_kq_t). We do not natively provide this
     // as 2-qubit gates are standard on most platforms.
+    //
+    // Tracking may be useful for experiments (i.e. seeing what types of errors
+    // a decoder is failing on), but note that not all simulators can implement
+    // error label tracking effectively. For example, a full-state simulator may
+    // implement errors as matrix operations, so the error that would occur depends
+    // on the state of the qubit. In such a situation, the label is not useful.
     //      
     typedef ErrorLabel                          label_1q_t;
     typedef std::pair<ErrorLabel, ErrorLabel>   label_2q_t;
     typedef label_1q_t (StateSimulator::*ErrorChannel1Q)(uint, uint64_t);
     typedef label_2q_t (StateSimulator::*ErrorChannel2Q)(uint, uint, uint64_t);
 
-    template <ErrorChannel1Q CH> virtual void
+    template <ErrorChannel1Q CH> void
     error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
         for (uint i = 0; i < operands.size(); i++) {
             uint j = operands[i];
@@ -133,7 +147,7 @@ public:
         }
     }
 
-    template <ErrorChannel2Q CH> virtual void
+    template <ErrorChannel2Q CH> void
     error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
         for (uint i = 0; i < operands.size(); i += 2) {
             uint j1 = operands[i];

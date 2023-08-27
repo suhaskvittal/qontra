@@ -32,6 +32,11 @@ int main() {
     cx_base.at({1, 0, 1, 1}) = 1;
     cx_base.at({1, 1, 1, 0}) = 1;
 
+    cytnx::Tensor m0_base({2, 2}, cytnx::Type.ComplexDouble);
+    m0_base.at({0, 0}) = 1;
+    cytnx::Tensor m1_base({2, 2}, cytnx::Type.ComplexDouble);
+    m1_base.at({1, 1}) = 1;
+
     cytnx::UniTensor q1(q_base);
     q1.set_labels({std::string("-1"), std::string("1")});
     q1.set_name("q1");
@@ -71,13 +76,26 @@ int main() {
     auto s4 = cytnx::Contract(s3, cx2);
     auto s5 = cytnx::Contract(q3, s4);
     auto s6 = cytnx::Contract(s5, h2);
-    s1.print_diagram();
-    s2.print_diagram();
-    s3.print_diagram();
-    s4.print_diagram();
-    s5.print_diagram();
     s6.print_diagram();
     s6.print_blocks();
+    std::cout << "prob:";
+    for (uint i = 0; i < 8; i++) {
+        uint a = i & 1, b = (i & 2) >> 1, c = (i & 4) >> 2;
+        fp_t p =((fp_t)cytnx::Scalar(s6.at({0, 0, 0, a, b, c})).abs());
+        if (p > 0) {
+            std::cout << " " << a << b << c << " (" << p << ")";
+        }
+    }
+    std::cout << "\n";
+
+    cytnx::UniTensor m0_0(m1_base);
+    m0_0.set_labels({std::string("9"), std::string("10")});
+
+    auto s7 = cytnx::Contract(s6, m0_0);
+    s7.normalize_();
+    s7.print_blocks();
+
+    std::cout << ((fp_t)cytnx::Scalar(s7.Norm().at({0})).abs()) << std::endl;
 
     return 0;
 }

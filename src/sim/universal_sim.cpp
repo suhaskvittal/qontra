@@ -48,6 +48,40 @@ UniversalSimulator::UniversalSimulator(uint n)
     }
 }
 
+template <int W> void
+UniversalSimulator::M(std::vector<uint> operands, fp_t m1w0, fp_t m0w1, int record) {
+    for (uint x : operands) {
+        fp_t r = rpdist(rng);
+        // Get the probability of measuring each state.
+        for (uint i = 0; i < W; i++) {
+            auto tmp = test_1q_gate(m_base(x, i), x);
+            fp_t pr = (fp_t) Scalar(tmp.Norm().at({0}).abs());
+            if (r < pr) {
+                // Collapse to this state.
+                tmp.normalize_();
+                update_1q_state(tmp);
+                if (record >= 0) {
+                    uint m = i;
+                    // Randomly resolve the measurement if we collapsed to |2>, |3>, etc.
+                    if (m > 1) {
+                        fp_t x = rpdist(rng);
+                        m = x < 0.5 ? 0 : 1;
+                    }
+                    // Apply errors.
+                    fp_t e = rpdist(rng);
+                    if (m == 0 && e < m1w0)         m = 1;
+                    else if (m == 1 && e < m0w1)    m = 0;
+
+                    record_table[record++] = m;
+                }
+                break;
+            } else {
+                r -= pr;
+            }
+        }
+    }
+}
+
 template <int W> StateSimulator::label_1q_t
 UniversalSimulator::eDP1(uint x, uint64_t t) {
     auto p = rng() & 3;
@@ -78,6 +112,68 @@ template <int W> StateSimulator::label_1q_t
 UniversalSimulator::eL(uint x, uint64_t t) {
     // Leave this for explicitly specialized implementations.
     return L_I;
+}
+
+template <int W, int b1, int b2> StateSimulator::label_1q_t
+UniversalSimulator::eAD(uint x, uint64_t t) {
+    fp_t angle;
+    if (params.fix_amplitude_damping_angle) {
+        angle = params.amplitude_damping_angle;
+    } else {
+        angle = rpdist(rng) * 2 * M_PI;
+    }
+
+    Tensor rot({W, W}, type=Type.ComplexDouble);
+    for (int i = 0; i < W; i++) {
+        if (i != b1 && i != b2) rot.at({i, i}) = 1;
+    }
+    rot.at({b1, b1}) = 1.0;
+    rot.at({b1, b2}) = c64(0.0, -sin(angle*0.5));
+    rot.at({b2, b2}) = cos(angle*0.5);
+
+    apply_1q_gate(build_1q_gate(rot, x), x);
+    return b1 <= 1 && b2 <= 1 ? L_X : L_L;
+}
+
+template <int W, int b1, int b2> StateSimulator::label_1q_t
+UniversalSimulator::ePD(uint x, uint64_t t) {
+    fp_t angle;
+    if (params.fix_phase_damping_angle) {
+        angle = params.phase_damping_angle;
+    } else {
+        angle = rpdist(rng) * 2 * M_PI;
+    }
+
+    Tensor rot({W, W}, type=Type.ComplexDouble);
+    for (int i = 0; i < W; i++) {
+        if (i != b1 && i != b2) rot.at({i, i}) = 1;
+    }
+    rot.at({b1, b1}) = c64(cos(angle*0.5), -sin(angle*0.5));
+    rot.at({b2, b2}) = c64(cos(angle*0.5), sin(angle*0.5));
+    
+    apply_1q_gate(build_1q_gate(rot, x), x);
+    return L_Z;
+}
+
+template <int W, int b1, int b2> StateSimulator::label_1q_t
+UniversalSimulator::eHEAT(uint x, uint64_t t) {
+    fp_t angle;
+    if (params.fix_heating_angle) {
+        angle = params.heating_angle;
+    } else {
+        angle = rpdist(rng) * 2 * M_PI;
+    }
+
+    Tensor rot({W, W}, type=Type.ComplexDouble);
+    for (int i = 0; i < W; i++) {
+        if (i != b1 && i != b2) rot.at({i, i}) = 1;
+    }
+    rot.at({b1, b1}) = cos(angle*0.5);
+    rot.at({b2, b1}) = c64(0.0, -sin(angle*0.5));
+    rot.at({b2, b2}) = 1.0;
+
+    apply_1q_gate(build_1q_gate(rot, x), x);
+    return b1 <= 1 && b2 <= 1 ? L_X : L_L;
 }
 
 template <int W> StateSimulator::label_2q_t
@@ -210,7 +306,7 @@ UniversalSimulator::cx_base(uint x, uint y) {
 
 template <int W> UniTensor
 UniversalSimulator::rx_base(fp_t angle, uint x) {
-    Tensor base({2, 2}, type=Type.ComplexDouble);
+    Tensor base({W, W}, type=Type.ComplexDouble);
     base.at({0, 0}) = cos(angle*0.5);
     base.at({0, 1}) = c64(0, -sin(angle*0.5));
     base.at({1, 0}) = c64(0, -sin(angle*0.5));
@@ -223,7 +319,7 @@ UniversalSimulator::rx_base(fp_t angle, uint x) {
 
 template <int W> UniTensor
 UniversalSimulator::ry_base(fp_t angle, uint x) {
-    Tensor base({2, 2}, type=Type.ComplexDouble);
+    Tensor base({W, W}, type=Type.ComplexDouble);
     base.at({0, 0}) = cos(angle*0.5);
     base.at({0, 1}) = -sin(angle*0.5);
     base.at({1, 0}) = sin(angle*0.5);
@@ -236,11 +332,27 @@ UniversalSimulator::ry_base(fp_t angle, uint x) {
 
 template <int W> UniTensor
 UniversalSimulator::rz_base(fp_t angle, uint x) {
-    Tensor base({2, 2}, type=Type.ComplexDouble);
+    Tensor base({W, W}, type=Type.ComplexDouble);
     base.at({0, 0}) = c64(cos(angle*0.5), -sin(angle*0.5));
     base.at({1, 1}) =  c64(cos(angle*0.5), sin(angle*0.5));
     for (uint i = 2; i < W; i++) {
         base.at({i, i}) = 1;
+    }
+    return build_1q_gate(base, x);
+}
+
+template <int W> UniTensor
+UniversalSimulator::m_base(uint x, uint b) {
+    Tensor base({W, W}, type=Type.ComplexDouble);
+    base.at({b, b}) = 1;
+    return build_1q_gate(base, x);
+}
+
+template <int W> UniTensor
+UniversalSimulator::reset_base(uint x) {
+    Tensor base({W, W}, type=Type.ComplexDouble);
+    for (uint i = 0; i < W; i++) {
+        base.at({0, i}) = 1;
     }
     return build_1q_gate(base, x);
 }
@@ -273,31 +385,15 @@ UniversalSimulator::build_2q_gate(const Tensor& base, uint x, uint y) {
     return gate;
 }
 
-template <int W> void
-UniversalSimulator::apply_1q_gate(const UniTensor gate, uint x) {
+template <int W> UniTensor
+UniversalSimulator::test_1q_gate(const cytnx::UniTensor gate, uint x) {
     std::string xlabel = qubit_to_label[x];
     UniTensor* curr = label_to_tensor[xlabel];
-
-    UniTensor* outcome = new UniTensor(Contract(curr, gate));
-
-    // Update data structures and delete curr.
-    qubit_to_label[x] = awaiting_labels[x];
-    label_to_tensor.erase(xlabel);
-
-    tensor_pool.erase(curr);
-    tensor_pool.insert(outcome);
-    for (auto label : tensor_to_labels[curr]) {
-        auto true_label = label == xlabel ? awaiting_labels[x] : label;
-        label_to_tensor[true_label] = outcome;
-        tensor_to_label[outcome].push_back(true_label);
-    }
-    tensor_to_label.erase(curr);
-    delete curr;
-    // Note that this operation cannot increase bond length.
+    return Contract(curr, gate);
 }
 
-template <int W> void
-UniversalSimulator::apply_2q_gate(const UniTensor gate, uint x, uint y) {
+template <int W> UniTensor
+UniversalSimulator::test_2q_gate(const cytnx::UniTensor gate, uint x, uint y) {
     std::string xlabel = qubit_to_label[x];
     std::string ylabel = qubit_to_label[y];
     UniTensor* t1 = label_to_tensor(xlabel);
@@ -305,7 +401,45 @@ UniversalSimulator::apply_2q_gate(const UniTensor gate, uint x, uint y) {
 
     UniTensor s1 = Contract(t1, gate);
     UniTensor s2 = Contract(t2, s1);
-    UniTensor* outcome = new UniTensor(s2);
+    return s2;
+}
+
+template <int W> void
+UniversalSimulator::apply_1q_gate(const UniTensor gate, uint x) {
+    update_1q_state(test_1q_gate(gate, x), x);
+}
+
+template <int W> void
+UniversalSimulator::update_1q_state(const UniTensor state, uint x) {
+    std::string xlabel = qubit_to_label[x];
+
+    UniTensor* out = new UniTensor(state);
+    // Update data structures and delete curr.
+    qubit_to_label[x] = awaiting_labels[x];
+    label_to_tensor.erase(xlabel);
+
+    tensor_pool.erase(curr);
+    tensor_pool.insert(out);
+    for (auto label : tensor_to_labels[curr]) {
+        auto true_label = label == xlabel ? awaiting_labels[x] : label;
+        label_to_tensor[true_label] = outcome;
+        tensor_to_label[out].push_back(true_label);
+    }
+    tensor_to_label.erase(curr);
+    delete curr;
+}
+
+template <int W> void
+UniversalSimulator::apply_2q_gate(const UniTensor gate, uint x, uint y) {
+    update_2q_state(test_2q_gate(gate, x, y), x, y);
+}
+
+template <int W> void
+UniversalSimulator::update_2q_state(const UniTensor state, uint x, uint y) {
+    std::string xlabel = qubit_to_label[x];
+    std::string ylabel = qubit_to_label[y];
+
+    UniTensor* out = new UniTensor(state);
 
     // Update data structures and delete t1, t2.
     qubit_to_label[x] = awaiting_labels[x];
@@ -315,7 +449,7 @@ UniversalSimulator::apply_2q_gate(const UniTensor gate, uint x, uint y) {
 
     tensor_pool.erase(t1);
     tensor.pool.erase(t2);
-    tensor_pool.insert(outcome);
+    tensor_pool.insert(out);
     std::vector<std::string> t1_t2_labels;
     if (t1 == t2) {
         t1_t2_labels = tensor_to_labels[t1];
@@ -336,8 +470,8 @@ UniversalSimulator::apply_2q_gate(const UniTensor gate, uint x, uint y) {
         if (label == xlabel)        true_label = awaiting_labels[x];
         else if (label == ylabel)   true_label = awaiting_labels[y];
         else                        true_label = label;
-        label_to_tensor[true_label] = outcome;
-        tensor_to_labels[outcome].push_back(true_label);
+        label_to_tensor[true_label] = out;
+        tensor_to_labels[out].push_back(true_label);
     }
     // Check if the bond size is too high.
     if (is_bond_length_critical())  compress();
@@ -371,7 +505,7 @@ UniversalSimulator<3>::eLT(uint x, uint y, uint64_t t) {
     if (params.fix_leakage_transport_angle) {
         transport_angle = params.leakage_transport_angle;
     } else {
-        transport_angle = rpdist() * 2 * M_PI;
+        transport_angle = rpdist(rng) * 2 * M_PI;
     }
     // We will apply the transport across four subspaces.
     //  a. |02> - |22>
