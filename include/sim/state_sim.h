@@ -71,9 +71,9 @@ public:
     // provide a default implementation that does
     // nothing.
     virtual void    T(std::vector<uint>) {}
-    virtual void    RX(std::vector<uint>) {}
-    virtual void    RY(std::vector<uint>) {}
-    virtual void    RZ(std::vector<uint>) {}
+    virtual void    RX(fp_t, std::vector<uint>) {}
+    virtual void    RY(fp_t, std::vector<uint>) {}
+    virtual void    RZ(fp_t, std::vector<uint>) {}
 
     // Measurement is a special operation. 
     // The first argument is the operands (as with other operations).
