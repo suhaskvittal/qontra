@@ -1,6 +1,5 @@
 /*
- *  author: Suhas Vittal
- *  date:   24 June 2023
+ *  author: Suhas Vittal date:   24 June 2023
  * */
 
 #include "instruction.h"
@@ -42,185 +41,119 @@ schedule_to_text(const schedule_t& sch) {
     return out;
 }
 
-schedule_t
-schedule_from_stim(const stim::Circuit& circ) {
-    schedule_t sch;
-
-    uint64_t mctr = 0;  // Measurement, event, and observable counters.
-    uint64_t ectr = 0;
-    uint64_t octr = 0;
-    auto cb = [&] (const stim::Operation& op)
-    {
-        auto gate = op.gate;
-        std::string opname(gate->name);
-        std::vector<uint> operands;
-        // Parse operands:
-        //  We need to handle detector and observable instructions
-        //  differently, as they are a record lookback.
-        //
-        //  We also need to handle measurement instructions as well.
-        if (opname == "DETECTOR")               operands.push_back(ectr++);
-        if (opname == "OBSERVABLE_INCLUDE")     operands.push_back(octr++);
-        if (opname == "M" || opname == "MR")    operands.push_back(mctr);
-        for (auto target : op.target_data.targets) {
-            uint32_t x = target.data;
-            uint32_t v = x & stim::TARGET_VALUE_MASK;
-            if (opname == "DETECTOR" || opname == "OBSERVABLE_INCLUDE") {
-                operands.push_back(mctr - v);
-            } else {
-                operands.push_back(v);
-            }
-        }
-        if (opname == "M" || opname == "MR")    mctr += operands.size()-1;
-        // Convert stim instruction to ISA instruction
-        std::string name;
-        if (opname == "X")                  name = "x";
-        else if (opname == "Z")             name = "z";
-        else if (opname == "CX")            name = "cx";
-        else if (opname == "H")             name = "h";
-        else if (opname == "R")             name = "reset";
-        else if (opname == "S")             name = "s";
-        else if (opname == "M")             name = "mrc";
-        else if (opname == "DETECTOR")      name = "event";
-        else if (opname == "OBSERVABLE_INCLUDE") {
-            name = "obs";
-        } else if (opname == "MR") {
-            sch.push_back({"mrc", operands, {}});
-            operands.erase(operands.begin());
-            name = "reset";
-        } else                              name = "nop";
-        if (name == "nop")  return;
-        
-        sch.push_back({name, operands, {}});
-    };
-    circ.for_each_operation(cb);
-    sch = relabel_operands(sch);
-    return sch;
-}
-
-schedule_t
-relabel_operands(const schedule_t& sch) {
-    schedule_t new_sch;
-
-    std::map<uint, uint> operand_map;
-    uint k = 0;
-    for (const auto& inst : sch) {
-        Instruction new_inst;
-        new_inst.name = inst.name;
-        if (ONLY_HAS_QUBIT_OPERANDS.count(inst.name)) {
-            for (uint i : inst.operands) {
-                if (!operand_map.count(i))  operand_map[i] = k++;
-                uint x = operand_map[i];
-                new_inst.operands.push_back(x);
-            }
-        } else if (inst.name == "mrc") {
-            new_inst.operands.push_back(inst.operands[0]);
-            for (uint j = 1; j < inst.operands.size(); j++) {
-                uint i = inst.operands[j];
-                if (!operand_map.count(i))  operand_map[i] = k++;
-                uint x = operand_map[i];
-                new_inst.operands.push_back(x);
-            }
-        } else if (inst.name == "lckqifmspc") {
-            new_inst.operands = std::vector<uint>(inst.operands);
-            new_inst.operands[0] = operand_map[inst.operands[0]];
-        } else {
-            new_inst.operands = inst.operands;
-        }
-        new_sch.push_back(new_inst);
-    }
-
-    return new_sch;
-}
-
 stim::Circuit
-fast_convert_to_stim(const schedule_t& prog, ErrorTable& errors, TimeTable& timing) {
+schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing) {
+    uint n = get_number_of_qubits(sch);
+
     stim::Circuit circuit;
-    uint mctr = 0;
-    for (const auto& inst : prog) {
-        // If it is a measurement, inject a measurement error here.
-        if (inst.name == "mrc") {
-            for (uint i : inst.get_qubit_operands()) {
-                circuit.append_op("X_ERROR", {i}, errors.op1q["m"][i]);
-            }
-        }
+    fp_t time = 0.0;
+    // The instructions below can only be Pauli operators, CX,
+    // or the following:
+    //   measure, reset, event, obs, nop
+    uint n_meas = 0;
+    for (const auto& inst : sch) {
+        std::vector<uint> operands = inst.operands;
 
-        if (inst.name == "x") {
-            circuit.append_op("X", inst.get_qubit_operands());
-        } else if (inst.name == "z") {
-            circuit.append_op("Z", inst.get_qubit_operands());
+        bool inject_op_error = !inst.annotations.count(Annotation::no_error);
+        bool inject_timing_error = inst.annotations.count(Annotation::inject_timing_error);
+        bool operation_takes_time = !inst.annotations.count(Annotation::no_tick);
+        bool is_2q_op = IS_2Q_OPERATOR.count(inst.name);
+        if (inst.name == "measure") {
+            // Add X error before.
+            if (inject_op_error) {
+                for (uint x : operands) {
+                    fp_t e = 0.5*(errors.m1w0[x] + errors.m0w1[x]);
+                    if (e > 0)  circuit.append_op("X_ERROR", {x}, e);
+                }
+            }
+            circuit.append_op("M", operands);
+            n_meas += operands.size();
         } else if (inst.name == "h") {
-            circuit.append_op("H", inst.get_qubit_operands());
-        } else if (inst.name == "s") {
-            circuit.append_op("S", inst.get_qubit_operands());
+            circuit.append_op("H", operands);
+        } else if (inst.name == "x") {
+            circuit.append_op("X", operands);
+        } else if (inst.name == "z") {
+            circuit.append_op("Z", operands);
         } else if (inst.name == "cx") {
-            circuit.append_op("CX", inst.get_qubit_operands());
-        } else if (inst.name == "mrc") {
-            circuit.append_op("M", inst.get_qubit_operands());
-            mctr += inst.get_qubit_operands().size();
+            circuit.append_op("CX", operands);
+        } else if (inst.name == "nop") {
+            circuit.append_op("TICK", {});
         } else if (inst.name == "reset") {
-            circuit.append_op("R", inst.get_qubit_operands());
+            circuit.append_op("R", operands);
         } else if (inst.name == "event") {
-            std::vector<uint32_t> components;
-            for (uint i = 1; i < inst.operands.size(); i++) {
-                components.push_back(stim::TARGET_RECORD_BIT | (mctr - inst.operands[i]));
+            std::vector<uint> offsets;
+            for (uint i = 1; i < operands.size(); i++) {
+                offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - operands[i]));
             }
-            circuit.append_op("DETECTOR", components);
+            circuit.append_op("DETECTOR", offsets);
+            continue;
         } else if (inst.name == "obs") {
-            std::vector<uint32_t> components;
-            for (uint i = 1; i < inst.operands.size(); i++) {
-                components.push_back(stim::TARGET_RECORD_BIT | (mctr - inst.operands[i]));
+            std::vector<uint> offsets;
+            for (uint i = 1; i < operands.size(); i++) {
+                offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - operands[i]));
             }
-            circuit.append_op("OBSERVABLE_INCLUDE", components, inst.operands[0]);
-        }
+            circuit.append_op("OBSERVABLE_INCLUDE", offsets, operands[0]);
+            continue;
+        } else { continue; }    // Ignore all other instructions.
         
-        // Add other operation errors and decoherence/dephasing errors
-        std::map<uint, fp_t> qubit_to_delay;
-        if (inst.name == "cx") {
-            for (uint i = 0; i < inst.operands.size(); i += 2) {
-                uint j1 = inst.operands[i];
-                uint j2 = inst.operands[i+1];
-                auto j1_j2 = std::make_pair(j1, j2);
+        // Inject timing errors if requested.
+        if (inject_timing_error) {
+            for (uint x = 0; x < n; x++) {
+                fp_t t1 = timing.t1[x];
+                fp_t t2 = timing.t2[x];
 
-                fp_t dp2 = errors.op2q["cx"][j1_j2];
-                fp_t li = errors.op2q_leakage_injection["cx"][j1_j2];
-                fp_t lt = errors.op2q_leakage_transport["cx"][j1_j2];
+                fp_t e_ad = 0.25*(1 - exp(-time/t1));
+                fp_t e_pd = 0.5*(1 - exp(-time/t2));
 
-                circuit.append_op("L_TRANSPORT", {j1, j2}, lt);
-                circuit.append_op("L_ERROR", {j1, j2}, li);
-                circuit.append_op("DEPOLARIZE2", {j1, j2}, dp2);
-
-                fp_t cx_t = timing.op2q["cx"][j1_j2];
-                qubit_to_delay[j1] = cx_t;
-                qubit_to_delay[j2] = cx_t;
+                circuit.append_op("X_ERROR", {x}, e_ad);
+                circuit.append_op("Y_ERROR", {x}, e_ad);
+                circuit.append_op("Z_ERROR", {x}, e_pd-e_ad);
             }
-        } else {
-            if (inst.name != "mrc") {
-                if (!errors.op1q.count(inst.name))   continue;
-                for (uint i : inst.operands) {
-                    fp_t e = errors.op1q[inst.name][i];
-                    if (inst.name == "reset") {
-                        circuit.append_op("X_ERROR", {i}, e);
-                    } else {
-                        circuit.append_op("DEPOLARIZE1", {i}, e);
-                    }
-                    fp_t t = timing.op1q[inst.name][i];
-                    qubit_to_delay[i] = t;
+            time = 0;
+        }
+        // Update operation latency.
+        if (operation_takes_time) {
+            fp_t max_t = 0.0;
+            if (is_2q_op) {
+                for (uint i = 0; i < operands.size(); i += 2) {
+                    fp_t x = operands[i], y = operands[i+1];
+                    fp_t t = timing.op2q[inst.name][std::make_pair(x, y)];
+                    max_t = t > max_t ? t : max_t;
                 }
             } else {
-                for (uint i : inst.get_qubit_operands()) {
-                    fp_t t = timing.op1q["m"][i];
-                    qubit_to_delay[i] = t;
+                for (uint x : operands) {
+                    fp_t t = timing.op1q[inst.name][x];
+                    max_t = t > max_t ? t : max_t;
                 }
             }
+            time += max_t;
         }
+        // Add operation error.
+        if (inst.name != "measure" && inject_op_error) {
+            if (is_2q_op) {
+                for (uint i = 0; i < operands.size(); i += 2) {
+                    uint x = operands[i], y = operands[i+1];
+                    auto x_y = std::make_pair(x, y);
+                    fp_t dp = errors.op2q[inst.name][x_y];
+                    fp_t lt = errors.op2q_leakage_transport[inst.name][x_y];
+                    fp_t li = errors.op2q_leakage_injection[inst.name][x_y];
 
-        for (auto pair : qubit_to_delay) {
-            uint i = pair.first;
-            fp_t t = pair.second;
-            fp_t mean_t = (timing.t1[i] + timing.t2[i])*0.5;
-            fp_t e = 1 - exp(-t/mean_t);
-            circuit.append_op("DEPOLARIZE1", {i}, e);
+                    if (lt > 0) circuit.append_op("L_TRANSPORT", {x, y}, lt);
+                    if (li > 0) circuit.append_op("L_ERROR", {x, y}, lt);
+                    if (dp > 0) circuit.append_op("DEPOLARIZE2", {x, y}, dp);
+                }
+            } else {
+                for (uint x : operands) {
+                    fp_t e = errors.op1q[inst.name][x];
+                    if (e > 0) {
+                        if (inst.name == "reset") {
+                            circuit.append_op("X_ERROR", {x}, e);
+                        } else {
+                            circuit.append_op("DEPOLARIZE1", {x}, e);
+                        }
+                    }
+                }
+            }
         }
     }
     return circuit;

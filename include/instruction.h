@@ -15,6 +15,7 @@
 #include <string>
 
 #include <stdio.h>
+#include <math.h>
 
 namespace qontra {
 
@@ -134,12 +135,11 @@ typedef std::vector<Instruction>    schedule_t;
 uint            get_number_of_qubits(const schedule_t&);
 
 std::string     schedule_to_text(const schedule_t&);
+stim::Circuit   schedule_to_stim(const schedule_t&, ErrorTable&, TimeTable&);
 
-schedule_t      schedule_from_stim(const stim::Circuit&);
-schedule_t      relabel_operands(const schedule_t&);
+// The below functions are for parsing ASM (either in a file or in a string).
 schedule_t      schedule_from_file(std::string fname);
 schedule_t      schedule_from_text(std::string);
-
 schedule_t      schedule_after_parse(void);
 
 }   // qontra

@@ -204,6 +204,7 @@ SimManager::simulate_batch(uint64_t shots) {
                 timing_table[pc] += get_operation_latency(inst);
                 if (inst.annotations.count(Annotation::inject_timing_error)) {
                     inject_timing_error(timing_table[pc]);
+                    timing_table[pc] = 0;  // Reset the timer.
                 }
 
                 sim->rollback_where(shot_mask_ref);
