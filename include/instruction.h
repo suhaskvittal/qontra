@@ -135,7 +135,8 @@ typedef std::vector<Instruction>    schedule_t;
 uint            get_number_of_qubits(const schedule_t&);
 
 std::string     schedule_to_text(const schedule_t&);
-stim::Circuit   schedule_to_stim(const schedule_t&, ErrorTable&, TimeTable&);
+stim::Circuit   schedule_to_stim(const schedule_t&, ErrorTable&, TimeTable&, 
+                                    fp_t fix_timing_error_as_depolarizing_error=-1);
 
 // The below functions are for parsing ASM (either in a file or in a string).
 schedule_t      schedule_from_file(std::string fname);

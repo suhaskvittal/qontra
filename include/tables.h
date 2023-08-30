@@ -87,8 +87,8 @@ struct ErrorAndTiming {
     fp_t t_g1q = 30;    // in nanoseconds.
     fp_t t_g2q = 40;
     fp_t t_ro = 600;
-    fp_t t1 = 100e3;
-    fp_t t2 = 50e3;
+    fp_t t1 = 1000e3;
+    fp_t t2 = 500e3;
 
     ErrorAndTiming operator*(fp_t x) {
         this->e_g1q *= x;

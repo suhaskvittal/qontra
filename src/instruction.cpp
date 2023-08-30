@@ -42,7 +42,7 @@ schedule_to_text(const schedule_t& sch) {
 }
 
 stim::Circuit
-schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing) {
+schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, fp_t ftedpe) {
     uint n = get_number_of_qubits(sch);
 
     stim::Circuit circuit;
@@ -99,15 +99,19 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing) {
         // Inject timing errors if requested.
         if (inject_timing_error) {
             for (uint x = 0; x < n; x++) {
-                fp_t t1 = timing.t1[x];
-                fp_t t2 = timing.t2[x];
+                if (ftedpe > 0) {
+                    circuit.append_op("DEPOLARIZE1", {x}, ftedpe);
+                } else {
+                    fp_t t1 = timing.t1[x];
+                    fp_t t2 = timing.t2[x];
 
-                fp_t e_ad = 0.25*(1 - exp(-time/t1));
-                fp_t e_pd = 0.5*(1 - exp(-time/t2));
+                    fp_t e_ad = 0.25*(1 - exp(-time/t1));
+                    fp_t e_pd = 0.5*(1 - exp(-time/t2));
 
-                circuit.append_op("X_ERROR", {x}, e_ad);
-                circuit.append_op("Y_ERROR", {x}, e_ad);
-                circuit.append_op("Z_ERROR", {x}, e_pd-e_ad);
+                    circuit.append_op("X_ERROR", {x}, e_ad);
+                    circuit.append_op("Y_ERROR", {x}, e_ad);
+                    circuit.append_op("Z_ERROR", {x}, e_pd-e_ad);
+                }
             }
             time = 0;
         }

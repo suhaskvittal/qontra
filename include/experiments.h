@@ -35,8 +35,8 @@ typedef std::function<void(stim::simd_bits_range_ref&)>         cb_t1;
 typedef std::function<void(const Decoder::result_t&)>  cb_t2;
 
 typedef struct {
-    cb_t1   prologue = [&] (stim::simd_bits_range_ref x) {};
-    cb_t2   epilogue = [&] (const Decoder::result_t& res) {};
+    cb_t1   prologue = [] (stim::simd_bits_range_ref x) {};
+    cb_t2   epilogue = [] (const Decoder::result_t& res) {};
 } callback_t;
 
 extern callback_t   DEFAULT_CALLBACKS;
@@ -77,7 +77,7 @@ extern uint64_t G_FILTERING_HAMMING_WEIGHT;         // Default is 2.
 
 #define SQR(x)              (x)*(x)
 #define MEAN(s, n)          ((fp_t)(s))/((fp_t)(n))
-#define STD(m, ss, n)       ( ((fp_t)(ss))/((fp_t)(n)) - SQR(m) )
+#define STD(m, ss, n)       sqrt( ((fp_t)(ss))/((fp_t)(n)) - SQR(m) )
 
 // Experiments functions:
 //
