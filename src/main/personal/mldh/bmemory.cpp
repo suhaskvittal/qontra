@@ -4,6 +4,7 @@
  * */
 
 #include "decoder/mwpm.h"
+#include "mldh/astrea.h"
 #include "mldh/block.h"
 #include "experiments.h"
 #include "parsing/cmd.h"
@@ -14,8 +15,15 @@
 #include <fstream>
 #include <iostream>
 
+#include <math.h>
+#include <mpi.h>
+
 using namespace qontra;
 using namespace mldh;
+
+#define BMEM_SQR(x)          ((x) * (x))
+#define BMEM_MEAN(x, n)      ((fp_t)(x)) / ((fp_t)(n))
+#define BMEM_STD(x, x2, n)   sqrt(BMEM_MEAN(x2, n) - BMEM_SQR(BMEM_MEAN(x, n)))
 
 void set_error_rate_to(fp_t p, stim::CircuitGenParameters& params) {
     params.before_measure_flip_probability = p;
@@ -35,6 +43,7 @@ int main(int argc, char* argv[]) {
     uint d; // Distance
     fp_t p; // Error rate
     uint r; // Rounds
+    uint blk;   // block size
 
     std::string output_file;
     uint64_t shots;
@@ -42,6 +51,7 @@ int main(int argc, char* argv[]) {
     if (!pp.get_uint32("d", d))             return 1;
     if (!pp.get_float("p", p))              return 1;
     if (!pp.get_uint32("r", r))             return 1;
+    if (!pp.get_uint32("blk", blk))         return 1;
     if (!pp.get_string("out", output_file)) return 1;
     if (!pp.get_uint64("shots", shots))     return 1;
 
@@ -50,11 +60,12 @@ int main(int argc, char* argv[]) {
     set_error_rate_to(p, circ_params);
     stim::Circuit circuit = stim::generate_surface_code_circuit(circ_params).circuit;
 
-    MWPMDecoder base_dec(circuit);
-    BlockDecoder dec(circuit, &base_dec, (d+1)>>1);
+    AstreaDecoder<MWPMDecoder, 8> base_dec(circuit);
+    BlockDecoder dec(circuit, &base_dec, blk);
 
     // Setup experiment.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
+    experiments::G_FILTERING_HAMMING_WEIGHT = 0;
     experiments::memory_params_t params;
     params.shots = shots;
     
@@ -71,13 +82,60 @@ int main(int argc, char* argv[]) {
     bool write_header = !std::filesystem::exists(output_path);
     MPI_Barrier(MPI_COMM_WORLD);
     std::ofstream out(output_path, std::ios::app);
+    
+    // Accumulate custom statistics.
+    uint64_t total_number_of_blocks;
+    uint64_t total_number_sqr_of_blocks;
+    uint64_t max_number_of_blocks;
+    uint64_t min_number_of_blocks;
+    uint64_t true_shots;
+
+    uint64_t total_hw_in_block;
+    uint64_t total_hw_sqr_in_block;
+    uint64_t max_hw_in_block;
+
+    uint64_t total_blk_hw_above_10;
+
+    MPI_Reduce(&dec.total_number_of_blocks, &total_number_of_blocks, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.total_number_sqr_of_blocks, &total_number_sqr_of_blocks, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.max_number_of_blocks, &max_number_of_blocks, 1,
+            MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.min_number_of_blocks, &min_number_of_blocks, 1,
+            MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.total_shots_evaluated, &true_shots, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    MPI_Reduce(&dec.total_hw_in_block, &total_hw_in_block, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.total_hw_sqr_in_block, &total_hw_sqr_in_block, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.max_hw_in_block, &max_hw_in_block, 1,
+            MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    MPI_Reduce(&dec.total_blk_hw_above_10, &total_blk_hw_above_10, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    true_shots = shots;
 
     if (world_rank == 0) {
+        fp_t mean_blocks = BMEM_MEAN(total_number_of_blocks, true_shots);
+        fp_t std_blocks = BMEM_STD(total_number_of_blocks,
+                                total_number_sqr_of_blocks,
+                                true_shots);
+        fp_t mean_blkhw = BMEM_MEAN(total_hw_in_block, total_number_of_blocks);
+        fp_t std_blkhw = BMEM_STD(total_hw_in_block,
+                                    total_hw_sqr_in_block,
+                                    total_number_of_blocks);
+        fp_t prob_blkhw_gt10 = BMEM_MEAN(total_blk_hw_above_10, total_number_of_blocks);
+
         if (write_header) {
             // Write the header.
             out << "Distance,"
                     << "Rounds,"
                     << "Physical Error Rate,"
+                    << "Block Width,"
                     << "Shots,"
                     << "Logical Error Probability,"
                     << "Hamming Weight Mean,"
@@ -85,11 +143,20 @@ int main(int argc, char* argv[]) {
                     << "Hamming Weight Max,"
                     << "Time Mean,"
                     << "Time Std,"
-                    << "Time Max\n";
+                    << "Time Max,"
+                    << "Block Mean,"
+                    << "Block Std,"
+                    << "Block Min,"
+                    << "Block Max,"
+                    << "Block Hamming Weight Mean,"
+                    << "Block Hamming Weight Std,"
+                    << "Block Hamming Weight Max,"
+                    << "Prob Block Hamming Weight GT 10\n";
         }
         out << d << ","
             << r << ","
             << p << ","
+            << blk << ","
             << shots << ","
             << res.logical_error_rate << ","
             << res.hw_mean << ","
@@ -98,7 +165,14 @@ int main(int argc, char* argv[]) {
             << res.t_mean << ","
             << res.t_std << ","
             << res.t_max << ","
-            << ;
+            << mean_blocks << ","
+            << std_blocks << ","
+            << min_number_of_blocks << ","
+            << max_number_of_blocks << ","
+            << mean_blkhw << ","
+            << std_blkhw << ","
+            << max_hw_in_block << ","
+            << prob_blkhw_gt10 << "\n";
     }
     MPI_Finalize();
 }

@@ -6,11 +6,11 @@
 #ifndef MLDH_BLOCK_DECODER_h
 #define MLDH_BLOCK_DECODER_h
 
-#include "mldh/astrea.h"
 #include "decoder/mwpm.h"
 #include "graph/algorithms/search.h"
 #include "graph/decoding_graph.h"
 
+#include <limits>
 #include <map>
 #include <vector>
 
@@ -44,7 +44,16 @@ public:
 
     // Statistics:
     uint64_t    total_number_of_blocks=0;
+    uint64_t    total_number_sqr_of_blocks=0;
     uint64_t    max_number_of_blocks=0;
+    uint64_t    min_number_of_blocks=std::numeric_limits<uint64_t>::max();
+    uint64_t    total_shots_evaluated=0;
+
+    uint64_t    total_hw_in_block=0;
+    uint64_t    total_hw_sqr_in_block=0;
+    uint64_t    max_hw_in_block=0;
+
+    uint64_t    total_blk_hw_above_10=0;
 private:
     std::vector<block_t>    get_blocks(std::vector<uint> detectors);
     block_t                 compute_block_from(uint d, std::vector<uint> detectors);

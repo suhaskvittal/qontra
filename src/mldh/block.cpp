@@ -23,6 +23,8 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
     const uint obs = circuit.count_observables();
     stim::simd_bits corr(obs);
     corr.clear();
+
+    fp_t max_dec_time = 0.0;
     for (const auto& blk : blocks) {
         syndrome_t bs(det+obs);
         bs.clear();
@@ -32,13 +34,27 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
         }
         auto blk_res = base_decoder->decode_error(bs);
         corr ^= blk_res.corr;
+        max_dec_time = blk_res.exec_time > max_dec_time ? blk_res.exec_time : max_dec_time;
+
+        // Update block statistics.
+        const uint hw = blk.size();
+        total_hw_in_block += hw;
+        total_hw_sqr_in_block += hw*hw;
+        max_hw_in_block = hw > max_hw_in_block ? hw : max_hw_in_block;
+        total_blk_hw_above_10 += (hw > 10);
     }
     // Update statistics.
-    total_number_of_blocks += blocks.size();
-    max_number_of_blocks = blocks.size() > max_number_of_blocks : blocks.size() : max_number_of_blocks;
+    const uint64_t sz = blocks.size();
+    total_number_of_blocks += sz;
+    total_number_sqr_of_blocks += sz*sz;
+    max_number_of_blocks = sz > max_number_of_blocks ? sz : max_number_of_blocks;
+    min_number_of_blocks = sz < min_number_of_blocks ? sz : min_number_of_blocks;
+    total_shots_evaluated++;
+
+    fp_t t = max_dec_time;
 
     Decoder::result_t res = {
-        0.0,
+        t,
         corr,
         is_error(corr, syndrome)
     };
