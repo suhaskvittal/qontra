@@ -111,14 +111,16 @@ DecodingGraph::build_error_polynomial() {
 bool 
 DecodingGraph::update_state() {
     if (!__DecodingGraphParent::update_state()) return false;
-    build_distance_matrix();
+    if (mode != Mode::LOW_MEMORY) {
+        build_distance_matrix();
+    }
     build_error_polynomial();
     return true;
 }
 
 DecodingGraph
-to_decoding_graph(const stim::Circuit& qec_circ) {
-    DecodingGraph graph;
+to_decoding_graph(const stim::Circuit& qec_circ, DecodingGraph::Mode mode) {
+    DecodingGraph graph(mode);
 
     stim::DetectorErrorModel dem = 
         stim::ErrorAnalyzer::circuit_to_detector_error_model(

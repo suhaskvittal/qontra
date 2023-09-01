@@ -16,7 +16,7 @@ namespace qontra {
 class NeuralDecoder : public Decoder {
 public:
     NeuralDecoder(const stim::Circuit& circ)
-        :Decoder(circ, false)
+        :Decoder(circ, graph::DecodingGraph::Mode::LOW_MEMORY)
     {}
 
     void                train(uint64_t shots, bool verbose=true);

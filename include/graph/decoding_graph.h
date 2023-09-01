@@ -45,8 +45,13 @@ struct edge_t : base::edge_t {
 
 class DecodingGraph : public __DecodingGraphParent {
 public:
-    DecodingGraph()
-        :Graph(), distance_matrix(), error_polynomial(), expected_errors()
+    enum class Mode {
+        NORMAL,     // No adjustments. Default option.
+        LOW_MEMORY  // Here, we will not generate the distance matrix.
+    };
+
+    DecodingGraph(Mode m=Mode::NORMAL)
+        :Graph(), distance_matrix(), error_polynomial(), expected_errors(), mode(m)
     {
         std::array<fp_t, N_COORD> boundary_coords;
         boundary_coords.fill(-1);
@@ -61,7 +66,8 @@ public:
         :Graph(other),
         distance_matrix(other.distance_matrix),
         error_polynomial(other.error_polynomial),
-        expected_errors(other.expected_errors)
+        expected_errors(other.expected_errors),
+        mode(other.mode)
     {}
 
     typedef struct {    // Each pair of vertices has this entry, and each entry
@@ -100,6 +106,8 @@ private:
 
     poly_t  error_polynomial;
     fp_t    expected_errors;
+
+    const Mode mode;
 };
 
 // This is standard method of building decoding graphs, where each error is assumed
@@ -112,7 +120,7 @@ private:
 // method use that).
 
 DecodingGraph
-to_decoding_graph(const stim::Circuit&);
+to_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGraph::Mode::NORMAL);
 
 }   // graph
 }   // qontra

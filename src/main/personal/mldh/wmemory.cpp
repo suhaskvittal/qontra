@@ -4,6 +4,7 @@
  * */
 
 #include "decoder/mwpm.h"
+#include "decoder/window.h"
 #include "experiments.h"
 #include "parsing/cmd.h"
 #include "instruction.h"
@@ -33,23 +34,34 @@ int main(int argc, char* argv[]) {
     uint d; // Distance
     fp_t p; // Error rate
     uint r; // Rounds
+    uint w; // Window size
+    uint c; // Commit window
 
     std::string output_file;
     uint64_t shots;
 
-    if (!pp.get_uint32("d", d))                     return 1;
-    if (!pp.get_float("p", p))                      return 1;
-    if (!pp.get_uint32("r", r))                     return 1;
-    if (!pp.get_string("out", output_file))         return 1;
-    if (!pp.get_uint64("shots", shots))             return 1;
+    if (!pp.get_uint32("d", d))             return 1;
+    if (!pp.get_float("p", p))              return 1;
+    if (!pp.get_uint32("r", r))             return 1;
+    if (!pp.get_uint32("w", w))             return 1;
+    if (!pp.get_uint32("c", c))             return 1;
+    if (!pp.get_string("out", output_file)) return 1;
+    if (!pp.get_uint64("shots", shots))     return 1;
 
     // Define circuits.
     stim::CircuitGenParameters circ_params(r, d, "rotated_memory_z");
     set_error_rate_to(p, circ_params);
     stim::Circuit circuit = stim::generate_surface_code_circuit(circ_params).circuit;
+    
+    stim::CircuitGenParameters window_circ_params(w+1, d, "rotated_memory_z");
+    set_error_rate_to(p, window_circ_params);
+    stim::Circuit window_circuit = stim::generate_surface_code_circuit(window_circ_params).circuit;
 
     // Define Decoder.
-    MWPMDecoder dec(circuit);
+    const uint dpr = (d*d - 1) >> 1;
+
+    MWPMDecoder base_dec(window_circuit);
+    WindowDecoder dec(circuit, &base_dec, c, dpr);
 
     // Setup experiment.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
@@ -73,7 +85,9 @@ int main(int argc, char* argv[]) {
         if (write_header) {
             // Write the header.
             out << "Distance,"
+                    << "Rounds,"
                     << "Physical Error Rate,"
+                    << "Window Read:Commit,"
                     << "Shots,"
                     << "Logical Error Probability,"
                     << "Hamming Weight Mean,"
@@ -84,7 +98,9 @@ int main(int argc, char* argv[]) {
                     << "Time Max\n";
         }
         out << d << ","
+            << r << ","
             << p << ","
+            << w << ":" << c << ","
             << shots << ","
             << res.logical_error_rate << ","
             << res.hw_mean << ","

@@ -33,10 +33,10 @@ public:
     // but the backing decoder only uses a few rounds. This may also be 
     // used if the subclass constructs the decoding graph
     // via a custom strategy, or does not need a decoding graph.
-    Decoder(const stim::Circuit& circ, bool build_decoding_graph=true)
+    Decoder(const stim::Circuit& circ, 
+            graph::DecodingGraph::Mode dgr_mode=graph::DecodingGraph::Mode::NORMAL)
         :circuit(circ),
-        decoding_graph(build_decoding_graph 
-                        ? graph::to_decoding_graph(circ) : graph::DecodingGraph())
+        decoding_graph(graph::to_decoding_graph(circ, dgr_mode))
     {}
 
     virtual ~Decoder() {}

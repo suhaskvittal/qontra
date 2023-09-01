@@ -29,7 +29,6 @@ set(QONTRA_FILES
     # Decoders
     src/decoder/mwpm.cpp
     src/decoder/window.cpp
-    src/decoder/restriction.cpp
     src/decoder/neural.cpp
     # Parsing
     src/parsing/cmd.cpp
@@ -110,7 +109,15 @@ endif()
 if (COMPILE_MLDH)
     message("Will compile MLDH executables.")
 
+    set(MLDH_FILES
+        # Decoders
+        src/mldh/block.cpp)
+
     add_executable(mldh_memory src/main/personal/mldh/memory.cpp ${ASM_FILES})
+    add_executable(mldh_wmemory src/main/personal/mldh/wmemory.cpp ${ASM_FILES})
+    add_executable(mldh_bmemory src/main/personal/mldh/bmemory.cpp ${ASM_FILES} ${MLDH_FILES})
 
     target_link_libraries(mldh_memory PRIVATE qontra)
+    target_link_libraries(mldh_wmemory PRIVATE qontra)
+    target_link_libraries(mldh_bmemory PRIVATE qontra)
 endif()
