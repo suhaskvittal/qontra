@@ -62,7 +62,7 @@ set(SDL_FILES
 add_library(qontra ${QONTRA_FILES})
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-    target_compile_options(qontra PUBLIC -O3 -fno-strict-aliasing)
+    target_compile_options(qontra PUBLIC -Ofast -fno-strict-aliasing)
 else()
     target_compile_options(qontra PUBLIC -ggdb3 -fno-strict-aliasing)
 endif()
