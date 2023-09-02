@@ -33,14 +33,28 @@ public:
     BlockDecoder(const stim::Circuit& target_circuit,
             Decoder* base,
             const uint block_dim)
-        :Decoder(target_circuit, graph::DecodingGraph::Mode::LOW_MEMORY),
+        :Decoder(target_circuit),
         base_decoder(base),
         block_dim(block_dim)
     {}
 
     Decoder::result_t decode_error(const syndrome_t&) override;
-
     std::string name(void) override { return "Block"; }
+
+    void reset_stats(void) {
+        total_number_of_blocks = 0;
+        total_number_sqr_of_blocks = 0;
+        max_number_of_blocks = 0;
+        min_number_of_blocks = std::numeric_limits<uint64_t>::max();
+        total_shots_evaluated = 0;
+
+        total_hw_in_block = 0;
+        total_hw_sqr_in_block = 0;
+        max_hw_in_block = 0;
+
+        total_blk_hw_above_th = 0;
+    }
+
 
     // Statistics:
     uint64_t    total_number_of_blocks=0;
@@ -53,8 +67,18 @@ public:
     uint64_t    total_hw_sqr_in_block=0;
     uint64_t    max_hw_in_block=0;
 
-    uint64_t    total_blk_hw_above_10=0;
+    uint64_t    total_blk_hw_above_th=0;
+
+    // Configuration:
+    struct {
+        uint    blocking_threshold = 14;
+        uint    cutting_threshold = 14;
+        bool    allow_adaptive_blocks = false;
+    } config;
 private:
+    void update_hw_statistics(uint hw);
+    void update_blk_statistics(uint blks);
+
     std::vector<block_t>    get_blocks(std::vector<uint> detectors);
     block_t                 compute_block_from(uint d, std::vector<uint> detectors);
 

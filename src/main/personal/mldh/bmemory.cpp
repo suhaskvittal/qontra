@@ -65,11 +65,16 @@ int main(int argc, char* argv[]) {
 
     // Setup experiment.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
-    experiments::G_FILTERING_HAMMING_WEIGHT = 0;
+    experiments::G_FILTERING_HAMMING_WEIGHT = 2;
     experiments::memory_params_t params;
     params.shots = shots;
     
     // Run experiment.
+    experiments::memory_params_t caching_params;
+    caching_params.shots = world_size * 10;
+    memory_experiment(&dec, caching_params);
+
+    dec.reset_stats();
     experiments::memory_result_t res = memory_experiment(&dec, params);
 
     // Write results to file.
@@ -94,7 +99,7 @@ int main(int argc, char* argv[]) {
     uint64_t total_hw_sqr_in_block;
     uint64_t max_hw_in_block;
 
-    uint64_t total_blk_hw_above_10;
+    uint64_t total_blk_hw_above_th;
 
     MPI_Reduce(&dec.total_number_of_blocks, &total_number_of_blocks, 1,
             MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -114,10 +119,8 @@ int main(int argc, char* argv[]) {
     MPI_Reduce(&dec.max_hw_in_block, &max_hw_in_block, 1,
             MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
 
-    MPI_Reduce(&dec.total_blk_hw_above_10, &total_blk_hw_above_10, 1,
+    MPI_Reduce(&dec.total_blk_hw_above_th, &total_blk_hw_above_th, 1,
             MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-
-    true_shots = shots;
 
     if (world_rank == 0) {
         fp_t mean_blocks = BMEM_MEAN(total_number_of_blocks, true_shots);
@@ -128,7 +131,7 @@ int main(int argc, char* argv[]) {
         fp_t std_blkhw = BMEM_STD(total_hw_in_block,
                                     total_hw_sqr_in_block,
                                     total_number_of_blocks);
-        fp_t prob_blkhw_gt10 = BMEM_MEAN(total_blk_hw_above_10, total_number_of_blocks);
+        fp_t prob_blkhw_gtth = BMEM_MEAN(total_blk_hw_above_th, total_number_of_blocks);
 
         if (write_header) {
             // Write the header.
@@ -151,7 +154,7 @@ int main(int argc, char* argv[]) {
                     << "Block Hamming Weight Mean,"
                     << "Block Hamming Weight Std,"
                     << "Block Hamming Weight Max,"
-                    << "Prob Block Hamming Weight GT 10\n";
+                    << "Prob Block Hamming Weight GT " << dec.config.blocking_threshold << "\n";
         }
         out << d << ","
             << r << ","
@@ -172,7 +175,7 @@ int main(int argc, char* argv[]) {
             << mean_blkhw << ","
             << std_blkhw << ","
             << max_hw_in_block << ","
-            << prob_blkhw_gt10 << "\n";
+            << prob_blkhw_gtth << "\n";
     }
     MPI_Finalize();
 }

@@ -26,9 +26,10 @@ public:
         const uint hw = get_nonzero_detectors(syndrome).size();
         
         fp_t t;
-        if (hw <= K)        t = 1;
-        else if (hw <= K+2) t = (K+3) + (K+1);
-        else if (hw <= K+4) t = (K+5) + (K+3)*(K+1);
+        if (hw <= K)        t = 4;
+        else if (hw <= K+2) t = 4;  // Can be parallelized.
+        else if (hw <= K+4) t = (K+3)*4;
+        else if (hw <= K+6) t = ((K+5)*(K+3))*4;
         else                t = res.exec_time;
 
         return (Decoder::result_t) {
