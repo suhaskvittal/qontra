@@ -29,9 +29,14 @@ set(QONTRA_FILES
     # Decoders
     src/decoder/mwpm.cpp
     src/decoder/window.cpp
-    src/decoder/neural.cpp
     # Parsing
     src/parsing/cmd.cpp
+    src/parsing/asm.cpp
+    ${BISON_ASMParser_OUTPUTS}
+    ${FLEX_ASMLexer_OUTPUTS}
+#   src/parsing/sdl.cpp
+#   ${BISON_SDLParser_OUTPUTS}
+#   ${FLEX_SDLLexer_OUTPUTS}
     # Graphs
     src/graph/decoding_graph.cpp 
     src/graph/dependence_graph.cpp
@@ -43,21 +48,25 @@ set(QONTRA_FILES
     src/sim/frame_sim.cpp
     src/sim/manager.cpp
     src/sim/state_sim.cpp
-    src/sim/universal_sim.cpp
-    )
-# I've a had a lot of trouble with Bison/Flex files. Only
-# include them if you need them.
-set(ASM_FILES
-    src/parsing/asm.cpp
-    ${BISON_ASMParser_OUTPUTS}
-    ${FLEX_ASMLexer_OUTPUTS}
     )
 
-set(SDL_FILES
-    src/parsing/sdl.cpp
-    ${BISON_SDLParser_OUTPUTS}
-    ${FLEX_SDLLexer_OUTPUTS}
-    )
+# Below are the remaining Qontra "extensions". The reason of I have
+# not kept them with QONTRA_FILES is because not all systems
+# are able to support them.
+#
+# For example, PACE does not support MLPACK natively.
+
+if (COMPILE_NEURAL_DECODER)
+    message("Will compile NEURAL DECODER.")
+    find_package(Armadillo REQUIRED)
+    set(QONTRA_FILES ${QONTRA_FILES} src/decoder/neural.cpp)
+endif()
+
+if (COMPILE_UNIVERSAL_SIM)
+    message("Will compile UNIVERSAL SIM.")
+    add_subdirectory(cytnx)
+    set(QONTRA_FILES ${QONTRA_FILES} src/sim/universal_sim.cpp)
+endif()
 
 add_library(qontra ${QONTRA_FILES})
 
@@ -68,28 +77,28 @@ else()
 endif()
 
 find_package(MPI REQUIRED)
-find_package(Armadillo REQUIRED)
 
-# I don't know why I have to include /usr/local/include...
-target_include_directories(qontra PUBLIC
-    "include" 
-    ${MPI_INCLUDE_PATH} 
-    "/usr/local/include"
-    ${ARMADILLO_INCLUDE_DIRS})
-
-add_subdirectory(stim)
-add_subdirectory(blossom5)
-add_subdirectory(cytnx)
-add_subdirectory(pymatching)
-
-add_executable(asm_analyzer src/main/asm_analyzer.cpp ${ASM_FILES})
-add_executable(converter src/main/converter.cpp ${ASM_FILES})
+target_include_directories(qontra PUBLIC "include" ${MPI_INCLUDE_PATH})
 
 target_link_libraries(qontra PUBLIC libstim)
 target_link_libraries(qontra PUBLIC libblossom5)
-target_link_libraries(qontra PUBLIC cytnx)
 target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
-target_link_libraries(qontra PUBLIC ${ARMADILLO_LIBRARIES})
+
+if (COMPILE_NEURAL_DECODER)
+    target_include_directories(qontra PUBLIC ${ARMADILLO_INCLUDE_DIRS})
+    target_link_libraries(qontra PUBLIC ${ARMADILLO_LIBRARIES})
+endif()
+
+if (COMPILE_UNIVERSAL_SIM)
+    target_link_libraries(qontra PUBLIC cytnx)
+endif()
+
+add_subdirectory(stim)
+add_subdirectory(blossom5)
+add_subdirectory(pymatching)
+
+add_executable(asm_analyzer src/main/asm_analyzer.cpp)
+add_executable(converter src/main/converter.cpp)
 
 target_link_libraries(asm_analyzer PRIVATE qontra)
 target_link_libraries(converter PRIVATE qontra)
@@ -97,9 +106,9 @@ target_link_libraries(converter PRIVATE qontra)
 if (COMPILE_TESTS)
     message("Will compile TEST executables.")
 
-    add_executable(clifford_sim_test src/main/tests/clifford_sim_test.cpp ${ASM_FILES})
+    add_executable(clifford_sim_test src/main/tests/clifford_sim_test.cpp)
     add_executable(cytnx_contract_test src/main/tests/cytnx/contract_test.cpp)
-    add_executable(tensor_sim_test src/main/tests/tensor_sim_test.cpp ${ASM_FILES})
+    add_executable(tensor_sim_test src/main/tests/tensor_sim_test.cpp)
 
     target_link_libraries(clifford_sim_test PRIVATE qontra)
     target_link_libraries(cytnx_contract_test PRIVATE qontra)

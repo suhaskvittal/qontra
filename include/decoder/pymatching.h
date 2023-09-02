@@ -49,7 +49,7 @@ public:
         timer.clk_start();
         int64_t w;
         pm::decode_detection_events(solver, d64, corr.u8, w);
-        fp_t t = timer.clk_end();
+        fp_t t = (fp_t)timer.clk_end();
 
         return (Decoder::result_t) {
             t,

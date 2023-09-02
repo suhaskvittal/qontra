@@ -229,10 +229,10 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
                     0, MPI_COMM_WORLD);
         MPI_Reduce(&__hw_max, &hw_max, 1, MPI_UNSIGNED_LONG, MPI_MAX,
                     0, MPI_COMM_WORLD);
-        MPI_Reduce(&__t_sum, &t_sum, 1, MPI_LONG_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(&__t_sqr_sum, &t_sqr_sum, 1, MPI_LONG_DOUBLE, MPI_SUM, 
+        MPI_Reduce(&__t_sum, &t_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&__t_sqr_sum, &t_sqr_sum, 1, MPI_DOUBLE, MPI_SUM, 
                     0, MPI_COMM_WORLD);
-        MPI_Reduce(&__t_max, &t_max, 1, MPI_LONG_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&__t_max, &t_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     } else {
         logical_errors = __logical_errors;
         hw_sum = __hw_sum;

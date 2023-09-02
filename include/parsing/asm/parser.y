@@ -5,7 +5,7 @@
     Parser for ASM specified in ISA (see instruction.h)
 */
 
-%require "3.2"
+%require "3.0"
 
 %define api.prefix {asm_yy}
 

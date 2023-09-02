@@ -6,7 +6,7 @@
     See lexer.lex for examples of instructions.
 */
 
-%require "3.2"
+%require "3.0"
 
 %define api.prefix {sdl_yy}
 
