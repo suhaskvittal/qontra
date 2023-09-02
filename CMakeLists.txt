@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.20.2)
 project(QontraSim VERSION 0.1)
 # Declare CPP Version
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(FLEX REQUIRED)
@@ -35,7 +35,7 @@ set(QONTRA_FILES
     # Graphs
     src/graph/decoding_graph.cpp 
     src/graph/dependence_graph.cpp
-    src/graph/coupling_graph.cpp
+#   src/graph/coupling_graph.cpp
     src/graph/lattice_graph.cpp
     src/graph/tanner_graph.cpp
     # Simulators
@@ -62,13 +62,12 @@ set(SDL_FILES
 add_library(qontra ${QONTRA_FILES})
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-    target_compile_options(qontra PUBLIC -O3 -lemon -fno-strict-aliasing)
+    target_compile_options(qontra PUBLIC -O3 -fno-strict-aliasing)
 else()
-    target_compile_options(qontra PUBLIC -ggdb3 -lemon -fno-strict-aliasing)
+    target_compile_options(qontra PUBLIC -ggdb3 -fno-strict-aliasing)
 endif()
 
 find_package(MPI REQUIRED)
-find_package(LEMON REQUIRED)
 find_package(Armadillo REQUIRED)
 
 # I don't know why I have to include /usr/local/include...
@@ -81,6 +80,7 @@ target_include_directories(qontra PUBLIC
 add_subdirectory(stim)
 add_subdirectory(blossom5)
 add_subdirectory(cytnx)
+add_subdirectory(pymatching)
 
 add_executable(asm_analyzer src/main/asm_analyzer.cpp ${ASM_FILES})
 add_executable(converter src/main/converter.cpp ${ASM_FILES})
@@ -120,4 +120,6 @@ if (COMPILE_MLDH)
     target_link_libraries(mldh_memory PRIVATE qontra)
     target_link_libraries(mldh_wmemory PRIVATE qontra)
     target_link_libraries(mldh_bmemory PRIVATE qontra)
+
+    target_link_libraries(mldh_bmemory PRIVATE libpym)
 endif()

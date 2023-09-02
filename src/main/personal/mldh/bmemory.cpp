@@ -4,6 +4,7 @@
  * */
 
 #include "decoder/mwpm.h"
+#include "decoder/pymatching.h"
 #include "mldh/astrea.h"
 #include "mldh/block.h"
 #include "experiments.h"
@@ -60,7 +61,7 @@ int main(int argc, char* argv[]) {
     set_error_rate_to(p, circ_params);
     stim::Circuit circuit = stim::generate_surface_code_circuit(circ_params).circuit;
 
-    AstreaDecoder<MWPMDecoder, 8> base_dec(circuit);
+    AstreaDecoder<PyMatching, 8> base_dec(circuit);
     BlockDecoder dec(circuit, &base_dec, blk);
 
     // Setup experiment.
