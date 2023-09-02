@@ -72,8 +72,8 @@ public:
     // Configuration:
     struct {
         uint    blocking_threshold = 14;
-        uint    cutting_threshold = 14;
-        bool    allow_adaptive_blocks = false;
+        uint    cutting_threshold = 24;
+        bool    allow_adaptive_blocks = true;
     } config;
 private:
     void update_hw_statistics(uint hw);

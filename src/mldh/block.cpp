@@ -96,9 +96,7 @@ BlockDecoder::get_blocks(std::vector<uint> detectors) {
         // Check if we need to merge anything with this block.
         for (uint y : xblk) {
             uint yrt = find(y, root_table);
-            block_t& yblk = block_map[yrt];
             if (yrt == xrt)                 continue;
-            if (!block_contains(x, yblk))   continue;
             // Merge yrt's block with xrt.
             merge(xrt, yrt, block_map, root_table);
         }
@@ -137,13 +135,14 @@ BlockDecoder::compute_block_from(uint d, std::vector<uint> detectors) {
             weight_table[x] = error_data.weight;
         }
     }
-    if (config.allow_adaptive_blocks) {
-        while (blk.size() > config.cutting_threshold) {
+    if (config.allow_adaptive_blocks && detectors.size() > config.cutting_threshold) {
+        while (true) {
             auto it = std::max_element(blk.begin(), blk.end(),
                         [&] (uint x, uint y) {
                             return weight_table[x] < weight_table[y];
                         });
-            if (weight_table[*it] > min_edge_weight + 0.25*block_dim) {
+            if (*it == d)   break;
+            if (weight_table[*it] > min_edge_weight*block_dim) {
                 blk.erase(it);
             } else {
                 break;
