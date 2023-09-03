@@ -10,6 +10,8 @@
 #include "graph/algorithms/search.h"
 #include "graph/decoding_graph.h"
 
+#include <fstream>
+#include <iostream>
 #include <limits>
 #include <map>
 #include <vector>
@@ -74,10 +76,17 @@ public:
         uint    blocking_threshold = 14;
         uint    cutting_threshold = 24;
         bool    allow_adaptive_blocks = false;
+
+        struct {
+            bool            record_decoder_timing_data = false;
+            std::ofstream   decoder_timing_out;
+        } io;
     } config;
 private:
-    void update_hw_statistics(uint hw);
-    void update_blk_statistics(uint blks);
+    void update_hw_statistics(uint);
+    void update_blk_statistics(uint);
+
+    void write_timing_data(fp_t);
 
     std::vector<block_t>    get_blocks(std::vector<uint> detectors);
     block_t                 compute_block_from(uint d, std::vector<uint> detectors);

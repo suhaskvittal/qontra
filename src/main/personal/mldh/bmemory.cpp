@@ -49,12 +49,16 @@ int main(int argc, char* argv[]) {
     std::string output_file;
     uint64_t shots;
 
+    std::string timing_folder;
+
     if (!pp.get_uint32("d", d))             return 1;
     if (!pp.get_float("p", p))              return 1;
     if (!pp.get_uint32("r", r))             return 1;
     if (!pp.get_uint32("blk", blk))         return 1;
     if (!pp.get_string("out", output_file)) return 1;
     if (!pp.get_uint64("shots", shots))     return 1;
+
+    bool record_timing_data = pp.get_string("timing-outdir", timing_folder);
 
     // Define circuits.
     stim::CircuitGenParameters circ_params(r, d, "rotated_memory_z");
@@ -64,9 +68,26 @@ int main(int argc, char* argv[]) {
     AstreaDecoder<PyMatching, 8> base_dec(circuit);
     BlockDecoder dec(circuit, &base_dec, blk);
 
+    // Add output streams to collect timing data if necessary.
+    if (record_timing_data) {
+        // Remove folder if it exists -- we want a fresh folder.
+        if (world_rank == 0) {
+            std::filesystem::path timing_folder_path(timing_folder);
+            safe_create_directory(timing_folder_path);
+            for (auto& x : std::filesystem::directory_iterator(timing_folder_path)) {
+                std::filesystem::remove_all(x);
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        std::string filename = "proc_" + std::to_string(world_rank) + ".bin";
+
+        dec.config.io.record_decoder_timing_data = true;
+        dec.config.io.decoder_timing_out = std::ofstream(timing_folder + "/" + filename);
+    }
+
     // Setup experiment.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
-    experiments::G_FILTERING_HAMMING_WEIGHT = 2;
+    experiments::G_FILTER_OUT_SYNDROMES = false;
     experiments::memory_params_t params;
     params.shots = shots;
     

@@ -22,11 +22,11 @@ public:
 
     Decoder::result_t decode_error(const syndrome_t& syndrome) override {
         auto res = global_decoder.decode_error(syndrome);
-        
         const uint hw = get_nonzero_detectors(syndrome).size();
         
         fp_t t;
-        if (hw <= K)        t = 4;
+        if (hw <= 2)        t = 0;
+        else if (hw <= K)   t = 4;
         else if (hw <= K+2) t = 4;  // Can be parallelized.
         else if (hw <= K+4) t = (K+3)*4;
         else if (hw <= K+6) t = ((K+5)*(K+3))*4;

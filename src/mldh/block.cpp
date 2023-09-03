@@ -21,7 +21,9 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
         // Update statistics.
         update_blk_statistics(1);
         update_hw_statistics(detectors.size());
-        return base_decoder->decode_error(syndrome);
+        auto res = base_decoder->decode_error(syndrome);
+        write_timing_data(res.exec_time);
+        return res;
     }
     std::vector<block_t> blocks = get_blocks(detectors);
     // Now, we call our base decoder on each block, and merge
@@ -52,6 +54,7 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
     update_blk_statistics(sz);
 
     fp_t t = max_dec_time;
+    write_timing_data(t);
 
     Decoder::result_t res = {
         t,
@@ -76,6 +79,16 @@ BlockDecoder::update_blk_statistics(uint sz) {
     max_number_of_blocks = sz > max_number_of_blocks ? sz : max_number_of_blocks;
     min_number_of_blocks = sz < min_number_of_blocks ? sz : min_number_of_blocks;
     total_shots_evaluated++;
+}
+
+void
+BlockDecoder::write_timing_data(fp_t t) {
+    if (!config.io.record_decoder_timing_data) {
+        return;
+    }
+    // Write 8 bytes for t (convert to uint64_t).
+    uint64_t qt = (uint64_t) t;
+    config.io.decoder_timing_out.write(reinterpret_cast<char*>(&qt), sizeof(qt));
 }
 
 std::vector<block_t>

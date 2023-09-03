@@ -120,15 +120,19 @@ if (COMPILE_MLDH)
 
     set(MLDH_FILES
         # Decoders
-        src/mldh/block.cpp)
+        src/mldh/block.cpp
+        src/mldh/latency_sim.cpp)
 
     add_executable(mldh_memory src/main/personal/mldh/memory.cpp ${ASM_FILES})
     add_executable(mldh_wmemory src/main/personal/mldh/wmemory.cpp ${ASM_FILES})
     add_executable(mldh_bmemory src/main/personal/mldh/bmemory.cpp ${ASM_FILES} ${MLDH_FILES})
 
+    add_executable(mldh_timing src/main/personal/mldh/timing.cpp ${MLDH_FILES})
+
     target_link_libraries(mldh_memory PRIVATE qontra)
     target_link_libraries(mldh_wmemory PRIVATE qontra)
     target_link_libraries(mldh_bmemory PRIVATE qontra)
+    target_link_libraries(mldh_timing PRIVATE qontra)
 
     target_link_libraries(mldh_bmemory PRIVATE libpym)
 endif()
