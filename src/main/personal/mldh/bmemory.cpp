@@ -65,8 +65,13 @@ int main(int argc, char* argv[]) {
     set_error_rate_to(p, circ_params);
     stim::Circuit circuit = stim::generate_surface_code_circuit(circ_params).circuit;
 
-    AstreaDecoder<PyMatching, 8> base_dec(circuit);
-    BlockDecoder dec(circuit, &base_dec, blk);
+    AstreaDecoder<PyMatching, 8> astrea(circuit);
+    PyMatching pymatching(circuit);
+
+    Decoder* base_dec = &astrea;
+    if (pp.option_set("pym"))   base_dec = &pymatching;
+
+    BlockDecoder dec(circuit, base_dec, blk);
 
     // Add output streams to collect timing data if necessary.
     if (record_timing_data) {

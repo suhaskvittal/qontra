@@ -44,6 +44,7 @@ class Manager {
 public:
     Manager(std::string data_folder)
         :data_folder(data_folder),
+        eod(false),
         fin(),
         fno(0),
         mpi_world_rank(0),
@@ -52,7 +53,6 @@ public:
         if (experiments::G_USE_MPI) {
             MPI_Comm_size(MPI_COMM_WORLD, &mpi_world_size);
             MPI_Comm_rank(MPI_COMM_WORLD, &mpi_world_rank);
-            fno = mpi_world_rank;
 
             fin = std::ifstream(get_kth_file(fno));
         }
@@ -60,18 +60,21 @@ public:
 
     // Returns false if there is no more data.
     bool get_next(uint64_t* t_p) {
+        if (eod)    return false;
+
+        fin.read(reinterpret_cast<char*>(t_p), sizeof(uint64_t));
         if (fin.eof()) {
-            fno += mpi_world_size;
+            fno++;
             // Open next file.
             std::filesystem::path input_path(get_kth_file(fno));
             if (!std::filesystem::exists(input_path)) {
-                return false;
+                eod = true;
             }
             fin = std::ifstream(input_path);
             fin.seekg(mpi_world_rank*sizeof(uint64_t));
+        } else {
+            fin.seekg((mpi_world_size-1)*sizeof(uint64_t), std::ios::cur);
         }
-        fin.read(reinterpret_cast<char*>(t_p), sizeof(uint64_t));
-        fin.seekg(mpi_world_size*sizeof(uint64_t), std::ios::cur);
         return true;
     }
 
@@ -83,6 +86,7 @@ private:
     }
 
     const std::string data_folder;
+    bool eod;
 
     std::ifstream fin;
     uint64_t fno;

@@ -45,21 +45,23 @@ simulate_on_latency_data(std::string data_folder, const latency_sim_params_t& pa
             // Reset total and rounds.
             total_time = 0;
             rounds = 1;
+        } else {
+            rounds++;
         }
         __total_syndromes++;
     }
     // Compute stats.
     latency_sim_stats_t stats;
     if (G_USE_MPI) {
-        total_syndromes = __total_syndromes;
-        true_syndromes = __true_syndromes;
-    } else {
         MPI_Allreduce(&__total_syndromes, &total_syndromes, 1,
                     MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
         MPI_Allreduce(&__true_syndromes, &true_syndromes, 1,
                     MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+    } else {
+        total_syndromes = __total_syndromes;
+        true_syndromes = __true_syndromes;
     }
-    stats.normalized_latency = 1.0/MEAN(true_syndromes, total_syndromes);
+    stats.normalized_latency = ((fp_t) total_syndromes) / ((fp_t) true_syndromes);
 
     return stats;
 }
