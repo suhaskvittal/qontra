@@ -16,7 +16,7 @@ cd build
 for d in 5 7 9 11
 do
     echo "Running bmemory for d = ${d}"
-    for p in 3e-3 2e-3 1e-3 9e-4 8e-4 7e-4
+    for p in 1e-3
     do
         blk=$(( d/2 - 1 ))
         echo "\tParams: p = ${p}, r = ${d}, blk = ${blk}"

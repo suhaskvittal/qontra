@@ -7,7 +7,11 @@
 #define ASTREA_DECODER_h
 
 #include "decoder/decoder.h"
+#include "decoder/mwpm.h"
 #include "graph/decoding_graph.h"
+
+#include <fstream>
+#include <iostream>
 
 namespace qontra {
 namespace mldh {
@@ -22,7 +26,8 @@ public:
 
     Decoder::result_t decode_error(const syndrome_t& syndrome) override {
         auto res = global_decoder.decode_error(syndrome);
-        const uint hw = get_nonzero_detectors(syndrome).size();
+        std::vector<uint> detectors = get_nonzero_detectors(syndrome);
+        const uint hw = detectors.size();
         
         fp_t t;
         if (hw <= 2)        t = 0;

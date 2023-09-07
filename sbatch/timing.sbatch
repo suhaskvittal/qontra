@@ -19,6 +19,7 @@ do
     for p in 3e-3 2e-3 1e-3 9e-4 8e-4 7e-4
     do
         echo "\tParams: p = ${p}, r = ${d}, blk = ${blk}"
-        srun ./mldh_timing --in ../data/timing/d${d}_p${p} --out ../data/timing.csv
+        t=$(( 1000*d ))
+        srun ./mldh_timing --in ../data/timing/d${d}_p${p} --out ../data/timing.csv --t $t
     done
 done

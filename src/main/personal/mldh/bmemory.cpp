@@ -33,6 +33,19 @@ void set_error_rate_to(fp_t p, stim::CircuitGenParameters& params) {
     params.before_round_data_depolarization = p;
 }
 
+void
+build_folder(std::string folder) {
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    if (world_rank == 0) {
+        std::filesystem::path folder_path(folder);
+        safe_create_directory(folder_path);
+        for (auto& x : std::filesystem::directory_iterator(folder_path)) {
+            std::filesystem::remove_all(x);
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
     MPI_Init(NULL, NULL);
     int world_rank, world_size;
@@ -51,6 +64,9 @@ int main(int argc, char* argv[]) {
 
     std::string timing_folder;
 
+    std::string syndrome_folder;
+    uint64_t syndrome_rec_hw;
+
     if (!pp.get_uint32("d", d))             return 1;
     if (!pp.get_float("p", p))              return 1;
     if (!pp.get_uint32("r", r))             return 1;
@@ -59,6 +75,8 @@ int main(int argc, char* argv[]) {
     if (!pp.get_uint64("shots", shots))     return 1;
 
     bool record_timing_data = pp.get_string("timing-outdir", timing_folder);
+    bool record_syndrome_data = pp.get_string("syndrome-outdir", syndrome_folder)
+                                    && pp.get_uint64("syndrome-record-hw", syndrome_rec_hw);
 
     // Define circuits.
     stim::CircuitGenParameters circ_params(r, d, "rotated_memory_z");
@@ -76,18 +94,25 @@ int main(int argc, char* argv[]) {
     // Add output streams to collect timing data if necessary.
     if (record_timing_data) {
         // Remove folder if it exists -- we want a fresh folder.
-        if (world_rank == 0) {
-            std::filesystem::path timing_folder_path(timing_folder);
-            safe_create_directory(timing_folder_path);
-            for (auto& x : std::filesystem::directory_iterator(timing_folder_path)) {
-                std::filesystem::remove_all(x);
-            }
-        }
+        build_folder(timing_folder);
         MPI_Barrier(MPI_COMM_WORLD);
         std::string filename = "proc_" + std::to_string(world_rank) + ".bin";
 
-        dec.config.io.record_decoder_timing_data = true;
-        dec.config.io.decoder_timing_out = std::ofstream(timing_folder + "/" + filename);
+        dec.config.timing_io.record_data = true;
+        dec.config.timing_io.fout = std::ofstream(timing_folder + "/" + filename);
+    }
+
+    if (record_syndrome_data) {
+        build_folder(syndrome_folder);
+        MPI_Barrier(MPI_COMM_WORLD);
+        std::string filename = "proc_" + std::to_string(world_rank) + ".txt";
+
+        dec.config.syndrome_io.record_data = true;
+        dec.config.syndrome_io.fout = std::ofstream(syndrome_folder + "/" + filename);
+
+        MWPMDecoder* mwpm_base = new MWPMDecoder(circuit);
+        dec.config.syndrome_io.base = mwpm_base;
+        dec.config.syndrome_io.hw_trigger = syndrome_rec_hw;
     }
 
     // Setup experiment.
@@ -116,28 +141,25 @@ int main(int argc, char* argv[]) {
     std::ofstream out(output_path, std::ios::app);
     
     // Accumulate custom statistics.
-    uint64_t total_number_of_blocks;
-    uint64_t total_number_sqr_of_blocks;
-    uint64_t max_number_of_blocks;
-    uint64_t min_number_of_blocks;
-    uint64_t true_shots;
+    fp_t total_ratio_mbhw_thw;
+    fp_t total_ratio_mbhw_thw_sqr;
+    fp_t total_ratio_mbhw_thw_max;
 
     uint64_t total_hw_in_block;
     uint64_t total_hw_sqr_in_block;
     uint64_t max_hw_in_block;
 
     uint64_t total_blk_hw_above_th;
+    uint64_t total_number_of_blocks;
 
-    MPI_Reduce(&dec.total_number_of_blocks, &total_number_of_blocks, 1,
-            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&dec.total_number_sqr_of_blocks, &total_number_sqr_of_blocks, 1,
-            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&dec.max_number_of_blocks, &max_number_of_blocks, 1,
-            MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&dec.min_number_of_blocks, &min_number_of_blocks, 1,
-            MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&dec.total_shots_evaluated, &true_shots, 1,
-            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    uint64_t shots_above_th;
+
+    MPI_Reduce(&dec.total_ratio_mbhw_thw, &total_ratio_mbhw_thw, 1,
+            MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.total_ratio_mbhw_thw_sqr, &total_ratio_mbhw_thw_sqr, 1,
+            MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.total_ratio_mbhw_thw_max, &total_ratio_mbhw_thw_max, 1,
+            MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     MPI_Reduce(&dec.total_hw_in_block, &total_hw_in_block, 1,
             MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -146,19 +168,27 @@ int main(int argc, char* argv[]) {
     MPI_Reduce(&dec.max_hw_in_block, &max_hw_in_block, 1,
             MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
 
+    MPI_Reduce(&dec.total_number_of_blocks, &total_number_of_blocks, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&dec.total_blk_hw_above_th, &total_blk_hw_above_th, 1,
             MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
+    MPI_Reduce(&dec.shots_above_th, &shots_above_th, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
     if (world_rank == 0) {
-        fp_t mean_blocks = BMEM_MEAN(total_number_of_blocks, true_shots);
-        fp_t std_blocks = BMEM_STD(total_number_of_blocks,
-                                total_number_sqr_of_blocks,
-                                true_shots);
+        fp_t mean_ratio_mbhw_thw = BMEM_MEAN(total_ratio_mbhw_thw, shots_above_th);
+        fp_t std_ratio_mbhw_thw = BMEM_STD(total_ratio_mbhw_thw,
+                                        total_ratio_mbhw_thw_sqr,
+                                        shots_above_th);
+
         fp_t mean_blkhw = BMEM_MEAN(total_hw_in_block, total_number_of_blocks);
         fp_t std_blkhw = BMEM_STD(total_hw_in_block,
                                     total_hw_sqr_in_block,
                                     total_number_of_blocks);
+
         fp_t prob_blkhw_gtth = BMEM_MEAN(total_blk_hw_above_th, total_number_of_blocks);
+        fp_t freq_blocks_used = BMEM_MEAN(shots_above_th, shots);
 
         if (write_header) {
             // Write the header.
@@ -174,14 +204,14 @@ int main(int argc, char* argv[]) {
                     << "Time Mean,"
                     << "Time Std,"
                     << "Time Max,"
-                    << "Block Mean,"
-                    << "Block Std,"
-                    << "Block Min,"
-                    << "Block Max,"
+                    << "Max Block HW to Total HW Ratio Mean,"
+                    << "Max Block HW to Total HW Ratio Std,"
+                    << "Max Block HW to Total HW Ratio Max,"
                     << "Block Hamming Weight Mean,"
                     << "Block Hamming Weight Std,"
                     << "Block Hamming Weight Max,"
-                    << "Prob Block Hamming Weight GT " << dec.config.blocking_threshold << "\n";
+                    << "Prob Block Hamming Weight GT " << dec.config.blocking_threshold << ","
+                    << "Shots With Total HW GT " << dec.config.blocking_threshold << "\n";
         }
         out << d << ","
             << r << ","
@@ -195,14 +225,19 @@ int main(int argc, char* argv[]) {
             << res.t_mean << ","
             << res.t_std << ","
             << res.t_max << ","
-            << mean_blocks << ","
-            << std_blocks << ","
-            << min_number_of_blocks << ","
-            << max_number_of_blocks << ","
+            << mean_ratio_mbhw_thw << ","
+            << std_ratio_mbhw_thw << ","
+            << total_ratio_mbhw_thw_max << ","
             << mean_blkhw << ","
             << std_blkhw << ","
             << max_hw_in_block << ","
-            << prob_blkhw_gtth << "\n";
+            << prob_blkhw_gtth << ","
+            << freq_blocks_used << "\n";
     }
+    
+    if (dec.config.syndrome_io.record_data) {
+        delete dec.config.syndrome_io.base;
+    }
+
     MPI_Finalize();
 }

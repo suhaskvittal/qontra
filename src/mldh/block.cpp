@@ -14,13 +14,12 @@ namespace mldh {
 Decoder::result_t
 BlockDecoder::decode_error(const syndrome_t& syndrome) {
     std::vector<uint> detectors = get_nonzero_detectors(syndrome);
+    const uint orig_hw = detectors.size();
     // If the HW is below a given threshold, then there is
     // no reason to spend time computing the blocks. Decode
     // the syndrome directly.
-    if (detectors.size() <= config.blocking_threshold) {
+    if (orig_hw <= config.blocking_threshold) {
         // Update statistics.
-        update_blk_statistics(1);
-        update_hw_statistics(detectors.size());
         auto res = base_decoder->decode_error(syndrome);
         write_timing_data(res.exec_time);
         return res;
@@ -34,6 +33,7 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
     corr.clear();
 
     fp_t max_dec_time = 0.0;
+    uint max_blk_hw = 0;
     for (const auto& blk : blocks) {
         syndrome_t bs(det+obs);
         bs.clear();
@@ -48,19 +48,25 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
         // Update block statistics.
         const uint hw = blk.size();
         update_hw_statistics(hw);
+
+        max_blk_hw = hw > max_blk_hw ? hw : max_blk_hw;
     }
     // Update statistics.
-    const uint64_t sz = blocks.size();
-    update_blk_statistics(sz);
+    update_blk_ratio_statistics(max_blk_hw, orig_hw);
+    total_number_of_blocks += blocks.size();
+    shots_above_th++;
 
     fp_t t = max_dec_time;
-    write_timing_data(t);
 
     Decoder::result_t res = {
         t,
         corr,
         is_error(corr, syndrome)
     };
+
+    write_timing_data(t);
+    write_syndrome_data(syndrome, blocks, res.is_error);
+
     return res;
 }
 
@@ -73,22 +79,77 @@ BlockDecoder::update_hw_statistics(uint hw) {
 }
 
 void
-BlockDecoder::update_blk_statistics(uint sz) {
-    total_number_of_blocks += sz;
-    total_number_sqr_of_blocks += sz*sz;
-    max_number_of_blocks = sz > max_number_of_blocks ? sz : max_number_of_blocks;
-    min_number_of_blocks = sz < min_number_of_blocks ? sz : min_number_of_blocks;
-    total_shots_evaluated++;
+BlockDecoder::update_blk_ratio_statistics(uint max_blk_hw, uint total_hw) {
+    fp_t r = ((fp_t) max_blk_hw) / ((fp_t) total_hw);
+    
+    total_ratio_mbhw_thw += r;
+    total_ratio_mbhw_thw_sqr += r*r;
+    total_ratio_mbhw_thw_max = r > total_ratio_mbhw_thw_max ? r : total_ratio_mbhw_thw_max;
 }
 
 void
 BlockDecoder::write_timing_data(fp_t t) {
-    if (!config.io.record_decoder_timing_data) {
+    if (!config.timing_io.record_data) {
         return;
     }
     // Write 8 bytes for t (convert to uint64_t).
     uint64_t qt = (uint64_t) t;
-    config.io.decoder_timing_out.write(reinterpret_cast<char*>(&qt), sizeof(qt));
+    config.timing_io.fout.write(reinterpret_cast<char*>(&qt), sizeof(qt));
+}
+
+void
+BlockDecoder::write_syndrome_data(const syndrome_t& syndrome, const std::vector<block_t>& blks, bool is_error) {
+    if (!config.syndrome_io.record_data) {
+        return;
+    }
+    std::vector<uint> detectors = get_nonzero_detectors(syndrome);
+    if (detectors.size() <= config.syndrome_io.hw_trigger) {
+        return;
+    }
+    // First, map each detector to a block.
+    std::map<uint, uint> detector_to_block_num;
+    uint k = 0;
+    for (auto blk : blks) {
+        for (uint d : blk) {
+            detector_to_block_num[d] = k;
+        }
+        k++;
+    }
+    Decoder::result_t mwpm_res = config.syndrome_io.base->decode_error(syndrome);
+    // We will write the matching in high detail.
+    std::ofstream& fout = config.syndrome_io.fout;
+    fout << "-------------------------------------------\n";
+    fout << "Hamming weight: " << detectors.size() << "\n";
+    fout << "Blocks: " << blks.size() << ", sizes =";
+    for (auto blk : blks) {
+        fout << " " << blk.size();
+    }
+    fout << "\n";
+    fout << "Matching:\n";
+    for (auto& mate : mwpm_res.error_assignments) {
+        uint x = std::get<0>(mate), y = std::get<1>(mate);
+        if (x > y)  continue;
+        auto vx = decoding_graph.get_vertex(x);
+        auto vy = decoding_graph.get_vertex(y);
+        auto error_data = decoding_graph.get_error_chain_data(vx, vy);
+        
+        const uint len = error_data.chain_length;
+        const int bx = detector_to_block_num[x];
+        const int by = y == graph::BOUNDARY_INDEX ? -1 : detector_to_block_num[y];
+        const bool thru_b = error_data.error_chain_runs_through_boundary;
+        if (thru_b && by >= 0) {
+            fout << "\t" << x << " (b" << bx << ") <-----[B, " << len << "]-----> " 
+                << y << " (b" << by << ")\n";
+        } else if (by < 0) {
+            fout << "\t" << x << " (b" << bx << ") <-----[" << len << "]-----> B\n";
+        } else {
+            fout << "\t" << x << " (b" << bx << ") <-----[" << len << "]-----> "
+                << y << " (b" << by << ")";
+            if (bx != by)   fout << " XX";
+            fout << "\n";
+        }
+    }
+    fout << "Is error && MWPM had no error: " << (is_error && !mwpm_res.is_error) << "\n"; 
 }
 
 std::vector<block_t>
@@ -148,20 +209,24 @@ BlockDecoder::compute_block_from(uint d, std::vector<uint> detectors) {
             weight_table[x] = error_data.weight;
         }
     }
-    if (config.allow_adaptive_blocks && detectors.size() > config.cutting_threshold) {
-        while (true) {
-            auto it = std::max_element(blk.begin(), blk.end(),
-                        [&] (uint x, uint y) {
-                            return weight_table[x] < weight_table[y];
-                        });
-            if (*it == d)   break;
-            if (weight_table[*it] > min_edge_weight*block_dim) {
-                blk.erase(it);
-            } else {
-                break;
+    if (config.allow_adaptive_blocks && blk.size() > config.cutting_threshold) {
+        const std::vector<fp_t> scale_factors{0.5, 0.4, 0.3, 0.2, 0.1};
+        for (auto f : scale_factors) {
+            while (blk.size() > config.blocking_threshold) {
+                auto it = std::max_element(blk.begin(), blk.end(),
+                            [&] (uint x, uint y) {
+                                return weight_table[x] < weight_table[y];
+                            });
+                if (*it == d)   goto adaptive_end;
+                if (weight_table[*it] > min_edge_weight*block_dim*f) {
+                    blk.erase(it);
+                } else {
+                    break;
+                }
             }
         }
     }
+adaptive_end:
     return blk;
 }
 
