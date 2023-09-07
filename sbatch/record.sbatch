@@ -13,8 +13,8 @@
 module load openmpi
 
 cd build
-d=11
-blk=4
+d=9
+blk=3
 p=1e-3
 
 srun ./mldh_bmemory --d ${d} --p ${p} --r ${d} --blk ${blk} --out ../data/bmemory.csv --shots 10000000\

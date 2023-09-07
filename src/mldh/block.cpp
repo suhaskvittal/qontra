@@ -309,43 +309,37 @@ BlockDecoder::get_blocks(std::vector<uint> detectors, std::vector<blossom_edge_t
 block_t
 BlockDecoder::compute_block_from(uint d, std::vector<uint> detectors) {
     auto dv = decoding_graph.get_vertex(d);
-    // Get all detectors within distance block_dim of d.
-    block_t blk{d};
+    // We compute multiple block rings, where ring r
+    // corresponds to all detectors within r of d. We
+    // return the smallest block ring r such that block
+    // ring r+1 (remove r) is empty (aside from d).
+    std::vector<block_t> blk_rings(block_dim);
+    for (block_t& b : blk_rings)    b.push_back(d);
+    std::vector<uint> len_scatter(block_dim, 0);
+    uint min_len = std::numeric_limits<uint>::max();
 
     fp_t min_edge_weight = std::numeric_limits<fp_t>::max();
-    std::map<uint, fp_t> weight_table;
     for (uint x : detectors) {
         if (x == d) continue;
         auto dw = decoding_graph.get_vertex(x);
         auto error_data = decoding_graph.get_error_chain_data(dv, dw);
-        if (error_data.chain_length <= block_dim
-                && !error_data.error_chain_runs_through_boundary)
-        {
-            blk.push_back(x);
-            min_edge_weight = error_data.weight < min_edge_weight
-                                ? error_data.weight : min_edge_weight;
-            weight_table[x] = error_data.weight;
-        }
-    }
-    if (config.allow_adaptive_blocks && blk.size() > config.cutting_threshold) {
-        const std::vector<fp_t> scale_factors{0.5, 0.4, 0.3, 0.2, 0.1};
-        for (auto f : scale_factors) {
-            while (blk.size() > config.blocking_threshold) {
-                auto it = std::max_element(blk.begin(), blk.end(),
-                            [&] (uint x, uint y) {
-                                return weight_table[x] < weight_table[y];
-                            });
-                if (*it == d)   goto adaptive_end;
-                if (weight_table[*it] > min_edge_weight*block_dim*f) {
-                    blk.erase(it);
-                } else {
-                    break;
-                }
+        uint len = error_data.chain_length;
+        if (len <= block_dim && !error_data.error_chain_runs_through_boundary) {
+            // Note len is 1-indexed, whereas best_blk is 0-indexed.
+            len--;  // Subtract 1 from len for this reason.
+            for (uint i = len; i < block_dim; i++) {
+                blk_rings[i].push_back(x);
             }
+            len_scatter[len]++;
+            min_len = len < min_len ? len : min_len;
         }
     }
-adaptive_end:
-    return blk;
+    uint best_blk = 0;
+    if (min_len < std::numeric_limits<uint>::max()) {
+        best_blk = config.allow_adaptive_blocks ? min_len + block_dim/(2*(min_len+1)) : block_dim-1;
+    }
+    if (best_blk >= block_dim)  best_blk = block_dim-1;
+    return blk_rings[best_blk];
 }
 
 bool
