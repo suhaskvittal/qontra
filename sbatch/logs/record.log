@@ -1,6 +1,6 @@
 ---------------------------------------
-Begin Slurm Prolog: Sep-06-2023 23:43:28
-Job ID:    3035520
+Begin Slurm Prolog: Sep-07-2023 14:23:30
+Job ID:    3053059
 User ID:   svittal8
 Account:   gts-mqureshi4-rg
 Job name:  record
@@ -11,15 +11,15 @@ QOS:       inferno
 Lmod is automatically replacing "mvapich2/2.3.6-ouywal" with "openmpi/4.1.4".
 
 ---------------------------------------
-Begin Slurm Epilog: Sep-06-2023 23:44:34
-Job ID:        3035520
+Begin Slurm Epilog: Sep-07-2023 14:24:47
+Job ID:        3053059
 Array Job ID:  _4294967294
 User ID:       svittal8
 Account:       gts-mqureshi4-rg
 Job name:      record
 Resources:     cpu=32,mem=128G,node=8
-Rsrc Used:     cput=00:35:44,vmem=10460K,walltime=00:01:07,mem=8460K,energy_used=0
+Rsrc Used:     cput=00:41:04,vmem=10416K,walltime=00:01:17,mem=8472K,energy_used=0
 Partition:     cpu-small
 QOS:           inferno
-Nodes:         atl1-1-01-003-10-2,atl1-1-01-003-14-1,atl1-1-01-003-15-2,atl1-1-01-003-16-2,atl1-1-01-003-23-[1-2],atl1-1-01-003-25-2,atl1-1-01-003-29-1
+Nodes:         atl1-1-01-003-4-1,atl1-1-01-003-8-2,atl1-1-01-003-9-1,atl1-1-01-003-10-2,atl1-1-01-003-15-2,atl1-1-01-003-17-1,atl1-1-01-003-22-2,atl1-1-01-003-24-1
 ---------------------------------------

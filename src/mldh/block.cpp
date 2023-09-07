@@ -24,7 +24,8 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
         write_timing_data(res.exec_time);
         return res;
     }
-    std::vector<block_t> blocks = get_blocks(detectors);
+    std::vector<blossom_edge_t> blossom_edges;
+    std::vector<block_t> blocks = get_blocks(detectors, blossom_edges);
     // Now, we call our base decoder on each block, and merge
     // the correction together.
     const uint det = circuit.count_detectors();
@@ -41,7 +42,8 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
         for (uint x : blk)  {
             bs[x] = 1;
         }
-        auto blk_res = base_decoder->decode_error(bs);
+        Decoder::result_t blk_res;
+        blk_res = base_decoder->decode_error(bs);
         corr ^= blk_res.corr;
         max_dec_time = blk_res.exec_time > max_dec_time ? blk_res.exec_time : max_dec_time;
 
@@ -148,12 +150,114 @@ BlockDecoder::write_syndrome_data(const syndrome_t& syndrome, const std::vector<
             if (bx != by)   fout << " XX";
             fout << "\n";
         }
+        // Print out statistics for x's and y's other options.
+        std::map<uint, uint> x_options, y_options;
+        for (uint z : detectors) {
+            if (x == z || y == z) {
+                continue;
+            }
+            auto vz = decoding_graph.get_vertex(z);
+            auto xzdata = decoding_graph.get_error_chain_data(vx, vz);
+            const uint xzlen = xzdata.chain_length;
+            x_options[xzlen]++;
+            if (y != graph::BOUNDARY_INDEX) {
+                auto yzdata = decoding_graph.get_error_chain_data(vy, vz);
+                const uint yzlen = yzdata.chain_length;
+                y_options[yzlen]++;
+            }
+        }
+        fout << "\t\tother options for " << x << ":";
+        for (auto pair : x_options) {
+            fout << " L" << pair.first << " (" << pair.second << ")";
+        }
+        fout << "\n";
+        if (y != graph::BOUNDARY_INDEX) {
+            fout << "\t\tother options for " << y << ":";
+            for (auto pair : y_options) {
+                fout << " L" << pair.first << " (" << pair.second << ")";
+            }
+            fout << "\n";
+        }
     }
     fout << "Is error && MWPM had no error: " << (is_error && !mwpm_res.is_error) << "\n"; 
 }
 
+bool
+BlockDecoder::blossom_subroutine(const std::vector<uint>& detectors, 
+                                const std::vector<blossom_edge_t>& edges,
+                                Decoder::result_t& res)
+{
+    // This is a shortened implementation of the blossom algorithm.
+    // We will really only profile the execution part -- we assume that
+    // the bookkeeping aspects of the algorithm can be optimized out
+    // (i.e. mapping detectors to ids, and computing the correction)
+    // as has been done with PyMatching.
+    const uint n = detectors.size();
+    const uint m = edges.size();
+    // As the existing graph is not guaranteed to have a MWPM, we must
+    // reduce it to a graph that will have an MWPM.
+    // As we are making this investment, we require that m < O(n^2)/4.
+    // Map detectors to ids.
+    std::map<uint, uint> detector_to_id;
+    for (uint i = 0; i < n; i++) {
+        detector_to_id[detectors[i]] = i;
+    }
+    // Add edges.
+    PerfectMatching pm(2*n, 2*(m-n)+n);
+    pm.options.verbose = false;
+
+    timer.clk_start();
+    uint true_m = 0;
+    for (auto& e : edges) {
+        int x = std::get<0>(e);
+        int y = std::get<1>(e);
+        fp_t w = std::get<2>(e);
+        if (!detector_to_id.count(x) 
+            || (!detector_to_id.count(y) && y >= 0)) 
+        {
+            continue;
+        }
+
+        int i = detector_to_id[x];
+        int j = y == -1 ? i+n : detector_to_id[y];
+        const uint16_t qw = 1000*w;
+        pm.AddEdge(i, j, qw);
+        if (y >= 0) {
+            // Add duplicate edges.
+            pm.AddEdge(i+n, j+n, qw);
+        }
+        true_m += 1 + (y >= 0);
+    }
+    if (true_m >= (n*(n-1))/4) {
+        timer.clk_end();
+        return false;
+    }
+    pm.Solve();
+    fp_t t = timer.clk_end();
+
+    const uint n_observables = circuit.count_observables();
+    stim::simd_bits corr(n_observables);
+    corr.clear();
+    for (uint i = 0; i < n; i++) {
+        uint j = pm.GetMatch(i);
+        if (i > j)  continue;
+
+        uint x = detectors[i];
+        uint y = j == i+n ? graph::BOUNDARY_INDEX : detectors[j];
+        auto vx = decoding_graph.get_vertex(x);
+        auto vy = decoding_graph.get_vertex(y);
+        auto error_data = decoding_graph.get_error_chain_data(vx, vy);
+        for (uint fr : error_data.frame_changes) {
+            corr[fr] ^= 1;
+        }
+    }
+    res.exec_time = t;
+    res.corr = corr;
+    return true;
+}
+
 std::vector<block_t>
-BlockDecoder::get_blocks(std::vector<uint> detectors) {
+BlockDecoder::get_blocks(std::vector<uint> detectors, std::vector<blossom_edge_t>& blossom_edges) {
     // We want to compute the block partitions via a
     // union-find like approach. That is, we grow each
     // block until we cannot anymore.
@@ -162,6 +266,20 @@ BlockDecoder::get_blocks(std::vector<uint> detectors) {
     for (uint x : detectors) {
         block_map[x] = compute_block_from(x, detectors);
         root_table[x] = x;
+        // Only add blossom edges for those within the same block.
+        auto vx = decoding_graph.get_vertex(x);
+        for (uint y : block_map[x]) {
+            if (x >= y) continue;
+            auto vy = decoding_graph.get_vertex(y);
+            fp_t w = decoding_graph.get_error_chain_data(vx, vy).weight;
+            blossom_edge_t e = std::make_tuple((int)x, (int)y, w);
+            blossom_edges.push_back(e);
+        }
+        // Add an additional edge for the boundary.
+        auto vb = decoding_graph.get_vertex(graph::BOUNDARY_INDEX);
+        auto wb = decoding_graph.get_error_chain_data(vx, vb).weight;
+        blossom_edge_t boundary_e = std::make_tuple((int)x, -1, wb);
+        blossom_edges.push_back(boundary_e);
     }
 
     for (uint x : detectors) {
@@ -170,7 +288,7 @@ BlockDecoder::get_blocks(std::vector<uint> detectors) {
         // Check if we need to merge anything with this block.
         for (uint y : xblk) {
             uint yrt = find(y, root_table);
-            if (yrt == xrt)                 continue;
+            if (yrt == xrt) continue;
             // Merge yrt's block with xrt.
             merge(xrt, yrt, block_map, root_table);
         }

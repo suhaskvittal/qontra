@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <stim.h>
+#include <PerfectMatching.h>
 
 namespace qontra {
 namespace mldh {
@@ -93,13 +94,17 @@ public:
         } syndrome_io;
     } config;
 private:
+    typedef std::tuple<int, int, fp_t> blossom_edge_t;
+
     void update_hw_statistics(uint hw);
     void update_blk_ratio_statistics(uint max_blk_hw, uint total_hw);
 
     void write_timing_data(fp_t);
     void write_syndrome_data(const syndrome_t&, const std::vector<block_t>&, bool is_error);
 
-    std::vector<block_t>    get_blocks(std::vector<uint> detectors);
+    bool blossom_subroutine(const std::vector<uint>&, const std::vector<blossom_edge_t>&, Decoder::result_t&);
+
+    std::vector<block_t>    get_blocks(std::vector<uint> detectors, std::vector<blossom_edge_t>&);
     block_t                 compute_block_from(uint d, std::vector<uint> detectors);
 
     Decoder* base_decoder;
