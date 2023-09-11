@@ -308,6 +308,8 @@ BlockDecoder::get_blocks(std::vector<uint> detectors, std::vector<blossom_edge_t
 
 block_t
 BlockDecoder::compute_block_from(uint d, std::vector<uint> detectors) {
+    const auto error_poly = decoding_graph.get_error_polynomial();
+
     auto dv = decoding_graph.get_vertex(d);
     // We compute multiple block rings, where ring r
     // corresponds to all detectors within r of d. We
@@ -315,10 +317,16 @@ BlockDecoder::compute_block_from(uint d, std::vector<uint> detectors) {
     // ring r+1 (remove r) is empty (aside from d).
     std::vector<block_t> blk_rings(block_dim);
     for (block_t& b : blk_rings)    b.push_back(d);
-    std::vector<uint> len_scatter(block_dim, 0);
-    uint min_len = std::numeric_limits<uint>::max();
 
-    fp_t min_edge_weight = std::numeric_limits<fp_t>::max();
+    std::vector<uint> len_scatter(block_dim, 0);
+    std::vector<fp_t> len_prob_sum(block_dim, 0.0);
+    fp_t p_base = 0.0;
+
+    fp_t p_min_at_min_len = std::numeric_limits<uint>::max();
+    fp_t p_min_at_next_min_len = std::numeric_limits<uint>::max();
+    uint min_len = std::numeric_limits<uint>::max();
+    uint next_min_len = std::numeric_limits<uint>::max();
+
     for (uint x : detectors) {
         if (x == d) continue;
         auto dw = decoding_graph.get_vertex(x);
@@ -331,14 +339,48 @@ BlockDecoder::compute_block_from(uint d, std::vector<uint> detectors) {
                 blk_rings[i].push_back(x);
             }
             len_scatter[len]++;
-            min_len = len < min_len ? len : min_len;
+
+            fp_t p = error_data.probability;
+            len_prob_sum[len] += p;
+            p_base += p;
+            if (len < min_len) {
+                next_min_len = min_len;
+                min_len = len;
+
+                p_min_at_next_min_len = p_min_at_min_len;
+            } 
+            if (len == min_len) {
+                p_min_at_min_len = p < p_min_at_min_len ? p : p_min_at_min_len;
+            } else if (len == next_min_len) {
+                p_min_at_next_min_len = p < p_min_at_next_min_len ? p : p_min_at_next_min_len;
+            }
         }
     }
-    uint best_blk = 0;
+    if (next_min_len == std::numeric_limits<uint>::max()) {
+        next_min_len = min_len;
+        p_min_at_next_min_len = p_min_at_min_len;
+    }
+    uint best_blk = block_dim-1;
+    /*
+    if (config.allow_adaptive_blocks) {
+        best_blk = 0;
+        for (uint i = 0; i < block_dim; i++) {
+            fp_t x = len_prob_sum[i] / (p_base);
+            if (x > 1e-5*p_min_at_next_min_len / p_min_at_min_len)   best_blk = i;
+        }
+    }
+    */
+    if (p_min_at_next_min_len > p_min_at_min_len) {
+        std::cout << "Unexpected: p_mins: " << p_min_at_min_len
+                    << ", " << p_min_at_next_min_len << ", lens: "
+                    << min_len << ", " << next_min_len << "\n";
+    }
+    /*
     if (min_len < std::numeric_limits<uint>::max()) {
         best_blk = config.allow_adaptive_blocks ? min_len + block_dim/(2*(min_len+1)) : block_dim-1;
     }
     if (best_blk >= block_dim)  best_blk = block_dim-1;
+    */
     return blk_rings[best_blk];
 }
 
