@@ -26,7 +26,9 @@ const std::vector<std::string> ISA{
     "z",
     "cx",
     "s",
+    "sdg",
     "t",
+    "tdg",
     "rz",
     "measure",
     "reset",
@@ -43,12 +45,12 @@ const std::vector<std::string> ISA{
 };
 
 const std::set<std::string> IS_QUANTUM_INSTRUCTION {
-    "h", "x", "z", "cx", "rz", "t", "s", "measure", "reset"
+    "h", "x", "z", "cx", "rz", "s", "sdg", "t", "tdg", "measure", "reset"
 };
 
 // These operations only have qubits in its operand list.
 const std::set<std::string> ONLY_HAS_QUBIT_OPERANDS {
-    "h", "x", "z", "s", "t", "cx", "measure", "reset"
+    "h", "x", "z", "cx", "rz", "s", "sdg", "t", "tdg", "measure", "reset"
 };
 
 // These operations have both angles and qubits in the

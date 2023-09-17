@@ -71,20 +71,21 @@ endif()
 add_library(qontra ${QONTRA_FILES})
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-    target_compile_options(qontra PUBLIC -Ofast -fno-strict-aliasing)
+    target_compile_options(qontra PUBLIC -O3 -fno-strict-aliasing)
 else()
     target_compile_options(qontra PUBLIC -ggdb3 -fno-strict-aliasing)
 endif()
 
 find_package(MPI REQUIRED)
 
-target_include_directories(qontra PUBLIC "include" ${MPI_INCLUDE_PATH})
+target_include_directories(qontra PUBLIC "include" ${MPI_INCLUDE_PATH} "/usr/local/include")
 
 target_link_libraries(qontra PUBLIC libstim)
 target_link_libraries(qontra PUBLIC libblossom5)
 target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
 
 if (COMPILE_NEURAL_DECODER)
+    message("Adding Armadillo include and libs")
     target_include_directories(qontra PUBLIC ${ARMADILLO_INCLUDE_DIRS})
     target_link_libraries(qontra PUBLIC ${ARMADILLO_LIBRARIES})
 endif()
@@ -98,9 +99,11 @@ add_subdirectory(blossom5)
 
 add_executable(asm_analyzer src/main/asm_analyzer.cpp)
 add_executable(converter src/main/converter.cpp)
+add_executable(mwpm_memory src/main/mwpm_memory.cpp ${ASM_FILES})
 
 target_link_libraries(asm_analyzer PRIVATE qontra)
 target_link_libraries(converter PRIVATE qontra)
+target_link_libraries(mwpm_memory PRIVATE qontra)
 
 if (COMPILE_TESTS)
     message("Will compile TEST executables.")

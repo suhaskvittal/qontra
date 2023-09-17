@@ -4,6 +4,7 @@
  * */
 
 #include "decoder/mwpm.h"
+#include "decoder/neural.h"
 #include "experiments.h"
 #include "parsing/cmd.h"
 #include "instruction.h"
@@ -40,12 +41,27 @@ int main(int argc, char* argv[]) {
     // Define error model.
     tables::ErrorAndTiming et;
     et = et * (p * 1000);
+    et.e_g1q = 0.0;
+    et.e_g2q = 0.0;
+    et.e_m1w0 = 0.0;
+    et.e_m0w1 = 0.0;
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
 
     // Define Decoder.
+    using namespace mlpack;
     stim::Circuit error_model = schedule_to_stim(sch, errors, timing);
+    /*
+    NeuralDecoder dec(error_model);
+    dec.model.Add<Linear>(256);
+    dec.model.Add<TanH>();
+    dec.model.Add<Linear>(64);
+    dec.model.Add<TanH>();
+    dec.model.Add<Linear>(1);
+    dec.model.Add<TanH>();
+    dec.train(100'000);
+    */
     MWPMDecoder dec(error_model);
 
     // Setup experiment.

@@ -73,6 +73,10 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             circuit.append_op("TICK", {});
         } else if (inst.name == "reset") {
             circuit.append_op("R", qubits);
+        } else if (inst.name == "s") {
+            circuit.append_op("S", qubits);
+        } else if (inst.name == "sdg") {
+            circuit.append_op("S_DAG", qubits);
         } else if (inst.name == "event") {
             std::vector<uint> offsets;
             for (uint i = 0; i < meas.size(); i++) {

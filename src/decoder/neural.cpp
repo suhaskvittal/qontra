@@ -33,7 +33,7 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
         }
         shots_elapsed++;
     };
-    generate_syndromes(circuit, shots, cb);
+    generate_syndromes(training_circuit, shots, cb);
     data_matrix.reshape(det, shots_elapsed);
     y.reshape(obs, shots_elapsed);
 
