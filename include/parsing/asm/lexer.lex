@@ -27,9 +27,13 @@ void    force_lowercase(char*, int);
 #.+?\n      { /* this is a comment */ }
 @annotation { return ANNOTATION; }
 [0-9]+      { 
-                yylval.arg = (uint32_t) atoi(yytext); 
-                return NUM; 
+                yylval.integer = (uint32_t) atoi(yytext); 
+                return INTEGER; 
             }
+a[0-9]+("."[0-9]+)? {
+                    yylval.decimal = (double) atof(yytext+1); // Ignore "a"
+                    return DECIMAL;
+                }
 [A-Za-z_0-9]+  { 
                 yylval.name = malloc(yyleng+1);
                 memcpy(yylval.name, yytext, yyleng);

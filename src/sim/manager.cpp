@@ -40,6 +40,7 @@ SimManager::evaluate_monte_carlo(uint64_t shots) {
     }
     // Aggregate all the histogram results if using MPI.
     histogram_t prob_histogram;
+    uint64_t obscnt;
     if (G_USE_MPI) {
         for (uint64_t r = 0; r < world_size; r++) {
             // Convert the histogram data into a vector (if rank == r).
@@ -64,6 +65,9 @@ SimManager::evaluate_monte_carlo(uint64_t shots) {
                 // Now, first broadcast the number of words in w.
                 uint w_width = w.size();
                 MPI_Bcast(&w_width, 1, MPI_UNSIGNED, r, MPI_COMM_WORLD);
+                if (world_rank != r) {
+                    w = vlw_t(w_width);
+                }
                 // Now, broadcast w itself.
                 MPI_Bcast(&w[0], w_width, MPI_UNSIGNED_LONG, r, MPI_COMM_WORLD);
                 // Finally, broadcast the count.
@@ -72,12 +76,15 @@ SimManager::evaluate_monte_carlo(uint64_t shots) {
                 prob_histogram[w] += cnt;
             }
         }
+        MPI_Allreduce(&max_obs_written, &obscnt, 1, MPI_UNSIGNED_LONG, MPI_MAX, MPI_COMM_WORLD);
     } else {
         prob_histogram = local_prob_histogram;
+        obscnt = max_obs_written;
     }
 
     result_t res = {
-        prob_histogram
+        prob_histogram,
+        obscnt+1
     };
     return res;
 }
@@ -120,7 +127,13 @@ SimManager::simulate_batch(uint64_t shots) {
             if (pc >= program.size())   continue;
 
             Instruction inst = program[pc];
-            const std::vector<uint> operands(inst.operands);
+            const std::vector<uint>& qubits = inst.operands.qubits;
+            const std::vector<uint>& meas = inst.operands.measurements;
+            const std::vector<uint>& events = inst.operands.events;
+            const std::vector<uint>& observables = inst.operands.observables;
+            const std::vector<uint>& frames = inst.operands.frames;
+            const std::vector<uint>& labels = inst.operands.labels;
+            const std::vector<fp_t>& angles = inst.operands.angles;
             // Here, we will have a collection of variables that
             // are conditionally set based on the instruction.
             bool is_quantum_inst = ONLY_HAS_QUBIT_OPERANDS.count(inst.name);
@@ -128,8 +141,8 @@ SimManager::simulate_batch(uint64_t shots) {
             // Execute instructions.
             if (is_quantum_inst)    sim->snapshot();
             if (inst.name == "brifone" || inst.name == "brifzero") {
-                const uint64_t br_pc = operands[0];
-                const uint event = operands[1];
+                const uint64_t br_pc = labels[0];
+                const uint event = events[0];
                 stim::simd_bits br_taken(event_history_table[event]);
                 if (inst.name == "brifzero")    br_taken.invert_bits();
                 // Now we must filter out trials in br_taken that are
@@ -146,26 +159,44 @@ SimManager::simulate_batch(uint64_t shots) {
                         });
                 br_buffer.push_back(std::tuple(pc, br_pc, br_taken));
             } else if (inst.name == "h") {
-                sim->H(operands);
+                sim->H(qubits);
             } else if (inst.name == "x") {
-                sim->X(operands);
+                sim->X(qubits);
             } else if (inst.name == "z") {
-                sim->Z(operands);
+                sim->Z(qubits);
             } else if (inst.name == "s") {
-                sim->S(operands);
+                sim->S(qubits);
             } else if (inst.name == "measure") {
-                sim->M(operands, 
-//                      params.errors.m1w0, 
-//                      params.errors.m0w1, 
-                        0.0, 0.0,
-                        meas_record_ctr);
-                meas_record_ctr += operands.size();
+                // Get errors for all qubits.
+                std::vector<fp_t> m1w0, m0w1;
+                for (uint x : qubits) {
+                    if (inst.annotations.count(Annotation::no_error) || params.ignore_all_errors) {
+                        m1w0.push_back(0);
+                        m0w1.push_back(0);
+                    } else {
+                        m1w0.push_back(params.errors.m1w0[x]);
+                        m0w1.push_back(params.errors.m0w1[x]);
+                    }
+                }
+                sim->M(qubits, m1w0, m0w1, meas_record_ctr);
+                meas_record_ctr += qubits.size();
             } else if (inst.name == "reset") {
-                sim->R(operands);
+                sim->R(qubits);
             } else if (inst.name == "cx") {
-                sim->CX(operands);
+                sim->CX(qubits);
+            } else if (inst.name == "t") {
+                sim->T(qubits);
+            } else if (inst.name == "rx" || inst.name == "ry" || inst.name == "rz") {
+                fp_t x = angles[0];
+                if (inst.name == "rx") {
+                    sim->RX(x, qubits);
+                } else if (inst.name == "ry") {
+                    sim->RY(x, qubits);
+                } else {
+                    sim->RZ(x, qubits);
+                }
             } else if (inst.name == "decode") {
-                const uint frame = operands[0];
+                const uint frame = frames[0];
                 auto eht_tr = event_history_table.transposed();
                 for (uint64_t t = 0; t < shots; t++) {
                     if (G_FILTER_OUT_SYNDROMES
@@ -181,28 +212,34 @@ SimManager::simulate_batch(uint64_t shots) {
                     }
                 }
             } else if (inst.name == "event") {
-                const uint e = operands[0];
-                for (uint i = 1; i < operands.size(); i++) {
-                    uint x = operands[i];
+                const uint e = events[0];
+                for (uint x : meas) {
                     event_history_table[e] ^= sim->record_table[x];
                 }
             } else if (inst.name == "obs") {
-                const uint obs = operands[0];
-                for (uint i = 1; i < operands.size(); i++) {
-                    uint x = operands[i];
+                const uint obs = observables[0];
+                for (uint x : meas) {
                     obs_buffer_table[obs] ^= sim->record_table[x];
                 }
                 max_obs_written = max_obs_written < obs
                                     ? obs : max_obs_written;
+            } else if (inst.name == "any") {
+                const uint obs = observables[0];
+                for (uint x : meas) {
+                    obs_buffer_table[obs] |= sim->record_table[x];
+                }
+                max_obs_written = max_obs_written < obs ? obs : max_obs_written;
             } else if (inst.name == "xorfr") {
-                const uint obs = operands[0];
-                const uint frame = operands[1];
+                const uint obs = observables[0];
+                const uint frame = frames[0];
                 obs_buffer_table[obs] ^= pauli_frame_table[frame];
             }
             if (is_quantum_inst) {
                 inject_operation_error(inst);
                 timing_table[pc] += get_operation_latency(inst);
-                if (inst.annotations.count(Annotation::inject_timing_error)) {
+                if (inst.annotations.count(Annotation::inject_timing_error)
+                    || params.always_inject_timing_errors) 
+                {
                     inject_timing_error(timing_table[pc]);
                     timing_table[pc] = 0;  // Reset the timer.
                 }
@@ -221,18 +258,18 @@ SimManager::get_operation_latency(Instruction inst) {
 
     if (inst.annotations.count(Annotation::no_tick))    return 0.0;
 
-    std::vector<uint> operands(inst.get_qubit_operands());
+    std::vector<uint> qubits = inst.operands.qubits;
     fp_t max_time_taken = 0.0;
     if (IS_2Q_OPERATOR.count(inst.name)) {
-        for (uint i = 0; i < operands.size(); i += 2) {
-            uint x = operands[i];
-            uint y = operands[i+1];
+        for (uint i = 0; i < qubits.size(); i += 2) {
+            uint x = qubits[i];
+            uint y = qubits[i+1];
             auto x_y = std::make_pair(x, y);
             fp_t t = params.timing.op2q[inst.name][x_y];
             max_time_taken = t > max_time_taken ? t : max_time_taken;
         }
     } else {
-        for (uint x : operands) {
+        for (uint x : qubits) {
             fp_t t = params.timing.op1q[inst.name][x];
             max_time_taken = t > max_time_taken ? t : max_time_taken;
         }
@@ -242,14 +279,15 @@ SimManager::get_operation_latency(Instruction inst) {
 
 void
 SimManager::inject_operation_error(Instruction inst) {
+    if (params.ignore_all_errors)   return;
     if (inst.annotations.count(Annotation::no_error))  return;
 
-    std::vector<uint> operands(inst.get_qubit_operands());
+    std::vector<uint> qubits = inst.operands.qubits;
     if (IS_2Q_OPERATOR.count(inst.name)) {
         std::vector<fp_t> e_dp, e_li, e_lt;
-        for (uint i = 0; i < operands.size(); i += 2) {
-            uint x = operands[i];
-            uint y = operands[i+1];
+        for (uint i = 0; i < qubits.size(); i += 2) {
+            uint x = qubits[i];
+            uint y = qubits[i+1];
             auto x_y = std::make_pair(x, y);
             // Get error rates for (1) depolarizing errors,
             // (2) leakage errors, and (3) leakage transport errors.
@@ -257,24 +295,25 @@ SimManager::inject_operation_error(Instruction inst) {
             e_li.push_back(params.errors.op2q_leakage_injection[inst.name][x_y]);
             e_lt.push_back(params.errors.op2q_leakage_transport[inst.name][x_y]);
         }
-        sim->error_channel<&StateSimulator::eLT>(operands, e_lt);
-        sim->error_channel<&StateSimulator::eLI>(operands, e_li);
-        sim->error_channel<&StateSimulator::eDP2>(operands, e_dp);
+        sim->error_channel<&StateSimulator::eLT>(qubits, e_lt);
+        sim->error_channel<&StateSimulator::eLI>(qubits, e_li);
+        sim->error_channel<&StateSimulator::eDP2>(qubits, e_dp);
     } else {
         std::vector<fp_t> e;
-        for (uint x : operands) {
+        for (uint x : qubits) {
             e.push_back(params.errors.op1q[inst.name][x]);
         }
         if (inst.name == "reset") {
-            sim->error_channel<&StateSimulator::eX>(operands, e);
+            sim->error_channel<&StateSimulator::eX>(qubits, e);
         } else {
-            sim->error_channel<&StateSimulator::eDP1>(operands, e);
+            sim->error_channel<&StateSimulator::eDP1>(qubits, e);
         }
     }
 }
 
 void
 SimManager::inject_timing_error(fp_t time) {
+    if (params.ignore_all_errors)   return;
     // Amplitude damping is a non-Clifford channel.
     //
     // Current implementation (here) is via Pauli twirling:

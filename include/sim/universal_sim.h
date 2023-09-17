@@ -133,7 +133,8 @@ public:
         }
     }
 
-    void M(std::vector<uint> operands, fp_t m1w0, fp_t m0w1, int record=-1) override {
+    void M(std::vector<uint> operands, std::vector<fp_t> m1w0, std::vector<fp_t> m0w1, int record=-1) override {
+        uint k = 0;
         for (uint x : operands) {
             fp_t r = rpdist(rng);
             // Get the probability of measuring each state.
@@ -154,11 +155,12 @@ public:
                         }
                         // Apply errors.
                         fp_t e = rpdist(rng);
-                        if (m == 0 && e < m1w0)         m = 1;
-                        else if (m == 1 && e < m0w1)    m = 0;
+                        if (m == 0 && e < m1w0[k])         m = 1;
+                        else if (m == 1 && e < m0w1[k])    m = 0;
 
                         record_table[record++][0] = m;
                     }
+                    k++;
                     break;
                 } else {
                     r -= pr;
@@ -340,6 +342,12 @@ private:
         return out;
     }
 
+    cytnx::Tensor id() {
+        cytnx::Tensor base({W, W}, cytnx::Type.ComplexDouble);
+        for (uint i = 0; i < W; i++) base.at({i, i}) = 1;
+        return base;
+    }
+
     cytnx::UniTensor h_base(uint x) {
         cytnx::Tensor base({W, W}, cytnx::Type.ComplexDouble);
         base.at({0, 0}) = sqrt(0.5);
@@ -456,7 +464,7 @@ private:
     cytnx::UniTensor rz_base(fp_t angle, uint x) {
         cytnx::Tensor base({W, W}, cytnx::Type.ComplexDouble);
         base.at({0, 0}) = c64(cos(angle*0.5), -sin(angle*0.5));
-        base.at({1, 1}) =  c64(cos(angle*0.5), sin(angle*0.5));
+        base.at({1, 1}) = c64(cos(angle*0.5), sin(angle*0.5));
         for (uint i = 2; i < W; i++) {
             base.at({i, i}) = 1;
         }
@@ -531,12 +539,14 @@ private:
         cytnx::UniTensor* out = new cytnx::UniTensor(state);
         // Update data structures and delete curr.
         qubit_to_label[x] = awaiting_labels[x];
+        label_to_qubit[awaiting_labels[x]] = x;
+        label_to_qubit.erase(xlabel);
         label_to_tensor.erase(xlabel);
 
         tensor_pool.erase(curr);
         tensor_pool.insert(out);
         for (auto label : tensor_to_labels[curr]) {
-            auto true_label = label == xlabel ? awaiting_labels[x] : label;
+            std::string true_label = label == xlabel ? awaiting_labels[x] : label;
             label_to_tensor[true_label] = out;
             tensor_to_labels[out].push_back(true_label);
         }
@@ -561,6 +571,11 @@ private:
         // Update data structures and delete t1, t2.
         qubit_to_label[x] = awaiting_labels[x];
         qubit_to_label[y] = awaiting_labels[y];
+        label_to_qubit[awaiting_labels[x]] = x;
+        label_to_qubit[awaiting_labels[y]] = y;
+        label_to_qubit.erase(xlabel);
+        label_to_qubit.erase(ylabel);
+
         label_to_tensor.erase(xlabel);
         label_to_tensor.erase(ylabel);
 
@@ -586,7 +601,19 @@ private:
             std::string true_label;
             if (label == xlabel)        true_label = awaiting_labels[x];
             else if (label == ylabel)   true_label = awaiting_labels[y];
-            else                        true_label = label;
+            else {
+                // Apply identity.
+                cytnx::UniTensor u(id());
+                true_label = std::to_string(label_ctr++);
+                u.set_labels({label, true_label});
+                *out = Contract(*out, u);
+                // Update data structures.
+                label_to_tensor.erase(label);
+
+                label_to_qubit[true_label] = label_to_qubit[label];
+                qubit_to_label[label_to_qubit[label]] = true_label;
+                label_to_qubit.erase(label);
+            }
             label_to_tensor[true_label] = out;
             tensor_to_labels[out].push_back(true_label);
         }
@@ -598,6 +625,7 @@ private:
     void compress(void) {}
 
     std::map<uint, std::string>                 qubit_to_label;
+    std::map<std::string, uint>                 label_to_qubit;
     std::set<cytnx::UniTensor*>                 tensor_pool;
     std::map<std::string, cytnx::UniTensor*>    label_to_tensor;
     std::map<cytnx::UniTensor*, std::vector<std::string>>   tensor_to_labels;

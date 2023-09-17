@@ -90,7 +90,24 @@ to_vlw(T x, uint64_t len) {
     vlw_t w(n);
     for (uint i = 0; i < n; i++)    w[i] = x.u64[i];
     return w;
-} 
+}
+
+inline int
+vlw_compare(vlw_t a, vlw_t b) {
+    int max_size = a.size() > b.size() ? a.size() : b.size();
+    int min_size = a.size() < b.size() ? a.size() : b.size();
+    bool a_is_larger = a.size() > b.size();
+    for (int i = max_size-1; i >= 0; i--) {
+        if (i >= min_size) {
+            if (a_is_larger && a[i] > 0)        return 1;
+            else if (!a_is_larger && b[i] > 0)  return -1;
+        } else {
+            if (a[i] > b[i])        return 1;
+            else if (b[i] > a[i])   return -1;
+        }
+    }
+    return 0;
+}
 
 }  // qontra
 

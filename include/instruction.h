@@ -26,6 +26,8 @@ const std::vector<std::string> ISA{
     "z",
     "cx",
     "s",
+    "t",
+    "rz",
     "measure",
     "reset",
     "nop",
@@ -36,25 +38,58 @@ const std::vector<std::string> ISA{
     "decode",   // decode  frno
     "event",    // event   eventno, m1, m2, m3, ...
     "obs",      // obs     obsno, m1, m2, ...
+    "any",      // any     obsno, m1, m2, ...
     "xorfr"     // xorfr   obsno, frno
 };
 
 const std::set<std::string> IS_QUANTUM_INSTRUCTION {
-    "h", "x", "z", "cx", "s", "measure", "reset"
+    "h", "x", "z", "cx", "rz", "t", "s", "measure", "reset"
 };
 
+// These operations only have qubits in its operand list.
 const std::set<std::string> ONLY_HAS_QUBIT_OPERANDS {
-    "h", "x", "z", "s", "cx", "measure", "reset"
+    "h", "x", "z", "s", "t", "cx", "measure", "reset"
+};
+
+// These operations have both angles and qubits in the
+// instruction list.
+const std::set<std::string> INSTRUCTION_USES_ANGLES {
+    "rz"
 };
 
 const std::set<std::string> IS_2Q_OPERATOR {
     "cx"
 };
 
-// These instructions have labels in their first operand.
+const std::set<std::string> IS_BR {
+    "brifone",
+    "brifzero"
+};
+
+// These instructions have operands of the form: if-label, event1
 const std::set<std::string> IS_BR_TYPE1 {
     "brifone",
     "brifzero"
+};
+
+// These instructions are of the form: eventno, measno, measno, ...
+const std::set<std::string> IS_DECODE_TYPE1 {
+    "event"
+};
+
+// These instructions are of the form: obsno, measno, measno, ...
+const std::set<std::string> IS_DECODE_TYPE2 {
+     "any", "obs"
+};
+
+// These instructions are of the form: obsno, frno
+const std::set<std::string> IS_DECODE_TYPE3 {
+    "xorfr"
+};
+
+// These instructions are of the form: frno
+const std::set<std::string> IS_DECODE_TYPE4 {
+    "decode"
 };
 
 // Each instruction can have annotations that indicate
@@ -79,7 +114,41 @@ enum class Annotation {
 
 struct Instruction {
     std::string name;
-    std::vector<uint> operands;
+
+    struct operand_block_t {
+        std::vector<uint> qubits;
+        std::vector<uint> measurements;
+        std::vector<uint> events;
+        std::vector<uint> observables;
+        std::vector<uint> frames;
+
+        std::vector<uint32_t> labels;
+
+        std::vector<fp_t> angles;
+
+        bool operator==(const operand_block_t& other) const {
+            return qubits == other.qubits
+                    && measurements == other.measurements
+                    && events == other.events
+                    && observables == other.observables
+                    && frames == other.frames
+                    && labels == other.labels
+                    && angles == other.angles;
+        }
+
+        bool operator<(const operand_block_t& other) const {
+            if (qubits != other.qubits) return qubits < other.qubits;
+            else if (measurements != other.measurements) return measurements < other.measurements;
+            else if (events != other.events) return events < other.events;
+            else if (observables != other.observables) return observables < other.observables;
+            else if (frames != other.frames) return frames < other.frames;
+            else if (labels != other.labels) return labels < other.labels;
+            else if (angles != other.angles) return angles < other.angles;
+
+            return true;
+        }
+    } operands;
+
     std::set<Annotation> annotations;
 
     // Extra metadata (not necessary for general use).
@@ -101,13 +170,35 @@ struct Instruction {
 
     std::string str(void) const {
         std::string out = name;
-        bool first = true;
-        for (uint op : operands) {
-            if (first)  out += " ";
-            else        out += ", ";
-            out += std::to_string(op);
-            first = false;
+        if (operands.angles.size()) {
+            out += "(" + operands_to_str(operands.angles) + ")";
         }
+        if (operands.qubits.size()) {
+            out += " ";
+            out += operands_to_str(operands.qubits);
+        }
+        if (operands.measurements.size()) {
+            out += " ";
+            out += operands_to_str(operands.measurements, "M");
+        }
+        if (operands.events.size()) {
+            out += " ";
+            out += operands_to_str(operands.events, "e");
+        }
+        if (operands.observables.size()) {
+            out += " ";
+            out += operands_to_str(operands.observables, "o");
+        }
+        if (operands.frames.size()) {
+            out += " ";
+            out += operands_to_str(operands.frames, "f");
+        }
+        if (operands.labels.size()) {
+            out += " ";
+            out += operands_to_str(operands.labels, "addr");
+        }
+        out += "\n";
+        
         return out;
     }
 
@@ -117,6 +208,18 @@ struct Instruction {
 
     bool operator==(const Instruction& other) const {
         return name == other.name && operands == other.operands;
+    }
+private:
+    template <typename T>
+    std::string operands_to_str(std::vector<T> arr, std::string prefix="") const {
+        std::string out;
+        bool first = true;
+        for (T x : arr) {
+            if (!first) out += ", ";
+            out += prefix + std::to_string(x);
+            first = false;
+        }
+        return out;
     }
 };
 

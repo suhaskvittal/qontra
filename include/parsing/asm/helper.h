@@ -17,18 +17,28 @@ extern "C" {
 extern uint64_t pc;
 
 struct __asm_operand_t {
-    uint32_t*   data;
-    uint32_t    size;
+    uint32_t    integer;
+    uint8_t     integer_valid;
+
+    double      decimal;
+    uint8_t     decimal_valid;
 };
 
 struct __asm_inst_t {
     char*                   name;
-    struct __asm_operand_t  operands;
+    struct __asm_operand_t* operands;
+    uint32_t                size;
 };
+
+extern struct __asm_operand_t DEFAULT_OPERAND;
+extern struct __asm_inst_t DEFAULT_INST;
 
 struct __asm_annotation_t {
     char*   name;
 };
+
+struct __asm_inst_t asm_create_asm_inst_t(struct __asm_operand_t);
+void                asm_extend_asm_inst_t(struct __asm_inst_t*, struct __asm_operand_t);
 
 void        asm_reset_parser(void);
 

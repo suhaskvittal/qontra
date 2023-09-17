@@ -95,7 +95,6 @@ endif()
 
 add_subdirectory(stim)
 add_subdirectory(blossom5)
-add_subdirectory(pymatching)
 
 add_executable(asm_analyzer src/main/asm_analyzer.cpp)
 add_executable(converter src/main/converter.cpp)
@@ -113,6 +112,14 @@ if (COMPILE_TESTS)
     target_link_libraries(clifford_sim_test PRIVATE qontra)
     target_link_libraries(cytnx_contract_test PRIVATE qontra)
     target_link_libraries(tensor_sim_test PRIVATE qontra)
+endif()
+
+if (COMPILE_STM)
+    message("Will compile STM executables.")
+
+    add_executable(stm_bv src/main/personal/stm/bv.cpp ${ASM_FILES})
+
+    target_link_libraries(stm_bv PRIVATE qontra)
 endif()
 
 if (COMPILE_MLDH)
@@ -133,6 +140,8 @@ if (COMPILE_MLDH)
     target_link_libraries(mldh_wmemory PRIVATE qontra)
     target_link_libraries(mldh_bmemory PRIVATE qontra)
     target_link_libraries(mldh_timing PRIVATE qontra)
+
+    add_subdirectory(pymatching)
 
     target_link_libraries(mldh_bmemory PRIVATE libpym)
 endif()

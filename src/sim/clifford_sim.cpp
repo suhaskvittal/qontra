@@ -129,10 +129,11 @@ CliffordSimulator::CX(std::vector<uint> operands) {
 void
 CliffordSimulator::M(
         std::vector<uint> operands,
-        fp_t m1w0,
-        fp_t m0w1,
+        std::vector<fp_t> m1w0,
+        std::vector<fp_t> m0w1,
         int record)
 {
+    uint opk = 0;
     for (uint j : operands) {
         // Clear scratch space
         for (uint i = 2*n_qubits*n_qubits; i < x_width; i++)    x_table[i].clear();
@@ -226,8 +227,9 @@ CliffordSimulator::M(
                         rec |= r & ~lock;
                     });
             r_table[2*n_qubits].clear();
-            error_channel_m(record, m1w0, m0w1, lock_table[j]);
+            error_channel_m(record, m1w0[opk], m0w1[opk], lock_table[j]);
             record++;
+            opk++;
         }
     }
 }
@@ -241,7 +243,7 @@ CliffordSimulator::R(std::vector<uint> operands) {
     // Implement as a measure + X gate.
     stim::simd_bits record_0_cpy(record_table[0]);
     for (uint j : operands) {
-        M({j}, 0, 0, 0);
+        M({j}, {0}, {0}, 0);
         for (uint i = 0; i < 2*n_qubits; i++) {
             uint k = i*n_qubits + j;
             // Rec should be 0 whenever j is locked, so 

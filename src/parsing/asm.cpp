@@ -13,6 +13,9 @@
 // Declarations of external variables in the header.
 uint64_t    pc = 0;
 
+struct __asm_operand_t DEFAULT_OPERAND = {0, 0, 0, 0};
+struct __asm_inst_t DEFAULT_INST = {NULL, NULL, 0};
+
 // The below data should be hidden from other files.
 // For example, if we are using C++ types.
 
@@ -26,6 +29,28 @@ static std::map<int, uint64_t> label_id_to_pc;
 static int label_id_ctr = -1;
 
 // Parser helper code.
+struct __asm_inst_t
+asm_create_asm_inst_t(struct __asm_operand_t op) {
+    struct __asm_inst_t inst;
+    inst.operands = (struct __asm_operand_t*)malloc(1 * sizeof(struct __asm_operand_t));
+    inst.operands[0] = op;
+    inst.size = 1;
+    return inst;
+}
+
+void
+asm_extend_asm_inst_t(struct __asm_inst_t* inst_p, struct __asm_operand_t op) {
+    if (inst_p->size == 0) {
+        *inst_p = asm_create_asm_inst_t(op);
+    } else {
+        inst_p->operands = (struct __asm_operand_t*)
+                                realloc(inst_p->operands, (inst_p->size+1) * sizeof(struct __asm_operand_t));
+        memmove(inst_p->operands+1, inst_p->operands, inst_p->size*sizeof(struct __asm_operand_t));
+        inst_p->operands[0] = op;
+        inst_p->size++;
+    }
+}
+
 void
 asm_reset_parser() {
     pc = 0;
@@ -43,8 +68,39 @@ asm_add_instruction(struct __asm_inst_t inst_data) {
     if (std::find(ISA.begin(), ISA.end(), inst.name) == ISA.end()) {
         inst.name = "nop";
     }
-    for (uint i = 0; i < inst_data.operands.size; i++) {
-        inst.operands.push_back(inst_data.operands.data[i]);
+    if (ONLY_HAS_QUBIT_OPERANDS.count(inst.name)) {
+        // We can assume all operands are integers.
+        for (uint i = 0; i < inst_data.size; i++) {
+            inst.operands.qubits.push_back(inst_data.operands[i].integer);
+        }
+    } else if (INSTRUCTION_USES_ANGLES.count(inst.name)) {
+        // Now, we need to check for floats, as those are angles.
+        for (uint i = 0; i < inst_data.size; i++) {
+            if (inst_data.operands[i].integer_valid) {
+                inst.operands.qubits.push_back(inst_data.operands[i].integer);
+            } else if (inst_data.operands[i].decimal_valid) {
+                inst.operands.angles.push_back(inst_data.operands[i].decimal);
+            }
+        }
+    } else if (IS_DECODE_TYPE1.count(inst.name)) {
+        inst.operands.events.push_back(inst_data.operands[0].integer);
+        for (uint i = 1; i < inst_data.size; i++) {
+            inst.operands.measurements.push_back(inst_data.operands[i].integer);
+        }
+    } else if (IS_DECODE_TYPE2.count(inst.name)) {
+        inst.operands.observables.push_back(inst_data.operands[0].integer);
+        inst.operands.events.push_back(inst_data.operands[0].integer);
+        for (uint i = 1; i < inst_data.size; i++) {
+            inst.operands.measurements.push_back(inst_data.operands[i].integer);
+        }
+    } else if (IS_DECODE_TYPE3.count(inst.name)) {
+        inst.operands.observables.push_back(inst_data.operands[0].integer);
+        inst.operands.frames.push_back(inst_data.operands[1].integer);
+    } else if (IS_DECODE_TYPE4.count(inst.name)) {
+        inst.operands.frames.push_back(inst_data.operands[0].integer);
+    } else if (IS_BR_TYPE1.count(inst.name)) {
+        inst.operands.labels.push_back(inst_data.operands[0].integer);
+        inst.operands.events.push_back(inst_data.operands[1].integer);
     }
     running_schedule.push_back(inst);
 }
@@ -120,8 +176,10 @@ schedule_after_parse() {
     std::reverse(sch.begin(), sch.end());
     // Convert any label ids in the schedule.
     for (auto& inst : sch) {
-        if (IS_BR_TYPE1.count(inst.name)) {
-            inst.operands[0] = pc - label_id_to_pc[inst.operands[0]];
+        if (IS_BR.count(inst.name)) {
+            for (uint i = 0; i < inst.operands.labels.size(); i++) {
+                inst.operands.labels[i] = pc - label_id_to_pc[inst.operands.labels[i]];
+            }
         }
     }
     return sch;

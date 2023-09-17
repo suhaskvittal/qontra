@@ -80,7 +80,7 @@ public:
     // The second and third arguments (mXwY) is the probability that we
     //  measured a value X but the correct state was Y.
     // The last value is the location in the record table to store the measurement.
-    virtual void    M(std::vector<uint>, fp_t m1w0, fp_t m0w1, int record=-1) =0;
+    virtual void    M(std::vector<uint>, std::vector<fp_t> m1w0, std::vector<fp_t> m0w1, int record=-1) =0;
 
     enum class ErrorLabel { I, X, Y, Z, L };
     // 

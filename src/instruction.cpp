@@ -8,24 +8,14 @@ namespace qontra {
 
 std::vector<uint>
 Instruction::get_qubit_operands() const {
-    // Note: this is for qubit operands that are physically interacted with!
-    //
-    // Do not include instructions like lockq or unlockq which do not interact
-    // with qubits directly.
-    if (ONLY_HAS_QUBIT_OPERANDS.count(name)) {
-        return operands;
-    } else if (name == "mrc") {
-        return std::vector<uint>(operands.begin()+1, operands.end());
-    } else {
-        return std::vector<uint>();
-    }
+    return operands.qubits;
 }
 
 uint
 get_number_of_qubits(const schedule_t& sch) {
     uint max_q = 0;
     for (const auto& inst : sch) {
-        for (uint x : inst.operands) {
+        for (uint x : inst.get_qubit_operands()) {
             max_q = x > max_q ? x : max_q;
         }
     }
@@ -52,7 +42,10 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
     //   measure, reset, event, obs, nop
     uint n_meas = 0;
     for (const auto& inst : sch) {
-        std::vector<uint> operands = inst.operands;
+        std::vector<uint> qubits = inst.operands.qubits;
+        std::vector<uint> events = inst.operands.events;
+        std::vector<uint> meas = inst.operands.measurements;
+        std::vector<uint> obs = inst.operands.observables;
 
         bool inject_op_error = !inst.annotations.count(Annotation::no_error);
         bool inject_timing_error = inst.annotations.count(Annotation::inject_timing_error);
@@ -61,38 +54,38 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         if (inst.name == "measure") {
             // Add X error before.
             if (inject_op_error) {
-                for (uint x : operands) {
+                for (uint x : qubits) {
                     fp_t e = 0.5*(errors.m1w0[x] + errors.m0w1[x]);
                     if (e > 0)  circuit.append_op("X_ERROR", {x}, e);
                 }
             }
-            circuit.append_op("M", operands);
-            n_meas += operands.size();
+            circuit.append_op("M", qubits);
+            n_meas += qubits.size();
         } else if (inst.name == "h") {
-            circuit.append_op("H", operands);
+            circuit.append_op("H", qubits);
         } else if (inst.name == "x") {
-            circuit.append_op("X", operands);
+            circuit.append_op("X", qubits);
         } else if (inst.name == "z") {
-            circuit.append_op("Z", operands);
+            circuit.append_op("Z", qubits);
         } else if (inst.name == "cx") {
-            circuit.append_op("CX", operands);
+            circuit.append_op("CX", qubits);
         } else if (inst.name == "nop") {
             circuit.append_op("TICK", {});
         } else if (inst.name == "reset") {
-            circuit.append_op("R", operands);
+            circuit.append_op("R", qubits);
         } else if (inst.name == "event") {
             std::vector<uint> offsets;
-            for (uint i = 1; i < operands.size(); i++) {
-                offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - operands[i]));
+            for (uint i = 0; i < meas.size(); i++) {
+                offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
             circuit.append_op("DETECTOR", offsets);
             continue;
         } else if (inst.name == "obs") {
             std::vector<uint> offsets;
-            for (uint i = 1; i < operands.size(); i++) {
-                offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - operands[i]));
+            for (uint i = 0; i < meas.size(); i++) {
+                offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
-            circuit.append_op("OBSERVABLE_INCLUDE", offsets, operands[0]);
+            circuit.append_op("OBSERVABLE_INCLUDE", offsets, obs[0]);
             continue;
         } else { continue; }    // Ignore all other instructions.
         
@@ -119,13 +112,13 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         if (operation_takes_time) {
             fp_t max_t = 0.0;
             if (is_2q_op) {
-                for (uint i = 0; i < operands.size(); i += 2) {
-                    fp_t x = operands[i], y = operands[i+1];
+                for (uint i = 0; i < qubits.size(); i += 2) {
+                    fp_t x = qubits[i], y = qubits[i+1];
                     fp_t t = timing.op2q[inst.name][std::make_pair(x, y)];
                     max_t = t > max_t ? t : max_t;
                 }
             } else {
-                for (uint x : operands) {
+                for (uint x : qubits) {
                     fp_t t = timing.op1q[inst.name][x];
                     max_t = t > max_t ? t : max_t;
                 }
@@ -135,8 +128,8 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         // Add operation error.
         if (inst.name != "measure" && inject_op_error) {
             if (is_2q_op) {
-                for (uint i = 0; i < operands.size(); i += 2) {
-                    uint x = operands[i], y = operands[i+1];
+                for (uint i = 0; i < qubits.size(); i += 2) {
+                    uint x = qubits[i], y = qubits[i+1];
                     auto x_y = std::make_pair(x, y);
                     fp_t dp = errors.op2q[inst.name][x_y];
                     fp_t lt = errors.op2q_leakage_transport[inst.name][x_y];
@@ -147,7 +140,7 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                     if (dp > 0) circuit.append_op("DEPOLARIZE2", {x, y}, dp);
                 }
             } else {
-                for (uint x : operands) {
+                for (uint x : qubits) {
                     fp_t e = errors.op1q[inst.name][x];
                     if (e > 0) {
                         if (inst.name == "reset") {

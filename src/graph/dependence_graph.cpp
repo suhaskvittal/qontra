@@ -13,7 +13,7 @@ DependenceGraph::add_vertex(dep::vertex_t* v) {
     if (!__DependenceGraphParent::add_vertex(v))  return false;
 
     std::map<uint, dep::vertex_t*> operand_to_ancestor;
-    for (uint x : v->inst_p->operands)  operand_to_ancestor[x] = root;
+    for (uint x : v->inst_p->operands.qubits)  operand_to_ancestor[x] = root;
     // Get ancestors via BFS.
     search::callback_t<dep::vertex_t> cb = 
     [&] (dep::vertex_t* v1, dep::vertex_t* v2)
@@ -29,7 +29,7 @@ DependenceGraph::add_vertex(dep::vertex_t* v) {
     // Connect v to all ancestors
     std::set<dep::vertex_t*> already_connected;
     uint max_ancestor_depth = 0;
-    for (uint x : v->inst_p->operands) {
+    for (uint x : v->inst_p->operands.qubits) {
         auto a = operand_to_ancestor[x];
         if (already_connected.count(a)) continue;
 
