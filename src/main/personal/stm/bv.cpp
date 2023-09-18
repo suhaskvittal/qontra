@@ -7,7 +7,6 @@
 #include "instruction.h"
 #include "parsing/cmd.h"
 #include "sim/clifford_sim.h"
-#include "sim/universal_sim.h"
 #include "sim/manager.h"
 #include "tables.h"
 
@@ -26,8 +25,8 @@ int main(int argc, char* argv[]) {
     // Error rates:
     noise_model_def.e_m1w0 = 1e-2;
     noise_model_def.e_m0w1 = 3e-2;
-    noise_model_def.e_g1q = 1e-4;
-    noise_model_def.e_g2q = 5e-3;
+    noise_model_def.e_g1q = 5e-4;
+    noise_model_def.e_g2q = 1e-2;
     // Timing:
     noise_model_def.t_g1q = 40;
     noise_model_def.t_g2q = 200;
@@ -51,16 +50,20 @@ int main(int argc, char* argv[]) {
     SimManager mgr(prog);
     tables::populate(n, mgr.params.errors, mgr.params.timing, noise_model_def);
 
+    experiments::G_SHOTS_PER_BATCH = shots < 100'000 ? shots : 100'000;
+
     if (sim == "clifford") {
-        CliffordSimulator* csim = new CliffordSimulator(n, 100'000);
+        CliffordSimulator* csim = new CliffordSimulator(n, experiments::G_SHOTS_PER_BATCH);
         mgr.sim = csim;
-    } else if (sim == "universal") {
+    }
+    /*else if (sim == "universal") {
         experiments::G_SHOTS_PER_BATCH = 1;
         UniversalSimulator<2>* usim = new UniversalSimulator<2>(n);
         mgr.sim = usim;
-    }
+    }*/
 
     mgr.params.always_inject_timing_errors = true;
+    mgr.params.ignore_all_errors = true;
 
     auto res = mgr.evaluate_monte_carlo(shots);
     if (world_rank == 0) {
