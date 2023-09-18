@@ -166,6 +166,9 @@ SimManager::simulate_batch(uint64_t shots) {
                 sim->Z(qubits);
             } else if (inst.name == "s") {
                 sim->S(qubits);
+            } else if (inst.name == "sdg") {
+                sim->Z(qubits);
+                sim->S(qubits);
             } else if (inst.name == "measure") {
                 // Get errors for all qubits.
                 std::vector<fp_t> m1w0, m0w1;
@@ -185,6 +188,10 @@ SimManager::simulate_batch(uint64_t shots) {
             } else if (inst.name == "cx") {
                 sim->CX(qubits);
             } else if (inst.name == "t") {
+                sim->T(qubits);
+            } else if (inst.name == "tdg") {
+                sim->Z(qubits);
+                sim->S(qubits);
                 sim->T(qubits);
             } else if (inst.name == "rx" || inst.name == "ry" || inst.name == "rz") {
                 fp_t x = angles[0];

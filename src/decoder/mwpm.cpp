@@ -73,6 +73,20 @@ MWPMDecoder::decode_error(const syndrome_t& syndrome) {
         error_assignments
     };
 
+    if (res.is_error) {
+        std::cout << "---------------------------------\n";
+        std::cout << "Detectors:";
+        for (uint x : detectors) std::cout << " " << (x % 8) << "(" << (x/8) << ")";
+        std::cout << "\n";
+        std::cout << "Matching:\n";
+        for (auto mate : error_assignments) {
+            uint x = std::get<0>(mate), y = std::get<1>(mate);
+            if (x > y)  continue;
+            std::cout << "\t" << (x % 8) << "(" << (x/8) << ")" 
+                << " ---> " << (y % 8) << "(" << (y/8) << ")\n";
+        }
+    }
+
     return res;
 }
 
