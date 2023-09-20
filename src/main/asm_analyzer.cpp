@@ -28,9 +28,15 @@ int main(int argc, char* argv[]) {
     uint64_t pc = 0;
     for (const auto& inst : sch) {
         std::cout << "(pc = " << pc << ") " << inst.str();
-        std::cout << "\t@[ ";
+        std::cout << "\tannotations = [ ";
         for (auto x : inst.annotations) {
             std::cout << "\"" << x << "\" ";
+        }
+        std::cout << "]\n";
+        std::cout << "\tproperties = [ ";
+        for (auto pair : inst.properties) {
+            std::cout << "\"" << pair.first << "\"(i=" << pair.second.ival 
+                << ", f=" << pair.second.fval << ") ";
         }
         std::cout << "]\n";
         pc++;

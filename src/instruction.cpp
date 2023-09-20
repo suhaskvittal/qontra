@@ -83,7 +83,10 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             for (uint i = 0; i < meas.size(); i++) {
                 offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
-            circuit.append_op("DETECTOR", offsets);
+            int64_t tag = 0;
+            if (inst.properties.count("color")) tag = inst.properties["color"].ival;
+
+            circuit.append_op("DETECTOR", offsets, tag);
             continue;
         } else if (inst.name == "obs") {
             std::vector<uint> offsets;

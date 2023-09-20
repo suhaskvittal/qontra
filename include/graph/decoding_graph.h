@@ -27,16 +27,20 @@ namespace decoding {
 #define N_COORD    16
 
 struct vertex_t : base::vertex_t {
-    enum class Color { none, red, blue, green, notred, notblue, notgreen };
-
     std::array<fp_t, N_COORD>    coords;
-    Color                   color;
 };
 
 struct edge_t : base::edge_t {
     fp_t            edge_weight;
     fp_t            error_probability;
     std::set<uint>  frames;
+};
+
+struct colored_vertex_t : vertex_t {
+    std::string color;
+};
+
+struct colored_edge_t : edge_t {
 };
 
 }   // decoding
@@ -121,6 +125,53 @@ private:
 
 DecodingGraph
 to_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGraph::Mode::NORMAL);
+
+// Colored decoding graphs are a collection of decoding graphs, such that each decoding
+// graph restricts the decoding graph to two colors. Now, each detector in the graph corresponds
+// to detectors in multiple decoding graphs, and we must track such assignments alongside
+// other aspects such as adjacency.
+
+#define __ColoredDecodingGraphParent    Graph<decoding::colored_vertex_t, decoding::colored_edge_t>
+
+class ColoredDecodingGraph : {
+public:
+    ColoredDecodingGraph()
+        :Graph(),
+        restricted_color_map(),
+        restricted_graphs(),
+        number_of_restricted_lattices(3)
+    {
+        restricted_graphs.fill(DecodingGraph());
+
+        uint restricted_lattices = C;
+        restricted_color_map["rg"] = 0;
+        restricted_color_map["gr"] = 0;
+        restricted_color_map["rb"] = 1;
+        restricted_color_map["br"] = 1;
+        restricted_color_map["gb"] = 1;
+        restricted_color_map["bg"] = 1;
+    }
+
+    bool    add_vertex(decoding::colored_vertex_t*) override;
+    bool    add_edge(decoding::colored_edge_t*) override;
+
+    void    delete_vertex(decoding::colored_vertex_t*) override;
+    void    delete_edge(decoding::colored_edge_t*) override;
+
+    DecodingGraph& operator[](const std::string& cc) const {
+        return restricted_graphs.at(restricted_color_map.at(cc));
+    }
+
+    DecodingGraph& operator[](const char* cc) const {
+        return (*this)[std::string(cc)];
+    }
+private:
+    std::map<std::string, int>  restricted_color_map;
+    std::array<DecodingGraph, 3>  restricted_graphs;
+};
+
+ColoredDecodingGraph
+to_colored_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGraph::Mode::NORMAL);
 
 }   // graph
 }   // qontra
