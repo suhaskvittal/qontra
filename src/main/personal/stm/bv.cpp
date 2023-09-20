@@ -63,21 +63,24 @@ int main(int argc, char* argv[]) {
     }*/
 
     mgr.params.always_inject_timing_errors = true;
-    mgr.params.ignore_all_errors = true;
 
     auto res = mgr.evaluate_monte_carlo(shots);
     if (world_rank == 0) {
+        std::cout << "Entries before: " << res.probability_histogram.size() << "\n";
         // Filter out measurements.
+        vlw_t filter_word((true_meas_bits >> 6)+1, 0xffff'ffff'ffff'ffff);
+        filter_word[true_meas_bits >> 6] = (1L << (true_meas_bits % 64))-1;
         for (auto it = res.probability_histogram.begin();
                 it != res.probability_histogram.end(); ) 
         {
-            if (vlw_compare(it->first, {(1L << true_meas_bits)-1}) > 0) {
+            if (vlw_compare(it->first, filter_word) > 0) {
                 it = res.probability_histogram.erase(it);
             } else {
                 it++;
             }
         }
-        print_histogram(std::cout, true_meas_bits, res.probability_histogram, true_meas_bits > 5 ? 1e-2 : 0.0);
+        std::cout << "Entries after: " << res.probability_histogram.size() << "\n";
+        print_histogram(std::cout, true_meas_bits, res.probability_histogram, 1e-3);
     }
     delete mgr.sim;
 

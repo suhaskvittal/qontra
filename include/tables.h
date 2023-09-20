@@ -118,7 +118,8 @@ populate(
         TimeTable& timing,
         const ErrorAndTiming& params)
 {
-    const std::vector<std::string> g1q{"h", "x", "s", "z", "reset"};
+    // Assume z, rz, s, sdg, t, tdg are implemented via a virtual RZ.
+    const std::vector<std::string> g1q{"h", "x", "rx", "ry", "reset"};
     const std::vector<std::string> g2q{"cx"};
 
     set_all_1q(n_qubits, params.t1, timing.t1);

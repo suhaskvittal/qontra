@@ -99,11 +99,9 @@ add_subdirectory(blossom5)
 
 add_executable(asm_analyzer src/main/asm_analyzer.cpp)
 add_executable(converter src/main/converter.cpp)
-add_executable(mwpm_memory src/main/mwpm_memory.cpp ${ASM_FILES})
 
 target_link_libraries(asm_analyzer PRIVATE qontra)
 target_link_libraries(converter PRIVATE qontra)
-target_link_libraries(mwpm_memory PRIVATE qontra)
 
 if (COMPILE_TESTS)
     message("Will compile TEST executables.")

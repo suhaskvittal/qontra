@@ -41,7 +41,7 @@ SimManager::evaluate_monte_carlo(uint64_t shots) {
     // Aggregate all the histogram results if using MPI.
     histogram_t prob_histogram;
     uint64_t obscnt;
-    if (G_USE_MPI) {
+    if (G_USE_MPI && world_size > 0) {
         for (uint64_t r = 0; r < world_size; r++) {
             // Convert the histogram data into a vector (if rank == r).
             std::vector<std::pair<vlw_t, uint64_t>> hdata;
@@ -66,10 +66,10 @@ SimManager::evaluate_monte_carlo(uint64_t shots) {
                 uint w_width = w.size();
                 MPI_Bcast(&w_width, 1, MPI_UNSIGNED, r, MPI_COMM_WORLD);
                 if (world_rank != r) {
-                    w = vlw_t(w_width);
+                    w.resize(w_width);
                 }
                 // Now, broadcast w itself.
-                MPI_Bcast(&w[0], w_width, MPI_UNSIGNED_LONG, r, MPI_COMM_WORLD);
+                MPI_Bcast((uint64_t*)w.data(), w_width, MPI_UNSIGNED_LONG, r, MPI_COMM_WORLD);
                 // Finally, broadcast the count.
                 MPI_Bcast(&cnt, 1, MPI_UNSIGNED_LONG, r, MPI_COMM_WORLD);
                 // Update the final histogram.
