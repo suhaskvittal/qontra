@@ -104,15 +104,28 @@ const std::set<std::string> IS_DECODE_TYPE4 {
 // round_start: round starts at this instruction
 // flag: this is a flag measurement
 
-enum class Annotation {
-    // Error annotations
-    no_error,
-    no_tick,
-    inject_timing_error,
-    // Bookkeeping annotations
-    round_start,
-    flag
-};
+// Annotations and Properties can be defined
+// in the program. While there are a set of
+// recognized annotations, we leave the use
+// of annotations/properties to the user's
+// discretion to allow for customization.
+//
+// Default annotations that are supported:
+//      no_tick: ignore instruction latency
+//      no_error: ignore instruction error
+//      inject_timing_error: inject decoherence and dephasing errors
+//  
+//  Default properties that are supported:
+//      color: 0 (red), 1 (green), 2 (blue) -- for color codes
+
+#define ANNOT_NO_TICK               "no_tick"
+#define ANNOT_NO_ERROR              "no_error"
+#define ANNOT_INJECT_TIMING_ERROR   "inject_timing_error"
+
+#define PROPERTY_COLOR      "color"
+#define PROPERTY_COLOR_RED      0
+#define PROPERTY_COLOR_GREEN    1
+#define PROPERTY_COLOR_BLUE     2
 
 struct Instruction {
     std::string name;
@@ -151,7 +164,13 @@ struct Instruction {
         }
     } operands;
 
-    std::set<Annotation> annotations;
+    struct property_value_t {
+        int64_t         ival;
+        fp_t            fval;
+    };
+
+    std::set<std::string> annotations;
+    std::map<std::string, property_value_t> properties;
 
     // Extra metadata (not necessary for general use).
     //

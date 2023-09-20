@@ -47,9 +47,10 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         std::vector<uint> meas = inst.operands.measurements;
         std::vector<uint> obs = inst.operands.observables;
 
-        bool inject_op_error = !inst.annotations.count(Annotation::no_error);
-        bool inject_timing_error = inst.annotations.count(Annotation::inject_timing_error);
-        bool operation_takes_time = !inst.annotations.count(Annotation::no_tick);
+        bool inject_op_error = !inst.annotations.count(ANNOT_NO_ERROR);
+        bool inject_timing_error = inst.annotations.count(ANNOT_INJECT_TIMING_ERROR);
+        bool operation_takes_time = !inst.annotations.count(ANNOT_NO_TICK);
+
         bool is_2q_op = IS_2Q_OPERATOR.count(inst.name);
         if (inst.name == "measure") {
             // Add X error before.

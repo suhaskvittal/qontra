@@ -173,7 +173,7 @@ SimManager::simulate_batch(uint64_t shots) {
                 // Get errors for all qubits.
                 std::vector<fp_t> m1w0, m0w1;
                 for (uint x : qubits) {
-                    if (inst.annotations.count(Annotation::no_error) || params.ignore_all_errors) {
+                    if (inst.annotations.count(ANNOT_NO_ERROR) || params.ignore_all_errors) {
                         m1w0.push_back(0);
                         m0w1.push_back(0);
                     } else {
@@ -244,7 +244,7 @@ SimManager::simulate_batch(uint64_t shots) {
             if (is_quantum_inst) {
                 inject_operation_error(inst);
                 timing_table[pc] += get_operation_latency(inst);
-                if (inst.annotations.count(Annotation::inject_timing_error)
+                if (inst.annotations.count(ANNOT_INJECT_TIMING_ERROR)
                     || params.always_inject_timing_errors) 
                 {
                     inject_timing_error(timing_table[pc]);
@@ -263,7 +263,7 @@ fp_t
 SimManager::get_operation_latency(Instruction inst) {
     if (!IS_QUANTUM_INSTRUCTION.count(inst.name))   return 0.0;
 
-    if (inst.annotations.count(Annotation::no_tick))    return 0.0;
+    if (inst.annotations.count(ANNOT_NO_TICK))    return 0.0;
 
     std::vector<uint> qubits = inst.operands.qubits;
     fp_t max_time_taken = 0.0;
@@ -287,7 +287,7 @@ SimManager::get_operation_latency(Instruction inst) {
 void
 SimManager::inject_operation_error(Instruction inst) {
     if (params.ignore_all_errors)   return;
-    if (inst.annotations.count(Annotation::no_error))  return;
+    if (inst.annotations.count(ANNOT_NO_ERROR))  return;
 
     std::vector<uint> qubits = inst.operands.qubits;
     if (IS_2Q_OPERATOR.count(inst.name)) {
