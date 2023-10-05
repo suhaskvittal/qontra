@@ -1,6 +1,6 @@
 ---------------------------------------
-Begin Slurm Prolog: Sep-02-2023 19:41:03
-Job ID:    2999957
+Begin Slurm Prolog: Sep-19-2023 19:39:15
+Job ID:    3449922
 User ID:   svittal8
 Account:   gts-mqureshi4-rg
 Job name:  memory
@@ -10,44 +10,52 @@ QOS:       inferno
 
 Lmod is automatically replacing "mvapich2/2.3.6-ouywal" with "openmpi/4.1.4".
 
-Running bmemory for d = 5
-\tParams: p = 3e-3, r = 5, blk = 1
-\tParams: p = 2e-3, r = 5, blk = 1
-\tParams: p = 1e-3, r = 5, blk = 1
-\tParams: p = 9e-4, r = 5, blk = 1
-\tParams: p = 8e-4, r = 5, blk = 1
-\tParams: p = 7e-4, r = 5, blk = 1
 Running bmemory for d = 7
-\tParams: p = 3e-3, r = 7, blk = 2
-\tParams: p = 2e-3, r = 7, blk = 2
 \tParams: p = 1e-3, r = 7, blk = 2
-\tParams: p = 9e-4, r = 7, blk = 2
-\tParams: p = 8e-4, r = 7, blk = 2
-\tParams: p = 7e-4, r = 7, blk = 2
 Running bmemory for d = 9
-\tParams: p = 3e-3, r = 9, blk = 3
-\tParams: p = 2e-3, r = 9, blk = 3
 \tParams: p = 1e-3, r = 9, blk = 3
-\tParams: p = 9e-4, r = 9, blk = 3
-\tParams: p = 8e-4, r = 9, blk = 3
-\tParams: p = 7e-4, r = 9, blk = 3
 Running bmemory for d = 11
-\tParams: p = 3e-3, r = 11, blk = 4
-\tParams: p = 2e-3, r = 11, blk = 4
 \tParams: p = 1e-3, r = 11, blk = 4
-\tParams: p = 9e-4, r = 11, blk = 4
-\tParams: p = 8e-4, r = 11, blk = 4
-\tParams: p = 7e-4, r = 11, blk = 4
+Running bmemory for d = 13
+\tParams: p = 1e-3, r = 13, blk = 5
+Running bmemory for d = 15
+\tParams: p = 1e-3, r = 15, blk = 6
+Running bmemory for d = 17
+\tParams: p = 1e-3, r = 17, blk = 7
+Running bmemory for d = 19
+\tParams: p = 1e-3, r = 19, blk = 8
+Running bmemory for d = 21
+\tParams: p = 1e-3, r = 21, blk = 9
+slurmstepd: error: Detected 1 oom_kill event in StepId=3449922.15. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=3449922.15. Some of the step tasks have been OOM Killed.
+srun: error: atl1-1-02-020-7-2: task 57: Out Of Memory
+slurmstepd: error: Detected 1 oom_kill event in StepId=3449922.15. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=3449922.15. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=3449922.15. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=3449922.15. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=3449922.15. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=3449922.15. Some of the step tasks have been OOM Killed.
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-020-7-2 [3]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.3449922.15:57]
+slurmstepd: error: *** STEP 3449922.15 ON atl1-1-02-020-6-1 CANCELLED AT 2023-09-19T19:47:11 ***
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-020-6-1 [0]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.3449922.15:9]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-020-9-2 [7]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.3449922.15:123]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-020-7-1 [2]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.3449922.15:41]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-020-9-1 [6]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.3449922.15:99]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-020-8-2 [5]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.3449922.15:91]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-020-6-2 [1]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.3449922.15:20]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-020-8-1 [4]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.3449922.15:73]
+slurmstepd: error: Detected 1 oom_kill event in StepId=3449922.batch. Some of the step tasks have been OOM Killed.
 ---------------------------------------
-Begin Slurm Epilog: Sep-02-2023 19:45:39
-Job ID:        2999957
+Begin Slurm Epilog: Sep-19-2023 19:47:13
+Job ID:        3449922
 Array Job ID:  _4294967294
 User ID:       svittal8
 Account:       gts-mqureshi4-rg
 Job name:      memory
 Resources:     cpu=128,mem=512G,node=8
-Rsrc Used:     cput=09:50:56,vmem=8824K,walltime=00:04:37,mem=8492K,energy_used=0
+Rsrc Used:     cput=16:59:44,vmem=10536K,walltime=00:07:58,mem=8488K,energy_used=0
 Partition:     cpu-small
 QOS:           inferno
-Nodes:         atl1-1-02-007-24-2,atl1-1-02-007-25-1,atl1-1-02-007-27-[1-2],atl1-1-02-007-28-[1-2],atl1-1-02-007-29-[1-2]
+Nodes:         atl1-1-02-020-6-[1-2],atl1-1-02-020-7-[1-2],atl1-1-02-020-8-[1-2],atl1-1-02-020-9-[1-2]
 ---------------------------------------

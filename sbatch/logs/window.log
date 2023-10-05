@@ -1,0 +1,31 @@
+---------------------------------------
+Begin Slurm Prolog: Sep-11-2023 16:01:36
+Job ID:    3181814
+User ID:   svittal8
+Account:   gts-mqureshi4-rg
+Job name:  window
+Partition: cpu-small
+QOS:       inferno
+---------------------------------------
+
+Lmod is automatically replacing "mvapich2/2.3.6-ouywal" with "openmpi/4.1.4".
+
+Running window for d = 5
+Running window for d = 7
+Running window for d = 9
+Running window for d = 11
+slurmstepd: error: *** STEP 3181814.9 ON atl1-1-02-010-8-2 CANCELLED AT 2023-09-11T16:31:58 DUE TO TIME LIMIT ***
+slurmstepd: error: *** JOB 3181814 ON atl1-1-02-010-8-2 CANCELLED AT 2023-09-11T16:31:58 DUE TO TIME LIMIT ***
+---------------------------------------
+Begin Slurm Epilog: Sep-11-2023 16:32:02
+Job ID:        3181814
+Array Job ID:  _4294967294
+User ID:       svittal8
+Account:       gts-mqureshi4-rg
+Job name:      window
+Resources:     cpu=128,mem=512G,node=16
+Rsrc Used:     cput=2-16:46:56,vmem=9228K,walltime=00:30:22,mem=9192K,energy_used=0
+Partition:     cpu-small
+QOS:           inferno
+Nodes:         atl1-1-02-010-8-2,atl1-1-02-010-9-[1-2],atl1-1-02-010-10-1,atl1-1-02-010-11-1,atl1-1-02-010-13-[1-2],atl1-1-02-010-14-[1-2],atl1-1-02-010-15-[1-2],atl1-1-02-010-16-[1-2],atl1-1-02-010-17-[1-2],atl1-1-02-010-18-1
+---------------------------------------

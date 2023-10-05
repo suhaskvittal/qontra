@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <stim.h>
+#include <PerfectMatching.h>
 
 namespace qontra {
 namespace mldh {
@@ -44,51 +45,80 @@ public:
     std::string name(void) override { return "Block"; }
 
     void reset_stats(void) {
-        total_number_of_blocks = 0;
-        total_number_sqr_of_blocks = 0;
-        max_number_of_blocks = 0;
-        min_number_of_blocks = std::numeric_limits<uint64_t>::max();
-        total_shots_evaluated = 0;
+        total_ratio_mbhw_thw = 0;
+        total_ratio_mbhw_thw_sqr = 0;
+        total_ratio_mbhw_thw_max = 0;
+        total_shots_above_blk_th = 0;
 
         total_hw_in_block = 0;
         total_hw_sqr_in_block = 0;
         max_hw_in_block = 0;
+        total_blocks = 0;
 
-        total_blk_hw_above_th = 0;
+        total_local_uses = 0;
+        total_global_uses = 0;
+        total_local_uses_sqr = 0;
+        total_global_uses_sqr = 0;
+        max_local_uses = 0;
+        max_global_uses = 0;
     }
 
 
     // Statistics:
-    uint64_t    total_number_of_blocks=0;
-    uint64_t    total_number_sqr_of_blocks=0;
-    uint64_t    max_number_of_blocks=0;
-    uint64_t    min_number_of_blocks=std::numeric_limits<uint64_t>::max();
-    uint64_t    total_shots_evaluated=0;
+    fp_t total_ratio_mbhw_thw=0.0;  // mbhw_thw --> max block hamming weight to total hamming weight.
+    fp_t total_ratio_mbhw_thw_sqr=0.0;
+    fp_t total_ratio_mbhw_thw_max=0.0;
+    uint64_t    total_shots_above_blk_th=0;
 
     uint64_t    total_hw_in_block=0;
     uint64_t    total_hw_sqr_in_block=0;
     uint64_t    max_hw_in_block=0;
+    uint64_t    total_blocks=0;
 
-    uint64_t    total_blk_hw_above_th=0;
+    uint64_t    total_local_uses=0;
+    uint64_t    total_global_uses=0;
+    uint64_t    total_local_uses_sqr=0;
+    uint64_t    total_global_uses_sqr=0;
+    uint64_t    max_local_uses=0;
+    uint64_t    max_global_uses=0;
+
 
     // Configuration:
     struct {
+        bool    auto_to_global_decoder = false;
+
         uint    blocking_threshold = 14;
         uint    cutting_threshold = 24;
         bool    allow_adaptive_blocks = false;
 
+        fp_t    global_decoder_io_delay = 500;
+
         struct {
-            bool            record_decoder_timing_data = false;
-            std::ofstream   decoder_timing_out;
-        } io;
+            bool            record_data = false;
+            std::ofstream   fout;
+        } timing_io;
+
+        struct {
+            bool            record_data = false;
+            std::ofstream   fout;
+
+            uint64_t        hw_trigger; // If HW > trigger, write data.
+            MWPMDecoder*    base;
+        } syndrome_io;
     } config;
 private:
-    void update_hw_statistics(uint);
-    void update_blk_statistics(uint);
+    typedef std::tuple<int, int, fp_t> blossom_edge_t;
+
+    void update_use_statistics(uint, uint);
+    void update_hw_statistics(uint hw);
+    void update_blk_ratio_statistics(uint max_blk_hw, uint total_hw);
 
     void write_timing_data(fp_t);
+    void write_syndrome_data(const syndrome_t&, const std::vector<block_t>&, bool is_error);
 
-    std::vector<block_t>    get_blocks(std::vector<uint> detectors);
+    bool blossom_subroutine(const std::vector<uint>&, const std::vector<blossom_edge_t>&, Decoder::result_t&);
+
+    std::vector<block_t>    get_blocks(std::vector<uint> detectors, std::vector<blossom_edge_t>&);
     block_t                 compute_block_from(uint d, std::vector<uint> detectors);
 
     Decoder* base_decoder;

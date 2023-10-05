@@ -13,12 +13,14 @@
 module load openmpi
 
 cd build
-for d in 5 7 9 11
+for d in 7 9 11 13 15 17 19 21
 do
     echo "Running timing for d = ${d}"
-    for p in 3e-3 2e-3 1e-3 9e-4 8e-4 7e-4
+    for p in 1e-3
     do
         echo "\tParams: p = ${p}, r = ${d}, blk = ${blk}"
-        srun ./mldh_timing --in ../data/timing/d${d}_p${p} --out ../data/timing.csv
+        t=$(( 1000*d ))
+        srun ./mldh_timing --in ../data/timing/pym/d${d}_p${p} --out ../data/pym_timing.csv --t $t
+#       srun ./mldh_timing --in ../data/timing/astrea_pym/d${d}_p${p} --out ../data/astrea_pym_timing.csv --t $t
     done
 done
