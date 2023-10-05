@@ -21,6 +21,10 @@ read_detector_error_model(const stim::DetectorErrorModel&,
 
 using namespace decoding;
 
+//
+// DecodingGraph Definitions
+//
+
 void
 DecodingGraph::build_distance_matrix() {
     ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
@@ -118,12 +122,13 @@ DecodingGraph::update_state() {
 }
 
 DecodingGraph
-to_decoding_graph(const stim::Circuit& qec_circ, DecodingGraph::Mode mode) {
+to_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
+    if (mode == DecodingGraph::Mode::DO_NOT_BUILD)  return DecodingGraph();
     DecodingGraph graph(mode);
 
     stim::DetectorErrorModel dem = 
         stim::ErrorAnalyzer::circuit_to_detector_error_model(
-            qec_circ,
+            circuit,
             true,  // decompose_errors
             true,  // fold loops
             true, // allow gauge detectors
@@ -133,7 +138,7 @@ to_decoding_graph(const stim::Circuit& qec_circ, DecodingGraph::Mode mode) {
         );
     // Create callbacks.
     detector_callback_t det_f =
-        [&graph](uint det, std::array<fp_t, N_COORD> coords) 
+        [&graph](uint64_t det, std::array<fp_t, N_COORD> coords) 
         {
             vertex_t* v;
             if ((v=graph.get_vertex(det)) == nullptr) {
@@ -144,7 +149,7 @@ to_decoding_graph(const stim::Circuit& qec_circ, DecodingGraph::Mode mode) {
             v->coords = coords;
         };
     error_callback_t err_f = 
-        [&graph](fp_t prob, std::vector<uint> dets, std::set<uint> frames)
+        [&](fp_t prob, std::vector<uint64_t> dets, std::set<uint> frames)
         {
             if (prob == 0 || dets.size() == 0 || dets.size() > 2) {
                 return;  // Zero error probability -- not an edge.
@@ -197,6 +202,271 @@ to_decoding_graph(const stim::Circuit& qec_circ, DecodingGraph::Mode mode) {
     return graph;
 }
 
+//
+// ColoredDecodingGraph Definitions
+//
+
+face_t
+make_face(colored_vertex_t* v1, colored_vertex_t* v2, colored_vertex_t* v3) {
+    std::vector<colored_vertex_t*> vertices{v1, v2, v3};
+    std::sort(vertices.begin(), vertices.end());
+    return std::make_tuple(vertices[0], vertices[1], vertices[2]);
+}
+
+ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode=DecodingGraph::Mode::NORMAL)
+    :Graph(),
+    restricted_color_map(),
+    restricted_graphs(),
+    number_of_restricted_lattices(3)
+{
+    restricted_graphs.fill(DecodingGraph(mode));
+    for (auto& gr : restricted_graphs)  gr.dealloc_on_delete = false;
+
+    uint restricted_lattices = C;
+    restricted_color_map["rg"] = 0;
+    restricted_color_map["gr"] = 0;
+    restricted_color_map["rb"] = 1;
+    restricted_color_map["br"] = 1;
+    restricted_color_map["gb"] = 2;
+    restricted_color_map["bg"] = 2;
+
+    // Modify each decoding graph by introducing two boundaries -- one for each color.
+    // Delete their existing boundaries.
+    for (uint i = 0; i < 3; i++) {
+        DecodingGraph& gr = restricted_graphs[i];
+        auto boundary = gr.get_vertex(BOUNDARY_INDEX);
+        gr.delete_vertex(boundary);
+    }
+    colored_vertex_t* bred = new colored_vertex_t;
+    colored_vertex_t* bgreen = new colored_vertex_t;
+    colored_vertex_t* bblue = new colored_vertex_t;
+
+    bred->id = RED_BOUNDARY_INDEX;
+    bred->color = "r";
+    bgreen->id = GREEN_BOUNDARY_INDEX;
+    bgreen->color = "g";
+    bblue->id = BLUE_BOUNDARY_INDEX;
+    bblue->color = "b";
+
+    add_vertex(bred);
+    add_vertex(bgreen);
+    add_vertex(bblue);
+    // Add edges between each boundary.
+    colored_edge_t* erg = new colored_edge_t;
+    colored_edge_t* erb = new colored_edge_t;
+    colored_edge_t* egb = new colored_edge_t;
+
+    erg->src = (void*)bred;
+    erg->dst = (void*)bgreen;
+    erg->is_undirected = true;
+
+    erb->src = (void*)bred;
+    erb->dst = (void*)bblue;
+    erb->is_undirected = true;
+
+    egb->src = (void*)bgreen;
+    egb->dst = (void*)bblue;
+    egb->is_undirected = true;
+
+    add_edge(erg);
+    add_edge(erb);
+    add_edge(egb);
+}
+
+bool
+ColoredDecodingGraph::add_vertex(colored_vertex_t* v) {
+    if (!__ColoredDecodingGraphParent::add_vertex(v))   return false;
+    for (auto pair : restricted_color_map) {
+        std::string r = pair.first;
+        if (r[0] != v->color[0])    continue;
+        DecodingGraph& gr = restricted_graphs[pair.second];
+        if (!gr.add_vertex(v)) {
+            __ColoredDecodingGraphParent::delete_vertex(v);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool
+ColoredDecodingGraph::add_edge(colored_edge_t* e) {
+    if (!__ColoredDecodingGraphParent::add_edge(e)) return false;
+    colored_vertex_t* src = (colored_vertex_t*)e->src;
+    colored_vertex_t* dst = (colored_vertex_t*)e->dst;
+
+    std::string lat = src->color + dst->color;
+    DecodingGraph& gr = restricted_graphs[restricted_color_map[lat]];
+    if (!gr.add_edge(e)) {
+        __ColoredDecodingGraphParent::delete_edge(e);
+        return false;
+    }
+    return true;
+}
+
+void
+ColoredDecodingGraph::delete_vertex(colored_vertex_t* v) {
+    // Delete the vertex in the corresponding decoding graphs.
+    for (auto pair : restricted_color_map) {
+        std::string r = pair.first;
+        if (r[0] != v->color[0])    continue;
+        DecodingGraph& gr = restricted_graphs[pair.second];
+        __ColoredDecodingGraphParent::delete_vertex(v);
+    }
+    // Finally, delete the final reference to the vertex.
+    __ColoredDecodingGraphParent::delete_vertex(v);
+}
+
+void
+ColoredDecodingGraph::delete_edge(colored_edge_t* e) {
+    colored_vertex_t* src = (colored_vertex_t*)e->src;
+    colored_vertex_t* dst = (colored_vertex_t*)e->dst;
+
+    std::string lat = src->color + dst->color;
+    DecodingGraph& gr = restricted_graphs[restricted_color_map[lat]];
+    gr.delete_edge(e);
+    __ColoredDecodingGraphParent::delete_edge(e);
+}
+
+std::set<face_t>
+ColoredDecodingGraph::get_all_incident_faces(colored_vertex_t* v) {
+    auto v_adj = get_neighbors(v);
+    std::set<face_t> faces;
+    for (auto w : v_adj) {
+        for (auto u : get_common_neighbors(v, w)) {
+            faces.insert(make_face(v, w, u));
+        }
+    }
+    return faces;
+}
+
+ColoredDecodingGraph
+to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
+    ColoredDecodingGraph graph(mode);
+    // We need to create three circuits, one for each color restriction.
+    const std::string restrictions[] = {"rg", "rb", "gb"};
+
+    std::array<stim::Circuit, 3> subcircuits;
+    subcircuits.fill(stim::Circuit());
+
+    // Furthermore, as we will then pass each subcircuit through the ErrorAnalyzer,
+    // we must also track the detector mappings from the original circuit to the
+    // subcircuits.
+    std::array<uint64_t, 3> sub_detector_ctr;
+    sub_detector_ctr.fill(0);
+    uint64_t detector_ctr = 0;
+
+    // labeled_det_t: sub detector id, restricted lattice (i.e. "rg")
+    typedef std::pair<uint64_t, std::string> labeled_det_t;
+    std::map<labeled_det_t, uint64_t> sub_detector_map;
+
+    circuit.for_each_operation([&] (stim::Operation op) {
+        std::string gate_name(op.gate->name);
+        if (gate_name == "DETECTOR") {
+            // Check the color of the detector.
+            int color_id = (int) op.target_data.args[0];
+            std::string color = int_to_color(color_id);
+            uint64_t detector = (detector_ctr++);
+            for (uint i = 0; i < 3; i++) {
+                std::string r = restrictions[i];
+                if (r[0] == color[0] || r[1] == color[0]) {
+                    // Then, this detector belongs to this restricted lattice.
+                    labeled_det sub_detector = std::make_pair(sub_detector_ctr[i]++, r);
+                    sub_detector_map[sub_detector] = detector;
+                    // Add this operation to the corresponding subcircuit as well.
+                    subcircuits[i].append_operation(op);
+                }
+            }
+            // Finally, to avoid issues down the line, make the vertex for the
+            // detector here.
+            colored_vertex_t* v = new colored_vertex_t;
+            v->id = detector;
+            v->color = color;
+            graph.add_vertex(v);
+        } else {
+            for (auto& sc : subcircuits) sc.append_operation(op);
+        }
+    });
+
+    // Now, update the DecodingGraph for each subcircuit.
+    for (uint i = 0; i < 3; i++) {
+        std::string r = restrictions[i];
+        stim::Circuit& sc = subcircuits[i];
+
+        stim::DetectorErrorModel dem = 
+            stim::ErrorAnalyzer::circuit_to_detector_error_model(
+                circuit,
+                true,  // decompose_errors
+                true,  // fold loops
+                true, // allow gauge detectors
+                1.0,   // approx disjoint errors threshold
+                true, // ignore decomposition failures
+                false
+            );
+        // Nothing needs to be done for the detector callback as we have already
+        // added the detector.
+        detector_callback_t det_f = [] (uint64_t d, std::array<fp_t, N_COORD> coords) {};
+
+        error_callback_t err_f =
+            [&] (fp_t prob, std::vector<uint64_t> dets, std::set<uint> frames)
+            {
+                if (prob == 0 || dets.size() == 0 || dets.size() > 2) {
+                    return;  // Zero error probability -- not an edge.
+                }
+                // First, convert the detectors (which are sub detectors right now)
+                // to their true ids.
+                for (auto& d : dets) {
+                    labeled_det_t ld = std::make_pair(d, r);
+                    d = sub_detector_map[ld];
+                }
+
+                if (dets.size() == 1) {
+                    // We will be connecting to the boundary, so we must choose the correct one.
+                    uint64_t d = dets[0];
+                    auto v = graph.get_vertex(d);
+                    std::string c = v->color;
+                    if (r == "rg") {
+                        if (c == "r")   dets.push_back(GREEN_BOUNDARY_INDEX);
+                        else            dets.push_back(RED_BOUNDARY_INDEX);
+                    } else if (r == "rb") {
+                        if (c == "r")   dets.push_back(BLUE_BOUNDARY_INDEX);
+                        else            dets.push_back(RED_BOUNDARY_INDEX);
+                    } else {
+                        if (c == "g")   dets.push_back(BLUE_BOUNDARY_INDEX);
+                        else            dets.push_back(GREEN_BOUNDARY_INDEX);
+                    }
+                    dets.push_back(BOUNDARY_INDEX);
+                }
+                // Now, there are only two detectors.
+                auto v1 = graph.get_vertex(dets[0]);
+                auto v2 = graph.get_vertex(dets[1]);
+                auto e = graph.get_edge(v1, v2);
+                if (e != nullptr) {
+                    fp_t old_prob = e->error_probability;
+                    std::set<uint> old_frames = e->frames;
+                    if (frames == old_frames) {
+                        prob = prob * (1-old_prob) + old_prob * (1-prob);
+                    }
+                } else {
+                    // Create new edge if it does not exist.
+                    e = new edge_t;
+                    e->src = (void*)v1;
+                    e->dst = (void*)v2;
+                    graph.add_edge(e);
+                }
+                fp_t edge_weight = (fp_t)log10((1-prob)/prob);
+                e->edge_weight = edge_weight;
+                e->error_probability = prob;
+                e->frames = frames;
+            };
+        // Read the detector error model for the subcircuit.
+        uint det_offset = 0;
+        std::array<fp_t, N_COORD> coord_offset;
+        coord_offset.fill(0);
+        read_detector_error_model(dem, 1, det_offset, coord_offset, err_f, det_f);
+    }
+    return graph;
+}
+
 void 
 read_detector_error_model(
         const stim::DetectorErrorModel& dem, uint n_iter,
@@ -216,7 +486,7 @@ read_detector_error_model(
                 read_detector_error_model(subblock, n_repeats,
                            det_offset, coord_offset, err_f, det_f);
             } else if (type == stim::DemInstructionType::DEM_ERROR) {
-                std::vector<uint> detectors;
+                std::vector<uint64_t> detectors;
                 std::set<uint> frames;
                  
                 fp_t e_prob = (fp_t)inst.arg_data[0];
@@ -224,7 +494,7 @@ read_detector_error_model(
                     if (target.is_relative_detector_id()) {
                         // This is a detector, add it to the list.
                         detectors.push_back(
-                                (uint)target.data + det_offset);
+                                (uint64_t)target.data + det_offset);
                     } else if (target.is_observable_id()) {
                         frames.insert(target.data); 
                     } else if (target.is_separator()) {

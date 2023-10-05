@@ -16,11 +16,14 @@
 #include <array>
 
 #include <math.h>
-
 namespace qontra {
 namespace graph {
 
 const uint BOUNDARY_INDEX = std::numeric_limits<uint>::max();
+
+const uint64_t RED_BOUNDARY_INDEX = (1L << 48) | BOUNDARY_INDEX;
+const uint64_t BLUE_BOUNDARY_INDEX = (1L << 49) | BOUNDARY_INDEX;
+const uint64_t GREEN_BOUNDARY_INDEX = (1L << 50) | BOUNDARY_INDEX;
 
 namespace decoding {
 
@@ -51,7 +54,8 @@ class DecodingGraph : public __DecodingGraphParent {
 public:
     enum class Mode {
         NORMAL,     // No adjustments. Default option.
-        LOW_MEMORY  // Here, we will not generate the distance matrix.
+        LOW_MEMORY, // Here, we will not generate the distance matrix.
+        DO_NOT_BUILD,   // Hidden option for decoders to avoid building the decoding graph.
     };
 
     DecodingGraph(Mode m=Mode::NORMAL)
@@ -133,30 +137,28 @@ to_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGraph::Mode:
 
 #define __ColoredDecodingGraphParent    Graph<decoding::colored_vertex_t, decoding::colored_edge_t>
 
-class ColoredDecodingGraph : {
-public:
-    ColoredDecodingGraph()
-        :Graph(),
-        restricted_color_map(),
-        restricted_graphs(),
-        number_of_restricted_lattices(3)
-    {
-        restricted_graphs.fill(DecodingGraph());
+typedef std::tuple<decoding::colored_vertex_t*,
+                    decoding::colored_vertex_t*,
+                    decoding::colored_vertex_t*> face_t;
+face_t
+make_face(decoding::colored_vertex_t*, decoding::colored_vertex_t*, decoding::colored_vertex*);
 
-        uint restricted_lattices = C;
-        restricted_color_map["rg"] = 0;
-        restricted_color_map["gr"] = 0;
-        restricted_color_map["rb"] = 1;
-        restricted_color_map["br"] = 1;
-        restricted_color_map["gb"] = 1;
-        restricted_color_map["bg"] = 1;
-    }
+inline std::string int_to_color(int x) {
+    return "rgb"[x];
+}
+
+class ColoredDecodingGraph : __ColoredDecodingGraphParent {
+public:
+    ColoredDecodingGraph(DecodingGraph::Mode mode=DecodingGraph::Mode::NORMAL);
 
     bool    add_vertex(decoding::colored_vertex_t*) override;
     bool    add_edge(decoding::colored_edge_t*) override;
 
     void    delete_vertex(decoding::colored_vertex_t*) override;
     void    delete_edge(decoding::colored_edge_t*) override;
+
+    std::set<face_t>    get_all_incident_faces(decoding::colored_vertex_t*);
+    stim::simd_bits     get_correction_for_face(face_t);
 
     DecodingGraph& operator[](const std::string& cc) const {
         return restricted_graphs.at(restricted_color_map.at(cc));
