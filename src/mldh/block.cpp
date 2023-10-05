@@ -18,10 +18,14 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
     // If the HW is below a given threshold, then there is
     // no reason to spend time computing the blocks. Decode
     // the syndrome directly.
-    if (orig_hw <= config.blocking_threshold) {
+    if (config.auto_to_global_decoder || orig_hw <= config.blocking_threshold) {
         // Update statistics.
         auto res = base_decoder->decode_error(syndrome);
         write_timing_data(res.exec_time);
+
+        if (orig_hw > 0) {
+            update_use_statistics(1, 0);
+        }
         return res;
     }
     std::vector<blossom_edge_t> blossom_edges;
@@ -35,6 +39,8 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
 
     fp_t max_dec_time = 0.0;
     uint max_blk_hw = 0;
+
+    uint lu = 0, gu = 0;
     for (const auto& blk : blocks) {
         syndrome_t bs(det+obs);
         bs.clear();
@@ -51,12 +57,17 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
         const uint hw = blk.size();
         update_hw_statistics(hw);
 
+        lu += (hw <= config.blocking_threshold);
+        gu += (hw > config.blocking_threshold);
+
         max_blk_hw = hw > max_blk_hw ? hw : max_blk_hw;
     }
     // Update statistics.
+    update_use_statistics(lu, gu);
     update_blk_ratio_statistics(max_blk_hw, orig_hw);
-    total_number_of_blocks += blocks.size();
-    shots_above_th++;
+
+    total_blocks += blocks.size();
+    total_shots_above_blk_th++;
 
     fp_t t = max_dec_time;
 
@@ -73,11 +84,21 @@ BlockDecoder::decode_error(const syndrome_t& syndrome) {
 }
 
 void
+BlockDecoder::update_use_statistics(uint lu, uint gu) {
+    total_local_uses += lu;
+    total_local_uses_sqr += lu*lu;
+    total_global_uses += gu;
+    total_global_uses_sqr += gu*gu;
+
+    max_local_uses = lu > max_local_uses ? lu : max_local_uses;
+    max_global_uses = gu > max_global_uses ? gu : max_global_uses;
+}
+
+void
 BlockDecoder::update_hw_statistics(uint hw) {
     total_hw_in_block += hw;
     total_hw_sqr_in_block += hw*hw;
     max_hw_in_block = hw > max_hw_in_block ? hw : max_hw_in_block;
-    total_blk_hw_above_th += (hw > config.blocking_threshold);
 }
 
 void
@@ -361,19 +382,12 @@ BlockDecoder::compute_block_from(uint d, std::vector<uint> detectors) {
         p_min_at_next_min_len = p_min_at_min_len;
     }
     uint best_blk = block_dim-1;
-    /*
     if (config.allow_adaptive_blocks) {
         best_blk = 0;
         for (uint i = 0; i < block_dim; i++) {
             fp_t x = len_prob_sum[i] / (p_base);
             if (x > 1e-5*p_min_at_next_min_len / p_min_at_min_len)   best_blk = i;
         }
-    }
-    */
-    if (p_min_at_next_min_len > p_min_at_min_len) {
-        std::cout << "Unexpected: p_mins: " << p_min_at_min_len
-                    << ", " << p_min_at_next_min_len << ", lens: "
-                    << min_len << ", " << next_min_len << "\n";
     }
     /*
     if (min_len < std::numeric_limits<uint>::max()) {

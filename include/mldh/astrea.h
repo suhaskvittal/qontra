@@ -28,13 +28,15 @@ public:
         auto res = global_decoder.decode_error(syndrome);
         std::vector<uint> detectors = get_nonzero_detectors(syndrome);
         const uint hw = detectors.size();
+
+        const uint lat = ((K-6)/2 + 1)*4;
         
         fp_t t;
         if (hw <= 2)        t = 0;
-        else if (hw <= K)   t = 4;
-        else if (hw <= K+2) t = 4;  // Can be parallelized.
-        else if (hw <= K+4) t = (K+3)*4;
-        else if (hw <= K+6) t = ((K+5)*(K+3))*4;
+        else if (hw <= K)   t = lat;
+        else if (hw <= K+2) t = lat;  // Can be parallelized.
+        else if (hw <= K+4) t = (K+3)*lat;
+        else if (hw <= K+6) t = ((K+5)*(K+3))*lat;
         else                t = res.exec_time;
 
         return (Decoder::result_t) {

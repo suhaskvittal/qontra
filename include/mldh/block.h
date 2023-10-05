@@ -48,15 +48,19 @@ public:
         total_ratio_mbhw_thw = 0;
         total_ratio_mbhw_thw_sqr = 0;
         total_ratio_mbhw_thw_max = 0;
+        total_shots_above_blk_th = 0;
 
         total_hw_in_block = 0;
         total_hw_sqr_in_block = 0;
         max_hw_in_block = 0;
+        total_blocks = 0;
 
-        total_blk_hw_above_th = 0;
-        total_number_of_blocks = 0;
-
-        shots_above_th = 0;
+        total_local_uses = 0;
+        total_global_uses = 0;
+        total_local_uses_sqr = 0;
+        total_global_uses_sqr = 0;
+        max_local_uses = 0;
+        max_global_uses = 0;
     }
 
 
@@ -64,21 +68,30 @@ public:
     fp_t total_ratio_mbhw_thw=0.0;  // mbhw_thw --> max block hamming weight to total hamming weight.
     fp_t total_ratio_mbhw_thw_sqr=0.0;
     fp_t total_ratio_mbhw_thw_max=0.0;
+    uint64_t    total_shots_above_blk_th=0;
 
     uint64_t    total_hw_in_block=0;
     uint64_t    total_hw_sqr_in_block=0;
     uint64_t    max_hw_in_block=0;
+    uint64_t    total_blocks=0;
 
-    uint64_t    total_blk_hw_above_th=0;
-    uint64_t    total_number_of_blocks=0;
+    uint64_t    total_local_uses=0;
+    uint64_t    total_global_uses=0;
+    uint64_t    total_local_uses_sqr=0;
+    uint64_t    total_global_uses_sqr=0;
+    uint64_t    max_local_uses=0;
+    uint64_t    max_global_uses=0;
 
-    uint64_t    shots_above_th=0;
 
     // Configuration:
     struct {
+        bool    auto_to_global_decoder = false;
+
         uint    blocking_threshold = 14;
         uint    cutting_threshold = 24;
-        bool    allow_adaptive_blocks = true;
+        bool    allow_adaptive_blocks = false;
+
+        fp_t    global_decoder_io_delay = 500;
 
         struct {
             bool            record_data = false;
@@ -96,6 +109,7 @@ public:
 private:
     typedef std::tuple<int, int, fp_t> blossom_edge_t;
 
+    void update_use_statistics(uint, uint);
     void update_hw_statistics(uint hw);
     void update_blk_ratio_statistics(uint max_blk_hw, uint total_hw);
 

@@ -90,6 +90,7 @@ int main(int argc, char* argv[]) {
     if (pp.option_set("pym"))   base_dec = &pymatching;
 
     BlockDecoder dec(circuit, base_dec, blk);
+    if (pp.option_set("pym"))   dec.config.auto_to_global_decoder = true;
 
     // Add output streams to collect timing data if necessary.
     if (record_timing_data) {
@@ -144,15 +145,19 @@ int main(int argc, char* argv[]) {
     fp_t total_ratio_mbhw_thw;
     fp_t total_ratio_mbhw_thw_sqr;
     fp_t total_ratio_mbhw_thw_max;
+    uint64_t total_shots_above_blk_th;
 
     uint64_t total_hw_in_block;
     uint64_t total_hw_sqr_in_block;
     uint64_t max_hw_in_block;
+    uint64_t total_blocks;
 
-    uint64_t total_blk_hw_above_th;
-    uint64_t total_number_of_blocks;
-
-    uint64_t shots_above_th;
+    uint64_t total_local_uses;
+    uint64_t total_global_uses;
+    uint64_t total_local_uses_sqr;
+    uint64_t total_global_uses_sqr;
+    uint64_t max_local_uses;
+    uint64_t max_global_uses;
 
     MPI_Reduce(&dec.total_ratio_mbhw_thw, &total_ratio_mbhw_thw, 1,
             MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -160,6 +165,8 @@ int main(int argc, char* argv[]) {
             MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&dec.total_ratio_mbhw_thw_max, &total_ratio_mbhw_thw_max, 1,
             MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.total_shots_above_blk_th, &total_shots_above_blk_th, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
     MPI_Reduce(&dec.total_hw_in_block, &total_hw_in_block, 1,
             MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -167,28 +174,36 @@ int main(int argc, char* argv[]) {
             MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&dec.max_hw_in_block, &max_hw_in_block, 1,
             MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
-
-    MPI_Reduce(&dec.total_number_of_blocks, &total_number_of_blocks, 1,
-            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&dec.total_blk_hw_above_th, &total_blk_hw_above_th, 1,
+    MPI_Reduce(&dec.total_blocks, &total_blocks, 1,
             MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    MPI_Reduce(&dec.shots_above_th, &shots_above_th, 1,
+    MPI_Reduce(&dec.total_local_uses, &total_local_uses, 1,
             MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.total_global_uses, &total_global_uses, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.total_local_uses_sqr, &total_local_uses_sqr, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.total_global_uses_sqr, &total_global_uses_sqr, 1,
+            MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.max_local_uses, &max_local_uses, 1,
+            MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&dec.max_global_uses, &max_global_uses, 1,
+            MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
 
     if (world_rank == 0) {
-        fp_t mean_ratio_mbhw_thw = BMEM_MEAN(total_ratio_mbhw_thw, shots_above_th);
+        fp_t mean_ratio_mbhw_thw = BMEM_MEAN(total_ratio_mbhw_thw, total_shots_above_blk_th);
         fp_t std_ratio_mbhw_thw = BMEM_STD(total_ratio_mbhw_thw,
                                         total_ratio_mbhw_thw_sqr,
-                                        shots_above_th);
+                                        total_shots_above_blk_th);
 
-        fp_t mean_blkhw = BMEM_MEAN(total_hw_in_block, total_number_of_blocks);
+        fp_t mean_blkhw = BMEM_MEAN(total_hw_in_block, total_blocks);
         fp_t std_blkhw = BMEM_STD(total_hw_in_block,
                                     total_hw_sqr_in_block,
-                                    total_number_of_blocks);
-
-        fp_t prob_blkhw_gtth = BMEM_MEAN(total_blk_hw_above_th, total_number_of_blocks);
-        fp_t freq_blocks_used = BMEM_MEAN(shots_above_th, shots);
+                                    total_blocks);
+        fp_t mean_local_uses = BMEM_MEAN(total_local_uses, shots);
+        fp_t mean_global_uses = BMEM_MEAN(total_global_uses, shots);
+        fp_t std_local_uses = BMEM_STD(total_local_uses, total_local_uses_sqr, shots);
+        fp_t std_global_uses = BMEM_STD(total_global_uses, total_global_uses_sqr, shots);
 
         if (write_header) {
             // Write the header.
@@ -210,8 +225,12 @@ int main(int argc, char* argv[]) {
                     << "Block Hamming Weight Mean,"
                     << "Block Hamming Weight Std,"
                     << "Block Hamming Weight Max,"
-                    << "Prob Block Hamming Weight GT " << dec.config.blocking_threshold << ","
-                    << "Shots With Total HW GT " << dec.config.blocking_threshold << "\n";
+                    << "Mean Local Decoder Accesses Per Syndrome,"
+                    << "Std Local Decoder Accesses Per Syndrome,"
+                    << "Max Local Decoder Accesses Per Syndrome,"
+                    << "Mean Global Decoder Accesses Per Syndrome,"
+                    << "Std Global Decoder Accesses Per Syndrome,"
+                    << "Max Global Decoder Accesses Per Syndrome\n";
         }
         out << d << ","
             << r << ","
@@ -231,8 +250,12 @@ int main(int argc, char* argv[]) {
             << mean_blkhw << ","
             << std_blkhw << ","
             << max_hw_in_block << ","
-            << prob_blkhw_gtth << ","
-            << freq_blocks_used << "\n";
+            << mean_local_uses << ","
+            << std_local_uses << ","
+            << max_local_uses << ","
+            << mean_global_uses << ","
+            << std_global_uses << ","
+            << max_global_uses << "\n";
     }
     
     if (dec.config.syndrome_io.record_data) {
