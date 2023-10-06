@@ -50,6 +50,11 @@ set(QONTRA_FILES
     src/sim/state_sim.cpp
     )
 
+# Compatability
+if (APPLE)
+    set(CMAKE_CXX_FLAGS "-no-pie")
+endif()
+
 # Below are the remaining Qontra "extensions". The reason of I have
 # not kept them with QONTRA_FILES is because not all systems
 # are able to support them.
@@ -71,7 +76,7 @@ endif()
 add_library(qontra ${QONTRA_FILES})
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-    target_compile_options(qontra PUBLIC -O3 -fno-strict-aliasing)
+    target_compile_options(qontra PUBLIC -O3 -fno-strict-aliasing -lstdc++)
 else()
     target_compile_options(qontra PUBLIC -ggdb3 -fno-strict-aliasing)
 endif()
@@ -99,9 +104,11 @@ add_subdirectory(blossom5)
 
 add_executable(asm_analyzer src/main/asm_analyzer.cpp)
 add_executable(converter src/main/converter.cpp)
+add_executable(memory src/main/memory.cpp)
 
 target_link_libraries(asm_analyzer PRIVATE qontra)
 target_link_libraries(converter PRIVATE qontra)
+target_link_libraries(memory PRIVATE qontra)
 
 if (COMPILE_TESTS)
     message("Will compile TEST executables.")
@@ -113,36 +120,4 @@ if (COMPILE_TESTS)
     target_link_libraries(clifford_sim_test PRIVATE qontra)
     target_link_libraries(cytnx_contract_test PRIVATE qontra)
     target_link_libraries(tensor_sim_test PRIVATE qontra)
-endif()
-
-if (COMPILE_STM)
-    message("Will compile STM executables.")
-
-    add_executable(stm_bv src/main/personal/stm/bv.cpp ${ASM_FILES})
-
-    target_link_libraries(stm_bv PRIVATE qontra)
-endif()
-
-if (COMPILE_MLDH)
-    message("Will compile MLDH executables.")
-
-    set(MLDH_FILES
-        # Decoders
-        src/mldh/block.cpp
-        src/mldh/latency_sim.cpp)
-
-    add_executable(mldh_memory src/main/personal/mldh/memory.cpp ${ASM_FILES})
-    add_executable(mldh_wmemory src/main/personal/mldh/wmemory.cpp ${ASM_FILES})
-    add_executable(mldh_bmemory src/main/personal/mldh/bmemory.cpp ${ASM_FILES} ${MLDH_FILES})
-
-    add_executable(mldh_timing src/main/personal/mldh/timing.cpp ${MLDH_FILES})
-
-    target_link_libraries(mldh_memory PRIVATE qontra)
-    target_link_libraries(mldh_wmemory PRIVATE qontra)
-    target_link_libraries(mldh_bmemory PRIVATE qontra)
-    target_link_libraries(mldh_timing PRIVATE qontra)
-
-    add_subdirectory(pymatching)
-
-    target_link_libraries(mldh_bmemory PRIVATE libpym)
 endif()
