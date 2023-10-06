@@ -27,14 +27,14 @@ execute_gate(const Instruction& inst, stim::simd_bit_table& x_table, stim::simd_
         }
     } else if (inst.name == "cmpx") {
         for (uint q = 0; q < x_table.num_major_bits_padded(); q++) {
-            if (std::find(qubits.begin(), qubits.end(), q) == qubits.end()) {
+            if (!qubits.empty() && std::find(qubits.begin(), qubits.end(), q) == qubits.end()) {
                 x_table[q].clear();
             }
         }
         z_table.clear();
     } else if (inst.name == "cmpz") {
         for (uint q = 0; q < z_table.num_major_bits_padded(); q++) {
-            if (std::find(qubits.begin(), qubits.end(), q) == qubits.end()) {
+            if (!qubits.empty() && std::find(qubits.begin(), qubits.end(), q) == qubits.end()) {
                 z_table[q].clear();
             }
         }

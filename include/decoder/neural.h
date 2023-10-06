@@ -16,7 +16,7 @@ namespace qontra {
 class NeuralDecoder : public Decoder {
 public:
     NeuralDecoder(const stim::Circuit& circ)
-        :Decoder(circ, graph::DecodingGraph::Mode::LOW_MEMORY),
+        :Decoder(circ, graph::DecodingGraph::Mode::DO_NOT_BUILD),
         training_circuit(circ)
     {}
 
@@ -28,6 +28,10 @@ public:
     mlpack::FFN<mlpack::MeanSquaredError> model;
 
     stim::Circuit training_circuit;
+
+    struct {
+        int max_epochs = 100;
+    } config;
 };
 
 }   // qontra

@@ -41,10 +41,6 @@ int main(int argc, char* argv[]) {
     // Define error model.
     tables::ErrorAndTiming et;
     et = et * (p * 1000);
-    et.e_g1q = 0.0;
-    et.e_g2q = 0.0;
-    et.e_m1w0 = 0.0;
-    et.e_m0w1 = 0.0;
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
@@ -52,7 +48,6 @@ int main(int argc, char* argv[]) {
     // Define Decoder.
     using namespace mlpack;
     stim::Circuit error_model = schedule_to_stim(sch, errors, timing);
-    /*
     NeuralDecoder dec(error_model);
     dec.model.Add<Linear>(256);
     dec.model.Add<TanH>();
@@ -60,9 +55,11 @@ int main(int argc, char* argv[]) {
     dec.model.Add<TanH>();
     dec.model.Add<Linear>(1);
     dec.model.Add<TanH>();
-    dec.train(100'000);
-    */
+    dec.config.max_epochs = 25;
+    dec.train(10*shots);
+    /*
     MWPMDecoder dec(error_model);
+    */
 
     // Setup experiment.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
