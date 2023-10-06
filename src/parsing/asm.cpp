@@ -66,9 +66,10 @@ asm_add_instruction(struct __asm_inst_t inst_data) {
     inst.name = std::string(inst_data.name);
 
     if (std::find(ISA.begin(), ISA.end(), inst.name) == ISA.end()) {
+        std::cout << "(asm) could not find instruction " << inst.name << "\n";
         inst.name = "nop";
     }
-    if (ONLY_HAS_QUBIT_OPERANDS.count(inst.name)) {
+    if (IS_QUANTUM.count(inst.name) || IS_QUANTUM_LIKE.count(inst.name)) {
         // We can assume all operands are integers.
         for (uint i = 0; i < inst_data.size; i++) {
             inst.operands.qubits.push_back(inst_data.operands[i].integer);

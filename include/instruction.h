@@ -41,16 +41,25 @@ const std::vector<std::string> ISA{
     "event",    // event   eventno, m1, m2, m3, ...
     "obs",      // obs     obsno, m1, m2, ...
     "any",      // any     obsno, m1, m2, ...
-    "xorfr"     // xorfr   obsno, frno
+    "xorfr",    // xorfr   obsno, frno
+    // Simulation Instructions
+    //
+    // Such instructions depend on the simulation being performed.
+    // For instance, error enumeration instructions are only used by
+    // the error enumerator, but will be treated as NOPs in the a control
+    // simulation.
+    // 
+    // For the error enumerator:
+    "cmpx",     // cmpx q1, q2, q3, ... (this is usually an X observable)
+    "cmpz",     // cmpz q1, q2, q3, ...
 };
 
-const std::set<std::string> IS_QUANTUM_INSTRUCTION {
+const std::set<std::string> IS_QUANTUM {
     "h", "x", "z", "cx", "rz", "s", "sdg", "t", "tdg", "measure", "reset"
 };
 
-// These operations only have qubits in its operand list.
-const std::set<std::string> ONLY_HAS_QUBIT_OPERANDS {
-    "h", "x", "z", "cx", "rz", "s", "sdg", "t", "tdg", "measure", "reset"
+const std::set<std::string> IS_QUANTUM_LIKE {
+    "cmpx", "cmpz"
 };
 
 // These operations have both angles and qubits in the

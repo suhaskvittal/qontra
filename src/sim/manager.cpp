@@ -136,7 +136,7 @@ SimManager::simulate_batch(uint64_t shots) {
             const std::vector<fp_t>& angles = inst.operands.angles;
             // Here, we will have a collection of variables that
             // are conditionally set based on the instruction.
-            bool is_quantum_inst = ONLY_HAS_QUBIT_OPERANDS.count(inst.name);
+            bool is_quantum_inst = IS_QUANTUM.count(inst.name);
 
             // Execute instructions.
             if (is_quantum_inst)    sim->snapshot();
@@ -261,7 +261,7 @@ SimManager::simulate_batch(uint64_t shots) {
 
 fp_t
 SimManager::get_operation_latency(Instruction inst) {
-    if (!IS_QUANTUM_INSTRUCTION.count(inst.name))   return 0.0;
+    if (!IS_QUANTUM.count(inst.name))   return 0.0;
 
     if (inst.annotations.count(ANNOT_NO_TICK))    return 0.0;
 
