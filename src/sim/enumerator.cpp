@@ -157,10 +157,10 @@ write_recorded_errors_to(std::ostream& out, const std::vector<error_record_t>& r
         error_str_map[error::y] = "y";
         error_str_map[error::z] = "z";
         // Write error and its outcomes to the ostream.
-        out << "[ pc = " << std::hex << inst_no << std::dec << " ] instruction:";
+        out << "[ pc = " << std::hex << inst_no << std::dec << " ] instruction: " << inst.name;
         for (uint r : inst.operands.qubits) {
-            if (r == q) out << ", " << q;
-            else        out << ", _";
+            if (r == q) out << " " << q;
+            else        out << " _";
         }
         out << "\n\t" << error_str_map[e] << q << "\t";
         for (auto& qe : error_list) {

@@ -1,0 +1,192 @@
+---------------------------------------
+Begin Slurm Prolog: Sep-02-2023 08:44:44
+Job ID:    2998428
+User ID:   svittal8
+Account:   gts-mqureshi4-rg
+Job name:  compile_mldh
+Partition: cpu-small
+QOS:       inferno
+---------------------------------------
+
+Lmod is automatically replacing "mvapich2/2.3.6-ouywal" with "openmpi/4.1.4".
+
+-- The C compiler identification is GNU 10.3.0
+-- The CXX compiler identification is GNU 10.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/local/pace-apps/spack/packages/linux-rhel7-x86_64/gcc-4.8.5/gcc-10.3.0-o57x6h2gubo7bzh7evmy4mvibdqrlghr/bin/gcc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/local/pace-apps/spack/packages/linux-rhel7-x86_64/gcc-4.8.5/gcc-10.3.0-o57x6h2gubo7bzh7evmy4mvibdqrlghr/bin/g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found FLEX: /usr/bin/flex (found version "2.5.37") 
+-- Found BISON: /usr/bin/bison (found version "3.0.4") 
+-- Found MPI_C: /lib64/libxpmem.so (found version "3.1") 
+-- Found MPI_CXX: /lib64/libxpmem.so (found version "3.1") 
+-- Found MPI: TRUE (found version "3.1")  
+Will compile MLDH executables.
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /storage/home/hcoda1/8/svittal8/p-mqureshi4-0/qontra/build
+[  0%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/PMduals.cpp.o
+[  2%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/PMexpand.cpp.o
+[  4%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/PMmain.cpp.o
+[  4%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/PMrepair.cpp.o
+[  4%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/PMinterface.cpp.o
+[  6%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/arg_parse.cc.o
+[  6%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/PMshrink.cpp.o
+[  6%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/PMinit.cpp.o
+[  6%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/circuit.cc.o
+[  7%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/MinCost/MinCost.cpp.o
+[  8%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data.cc.o
+[  9%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_annotations.cc.o
+[ 10%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_blocks.cc.o
+[ 11%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_collapsing.cc.o
+[ 11%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_controlled.cc.o
+[ 12%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/GEOM/GPMinit.cpp.o
+[ 13%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_hada.cc.o
+[ 13%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/GEOM/GPMinterface.cpp.o
+[ 15%] Building CXX object blossom5/CMakeFiles/libblossom5.dir/GEOM/GPMkdtree.cpp.o
+[ 15%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_pauli.cc.o
+[ 16%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_noisy.cc.o
+[ 16%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_period_3.cc.o
+[ 17%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_period_4.cc.o
+[ 18%] Linking CXX static library libblossom5.a
+[ 19%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_pp.cc.o
+[ 20%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_data_swaps.cc.o
+[ 20%] Built target libblossom5
+[ 21%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/circuit/gate_target.cc.o
+[ 21%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/dem/detector_error_model.cc.o
+[ 22%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/help.cc.o
+[ 23%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/gen/circuit_gen_main.cc.o
+[ 24%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/gen/circuit_gen_params.cc.o
+[ 24%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/gen/gen_color_code.cc.o
+[ 25%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/gen/gen_rep_code.cc.o
+[ 26%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/gen/gen_surface_code.cc.o
+[ 27%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/io/measure_record_batch.cc.o
+/storage/home/hcoda1/8/svittal8/p-mqureshi4-0/qontra/stim/src/stim/gen/gen_surface_code.cc: In function 'stim::GeneratedCircuit _finish_surface_code_circuit(std::function<unsigned int(surface_coord)>, const std::set<surface_coord>&, const std::set<surface_coord>&, const std::set<surface_coord>&, const stim::CircuitGenParameters&, const std::vector<surface_coord>&, const std::vector<surface_coord>&, std::vector<surface_coord>, std::vector<surface_coord>, bool)':
+/storage/home/hcoda1/8/svittal8/p-mqureshi4-0/qontra/stim/src/stim/gen/gen_surface_code.cc:179:55: warning: narrowing conversion of '((((long unsigned int)(k + 1)) + m) | ((long unsigned int)((unsigned int)stim::TARGET_RECORD_BIT)))' from 'long unsigned int' to 'unsigned int' [-Wnarrowing]
+  179 |             {(k + 1) | TARGET_RECORD_BIT, (k + 1 + m) | TARGET_RECORD_BIT}, {m_coord.x, m_coord.y, 0});
+      |                                           ~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/storage/home/hcoda1/8/svittal8/p-mqureshi4-0/qontra/stim/src/stim/gen/gen_surface_code.cc:179:55: warning: narrowing conversion of '((((long unsigned int)(k + 1)) + m) | ((long unsigned int)((unsigned int)stim::TARGET_RECORD_BIT)))' from 'long unsigned int' to 'unsigned int' [-Wnarrowing]
+/storage/home/hcoda1/8/svittal8/p-mqureshi4-0/qontra/stim/src/stim/gen/gen_surface_code.cc:211:22: warning: variable 'q' set but not used [-Wunused-but-set-variable]
+  211 |                 auto q = chosen_basis_observable[i];
+      |                      ^
+/storage/home/hcoda1/8/svittal8/p-mqureshi4-0/qontra/stim/src/stim/gen/gen_surface_code.cc:51:17: warning: unused variable 'chosen_basis_measure_coords' [-Wunused-variable]
+   51 |     const auto &chosen_basis_measure_coords = is_memory_x ? x_measure_coords : z_measure_coords;
+      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+[ 28%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/io/measure_record_batch_writer.cc.o
+[ 28%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/io/measure_record.cc.o
+[ 29%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/io/measure_record_reader.cc.o
+[ 30%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/io/measure_record_writer.cc.o
+[ 31%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/io/raii_file.cc.o
+[ 32%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/io/stim_data_formats.cc.o
+[ 32%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/io/sparse_shot.cc.o
+[ 33%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/main_namespaced.cc.o
+[ 34%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/mem/bit_ref.cc.o
+[ 35%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/mem/simd_bit_table.cc.o
+[ 35%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/mem/simd_bits.cc.o
+[ 36%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/mem/simd_bits_range_ref.cc.o
+[ 37%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/mem/simd_compat.cc.o
+[ 38%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/mem/simd_util.cc.o
+[ 39%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/mem/sparse_xor_vec.cc.o
+[ 39%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/probability_util.cc.o
+[ 40%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/graphlike/algo.cc.o
+[ 41%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/graphlike/edge.cc.o
+[ 41%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/graphlike/node.cc.o
+[ 42%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/graphlike/graph.cc.o
+[ 43%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/graphlike/search_state.cc.o
+[ 44%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/hyper/algo.cc.o
+[ 45%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/hyper/edge.cc.o
+[ 46%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/hyper/graph.cc.o
+[ 46%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/hyper/node.cc.o
+[ 47%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/search/hyper/search_state.cc.o
+[ 48%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/simulators/dem_sampler.cc.o
+[ 49%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/simulators/detection_simulator.cc.o
+[ 49%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/simulators/error_analyzer.cc.o
+[ 50%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/simulators/error_matcher.cc.o
+[ 51%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/simulators/frame_simulator.cc.o
+[ 52%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/simulators/matched_error.cc.o
+[ 53%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/simulators/measurements_to_detection_events.cc.o
+[ 53%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/simulators/tableau_simulator.cc.o
+[ 54%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/simulators/vector_simulator.cc.o
+[ 55%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/stabilizers/conversions.cc.o
+[ 56%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/stabilizers/pauli_string.cc.o
+[ 57%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/stabilizers/pauli_string_ref.cc.o
+[ 57%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/stabilizers/tableau.cc.o
+[ 58%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/stabilizers/tableau_iter.cc.o
+[ 59%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/stabilizers/tableau_specialized_prepend.cc.o
+[ 60%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim/stabilizers/tableau_transposed_raii.cc.o
+[ 60%] Building CXX object stim/CMakeFiles/libstim.dir/src/stim.cc.o
+[ 61%] Linking CXX static library out/libstim.a
+[ 61%] Built target libstim
+[ 62%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/flooder/graph.cc.o
+[ 64%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/flooder/detector_node.cc.o
+[ 65%] Building CXX object CMakeFiles/qontra.dir/src/decoder/mwpm.cpp.o
+[ 66%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/flooder_matcher_interop/compressed_edge.cc.o
+[ 68%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/driver/io.cc.o
+[ 68%] Building CXX object CMakeFiles/qontra.dir/src/instruction.cpp.o
+[ 68%] Building CXX object CMakeFiles/qontra.dir/src/experiments.cpp.o
+[ 68%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/driver/mwpm_decoding.cc.o
+[ 68%] Building CXX object CMakeFiles/qontra.dir/src/decoder/window.cpp.o
+[ 69%] Building CXX object CMakeFiles/qontra.dir/src/parsing/cmd.cpp.o
+[ 70%] Building CXX object CMakeFiles/qontra.dir/src/parsing/asm.cpp.o
+[ 71%] Building C object CMakeFiles/qontra.dir/include/parsing/asm/parser.tab.c.o
+[ 72%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/flooder/graph_fill_region.cc.o
+[ 72%] Building C object CMakeFiles/qontra.dir/include/parsing/asm/lex.yy.c.o
+[ 73%] Building CXX object CMakeFiles/qontra.dir/src/graph/decoding_graph.cpp.o
+[ 74%] Building CXX object CMakeFiles/qontra.dir/src/graph/dependence_graph.cpp.o
+[ 75%] Building CXX object CMakeFiles/qontra.dir/src/graph/lattice_graph.cpp.o
+[ 75%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/flooder/match.cc.o
+[ 76%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/flooder/graph_flooder.cc.o
+[ 77%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/matcher/alternating_tree.cc.o
+[ 78%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/matcher/mwpm.cc.o
+[ 79%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/flooder_matcher_interop/region_edge.cc.o
+[ 79%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/flooder_matcher_interop/mwpm_event.cc.o
+[ 80%] Building CXX object CMakeFiles/qontra.dir/src/graph/tanner_graph.cpp.o
+[ 81%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/tracker/flood_check_event.cc.o
+[ 82%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/search/search_graph.cc.o
+[ 83%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/search/search_detector_node.cc.o
+[ 83%] Building CXX object CMakeFiles/qontra.dir/src/sim/clifford_sim.cpp.o
+[ 84%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/search/search_flooder.cc.o
+[ 85%] Building CXX object CMakeFiles/qontra.dir/src/sim/frame_sim.cpp.o
+[ 85%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/sparse_blossom/driver/user_graph.cc.o
+[ 86%] Building CXX object CMakeFiles/qontra.dir/src/sim/manager.cpp.o
+[ 87%] Building CXX object CMakeFiles/qontra.dir/src/sim/state_sim.cpp.o
+[ 88%] Building CXX object pymatching/CMakeFiles/libpym.dir/src/pymatching/rand/rand_gen.cc.o
+[ 89%] Linking CXX static library liblibpym.a
+[ 89%] Built target libpym
+[ 90%] Linking CXX static library libqontra.a
+[ 91%] Built target qontra
+[ 92%] Building CXX object CMakeFiles/asm_analyzer.dir/src/main/asm_analyzer.cpp.o
+[ 92%] Building CXX object CMakeFiles/mldh_memory.dir/src/main/personal/mldh/memory.cpp.o
+[ 92%] Building CXX object CMakeFiles/mldh_wmemory.dir/src/main/personal/mldh/wmemory.cpp.o
+[ 93%] Building CXX object CMakeFiles/converter.dir/src/main/converter.cpp.o
+[ 95%] Building CXX object CMakeFiles/mldh_bmemory.dir/src/mldh/block.cpp.o
+[ 95%] Building CXX object CMakeFiles/mldh_bmemory.dir/src/main/personal/mldh/bmemory.cpp.o
+[ 96%] Linking CXX executable asm_analyzer
+[ 96%] Built target asm_analyzer
+[ 97%] Linking CXX executable converter
+[ 97%] Built target converter
+[ 98%] Linking CXX executable mldh_memory
+[ 99%] Linking CXX executable mldh_wmemory
+[ 99%] Built target mldh_memory
+[ 99%] Built target mldh_wmemory
+[100%] Linking CXX executable mldh_bmemory
+[100%] Built target mldh_bmemory
+---------------------------------------
+Begin Slurm Epilog: Sep-02-2023 08:45:23
+Job ID:        2998428
+Array Job ID:  _4294967294
+User ID:       svittal8
+Account:       gts-mqureshi4-rg
+Job name:      compile_mldh
+Resources:     cpu=8,mem=2G,node=1
+Rsrc Used:     cput=00:05:12,vmem=573224K,walltime=00:00:39,mem=556988K,energy_used=0
+Partition:     cpu-small
+QOS:           inferno
+Nodes:         atl1-1-02-002-28-2
+---------------------------------------
