@@ -3,7 +3,7 @@
  *  date:   5 October 2023
  * */
 
-#include "enumerator.h"
+#include "sim/enumerator.h"
 
 namespace qontra {
 namespace enumerator {
@@ -12,14 +12,14 @@ bool G_RECORD_WEIGHT_ONE_ERRORS = false;
 
 void
 execute_gate(const Instruction& inst, stim::simd_bit_table& x_table, stim::simd_bit_table& z_table) {
-    const std::vector<uint> qubits(inst.operands.qubits);
+    std::vector<uint> qubits(inst.operands.qubits);
     // These are really the only two operations we care about.
     if (inst.name == "h") {
         for (uint q : qubits) {
             x_table[q].swap_with(z_table[q]);
         }
     } else if (inst.name == "cx") {
-        for (uint i = 0; i < qubits; i += 2) {
+        for (uint i = 0; i < qubits.size(); i += 2) {
             uint q0 = qubits[i], q1 = qubits[i+1];
 
             x_table[q1] ^= x_table[q0];
@@ -60,17 +60,19 @@ enumerate_errors(const schedule_t& prog) {
 
     uint64_t k = 0;
     for (uint i = 0; i < prog.size(); i++) {
+        Instruction inst = prog[i];
         if (inst.name != "h" && inst.name != "cx") {
             continue;
         }
-        for (uint ii = 0; ii < prog.operands.qubits; ii++) {
+        auto qubits = inst.operands.qubits;
+        for (uint ii = 0; ii < qubits.size(); ii++) {
             x_table.clear();
             z_table.clear();
             if ((k++) % world_size != world_rank) {
                 continue;
             }
-            uint q = prog.operands.qubits[ii];
-            inject_error(prog_operands.qubits[ii], x_table, z_table);
+            uint q = qubits[ii];
+            inject_error(qubits[ii], x_table, z_table);
             for (uint j = i+1; j < prog.size(); j++) {
                 execute_gate(prog[j], x_table, z_table);
             }
@@ -78,14 +80,14 @@ enumerate_errors(const schedule_t& prog) {
             auto x_tr = x_table.transposed();
             auto z_tr = z_table.transposed();
             for (uint j = 0; j < 3; j++) {
-                stim::simd_bits_range_ref xref = x_table[j];
-                stim::simd_bits_range_ref zref = z_table[j];
+                stim::simd_bits_range_ref x_ref = x_table[j];
+                stim::simd_bits_range_ref z_ref = z_table[j];
                 
                 if (((x_ref.popcnt() + G_RECORD_WEIGHT_ONE_ERRORS) > 1)
                     || (z_ref.popcnt() + G_RECORD_WEIGHT_ONE_ERRORS) > 1)
                 {
                     stim::simd_bits x_cpy(x_ref), z_cpy(z_ref);
-                    error_record_t rec = std::make_tuple(i, prog[i], q, error_list[j], x_cpy, z_cpy);
+                    error_record_t rec = std::make_tuple(i, inst, q, error_list[j], x_cpy, z_cpy);
                     record_list.push_back(rec);
                 }
             }
@@ -130,7 +132,7 @@ enumerate_errors(const schedule_t& prog) {
 }
 
 void
-write_recorded_errors_to(std::ofstream& out, const std::vector<error_record_t>& record_list) {
+write_recorded_errors_to(std::ostream& out, const std::vector<error_record_t>& record_list) {
     for (const error_record_t& rec : record_list) {
         uint64_t inst_no = std::get<0>(rec);
         Instruction inst = std::get<1>(rec);
@@ -142,7 +144,7 @@ write_recorded_errors_to(std::ofstream& out, const std::vector<error_record_t>& 
         typedef std::pair<uint, error> qubit_error_t;
         std::vector<qubit_error_t> error_list;
 
-        uint64_t n = x.qubits();   // Good enough approximation.
+        uint64_t n = x.num_bits_padded();   // Good enough approximation.
         // Cmopute the list of errors that have occurred due to this error.
         for (uint64_t i = 0; i < n; i++) {
             if (x[i] & z[i])    error_list.push_back(std::make_pair(i, error::y));

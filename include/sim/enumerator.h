@@ -47,7 +47,7 @@ std::vector<enumerator::error_record_t>
 enumerate_errors(const schedule_t& prog);
 
 void
-write_recorded_errors_to(std::ofstream&, const std::vector<enumerator::error_record_t>&);
+write_recorded_errors_to(std::ostream&, const std::vector<enumerator::error_record_t>&);
 
 }   // qontra
 
