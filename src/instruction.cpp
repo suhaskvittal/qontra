@@ -84,7 +84,7 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                 offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
             int64_t tag = 0;
-            if (inst.properties.count("color")) tag = inst.properties["color"].ival;
+            if (inst.properties.count("color")) tag = inst.properties.at("color").ival;
 
             circuit.append_op("DETECTOR", offsets, tag);
             continue;

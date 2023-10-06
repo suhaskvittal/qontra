@@ -8,7 +8,7 @@
 namespace qontra {
 namespace graph {
 
-typedef std::function<void(fp_t, std::vector<uint>, std::set<uint>)>
+typedef std::function<void(fp_t, std::vector<uint64_t>, std::set<uint>)>
     error_callback_t;
 typedef std::function<void(uint, std::array<fp_t, N_COORD>)>
     detector_callback_t;
@@ -213,16 +213,14 @@ make_face(colored_vertex_t* v1, colored_vertex_t* v2, colored_vertex_t* v3) {
     return std::make_tuple(vertices[0], vertices[1], vertices[2]);
 }
 
-ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode=DecodingGraph::Mode::NORMAL)
+ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
     :Graph(),
     restricted_color_map(),
-    restricted_graphs(),
-    number_of_restricted_lattices(3)
+    restricted_graphs()
 {
     restricted_graphs.fill(DecodingGraph(mode));
     for (auto& gr : restricted_graphs)  gr.dealloc_on_delete = false;
 
-    uint restricted_lattices = C;
     restricted_color_map["rg"] = 0;
     restricted_color_map["gr"] = 0;
     restricted_color_map["rb"] = 1;
@@ -370,7 +368,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
                 std::string r = restrictions[i];
                 if (r[0] == color[0] || r[1] == color[0]) {
                     // Then, this detector belongs to this restricted lattice.
-                    labeled_det sub_detector = std::make_pair(sub_detector_ctr[i]++, r);
+                    labeled_det_t sub_detector = std::make_pair(sub_detector_ctr[i]++, r);
                     sub_detector_map[sub_detector] = detector;
                     // Add this operation to the corresponding subcircuit as well.
                     subcircuits[i].append_operation(op);
@@ -448,7 +446,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
                     }
                 } else {
                     // Create new edge if it does not exist.
-                    e = new edge_t;
+                    e = new colored_edge_t;
                     e->src = (void*)v1;
                     e->dst = (void*)v2;
                     graph.add_edge(e);

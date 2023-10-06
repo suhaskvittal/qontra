@@ -115,7 +115,7 @@ private:
     poly_t  error_polynomial;
     fp_t    expected_errors;
 
-    const Mode mode;
+    Mode mode;
 };
 
 // This is standard method of building decoding graphs, where each error is assumed
@@ -141,13 +141,13 @@ typedef std::tuple<decoding::colored_vertex_t*,
                     decoding::colored_vertex_t*,
                     decoding::colored_vertex_t*> face_t;
 face_t
-make_face(decoding::colored_vertex_t*, decoding::colored_vertex_t*, decoding::colored_vertex*);
+make_face(decoding::colored_vertex_t*, decoding::colored_vertex_t*, decoding::colored_vertex_t*);
 
 inline std::string int_to_color(int x) {
-    return "rgb"[x];
+    return std::to_string("rgb"[x]);
 }
 
-class ColoredDecodingGraph : __ColoredDecodingGraphParent {
+class ColoredDecodingGraph : public __ColoredDecodingGraphParent {
 public:
     ColoredDecodingGraph(DecodingGraph::Mode mode=DecodingGraph::Mode::NORMAL);
 
@@ -160,16 +160,16 @@ public:
     std::set<face_t>    get_all_incident_faces(decoding::colored_vertex_t*);
     stim::simd_bits     get_correction_for_face(face_t);
 
-    DecodingGraph& operator[](const std::string& cc) const {
+    DecodingGraph& operator[](const std::string& cc) {
         return restricted_graphs.at(restricted_color_map.at(cc));
     }
 
-    DecodingGraph& operator[](const char* cc) const {
+    DecodingGraph& operator[](const char* cc) {
         return (*this)[std::string(cc)];
     }
 private:
-    std::map<std::string, int>  restricted_color_map;
-    std::array<DecodingGraph, 3>  restricted_graphs;
+    std::map<std::string, int>      restricted_color_map;
+    std::array<DecodingGraph, 3>    restricted_graphs;
 };
 
 ColoredDecodingGraph
