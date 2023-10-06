@@ -26,6 +26,7 @@ void    force_lowercase(char*, int);
 
 #.+?\n      { /* this is a comment */ }
 @annotation { return ANNOTATION; }
+@property   { return PROPERTY; }
 [0-9]+      { 
                 yylval.integer = (uint32_t) atoi(yytext); 
                 return INTEGER; 

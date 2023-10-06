@@ -13,17 +13,15 @@ void f_syntax_analysis(const schedule_t& prog) {
     uint64_t pc = 0;
     for (const auto& inst : prog) {
         std::cout << "(pc = " << pc << ") " << inst.str();
-        std::cout << "\t@[ ";
+        std::cout << "\tannotations = [ ";
         for (auto x : inst.annotations) {
-            if (x == Annotation::no_error) {
-                std::cout << "\"no errors\" ";
-            } else if (x == Annotation::inject_timing_error) {
-                std::cout << "\"inject timing errors\" ";
-            } else if (x == Annotation::round_start) {
-                std::cout << "\"round start\" ";
-            } else if (x == Annotation::flag) {
-                std::cout << "\"flag\" ";
-            }
+            std::cout << "\"" << x << "\" ";
+        }
+        std::cout << "]\n";
+        std::cout << "\tproperties = [ ";
+        for (auto pair : inst.properties) {
+            std::cout << "\"" << pair.first << "\"(i=" << pair.second.ival 
+                << ", f=" << pair.second.fval << ") ";
         }
         std::cout << "]\n";
         pc++;

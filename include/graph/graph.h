@@ -206,6 +206,20 @@ public:
         if (dealloc_on_delete)  delete e;
     }
 
+    std::vector<V_t*>
+    get_common_neighbors(V_t* v, V_t* w) {
+        auto v_adj = get_neighbors(v);
+        auto w_adj = get_neighbors(w);
+        for (auto it = v_adj.begin(); it != v_adj.end(); ) {
+            if (std::find(w_adj.begin(), w_adj.end(), *it) == w_adj.end()) {
+                it = v_adj.erase(it);
+            } else {
+                it++;
+            }
+        }
+        return v_adj;
+    }
+
     std::vector<V_t*>   get_vertices(void) { return vertices; }
     std::vector<E_t*>   get_edges(void) { return edges; }
     std::vector<V_t*>   get_neighbors(V_t* v) { return adjacency_lists[v]; }

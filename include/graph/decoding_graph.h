@@ -16,27 +16,34 @@
 #include <array>
 
 #include <math.h>
-
 namespace qontra {
 namespace graph {
 
 const uint BOUNDARY_INDEX = std::numeric_limits<uint>::max();
+
+const uint64_t RED_BOUNDARY_INDEX = (1L << 48) | BOUNDARY_INDEX;
+const uint64_t BLUE_BOUNDARY_INDEX = (1L << 49) | BOUNDARY_INDEX;
+const uint64_t GREEN_BOUNDARY_INDEX = (1L << 50) | BOUNDARY_INDEX;
 
 namespace decoding {
 
 #define N_COORD    16
 
 struct vertex_t : base::vertex_t {
-    enum class Color { none, red, blue, green, notred, notblue, notgreen };
-
     std::array<fp_t, N_COORD>    coords;
-    Color                   color;
 };
 
 struct edge_t : base::edge_t {
     fp_t            edge_weight;
     fp_t            error_probability;
     std::set<uint>  frames;
+};
+
+struct colored_vertex_t : vertex_t {
+    std::string color;
+};
+
+struct colored_edge_t : edge_t {
 };
 
 }   // decoding
@@ -47,7 +54,8 @@ class DecodingGraph : public __DecodingGraphParent {
 public:
     enum class Mode {
         NORMAL,     // No adjustments. Default option.
-        LOW_MEMORY  // Here, we will not generate the distance matrix.
+        LOW_MEMORY, // Here, we will not generate the distance matrix.
+        DO_NOT_BUILD,   // Hidden option for decoders to avoid building the decoding graph.
     };
 
     DecodingGraph(Mode m=Mode::NORMAL)
@@ -121,6 +129,51 @@ private:
 
 DecodingGraph
 to_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGraph::Mode::NORMAL);
+
+// Colored decoding graphs are a collection of decoding graphs, such that each decoding
+// graph restricts the decoding graph to two colors. Now, each detector in the graph corresponds
+// to detectors in multiple decoding graphs, and we must track such assignments alongside
+// other aspects such as adjacency.
+
+#define __ColoredDecodingGraphParent    Graph<decoding::colored_vertex_t, decoding::colored_edge_t>
+
+typedef std::tuple<decoding::colored_vertex_t*,
+                    decoding::colored_vertex_t*,
+                    decoding::colored_vertex_t*> face_t;
+face_t
+make_face(decoding::colored_vertex_t*, decoding::colored_vertex_t*, decoding::colored_vertex*);
+
+inline std::string int_to_color(int x) {
+    return "rgb"[x];
+}
+
+class ColoredDecodingGraph : __ColoredDecodingGraphParent {
+public:
+    ColoredDecodingGraph(DecodingGraph::Mode mode=DecodingGraph::Mode::NORMAL);
+
+    bool    add_vertex(decoding::colored_vertex_t*) override;
+    bool    add_edge(decoding::colored_edge_t*) override;
+
+    void    delete_vertex(decoding::colored_vertex_t*) override;
+    void    delete_edge(decoding::colored_edge_t*) override;
+
+    std::set<face_t>    get_all_incident_faces(decoding::colored_vertex_t*);
+    stim::simd_bits     get_correction_for_face(face_t);
+
+    DecodingGraph& operator[](const std::string& cc) const {
+        return restricted_graphs.at(restricted_color_map.at(cc));
+    }
+
+    DecodingGraph& operator[](const char* cc) const {
+        return (*this)[std::string(cc)];
+    }
+private:
+    std::map<std::string, int>  restricted_color_map;
+    std::array<DecodingGraph, 3>  restricted_graphs;
+};
+
+ColoredDecodingGraph
+to_colored_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGraph::Mode::NORMAL);
 
 }   // graph
 }   // qontra

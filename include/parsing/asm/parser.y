@@ -34,6 +34,8 @@ void        yyerror(char const*);
     double                  decimal;
     char*                   name;
     struct __asm_inst_t     instruction;
+
+    struct __asm_wildcard_data_t anydata;
 }
 
 %token ID
@@ -42,6 +44,7 @@ void        yyerror(char const*);
 %token ':'
 %token ';'
 %token ANNOTATION
+%token PROPERTY
 %token SEP
 %token EOL
 
@@ -51,6 +54,8 @@ void        yyerror(char const*);
 
 %type<instruction>  instruction
 %type<instruction>  operands
+
+%type<anydata> anyval
 
 %%
 
@@ -68,9 +73,16 @@ program:
 }
         | ANNOTATION ID program
 {
-    struct __asm_annotation_t annot = { $2 };
+    struct __asm_supplement_t annot = { $2 };
     asm_add_annotation(annot);
     free($2);
+}
+        | PROPERTY ID anyval program
+{
+    struct __asm_supplement_t prop = { $2 };
+    prop.integer = $3.integer;
+    prop.decimal = $3.decimal;
+    asm_add_property(prop);
 }
         | ID ':' program
 {
@@ -79,6 +91,23 @@ program:
 }
         | EOL program
 ;
+
+anyval:
+      /* empty */
+{
+    struct __asm_wildcard_data_t x = {0, 0};
+    $$ = x;
+}
+      | INTEGER anyval
+{
+    $$ = $2;
+    $$.integer = $1;
+}
+      | DECIMAL anyval
+{
+    $$ = $2;
+    $$.decimal = $1;
+}
 
 instruction:
            ID ';'

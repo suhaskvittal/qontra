@@ -106,20 +106,20 @@ asm_add_instruction(struct __asm_inst_t inst_data) {
 }
 
 void
-asm_add_annotation(struct __asm_annotation_t annot) {
+asm_add_annotation(struct __asm_supplement_t annot) {
     Instruction& inst = running_schedule.back();
     std::string annot_str(annot.name);
-    if (annot_str == "no_error") {
-        inst.annotations.insert(Annotation::no_error);
-    } else if (annot_str == "no_tick") {
-        inst.annotations.insert(Annotation::no_tick);
-    } else if (annot_str == "round_start") {
-        inst.annotations.insert(Annotation::round_start);
-    } else if (annot_str == "inject_timing_error") {
-        inst.annotations.insert(Annotation::inject_timing_error);
-    } else if (annot_str == "flag") {
-        inst.annotations.insert(Annotation::flag);
-    }
+    inst.annotations.insert(annot_str);
+}
+
+void
+asm_add_property(struct __asm_supplement_t prop) {
+    Instruction& inst = running_schedule.back();
+    std::string prop_str(prop.name);
+    inst.properties[prop_str] = {
+        prop.integer,
+        prop.decimal
+    };
 }
 
 int

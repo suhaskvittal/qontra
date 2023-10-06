@@ -47,9 +47,10 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         std::vector<uint> meas = inst.operands.measurements;
         std::vector<uint> obs = inst.operands.observables;
 
-        bool inject_op_error = !inst.annotations.count(Annotation::no_error);
-        bool inject_timing_error = inst.annotations.count(Annotation::inject_timing_error);
-        bool operation_takes_time = !inst.annotations.count(Annotation::no_tick);
+        bool inject_op_error = !inst.annotations.count(ANNOT_NO_ERROR);
+        bool inject_timing_error = inst.annotations.count(ANNOT_INJECT_TIMING_ERROR);
+        bool operation_takes_time = !inst.annotations.count(ANNOT_NO_TICK);
+
         bool is_2q_op = IS_2Q_OPERATOR.count(inst.name);
         if (inst.name == "measure") {
             // Add X error before.
@@ -82,7 +83,10 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             for (uint i = 0; i < meas.size(); i++) {
                 offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
-            circuit.append_op("DETECTOR", offsets);
+            int64_t tag = 0;
+            if (inst.properties.count("color")) tag = inst.properties["color"].ival;
+
+            circuit.append_op("DETECTOR", offsets, tag);
             continue;
         } else if (inst.name == "obs") {
             std::vector<uint> offsets;

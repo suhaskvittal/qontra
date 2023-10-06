@@ -33,8 +33,16 @@ struct __asm_inst_t {
 extern struct __asm_operand_t DEFAULT_OPERAND;
 extern struct __asm_inst_t DEFAULT_INST;
 
-struct __asm_annotation_t {
+struct __asm_supplement_t {
     char*   name;
+
+    int64_t integer;
+    double  decimal;
+};
+
+struct __asm_wildcard_data_t {
+    int64_t integer;
+    double  decimal;
 };
 
 struct __asm_inst_t asm_create_asm_inst_t(struct __asm_operand_t);
@@ -43,7 +51,8 @@ void                asm_extend_asm_inst_t(struct __asm_inst_t*, struct __asm_ope
 void        asm_reset_parser(void);
 
 void        asm_add_instruction(struct __asm_inst_t);
-void        asm_add_annotation(struct __asm_annotation_t);
+void        asm_add_annotation(struct __asm_supplement_t);
+void        asm_add_property(struct __asm_supplement_t);
 
 // During parsing, we will replace all label operands with an ID,
 // and go back later and replace them with their PC.
