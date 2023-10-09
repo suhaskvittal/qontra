@@ -15,7 +15,9 @@
 #include <algorithm>
 #include <array>
 
+#include <assert.h>
 #include <math.h>
+
 namespace qontra {
 namespace graph {
 
@@ -47,6 +49,16 @@ struct colored_edge_t : edge_t {
 };
 
 }   // decoding
+
+inline bool is_boundary(decoding::vertex_t* v) {
+    return v->id == BOUNDARY_INDEX;
+}
+
+inline bool is_colored_boundary(decoding::vertex_t* v) {
+    return v->id == RED_BOUNDARY_INDEX
+            || v->id == BLUE_BOUNDARY_INDEX
+            || v->id == GREEN_BOUNDARY_INDEX;
+}
 
 #define __DecodingGraphParent   Graph<decoding::vertex_t, decoding::edge_t>
 
@@ -144,7 +156,15 @@ face_t
 make_face(decoding::colored_vertex_t*, decoding::colored_vertex_t*, decoding::colored_vertex_t*);
 
 inline std::string int_to_color(int x) {
-    return std::to_string("rgb"[x]);
+    if (x == 0)         return "r";
+    else if (x == 1)    return "g";
+    else                return "b";
+}
+
+inline int color_to_int(std::string x) {
+    if (x == "r")       return 0;
+    else if (x == "g")  return 1;
+    else                return 2;
 }
 
 class ColoredDecodingGraph : public __ColoredDecodingGraphParent {
@@ -157,10 +177,26 @@ public:
     void    delete_vertex(decoding::colored_vertex_t*) override;
     void    delete_edge(decoding::colored_edge_t*) override;
 
-    std::set<face_t>    get_all_incident_faces(decoding::colored_vertex_t*);
-    stim::simd_bits     get_correction_for_face(face_t);
+    // The get_error_chain_data metadata only tells whether or not two vertices
+    // are matched through ANY boundary. For decoding, it is more important to
+    // know which boundaries were matched through and whether each vertex was
+    // matched to the same boundary or not. 
+    //
+    // The are_matched_through_boundary does all of this for a specific lattice.
+    // It takes in two vertices, the color of the lattice, and a pointer to two
+    // locations as to where to share the relevant boundary vertices if the
+    // function returns true.
+    bool    are_matched_through_boundary(
+                decoding::colored_vertex_t*, decoding::colored_vertex_t*, std::string lattice_color,
+                decoding::colored_vertex_t** b1_p, decoding::colored_vertex_t** b2_p);
+
+    std::set<face_t>
+        get_all_incident_faces(decoding::colored_vertex_t*);
+    std::set<decoding::colored_vertex_t*>
+        get_all_incident_vertices(const std::set<decoding::colored_edge_t*>&, std::string of_color);
 
     DecodingGraph& operator[](const std::string& cc) {
+        assert(restricted_color_map.count(cc));
         return restricted_graphs.at(restricted_color_map.at(cc));
     }
 

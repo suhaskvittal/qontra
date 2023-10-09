@@ -68,11 +68,9 @@ DecodingGraph::build_distance_matrix() {
                 frames = new_frames;
                 length++;
                 path.push_back(curr);
-                found_boundary |= (curr->id == BOUNDARY_INDEX);
+                found_boundary |= is_boundary(curr) || is_colored_boundary(curr);
                 curr = next;
             }
-            path.push_back(src);
-            found_boundary |= (src->id == BOUNDARY_INDEX);
         }
 failed:
         fp_t prob = pow(10, -weight);
@@ -325,8 +323,58 @@ ColoredDecodingGraph::delete_edge(colored_edge_t* e) {
     __ColoredDecodingGraphParent::delete_edge(e);
 }
 
+bool
+ColoredDecodingGraph::are_matched_through_boundary(
+        colored_vertex_t* v1, colored_vertex_t* v2, std::string r, colored_vertex_t** b1_p, colored_vertex_t** b2_p)
+{
+    typedef std::pair<colored_vertex_t*, colored_vertex_t*> cvp_t;
+    static std::map<std::pair<cvp_t, std::string>, cvp_t> memo; // We'll memoize any data to keep this
+                                        // fast for repeated requests.
+    auto error_data = (*this)[r].get_error_chain_data(v1, v2);
+    if (!error_data.error_chain_runs_through_boundary)  return false;
+
+    cvp_t v1_v2 = std::make_pair(v1, v2);
+    cvp_t v2_v1 = std::make_pair(v2, v1);
+
+    auto v1_v2_r = std::make_pair(v1_v2, r);
+    if (memo.count(v1_v2_r)) {
+        auto& boundaries = memo[v1_v2_r];
+        *b1_p = boundaries.first;
+        *b2_p = boundaries.second;
+        return true;
+    }
+    // Otherwise, we have to compute the two boundaries.
+    auto path = error_data.error_chain;
+    // Ignore both endpoints.
+    colored_vertex_t* b1 = nullptr;
+    colored_vertex_t* b2 = nullptr;
+    for (uint i = 1; i < path.size()-1; i++) {
+        auto w = (colored_vertex_t*)path[i];
+        if (is_colored_boundary(w)) {
+            if (b1 == nullptr) {
+                b1 = w;
+                b2 = w;
+            } else {
+                // Then, there are two different boundaries.
+                b2 = w;
+            }
+        }
+    }
+    auto v2_v1_r = std::make_pair(v2_v1, r);
+    memo[v1_v2_r] = std::make_pair(b1, b2);
+    memo[v2_v1_r] = std::make_pair(b2, b1);
+    
+    *b1_p = b1;
+    *b2_p = b2;
+    return true;
+}
+
 std::set<face_t>
 ColoredDecodingGraph::get_all_incident_faces(colored_vertex_t* v) {
+    // Memoize this function -- we will expect to access this quite frequently.
+    static std::map<colored_vertex_t*, std::set<face_t>> memo;
+    if (memo.count(v))  return memo[v];
+
     auto v_adj = get_neighbors(v);
     std::set<face_t> faces;
     for (auto w : v_adj) {
@@ -334,8 +382,22 @@ ColoredDecodingGraph::get_all_incident_faces(colored_vertex_t* v) {
             faces.insert(make_face(v, w, u));
         }
     }
+    memo[v] = faces;
     return faces;
 }
+
+std::set<colored_vertex_t*>
+ColoredDecodingGraph::get_all_incident_vertices(const std::set<colored_edge_t*>& edge_list, std::string color) {
+    std::set<colored_vertex_t*> incident;
+    for (auto e : edge_list) {
+        auto v1 = (colored_vertex_t*)e->src;
+        auto v2 = (colored_vertex_t*)e->dst;
+        if (v1->color == color) incident.insert(v1);
+        if (v2->color == color) incident.insert(v2);
+    }
+    return incident;
+}
+
 
 ColoredDecodingGraph
 to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
@@ -379,6 +441,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
             colored_vertex_t* v = new colored_vertex_t;
             v->id = detector;
             v->color = color;
+            std::cout << "found vertex " << detector << " with color " << color << "(" << color_id << ")\n";
             graph.add_vertex(v);
         } else {
             for (auto& sc : subcircuits) sc.append_operation(op);

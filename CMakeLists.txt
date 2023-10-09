@@ -29,6 +29,7 @@ set(QONTRA_FILES
     # Decoders
     src/decoder/mwpm.cpp
     src/decoder/window.cpp
+    src/decoder/restriction.cpp
     # Parsing
     src/parsing/cmd.cpp
     src/parsing/asm.cpp

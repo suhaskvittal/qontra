@@ -17,8 +17,9 @@
 namespace qontra {
 
 class RestrictionDecoder : public Decoder {
+public:
     RestrictionDecoder(stim::Circuit circuit)
-        :Decoder(circuit, graph::DecodingGraph::DO_NOT_BUILD),
+        :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
         c_decoding_graph(graph::to_colored_decoding_graph(circuit))
     {}
 
@@ -32,9 +33,12 @@ protected:
     std::vector<match_t>    blossom_subroutine(const std::vector<uint>&);
     std::vector<cc_t>       compute_connected_components(const std::vector<match_t>&);
 
-    std::set<colored_vertex_t*> get_incident_vertices(std::vector<colored_edge_t*>, std::string);
+    stim::simd_bits         get_correction_for_face(graph::face_t);
 
-    ColoredDecodingGraph c_decoding_graph;
+    std::set<graph::decoding::colored_vertex_t*>
+        get_incident_vertices(std::set<graph::decoding::colored_edge_t*>, std::string);
+
+    graph::ColoredDecodingGraph c_decoding_graph;
 };
 
 }   // qontra

@@ -5,6 +5,7 @@
 
 #include "decoder/mwpm.h"
 #include "decoder/neural.h"
+#include "decoder/restriction.h"
 #include "experiments.h"
 #include "parsing/cmd.h"
 #include "instruction.h"
@@ -48,6 +49,7 @@ int main(int argc, char* argv[]) {
     // Define Decoder.
     using namespace mlpack;
     stim::Circuit error_model = schedule_to_stim(sch, errors, timing);
+    /*
     NeuralDecoder dec(error_model);
     dec.model.Add<Linear>(256);
     dec.model.Add<TanH>();
@@ -55,11 +57,11 @@ int main(int argc, char* argv[]) {
     dec.model.Add<TanH>();
     dec.model.Add<Linear>(1);
     dec.model.Add<TanH>();
-    dec.config.max_epochs = 25;
+    dec.config.max_epochs = 100;
     dec.train(10*shots);
-    /*
     MWPMDecoder dec(error_model);
     */
+    RestrictionDecoder dec(error_model);
 
     // Setup experiment.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
