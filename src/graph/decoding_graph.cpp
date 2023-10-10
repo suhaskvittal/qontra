@@ -68,13 +68,13 @@ DecodingGraph::build_distance_matrix() {
                 frames = new_frames;
                 length++;
                 path.push_back(curr);
-                found_boundary |= is_boundary(curr) || is_colored_boundary(curr);
+                found_boundary |= (is_boundary(curr) || is_colored_boundary(curr)) && (curr != dst);
                 curr = next;
             }
+            path.push_back(src);
         }
 failed:
         fp_t prob = pow(10, -weight);
-
         return (matrix_entry_t) {length, prob, weight, frames, path, found_boundary};
     };
 
@@ -379,7 +379,9 @@ ColoredDecodingGraph::get_all_incident_faces(colored_vertex_t* v) {
     std::set<face_t> faces;
     for (auto w : v_adj) {
         for (auto u : get_common_neighbors(v, w)) {
-            faces.insert(make_face(v, w, u));
+            if (u->color != v->color && v->color != w->color && u->color != w->color) {
+                faces.insert(make_face(v, w, u));
+            }
         }
     }
     memo[v] = faces;
