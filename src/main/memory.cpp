@@ -17,6 +17,19 @@
 
 using namespace qontra;
 
+stim::Circuit
+get_circuit(const schedule_t& sch, fp_t p) {
+    const uint n = get_number_of_qubits(sch);
+
+    tables::ErrorAndTiming et;
+    et = et * (1000 * p);
+    ErrorTable errors;
+    TimeTable timing;
+    tables::populate(n, errors, timing, et);
+    stim::Circuit circ = schedule_to_stim(sch, errors, timing);
+    return circ;
+}
+
 int main(int argc, char* argv[]) {
     MPI_Init(NULL, NULL);
     int world_rank, world_size;
@@ -37,19 +50,9 @@ int main(int argc, char* argv[]) {
 
     // Get schedule from file.
     schedule_t sch = schedule_from_file(asm_file);
-    const uint n = get_number_of_qubits(sch);
-
-    // Define error model.
-    tables::ErrorAndTiming et;
-    et = et * (p * 1000);
-    ErrorTable errors;
-    TimeTable timing;
-    tables::populate(n, errors, timing, et);
-
     // Define Decoder.
     using namespace mlpack;
-    stim::Circuit error_model = schedule_to_stim(sch, errors, timing);
-    /*
+    stim::Circuit error_model = get_circuit(sch, p);
     NeuralDecoder dec(error_model);
     dec.model.Add<Linear>(256);
     dec.model.Add<TanH>();
@@ -57,17 +60,19 @@ int main(int argc, char* argv[]) {
     dec.model.Add<TanH>();
     dec.model.Add<Linear>(1);
     dec.model.Add<TanH>();
-    dec.config.max_epochs = 100;
-    dec.train(10*shots);
+    dec.config.max_epochs = 20;
+    dec.training_circuit = get_circuit(sch, p);
+    /*
     MWPMDecoder dec(error_model);
-    */
     RestrictionDecoder dec(error_model);
+    */
 
     // Setup experiment.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
     experiments::memory_params_t params;
     params.shots = shots;
     
+    dec.train(10'000'000);
     // Run experiment.
     experiments::memory_result_t res = memory_experiment(&dec, params);
 
