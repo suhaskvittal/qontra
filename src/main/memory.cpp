@@ -15,7 +15,11 @@
 #include <fstream>
 #include <iostream>
 
+#include <omp.h>
+
 using namespace qontra;
+
+#define DISABLE_MPI
 
 stim::Circuit
 get_circuit(const schedule_t& sch, fp_t p) {
@@ -31,11 +35,12 @@ get_circuit(const schedule_t& sch, fp_t p) {
 }
 
 int main(int argc, char* argv[]) {
+    int world_rank = 0, world_size = 1;
+#ifndef DISABLE_MPI
     MPI_Init(NULL, NULL);
-    int world_rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-
+#endif
     CmdParser pp(argc, argv);
 
     std::string asm_file;
@@ -43,10 +48,16 @@ int main(int argc, char* argv[]) {
     fp_t p;
     uint64_t shots;
 
+    uint64_t tshots = 10'000'000;
+    uint64_t epochs = 100;
+
     if (!pp.get_string("asm", asm_file))    return 1;
     if (!pp.get_string("out", output_file)) return 1;
     if (!pp.get_float("p", p))  return 1;
     if (!pp.get_uint64("shots", shots)) return 1;
+
+    pp.get_uint64("epochs", epochs);
+    pp.get_uint64("tshots", tshots);
 
     // Get schedule from file.
     schedule_t sch = schedule_from_file(asm_file);
@@ -60,7 +71,7 @@ int main(int argc, char* argv[]) {
     dec.model.Add<TanH>();
     dec.model.Add<Linear>(1);
     dec.model.Add<TanH>();
-    dec.config.max_epochs = 20;
+    dec.config.max_epochs = epochs;
     dec.training_circuit = get_circuit(sch, p);
     /*
     MWPMDecoder dec(error_model);
@@ -69,10 +80,13 @@ int main(int argc, char* argv[]) {
 
     // Setup experiment.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
+#ifdef DISABLE_MPI
+    experiments::G_USE_MPI = false;
+#endif
     experiments::memory_params_t params;
     params.shots = shots;
     
-    dec.train(10'000'000);
+    dec.train(tshots);
     // Run experiment.
     experiments::memory_result_t res = memory_experiment(&dec, params);
 
@@ -84,7 +98,9 @@ int main(int argc, char* argv[]) {
     }
 
     bool write_header = !std::filesystem::exists(output_path);
+#ifndef DISABLE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
+#endif
     std::ofstream out(output_path, std::ios::app);
     if (world_rank == 0) {
         if (write_header) {
@@ -111,5 +127,7 @@ int main(int argc, char* argv[]) {
             << res.t_std << ","
             << res.t_max << "\n";
     }
+#ifndef DISABLE_MPI
     MPI_Finalize();
+#endif
 }

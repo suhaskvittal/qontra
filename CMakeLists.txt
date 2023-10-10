@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.20.2)
 project(QontraSim VERSION 0.1)
 # Declare CPP Version
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(FLEX REQUIRED)
@@ -78,7 +78,7 @@ endif()
 add_library(qontra ${QONTRA_FILES})
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-    target_compile_options(qontra PUBLIC -O3 -fno-strict-aliasing -lstdc++)
+    target_compile_options(qontra PUBLIC -O3 -fno-strict-aliasing)
 else()
     target_compile_options(qontra PUBLIC -ggdb3 -fno-strict-aliasing)
 endif()
@@ -91,10 +91,20 @@ target_link_libraries(qontra PUBLIC libstim)
 target_link_libraries(qontra PUBLIC libblossom5)
 target_link_libraries(qontra PUBLIC ${MPI_CXX_LIBRARIES})
 
+if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
+    target_link_libraries(qontra PUBLIC "stdc++fs")
+endif()
+
 if (COMPILE_NEURAL_DECODER)
     message("Adding Armadillo include and libs")
     target_include_directories(qontra PUBLIC ${ARMADILLO_INCLUDE_DIRS})
     target_link_libraries(qontra PUBLIC ${ARMADILLO_LIBRARIES})
+
+    find_package(OpenMP)
+    if (OpenMP_CXX_FOUND)
+        message("Found OpenMP for the NN Decoder.")
+        target_link_libraries(qontra PUBLIC OpenMP::OpenMP_CXX)
+    endif()
 endif()
 
 if (COMPILE_UNIVERSAL_SIM)
