@@ -15,8 +15,6 @@
 #include <fstream>
 #include <iostream>
 
-#include <omp.h>
-
 using namespace qontra;
 
 #define DISABLE_MPI

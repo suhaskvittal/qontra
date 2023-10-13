@@ -8,6 +8,7 @@
 
 #include "defs.h"
 
+#include <limits>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -95,8 +96,8 @@ struct ErrorAndTiming {
         this->e_g2q *= x;
         this->e_m1w0 *= x;
         this->e_m0w1 *= x;
-        this->t1 *= 1.0/x;
-        this->t2 *= 1.0/x;
+        this->t1 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
+        this->t2 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
         return *this;
     }
 

@@ -156,6 +156,7 @@ write_recorded_errors_to(std::ostream& out, const std::vector<error_record_t>& r
         Instruction inst = std::get<1>(rec);
         uint64_t q = std::get<2>(rec);
         error e = std::get<3>(rec);
+        if (e == error::y)  continue;
         stim::simd_bits x = std::get<4>(rec);
         stim::simd_bits z = std::get<5>(rec);
 

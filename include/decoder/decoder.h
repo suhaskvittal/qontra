@@ -20,6 +20,28 @@
 
 namespace qontra {
 
+template <class T> std::vector<uint>
+// T = stim::simd_bits or stim::simd_bits_range_ref
+get_nonzero_detectors(const T syndrome, uint number_of_detectors) {
+    std::vector<uint> det;
+    uint64_t w = 0;
+    uint64_t last_bit = 0;
+    while (det.size() < syndrome.popcnt()) {
+        uint64_t i = ffsll(syndrome.u64[w] & ~((1L << last_bit)-1));
+        if (i == 0) {   // No match found.
+            last_bit = 0;
+            w++;
+            continue;
+        }
+        uint d = (w << 6) | (i-1);
+        if (d >= number_of_detectors) break;
+        det.push_back(d);
+        last_bit = i & 0x3f;
+        w += (i >= 64);
+    }
+    return det;
+}
+
 class Decoder {
 public: 
     // The decoder uses the passed in circuit for decoding. It should
@@ -105,5 +127,4 @@ protected:
 };
 
 }   // qontra
-
 #endif
