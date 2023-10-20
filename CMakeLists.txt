@@ -120,7 +120,7 @@ add_executable(memory src/main/memory.cpp)
 
 target_link_libraries(asm_analyzer PRIVATE qontra)
 target_link_libraries(converter PRIVATE qontra)
-target_link_libraries(memory PRIVATE qontra)
+target_link_libraries(memory PUBLIC qontra)
 
 if (COMPILE_TESTS)
     message("Will compile TEST executables.")

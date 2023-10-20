@@ -3,6 +3,8 @@
  *  date:   28 August 2023
  * */
 
+#define ARMA_OPENMP_THREADS 32
+
 #include "decoder/mwpm.h"
 #include "decoder/neural.h"
 #include "decoder/restriction.h"
@@ -16,6 +18,8 @@
 #include <iostream>
 
 #include <omp.h>
+
+#include <armadillo>
 
 using namespace qontra;
 
@@ -58,6 +62,10 @@ int main(int argc, char* argv[]) {
 
     pp.get_uint64("epochs", epochs);
     pp.get_uint64("tshots", tshots);
+
+    std::cout << "arma config: " << arma::arma_config::mp_threads << "\n";
+    std::cout << "arma threads: " << arma::mp_thread_limit::get() << "," << arma::mp_thread_limit::in_parallel() << "\n";
+    std::cout << "omp threads: " << omp_get_max_threads() << "\n";
 
     // Get schedule from file.
     schedule_t sch = schedule_from_file(asm_file);
