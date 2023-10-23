@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   28 August 2023
  * */
 
@@ -18,6 +17,7 @@
 using namespace qontra;
 
 #define DISABLE_MPI
+#define USE_NEURAL_NET
 
 stim::Circuit
 get_circuit(const schedule_t& sch, fp_t p) {
@@ -60,19 +60,22 @@ int main(int argc, char* argv[]) {
     // Get schedule from file.
     schedule_t sch = schedule_from_file(asm_file);
     // Define Decoder.
-    using namespace mlpack;
     stim::Circuit error_model = get_circuit(sch, p);
+#ifdef USE_NEURAL_NET
+    using namespace mlpack;
     NeuralDecoder dec(error_model);
     dec.model.Add<Linear>(256);
     dec.model.Add<TanH>();
     dec.model.Add<Linear>(64);
     dec.model.Add<TanH>();
-    dec.model.Add<Linear>(1);
+    dec.model.Add<Linear>(error_model.count_observables());
     dec.model.Add<TanH>();
     dec.config.max_epochs = epochs;
     dec.training_circuit = get_circuit(sch, p);
-    /*
+#else
     MWPMDecoder dec(error_model);
+#endif
+    /*
     RestrictionDecoder dec(error_model);
     */
 
@@ -84,7 +87,10 @@ int main(int argc, char* argv[]) {
     experiments::memory_params_t params;
     params.shots = shots;
     
+#ifdef USE_NEURAL_NET
+    std::cout << "starting training...\n";
     dec.train(tshots);
+#endif
     // Run experiment.
     experiments::memory_result_t res = memory_experiment(&dec, params);
 
@@ -117,8 +123,11 @@ int main(int argc, char* argv[]) {
         out << std::filesystem::path(asm_file).filename() << ","
             << p << ","
             << shots << ","
-            << res.logical_error_rate << ","
-            << res.hw_mean << ","
+            << res.logical_error_rate;
+        for (uint i = 0; i < error_model.count_observables(); i++) {
+            out << "," << res.logical_error_rate_by_obs[i];
+        }
+        out << "," << res.hw_mean << ","
             << res.hw_std << ","
             << res.hw_max << ","
             << res.t_mean << ","

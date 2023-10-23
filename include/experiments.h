@@ -62,6 +62,8 @@ typedef struct {
     fp_t        t_mean;
     fp_t        t_std;
     fp_t        t_max;
+    // More specific data:
+    std::vector<fp_t>   logical_error_rate_by_obs;  // Logical error rate for each observable.
 } memory_result_t;
 
 // Global experiments parameters:

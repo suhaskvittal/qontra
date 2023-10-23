@@ -65,7 +65,10 @@ NeuralDecoder::decode_error(const syndrome_t& syndrome) {
     fp_t t = (fp_t)timer.clk_end();
 
     stim::simd_bits corr(obs);
-    corr[0] ^= (pred(0, 0) > 0);
+    corr.clear();
+    for (uint i = 0; i < obs; i++) {
+        corr[i] ^= (bool)(pred(i, 0) > 0);
+    }
 
     Decoder::result_t res = {
         t,

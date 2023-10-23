@@ -69,7 +69,8 @@ int main(int argc, char* argv[]) {
     callback_t cb;
     cb.prologue = [&] (stim::simd_bits_range_ref& row) {
         auto detectors = get_nonzero_detectors(row, circuit.count_detectors());
-        if (detectors.size() >= G_FILTERING_HAMMING_WEIGHT) {
+        bool nonzero_obs = row.popcnt() - detectors.size();
+        if (detectors.size() >= G_FILTERING_HAMMING_WEIGHT || nonzero_obs) {
             syndrome_list.push_back(detectors);
         }
     };

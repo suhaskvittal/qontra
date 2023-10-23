@@ -193,7 +193,7 @@ write_recorded_errors_to(std::ostream& out, const std::vector<error_record_t>& r
                 else        out << " _";
             }
         }
-        out << "\n\t" << error_str_map[e] << q << "\t";
+        out << "\t" << error_str_map[e] << q << "\tW" << error_list.size() << "\t";
         for (auto& qe : error_list) {
             uint64_t r = qe.first;
             error f = qe.second;
