@@ -16,27 +16,16 @@
 #include <string>
 #include <vector>
 
-#define ID_TYPE_OFFSET  62
-#define ID_GEN_OFFSET   40
-#define ID_GEN_MASK     ((1L << 22)-1L)
-#define ID_MASK         ((1L << 32)-1L)
-
-#define PRINT_V(id)  (id >> ID_TYPE_OFFSET) << "|"\
-                        << ((id >> ID_GEN_OFFSET) & ID_GEN_MASK)\
-                        << "|" << (id & ID_MASK)
-
 namespace qontra {
 namespace graph {
 
 namespace tanner {
 
-struct vertex_t : graph::base::vertex_t {
-    uint64_t qubit_type; // 00 = Data, 01 = Gauge, 11 = X parity, 10 = Z parity
+const int VERTEX_ID_AUTOGEN_BIT = 63;
 
-    const static uint64_t DATA =    0x0;
-    const static uint64_t GAUGE =   0x1;
-    const static uint64_t XPARITY = 0x2;
-    const static uint64_t ZPARITY = 0x3;
+struct vertex_t : graph::base::vertex_t {
+    enum class Type { data, xparity, zparity };
+    Type qubit_type;
 };
 
 struct edge_t : graph::base::edge_t {
@@ -51,27 +40,26 @@ public:
     TannerGraph(void)
         :__TannerGraphParent(), 
         data_qubits(),
-        gauge_qubits(),
         x_parity_checks(),
-        z_parity_checks(), 
-        induced_gauge_index(0)
+        z_parity_checks(),
+        x_obs_list(),
+        z_obs_list()
     {}
 
     TannerGraph(const TannerGraph& other)
         :__TannerGraphParent(other),
         data_qubits(other.data_qubits),
-        gauge_qubits(other.gauge_qubits),
         x_parity_checks(other.x_parity_checks),
         z_parity_checks(other.z_parity_checks),
-        induced_gauge_index(other.induced_gauge_index)
+        x_obs_list(other.x_obs_list),
+        z_obs_list(other.z_obs_list)
     {}
 
     bool add_vertex(tanner::vertex_t* v) override {
-        if (!Graph::add_vertex(v))  return false;
-        if (v->qubit_type == tanner::vertex_t::DATA)     data_qubits.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::GAUGE)    gauge_qubits.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::XPARITY)  x_parity_checks.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::ZPARITY)  z_parity_checks.push_back(v);
+        if (!__TannerGraphParent::add_vertex(v))  return false;
+        if (v->qubit_type == tanner::vertex_t::Type::data)      data_qubits.push_back(v);
+        if (v->qubit_type == tanner::vertex_t::Type::xparity)   x_parity_checks.push_back(v);
+        if (v->qubit_type == tanner::vertex_t::Type::zparity)   z_parity_checks.push_back(v);
         return true;
     }
 
@@ -79,22 +67,17 @@ public:
         auto v = (tanner::vertex_t*)e->src;
         auto w = (tanner::vertex_t*)e->dst;
         // Make sure the edge preserves the bipartite property.
-        if ((v->qubit_type > 0) == (w->qubit_type > 0)) return false;
-        bool res = Graph::add_edge(e);
-        if (res) {
-            // Sort adjacency lists.
-            std::sort(adjacency_lists[v].begin(), adjacency_lists[v].end());
-            if (e->is_undirected)   std::sort(adjacency_lists[w].begin(), adjacency_lists[w].end());
-        }
-        return res;
+        bool src_is_parity = v->qubit_type != tanner::vertex_t::Type::data;
+        bool dst_is_parity = v->qubit_type != tanner::vertex_t::Type::data;
+        if (src_is_parity && dst_is_parity) return false;
+        return __TannerGraphParent::add_edge(e);
     }
 
     void delete_vertex(tanner::vertex_t* v) override {
         std::vector<tanner::vertex_t*>* cat;
-        if (v->qubit_type == tanner::vertex_t::DATA)     cat = &data_qubits;
-        if (v->qubit_type == tanner::vertex_t::GAUGE)    cat = &gauge_qubits;
-        if (v->qubit_type == tanner::vertex_t::XPARITY)  cat = &x_parity_checks;
-        if (v->qubit_type == tanner::vertex_t::ZPARITY)  cat = &z_parity_checks;
+        if (v->qubit_type == tanner::vertex_t::Type::data)      cat = &data_qubits;
+        if (v->qubit_type == tanner::vertex_t::Type::xparity)   cat = &x_parity_qubits;
+        if (v->qubit_type == tanner::vertex_t::Type::zparity)   cat = &z_parity_qubits;
         for (auto it = cat->begin(); it != cat->end();) {
             if (*it == v)   it = cat->erase(it);
             else            it++;
@@ -102,39 +85,14 @@ public:
         __TannerGraphParent::delete_vertex(v);
     }
 
-    std::vector<tanner::vertex_t*>  get_predecessors(tanner::vertex_t*); 
-                                                                // Gets the set of predecessor 
-                                                                // for a vertex. A vertex X 
-                                                                // precedes a vertex Y if
-                                                                // adj(X) is a subset of adj(Y).
-    tanner::vertex_t*       induce_predecessor(tanner::vertex_t*, tanner::vertex_t*);  
-                                                                // An induced predecessor of 
-                                                                // two vertices X and Y is a 
-                                                                // vertex Z such that adj(Z) 
-                                                                // is the intersection of 
-                                                                // adj(X) and adj(Y). The induced
-                                                                // predecessor is added to the
-                                                                // graph. This function fails
-                                                                // if either arg precedes the
-                                                                // other.
-    bool                    has_copy_in_gauges(const std::vector<tanner::vertex_t*>& adj);
+    typedef std::vector<tanner::vertex_t*>  obs_t;
 
-    std::vector<tanner::vertex_t*>  get_vertices_by_type(uint8_t t) {
-        const std::vector<tanner::vertex_t*> arr[] = 
-                { data_qubits, gauge_qubits, x_parity_checks, z_parity_checks };
-        return arr[t];
-    }
-
-    std::vector<tanner::vertex_t*>  x_obs;
-    std::vector<tanner::vertex_t*>  z_obs;
+    std::vector<obs_t>  x_obs_list;
+    std::vector<obs_t>  z_obs_list;
 private:
     std::vector<tanner::vertex_t*>  data_qubits;
-    std::vector<tanner::vertex_t*>  gauge_qubits;
     std::vector<tanner::vertex_t*>  x_parity_checks;
     std::vector<tanner::vertex_t*>  z_parity_checks;
-
-    uint64_t induced_gauge_index;
-    const static uint64_t INDUCED_GAUGE_INDEX_FLAG = ID_GEN_MASK << ID_GEN_OFFSET;
 };
 
 namespace io {
