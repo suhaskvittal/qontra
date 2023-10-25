@@ -3,9 +3,9 @@
  *  date:   11 Octoboer 2023
  * */
 
-#include "experiments.h"
-#include "instruction.h"
-#include "parsing/cmd.h"
+#include <experiments.h>
+#include <instruction.h>
+#include <parsing/cmd.h>
 
 #include <deque>
 #include <fstream>

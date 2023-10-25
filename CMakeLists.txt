@@ -35,13 +35,9 @@ set(QONTRA_FILES
     src/parsing/asm.cpp
     ${BISON_ASMParser_OUTPUTS}
     ${FLEX_ASMLexer_OUTPUTS}
-#   src/parsing/sdl.cpp
-#   ${BISON_SDLParser_OUTPUTS}
-#   ${FLEX_SDLLexer_OUTPUTS}
     # Graphs
     src/graph/decoding_graph.cpp 
     src/graph/dependence_graph.cpp
-#   src/graph/coupling_graph.cpp
     src/graph/lattice_graph.cpp
     src/graph/tanner_graph.cpp
     # Simulators
@@ -123,6 +119,23 @@ target_link_libraries(asm_analyzer PRIVATE qontra)
 target_link_libraries(converter PRIVATE qontra)
 target_link_libraries(memory PRIVATE qontra)
 target_link_libraries(syndromes PRIVATE qontra)
+
+if (COMPILE_PROTEAN)
+    include(${CMAKE_SOURCE_DIR}/cmake/FindCPLEX.cmake)
+
+    set(PROTEAN_FILES
+        src/protean/scheduler.cpp)
+    add_library(protean ${PROTEAN_FILES})
+    target_include_directories(protean PUBLIC ${CPLEX_INCLUDE_DIR})
+    target_link_libraries(protean PUBLIC 
+                            qontra 
+                            ${CPLEX_LIB_PREFIX}/libcplex.a
+                            ${CPLEX_LIB_PREFIX}/libilocplex.a)
+    target_compile_options(protean PUBLIC -O3 -fno-strict-aliasing)
+
+    add_executable(protean_scheduler_test src/main/protean/tests/scheduler.cpp)
+    target_link_libraries(protean_scheduler_test PRIVATE protean)
+endif()
 
 if (COMPILE_TESTS)
     message("Will compile TEST executables.")

@@ -8,13 +8,16 @@
 
 #include "defs.h"
 #include "graph/tanner_graph.h"
-
-#include <ilcplex/ilocplex.h>
+#include "linprog.h"
 
 #include <deque>
+#include <iostream>
 #include <map>
 #include <set>
+#include <utility>
 #include <vector>
+
+#include <string.h>
 
 namespace qontra {
 namespace protean {
@@ -42,6 +45,27 @@ struct css_code_data_t {
 
     // flag_usage[u][v] corresponds to the flag qubit used by data qubit v during check u.
     TwoLevelMap<uint, uint, uint>   flag_usage;
+
+    void print_schedule(std::ostream& out) {
+        out << "---------------- X Stabilizers -------------------\n";
+        for (uint xp : xparity_list) {
+            out << xp << "\t|";
+            for (int32_t t : check_schedules[xp]) {
+                if (t < 0)  out << "\t_";
+                else        out << "\t" << t;
+            }
+            out << "\n";
+        }
+        out << "---------------- Z Stabilizers -------------------\n";
+        for (uint zp : zparity_list) {
+            out << zp << "\t|";
+            for (int32_t t : check_schedules[zp]) {
+                if (t < 0)  out << "\t_";
+                else        out << "\t" << t;
+            }
+            out << "\n";
+        }
+    }
 };
 
 // Each stabilizer is defined as an array of pauli_ops.
@@ -58,9 +82,9 @@ typedef std::vector<uint>       support_t;
 // themselves commute -- but an operator on a single qubit
 // may not).
 struct stab_vertex_t : graph::base::vertex_t {
-    tanner::vertex_t* check;
+    graph::tanner::vertex_t* check;
     stabilizer_t stabilizer;
-    support_t support_t;
+    support_t support;
     std::map<uint, pauli> qubit_to_pauli;
 
     // Schedule maps qubit to time. This is easier for processing later.
@@ -78,13 +102,10 @@ css_code_data_t
 compute_schedule_from_tanner_graph(graph::TannerGraph&);
 
 // Helper functions:
-IloModel
+LPManager<uint>*
 construct_scheduling_program(stab_vertex_t*,
                                 StabilizerGraph&, 
-                                int max_stabilizer_weight,
-                                std::map<uint, IloIntVar>& qubit_to_variable);
-
-void    finalize_cplex(void);
+                                int max_stabilizer_weight);
 
 }   // protean
 }   // qontra

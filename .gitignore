@@ -22,3 +22,6 @@ include/parsing/asm/lex.yy.c
 include/parsing/sdl/parser.tab.c
 include/parsing/sdl/parser.tab.h
 include/parsing/sdl/lex.yy.c
+
+.DS_Store
+*/.DS_Store

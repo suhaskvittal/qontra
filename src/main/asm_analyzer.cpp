@@ -3,9 +3,9 @@
  *  date:   16 August 2023
  * */
 
-#include "parsing/cmd.h"
-#include "instruction.h"
-#include "sim/enumerator.h"
+#include <parsing/cmd.h>
+#include <instruction.h>
+#include <sim/enumerator.h>
 
 using namespace qontra;
 

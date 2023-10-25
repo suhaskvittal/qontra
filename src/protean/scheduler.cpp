@@ -3,9 +3,6 @@
  *  date:   23 October 2023
  * */
 
-#ifndef PROTEAN_SCHEDULER_h
-#define PROTEAN_SCHEDULER_h
-
 #include "protean/scheduler.h"
 
 namespace qontra {
@@ -13,10 +10,6 @@ namespace qontra {
 using namespace graph;
 
 namespace protean {
-
-static IloEnv env;
-
-void finalize_cplex() { env.end(); }
 
 css_code_data_t
 compute_schedule_from_tanner_graph(TannerGraph& tanner_graph) {
@@ -29,12 +22,14 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph) {
         std::map<uint, pauli> q2p;
         for (auto dv : tanner_graph.get_neighbors(pv)) {
             pauli p = pauli::x;
-            if (pv->qubit_type == tanner::vertex_t::Type::zparity) p = pauli::z;
+            if (pv->qubit_type == tanner::vertex_t::Type::zparity) {
+                p = pauli::z;
+            }
             uint q = (uint) (tanner::VERTEX_ID_NUMBER_MASK & dv->id);
-            pauli_op_t operator = std::make_pair(p, q);
-            stab.push_back(operator);
+            pauli_op_t op = std::make_pair(p, q);
+            stab.push_back(op);
             support.push_back(q);
-            p2q[q] = p;
+            q2p[q] = p;
         }
         stab_vertex_t* v = new stab_vertex_t;
         v->id = pv->id;
@@ -49,7 +44,7 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph) {
         }
     }
     // Add edges to the StabilizerGraph.
-    auto& vertices = gr.get_vertices();
+    auto vertices = gr.get_vertices();
     for (uint i = 0; i < vertices.size(); i++) {
         auto vi = vertices[i];
         for (uint j = i+1; j < vertices.size(); j++) {
@@ -57,16 +52,16 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph) {
             // Check for intersections in the support.
             for (auto qi : vi->support) {
                 pauli pi = vi->qubit_to_pauli[qi];
-                if (vj->pauli_to_qubit.count(qi)) {
-                    pauli pj = vj->pauli_to_qubit[qi];
-                    if (pi != pj) {
-                        // Make edge -- the paulis anticommute.
-                        stab_edge_t e = new stab_edge_t;
-                        e->src = (void*) vi;
-                        e->src = (void*) vj;
-                        e->is_undirected = true;
-                        gr.add_edge(e);
-                    }
+                if (!vj->qubit_to_pauli.count(qi))  continue;
+                
+                pauli pj = vj->qubit_to_pauli[qi];
+                if (pi != pj) {
+                    // Make edge -- the paulis anticommute.
+                    stab_edge_t* e = new stab_edge_t;
+                    e->src = (void*) vi;
+                    e->src = (void*) vj;
+                    e->is_undirected = true;
+                    gr.add_edge(e);
                 }
             }
         }
@@ -81,15 +76,11 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph) {
         if (visited.count(s))   continue;
         // Compute schedule for this stabilizer.
         // First construct an ILP.
-        std::map<uint, IloIntVar> qubit_to_variable;
-        IloModel prog = construct_scheduling_program(s, gr, max_stab_weight, qubit_to_variable);
-        IloCplex solver(prog);
-        if (!prog.solve()) {
-            return (css_code_data_t) {}; // Infeasible solution found.
-        }
+        LPManager<uint>* mgr = construct_scheduling_program(s, gr, max_stab_weight);
+        mgr->solve();
         // Get variable values.
         for (uint q : s->support) {
-            int t = (int) solver.getValue(qubit_to_variable[q]);
+            int t = (int) mgr->get_value(q);
             s->sch_qubit_to_time[q] = t;
             s->sch_time_to_qubit[t] = q;
             if (t > max_time) max_time = t;
@@ -99,6 +90,7 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph) {
             bfs.push_back(u);
         }
         visited.insert(s);
+        delete mgr;
     }
     // Now that we have computed all the schedules, let us compile the code
     // data.
@@ -120,7 +112,7 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph) {
             code_data.zparity_list.push_back(next_qubit_id);
         }
         stab_vertex_t* sv = gr.get_vertex(pv->id);
-        const auto& sch = sv->time_to_qubit;
+        const auto& sch = sv->sch_time_to_qubit;
         for (int t = 1; t <= max_time; t++) {
             if (!sch.count(t)) {
                 code_data.check_schedules[next_qubit_id].push_back(-1);
@@ -134,69 +126,72 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph) {
     return code_data;
 }
 
-IloModel
+LPManager<uint>*
 construct_scheduling_program(
         stab_vertex_t* s0,
         StabilizerGraph& gr,
-        int max_stabilizer_weight,
-        std::map<uint, IloIntVar>& qubit_to_variable)
+        int max_stabilizer_weight)
 {
-    IloModel model(env);
+    LPManager<uint>* mgr = new LPManager<uint>;
+
+    // This variable is greater than all qubit variables.
+    lp_var_t<uint>* max_of_all = mgr->add_slack_var(1, 2*max_stabilizer_weight, VarBounds::both, VarDomain::integer);
 
     const auto& support = s0->support;
-    IloIntVar max_of_all(env, 1, 2*max_stabilizer_weight);
-    model.add(max_of_all);
-    model.add(IloMinimize(max_of_all));
-
-    IloIntVarArray all_qubit_vars(env);
-
+    // Create variables for each qubit.
     for (uint q : support) {
-        IloIntVar x(env, 1, 2*max_stabilizer_weight);
-        qubit_to_variable[q] = x;
+        lp_var_t<uint>* qv = mgr->add_var(q, 1, 2*max_stabilizer_weight, VarBounds::both, VarDomain::integer);
+        lp_constr_t<uint> con(max_of_all, q, ConstraintDirection::ge);
+        mgr->add_constraint(con);
+    }
+    // Add uniqueness constraint (any qi != qj).
+    const uint w = support.size();
+    for (uint i = 0; i < w; i++) {
+        lp_var_t<uint>* q1v = mgr->get_var(support[i]);
+        for (uint j = i+1; j < w; j++) {
+            lp_var_t<uint>* q2v = mgr->get_var(support[j]);
+            lp_constr_t<uint> con(q1v, q2v, ConstraintDirection::neq);
+            mgr->add_constraint(con);
+        }
+    }
 
-        model.add(x);
-        all_qubit_vars.add(x);
-        // Add constraints.
-        model.add( max_of_all >= x ); }
-    IloAllDiff uniqueness(env, all_qubit_vars);
-    model.add(uniqueness);
     // Setup constraints with other stabilizers.
     for (auto s : gr.get_neighbors(s0)) {
         const auto& other_support = s->support;
-        const auto& sch = s->qubit_to_time;
+        const auto& sch = s->sch_qubit_to_time;
         // We only care about neighboring stabilizers if they
         // already have a schedule.
         if (sch.empty()) continue;
-
         bool sum_is_nonzero = false;
-        IloIntExpr ind_sum(env);
+        lp_expr_t<uint> ind_sum;
         for (auto q : support) {
             if (std::find(other_support.begin(), other_support.end(), q) == other_support.end()) {
                 continue;
             }
-            IloIntVar x = qubit_to_variables[q];
-            uint t = sch[q];
-            model.add( x != t );
-
+            lp_var_t<uint>* qv = mgr->get_var(q);
+            int t = sch.at(q);
+            lp_constr_t<uint> con1(qv, t, ConstraintDirection::neq);
+            mgr->add_constraint(con1);
             if (s0->qubit_to_pauli[q] != s->qubit_to_pauli[q]) {
-                IloBoolVar ineq(env);
-                model.add(ineq);
-                model.add( ineq == (x >= t) );
-                ind_sum += ineq;
+                const double M = 100000;
+                lp_var_t<uint>* ind = mgr->add_slack_var(0, 1, VarBounds::both, VarDomain::binary);
+                lp_constr_t<uint> con2(qv - t, -M*lp_expr_t<uint>(ind), ConstraintDirection::le);
+                mgr->add_constraint(con2);
+                // Also add ind to ind_sum.
+                ind_sum += ind;
                 sum_is_nonzero = true;
             }
         }
         if (sum_is_nonzero) {
-            IloIntVar sum_ind_div_two(env, 0, IloIntMax);
-            model.add(sum_ind_div_two);
-            model.add( 2*sum_ind_div_two == ind_sum );
+            lp_var_t<uint>* sum_ind_div_two = mgr->add_slack_var(0, 0, VarBounds::lower, VarDomain::integer);
+            lp_constr_t<uint> con(ind_sum, 2*lp_expr_t<uint>(sum_ind_div_two), ConstraintDirection::eq);
+            mgr->add_constraint(con);
         }
     }
-    return model;
+    // Build the LP.
+    mgr->build(max_of_all, false);
+    return mgr;
 }
-
 
 }   // protean
 }   // qontra
-
-#endif  // PROTEAN_SCHEDULER_h

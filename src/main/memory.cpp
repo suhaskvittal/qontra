@@ -2,22 +2,26 @@
  *  date:   28 August 2023
  * */
 
-#include "decoder/mwpm.h"
-#include "decoder/neural.h"
-#include "decoder/restriction.h"
-#include "experiments.h"
-#include "parsing/cmd.h"
-#include "instruction.h"
-#include "tables.h"
+
+#define DISABLE_MPI
+//#define USE_NEURAL_NET
+
+#include <decoder/mwpm.h>
+#include <decoder/restriction.h>
+#include <experiments.h>
+#include <parsing/cmd.h>
+#include <instruction.h>
+#include <tables.h>
 
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 
-using namespace qontra;
+#ifdef USE_NEURAL_NET
+#include <decoder/neural.h>
+#endif
 
-#define DISABLE_MPI
-#define USE_NEURAL_NET
+using namespace qontra;
 
 stim::Circuit
 get_circuit(const schedule_t& sch, fp_t p) {

@@ -46,12 +46,12 @@ struct edge_t : graph::base::edge_t {
 
 // ID tools that use the above masks. This is only recommended if you
 // use the IDs directly.
-bool    is_data(uint64_t id) { return id & VERTEX_ID_DATA_FLAG; }
-bool    is_xparity(uint64_t id) { return id & VERTEX_ID_XPARITY_FLAG; }
-bool    is_zparity(uint64_t id) { return id & VERTEX_ID_ZPARITY_FLAG: }
+inline bool is_data(uint64_t id) { return id & VERTEX_ID_DATA_FLAG; }
+inline bool is_xparity(uint64_t id) { return id & VERTEX_ID_XPARITY_FLAG; }
+inline bool is_zparity(uint64_t id) { return id & VERTEX_ID_ZPARITY_FLAG; }
 
 // Debugging print statement for tanner vertices.
-std::string
+inline std::string
 print_id(uint64_t id) {
     uint64_t q = id & VERTEX_ID_NUMBER_MASK;
     std::string prefix;
@@ -66,8 +66,23 @@ print_id(uint64_t id) {
 
 #define __TannerGraphParent graph::Graph<tanner::vertex_t, tanner::edge_t>
 
+class TannerGraph;
+
+namespace io {
+
+// Function for io callback.
+//
+// In a tanner graph description file, each line should be of the form:
+//          <X/Z><check-id>,<data-qubit-1>,<data-qubit-2>,...
+
+void    update_tanner_graph(TannerGraph&, std::string); // Callback for io function.
+
+}   // io
+
 class TannerGraph : public __TannerGraphParent {
 public:
+    typedef std::vector<tanner::vertex_t*>  obs_t;
+
     TannerGraph(void)
         :__TannerGraphParent(), 
         data_qubits(),
@@ -107,8 +122,8 @@ public:
     void delete_vertex(tanner::vertex_t* v) override {
         std::vector<tanner::vertex_t*>* cat;
         if (v->qubit_type == tanner::vertex_t::Type::data)      cat = &data_qubits;
-        if (v->qubit_type == tanner::vertex_t::Type::xparity)   cat = &xparity_qubits;
-        if (v->qubit_type == tanner::vertex_t::Type::zparity)   cat = &zparity_qubits;
+        if (v->qubit_type == tanner::vertex_t::Type::xparity)   cat = &xparity_checks;
+        if (v->qubit_type == tanner::vertex_t::Type::zparity)   cat = &zparity_checks;
         for (auto it = cat->begin(); it != cat->end();) {
             if (*it == v)   it = cat->erase(it);
             else            it++;
@@ -119,7 +134,7 @@ public:
     std::vector<tanner::vertex_t*> get_vertices_by_type(tanner::vertex_t::Type type) {
         if (type == tanner::vertex_t::Type::data)           return data_qubits;
         else if (type == tanner::vertex_t::Type::xparity)   return xparity_checks;
-        else if (type == tanner::vertex_t::Type::zparity)   return zparity_checks;
+        else                                                return zparity_checks;
     }
 
     std::vector<tanner::vertex_t*> get_checks() {
@@ -132,8 +147,6 @@ public:
         if (get_x_obs)  return x_obs_list;
         else            return z_obs_list;
     }
-
-    typedef std::vector<tanner::vertex_t*>  obs_t;
 private:
     std::vector<tanner::vertex_t*>  data_qubits;
     std::vector<tanner::vertex_t*>  xparity_checks;
@@ -141,18 +154,9 @@ private:
 
     std::vector<obs_t>  x_obs_list;
     std::vector<obs_t>  z_obs_list;
+
+    friend void io::update_tanner_graph(TannerGraph&, std::string);
 };
-
-namespace io {
-
-// Function for io callback.
-//
-// In a tanner graph description file, each line should be of the form:
-//          <X/Z><check-id>,<data-qubit-1>,<data-qubit-2>,...
-
-void    update_tanner_graph(TannerGraph&, std::string); // Callback for io function.
-
-}   // io
 
 }   // graph
 }   // qontra

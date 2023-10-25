@@ -9,7 +9,6 @@
 #include "defs.h"
 
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <string>
 
@@ -18,13 +17,15 @@ namespace graph {
 
 namespace io {
     template <class G_t>
-    using callback_t = std::function<void(G_t&, std::string)>;  // This call back takes in a line
-                                                                // (say from a file) and updates
-                                                                // the referenced graph.
+    using callback_t = void (*)(G_t&, std::string); // This call back takes in a line
+                                                    // (say from a file) and updates
+                                                    // the referenced graph.
 }   // io
 
 template <class G_t> G_t
-create_graph_from_file(std::ifstream& fin, io::callback_t<G_t> cb) {
+create_graph_from_file(std::string file, io::callback_t<G_t> cb) {
+    std::ifstream fin(file);
+
     G_t graph;
     std::string ln;
     while (std::getline(fin, ln)) {
