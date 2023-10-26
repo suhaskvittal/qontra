@@ -37,7 +37,7 @@ update_tanner_graph(TannerGraph& graph, std::string line) {
 
         check_v = new tanner::vertex_t;
         check_v->qubit_type = is_x_check ? tanner::vertex_t::Type::xparity : tanner::vertex_t::Type::zparity;
-        check_v->id = check_id | flag;
+        check_v->id = ((uint64_t)check_id) | flag;
         if (!graph.add_vertex(check_v)) {
             delete check_v;
             return;
@@ -52,11 +52,11 @@ update_tanner_graph(TannerGraph& graph, std::string line) {
         if ((ssi = line.find(",", pssi)) == std::string::npos) {
             ssi = line.size();
         }
-        uint dqid = std::stoi(line.substr(pssi, ssi-pssi));
+        uint64_t dqid = ((uint64_t)std::stoi(line.substr(pssi, ssi-pssi))) | VERTEX_ID_DATA_FLAG;
         auto data_v = graph.get_vertex(dqid);
         if (data_v == nullptr) {
             data_v = new tanner::vertex_t;
-            data_v->id = dqid | VERTEX_ID_DATA_FLAG;
+            data_v->id = dqid;
             data_v->qubit_type = tanner::vertex_t::Type::data;
             graph.add_vertex(data_v);
         }
@@ -68,7 +68,8 @@ update_tanner_graph(TannerGraph& graph, std::string line) {
             tanner::edge_t* e = new tanner::edge_t;
             e->src = check_v;
             e->dst = data_v;
-            graph.add_edge(e);  // This should never fail.
+            e->is_undirected = true;
+            graph.add_edge(e); // This should never fail.
         }
         pssi = ssi+1;
         if (ssi == line.size()) break;

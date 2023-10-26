@@ -10,11 +10,13 @@
 #include <map>
 #include <vector>
 
-#include <cplex.h>
+#include <cplexx.h>
 
 #include <stdlib.h>
 
 namespace qontra {
+
+static int fno = 0;
 
 template <typename T> class LPManager;
 
@@ -48,13 +50,33 @@ struct lp_expr_t {
 
     lp_expr_t<T>& operator+=(const lp_expr_t<T> other) {
         constant += other.constant;
-        for (auto& kv : coefs)  kv.second += other.coefs.at(kv.first);
+        for (auto& kv : coefs) {
+            if (other.coefs.count(kv.first)) {
+                kv.second += other.coefs.at(kv.first);
+            }
+        }
+        for (auto kv : other.coefs) {
+            if (!coefs.count(kv.first)) {
+                coefs[kv.first] = 0;
+            }
+            coefs[kv.first] += kv.second;
+        }
         return *this;
     }
 
     lp_expr_t<T>& operator-=(const lp_expr_t<T> other) {
         constant -= other.constant;
-        for (auto& kv : coefs)  kv.second -= other.coefs.at(kv.first);
+        for (auto& kv : coefs) {
+            if (other.coefs.count(kv.first)) {
+                kv.second -= other.coefs.at(kv.first);
+            }
+        }
+        for (auto kv : other.coefs) {
+            if (!coefs.count(kv.first)) {
+                coefs[kv.first] = 0;
+            }
+            coefs[kv.first] -= kv.second;
+        }
         return *this;
     }
 
@@ -82,6 +104,12 @@ struct lp_expr_t {
     std::map<lp_var_t<T>*, fp_t>   coefs;
 };
 
+template <typename T> lp_expr_t<T> operator-(lp_expr_t<T> e) {
+    e.constant = -e.constant;
+    for (auto& kv : e.coefs) kv.second = -kv.second;
+    return e;
+}
+
 template <typename T> lp_expr_t<T> operator+(lp_expr_t<T> e, lp_expr_t<T> f) { return (e += f); }
 template <typename T> lp_expr_t<T> operator-(lp_expr_t<T> e, lp_expr_t<T> f) { return (e -= f); }
 
@@ -90,7 +118,7 @@ template <typename T> lp_expr_t<T> operator-(lp_expr_t<T> e, fp_t x) { return (e
 template <typename T> lp_expr_t<T> operator*(lp_expr_t<T> e, fp_t x) { return (e *= x); }
 template <typename T> lp_expr_t<T> operator/(lp_expr_t<T> e, fp_t x) { return (e /= x); }
 template <typename T> lp_expr_t<T> operator+(fp_t x, lp_expr_t<T> e) { return e+x; }
-template <typename T> lp_expr_t<T> operator-(fp_t x, lp_expr_t<T> e) { return e-x; }
+template <typename T> lp_expr_t<T> operator-(fp_t x, lp_expr_t<T> e) { return -e+x; }
 template <typename T> lp_expr_t<T> operator*(fp_t x, lp_expr_t<T> e) { return e*x; }
 template <typename T> lp_expr_t<T> operator/(fp_t x, lp_expr_t<T> e) { return e/x; }
 
@@ -133,6 +161,7 @@ struct lp_constr_t {
         relation(r)
     {
         for (auto kv : _rhs.coefs) {
+            if (!lhs.coefs.count(kv.first)) lhs.coefs[kv.first] = 0;
             lhs.coefs[kv.first] -= kv.second;
         }
         rhs = _rhs.constant - _lhs.constant;
@@ -154,12 +183,12 @@ struct lp_constr_t {
 
 inline CPXENVptr cpxinit(void) {
     int status;
-    CPXENVptr env = CPXopenCPLEX(&status);
+    CPXENVptr env = CPXXopenCPLEX(&status);
     return env;
 }
 
 inline void cpxexit(CPXENVptr* env_p) {
-    CPXcloseCPLEX(env_p);
+    CPXXcloseCPLEX(env_p);
 }
 
 template <typename T>
@@ -195,7 +224,7 @@ public:
         cpxfreeprog();
         cpxmakeprog();
 
-        status = CPXchgobjsen(env, prog, is_maximization ? CPX_MAX : CPX_MIN);
+        status = CPXXchgobjsen(env, prog, is_maximization ? CPX_MAX : CPX_MIN);
         
         // Declare variables in columns.
         fp_t* obj = (fp_t*) calloc(columns, sizeof(fp_t));
@@ -205,7 +234,7 @@ public:
 
         for (int32_t i = 0; i < columns; i++) {
             lp_var_t<T>* v = variables[i];
-            obj[i] = objective.coefs[v];
+            if (objective.coefs.count(v)) obj[i] = objective.coefs[v];
 
             bool lwr_defined = v->bounds_type == VarBounds::lower
                                 || v->bounds_type == VarBounds::both
@@ -224,7 +253,12 @@ public:
                 vtypes[i] = 'B';
             }
         }
-        status = CPXnewcols(env, prog, columns, obj, lb, ub, vtypes, NULL);
+        status = CPXXnewcols(env, prog, columns, obj, lb, ub, vtypes, NULL);
+        free(obj);
+        free(lb);
+        free(ub);
+        free(vtypes);
+        if (rows == 0)  return;
         // Declare constraints in rows.
         //
         // First, we need to count the total number of nonzero coefficients in 
@@ -237,7 +271,7 @@ public:
         // constraints.
         fp_t* rhs = (fp_t*) malloc(rows * sizeof(fp_t));
         char* sense = (char*) malloc(rows * sizeof(char));
-        int* rmatbeg = (int*) malloc(rows * sizeof(int));
+        CPXNNZ* rmatbeg = (CPXNNZ*) malloc(rows * sizeof(CPXNNZ));
         int* rmatind = (int*) malloc(num_nonzeros * sizeof(int));
         fp_t* rmatval = (fp_t*) malloc(num_nonzeros * sizeof(fp_t));
 
@@ -263,12 +297,8 @@ public:
                 offset++;
             }
         }
-        status = CPXaddrows(env, prog, 0, rows, num_nonzeros, rhs, sense, rmatbeg, rmatind, rmatval, NULL, NULL);
+        status = CPXXaddrows(env, prog, 0, rows, num_nonzeros, rhs, sense, rmatbeg, rmatind, rmatval, NULL, NULL);
         // Free all variables.
-        free(obj);
-        free(lb);
-        free(ub);
-        free(vtypes);
         free(rhs);
         free(sense);
         free(rmatbeg);
@@ -277,26 +307,20 @@ public:
     }
 
     fp_t solve() {
-        status = CPXlpopt(env, prog);
+        std::string lpfile = std::string("test") + std::to_string(fno++) + ".alp";
+        status = CPXXmipopt(env, prog);
+        status = CPXXwriteprob(env, prog, lpfile.c_str(), NULL);
 
-        int finrows = CPXgetnumrows(env, prog);
-        int fincols = CPXgetnumcols(env, prog);
+        int finrows = CPXXgetnumrows(env, prog);
+        int fincols = CPXXgetnumcols(env, prog);
 
         int solstat;
         fp_t objective;
 
         if (prog_soln != NULL)  free(prog_soln);
-        fp_t* prog_soln = (fp_t*) malloc(fincols * sizeof(fp_t));
+        prog_soln = (fp_t*) malloc(fincols * sizeof(fp_t));
 
-        fp_t* slack = (fp_t*) malloc(finrows * sizeof(fp_t));
-        fp_t* dj = (fp_t*) malloc(fincols * sizeof(fp_t));
-        fp_t* pi = (fp_t*) malloc(finrows * sizeof(fp_t));
-
-        status = CPXsolution(env, prog, &solstat, &objective, prog_soln, pi, slack, dj);
-        free(pi);
-        free(slack);
-        free(dj);
-
+        status = CPXXsolution(env, prog, &solstat, &objective, prog_soln, NULL, NULL, NULL);
         return objective;
     }
 
@@ -317,6 +341,7 @@ public:
         v->upp = upper;
         v->bounds_type = btype;
         v->var_type = vtype;
+        variables.push_back(v);
         return v;
     }
 
@@ -351,13 +376,13 @@ public:
 private:
     void cpxfreeprog(void) {
         if (prog != NULL) {
-            status = CPXfreeprob(env, &prog);
+            status = CPXXfreeprob(env, &prog);
             prog = NULL;
         }
     }
 
     void cpxmakeprog(void) {
-        prog = CPXcreateprob(env, &status, "lp");
+        prog = CPXXcreateprob(env, &status, "lp");
     }
 
     std::map<T, lp_var_t<T>*> label_to_lp_var;

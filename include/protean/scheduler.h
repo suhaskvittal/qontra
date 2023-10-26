@@ -8,6 +8,7 @@
 
 #include "defs.h"
 #include "graph/tanner_graph.h"
+#include "instruction.h"
 #include "linprog.h"
 
 #include <deque>
@@ -17,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include <math.h>
 #include <string.h>
 
 namespace qontra {
@@ -36,15 +38,20 @@ struct css_code_data_t {
     // 
     // This should be -1 if no such qubit exists.
     std::map<uint, std::vector<int32_t>>    check_schedules;
+    uint schedule_depth;
     
     std::vector<uint>   xparity_list;
     std::vector<uint>   zparity_list;
+
+    std::vector<uint>   zflag_list;
+    std::vector<uint>   xflag_list;
 
     std::vector<std::vector<uint>>  x_obs_list;
     std::vector<std::vector<uint>>  z_obs_list;
 
     // flag_usage[u][v] corresponds to the flag qubit used by data qubit v during check u.
-    TwoLevelMap<uint, uint, uint>   flag_usage;
+    std::map<uint, std::vector<uint>>   parity_to_flags;
+    TwoLevelMap<uint, uint, uint>       flag_usage;
 
     void print_schedule(std::ostream& out) {
         out << "---------------- X Stabilizers -------------------\n";
@@ -67,6 +74,9 @@ struct css_code_data_t {
         }
     }
 };
+
+schedule_t
+write_memory_experiment(css_code_data_t, uint rounds, bool is_memory_x);
 
 // Each stabilizer is defined as an array of pauli_ops.
 // We choose such a definition to allow this code to be
@@ -99,7 +109,7 @@ typedef graph::Graph<stab_vertex_t, stab_edge_t>    StabilizerGraph;
 
 // Finally, the scheduling function.
 css_code_data_t
-compute_schedule_from_tanner_graph(graph::TannerGraph&);
+compute_schedule_from_tanner_graph(graph::TannerGraph&, int start=0);
 
 // Helper functions:
 LPManager<uint>*

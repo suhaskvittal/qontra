@@ -59,7 +59,7 @@ print_id(uint64_t id) {
     else if (is_xparity(id))    prefix = "x";
     else                        prefix = "z";
 
-    return prefix + std::to_string(id);
+    return prefix + std::to_string(q);
 }
 
 }   // tanner
@@ -114,7 +114,7 @@ public:
         auto w = (tanner::vertex_t*)e->dst;
         // Make sure the edge preserves the bipartite property.
         bool src_is_parity = v->qubit_type != tanner::vertex_t::Type::data;
-        bool dst_is_parity = v->qubit_type != tanner::vertex_t::Type::data;
+        bool dst_is_parity = w->qubit_type != tanner::vertex_t::Type::data;
         if (src_is_parity && dst_is_parity) return false;
         return __TannerGraphParent::add_edge(e);
     }
