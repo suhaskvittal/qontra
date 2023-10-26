@@ -8,8 +8,7 @@ namespace qontra {
 
 std::vector<uint>
 Instruction::get_qubit_operands() const {
-    return operands.qubits;
-}
+    return operands.qubits; }
 
 uint
 get_number_of_qubits(const schedule_t& sch) {

@@ -164,7 +164,7 @@ write_recorded_errors_to(std::ostream& out, const std::vector<error_record_t>& r
         std::vector<qubit_error_t> error_list;
 
         uint64_t n = x.num_bits_padded();   // Good enough approximation.
-        // Cmopute the list of errors that have occurred due to this error.
+        // Compute the list of errors that have occurred due to this error.
         for (uint64_t i = 0; i < n; i++) {
             if (x[i] & z[i])    error_list.push_back(std::make_pair(i, error::y));
             else if (x[i])      error_list.push_back(std::make_pair(i, error::x));

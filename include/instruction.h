@@ -184,36 +184,41 @@ struct Instruction {
     std::vector<uint>   get_qubit_operands(void) const;
 
     std::string str(void) const {
-        std::string out = name;
-        if (operands.angles.size()) {
-            out += "(" + operands_to_str(operands.angles) + ")";
+        std::string out;
+        // Add annotations and properties.
+        for (std::string annot : annotations) {
+            out += "@annotation " + annot + "\n";
         }
-        if (operands.qubits.size()) {
-            out += " ";
-            out += operands_to_str(operands.qubits);
+        for (auto prop_kv : properties) {
+            out += "@property " + prop_kv.first;
+            if (prop_kv.second.fval != 0.0) {
+                out += std::to_string(prop_kv.second.fval);
+            } else {
+                out += std::to_string(prop_kv.second.ival);
+            }
+            out += "\n";
         }
-        if (operands.measurements.size()) {
-            out += " ";
-            out += operands_to_str(operands.measurements, "M");
-        }
-        if (operands.events.size()) {
-            out += " ";
-            out += operands_to_str(operands.events, "e");
-        }
-        if (operands.observables.size()) {
-            out += " ";
-            out += operands_to_str(operands.observables, "o");
-        }
-        if (operands.frames.size()) {
-            out += " ";
-            out += operands_to_str(operands.frames, "f");
-        }
-        if (operands.labels.size()) {
-            out += " ";
-            out += operands_to_str(operands.labels, "addr");
-        }
-        out += "\n";
-        
+        // Depending on the type of instruction, print out differently.
+        out += name;
+        if (IS_QUANTUM.count(name)) {
+            out += "\t";
+            for (uint i = 0; i < operands.qubits.size(); i++) {
+                if (i > 0) out += ", ";
+                out += std::to_string(operands.qubits[i]);
+            }
+        } else if (IS_DECODE_TYPE1.count(name)) {
+            out += "\t";
+            out += std::to_string(operands.events[0]);
+            for (uint i = 0; i < operands.measurements.size(); i++) {
+                out += ", " + std::to_string(operands.measurements[i]);
+            }
+        } else if (IS_DECODE_TYPE2.count(name)) {
+            out += "\t";
+            out += std::to_string(operands.observables[0]);
+            for (uint i = 0; i < operands.measurements.size(); i++) {
+                out += ", " + std::to_string(operands.measurements[i]);
+            }
+        } // In construction :)
         return out;
     }
 

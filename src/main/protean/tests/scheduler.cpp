@@ -8,7 +8,12 @@
 #include <graph/tanner_graph.h>
 #include <instruction.h>
 #include <parsing/cmd.h>
+
 #include <protean/scheduler.h>
+#include <protean/utils.h>
+
+#include <fstream>
+#include <iostream>
 
 using namespace qontra;
 
@@ -35,8 +40,13 @@ int main(int argc, char* argv[]) {
 
     code_data.print_schedule(std::cout);
 
+    code_data = protean::make_fault_tolerant(code_data);
+
     schedule_t mxp = write_memory_experiment(code_data, 4, false);
     std::cout << schedule_to_text(mxp) << "\n";
+
+    std::ofstream fout("test.asm");
+    fout << schedule_to_text(mxp);
 
     return 0;
 }

@@ -82,6 +82,15 @@ xor_into(std::set<T>& s, T x) {
     else            s.insert(x);
 }
 
+template <typename T> int
+number_of_common_elements(const std::vector<T>& arr1, const std::vector<T>& arr2) {
+    std::set<T> ss(arr1.begin(), arr1.end());
+    for (T x : arr2) {
+        if (!ss.count(x)) return false;
+        ss.erase(x);
+    }
+    return ss.size();
+}
 
  // T must either be stim::simd_bits or stim::simd_bits_range_ref
 template <class T> inline vlw_t

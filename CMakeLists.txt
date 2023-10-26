@@ -124,7 +124,8 @@ if (COMPILE_PROTEAN)
     include(${CMAKE_SOURCE_DIR}/cmake/FindCPLEX.cmake)
 
     set(PROTEAN_FILES
-        src/protean/scheduler.cpp)
+        src/protean/scheduler.cpp
+        src/protean/utils.cpp)
     add_library(protean ${PROTEAN_FILES})
     target_include_directories(protean PUBLIC ${CPLEX_INCLUDE_DIR})
     target_link_libraries(protean PUBLIC 

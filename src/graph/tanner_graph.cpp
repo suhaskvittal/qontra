@@ -75,10 +75,12 @@ update_tanner_graph(TannerGraph& graph, std::string line) {
         if (ssi == line.size()) break;
     }
 
-    if (is_x_obs) {
-        graph.x_obs_list.push_back(obs_qubits);
-    } else {
-        graph.z_obs_list.push_back(obs_qubits);
+    if (is_obs) {
+        if (is_x_obs) {
+            graph.x_obs_list.push_back(obs_qubits);
+        } else {
+            graph.z_obs_list.push_back(obs_qubits);
+        }
     }
 }
 

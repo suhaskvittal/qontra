@@ -4,7 +4,7 @@
 
 
 #define DISABLE_MPI
-//#define USE_NEURAL_NET
+#define USE_NEURAL_NET
 
 #include <decoder/mwpm.h>
 #include <decoder/restriction.h>
