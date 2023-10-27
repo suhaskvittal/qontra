@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include <assert.h>
 #include <math.h>
 #include <string.h>
 

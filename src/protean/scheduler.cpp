@@ -207,6 +207,7 @@ make_fault_tolerant(css_code_data_t code_data) {
     // We will analyze the errors on the syndrome extraction schedule.
     schedule_t sxt_sch = write_syndrome_extraction_ops(code_data);
     std::vector<error_record_t> all_errors = enumerate_errors(sxt_sch);
+    write_recorded_errors_to(std::cout, all_errors);
     // Now, we will examine these errors and introduce flag qubits wherever
     // necessary.
     uint flag_qubit_ctr = code_data.data_qubits.size() + code_data.parity_qubits.size();
@@ -232,6 +233,7 @@ make_fault_tolerant(css_code_data_t code_data) {
         //
         // We can exit early if w == 1 (not an issue) or w == 0 (error is a
         // stabilizer).
+        /*
         mq_pauli_op_t min_weight_dual;
         uint w = std::numeric_limits<uint>::max();
         for (const stabilizer_t& s : stab) {
@@ -244,8 +246,10 @@ make_fault_tolerant(css_code_data_t code_data) {
         }
         if (w <= 1) continue;
         if (min_weight_dual.size() < error_op.size()) error_op = min_weight_dual;
+        */
         // Now, we must analyze and check for errors. Check against the
         // observables.
+        /*
         pauli pauli_array[] = { pauli::x, pauli::z };
         std::vector<std::vector<uint>> obs_list_array[] = { code_data.x_obs_list, code_data.z_obs_list };
         bool is_fault_tolerant = true;
@@ -262,6 +266,8 @@ make_fault_tolerant(css_code_data_t code_data) {
                 }
             }
         }
+        */
+        bool is_fault_tolerant = error_op.size() <= 1;
 obs_cmp_exit:
         if (is_fault_tolerant) continue;
         // Check CX instruction
@@ -290,15 +296,18 @@ obs_cmp_exit:
         uint next_data_qubit = next_qubit_in_schedule[check_qubit][data_qubit];
         // It should never be the case that the next data qubit is already
         // assigned a flag.
+        assert(!code_data.flag_usage[check_qubit].count(next_data_qubit));
         tlm::put(code_data.flag_usage, check_qubit, data_qubit, flag_qubit_ctr);
         tlm::put(code_data.flag_usage, check_qubit, next_data_qubit, flag_qubit_ctr);
         if (std::find(code_data.xparity_list.begin(), code_data.xparity_list.end(), check_qubit)
-                == code_data.xparity_list.end())
+                != code_data.xparity_list.end())
         {
             code_data.xflag_list.push_back(flag_qubit_ctr);
         } else {
             code_data.zflag_list.push_back(flag_qubit_ctr);
         }
+        std::cout << "flag qubit: " << flag_qubit_ctr << ": (C, D1, D2) = "
+            << check_qubit << ", " << data_qubit << ", " << next_data_qubit << "\n";
         code_data.parity_to_flags[check_qubit].push_back(flag_qubit_ctr);
         code_data.flag_qubits.push_back(flag_qubit_ctr);
         flag_qubit_ctr++;
