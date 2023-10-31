@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
 
     code_data.print_schedule(std::cout);
 
-    code_data = protean::make_fault_tolerant(code_data);
+//  code_data = protean::make_fault_tolerant(code_data);
 
     schedule_t mxp = write_memory_experiment(code_data, 4, false);
 
