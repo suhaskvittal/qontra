@@ -7,7 +7,7 @@
 
 #define DEBUG
 
-#define MODULO 9
+#define MODULO 3
 namespace qontra {
 
 using namespace graph;
@@ -63,8 +63,11 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
         std::vector<match_t> matches = std::get<2>(comp);
         std::set<colored_edge_t*> es;
         for (match_t& m : matches) {
-            auto v = c_decoding_graph.get_vertex(std::get<0>(m) % MODULO);
-            auto w = c_decoding_graph.get_vertex(std::get<1>(m) % MODULO);
+            auto v = c_decoding_graph.get_vertex(std::get<0>(m));
+            auto w = c_decoding_graph.get_vertex(std::get<1>(m));
+            if (!is_colored_boundary(v)) v = c_decoding_graph.get_vertex(v->id % MODULO);
+            if (!is_colored_boundary(w)) w = c_decoding_graph.get_vertex(w->id % MODULO);
+
             if (v == w) continue;
 
             std::string r = std::get<2>(m);
@@ -97,6 +100,8 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     for (match_t& m : matchings) {
         colored_vertex_t* v = c_decoding_graph.get_vertex(std::get<0>(m));
         colored_vertex_t* w = c_decoding_graph.get_vertex(std::get<1>(m));
+        if (!is_colored_boundary(v)) v = c_decoding_graph.get_vertex(v->id % MODULO);
+        if (!is_colored_boundary(w)) w = c_decoding_graph.get_vertex(w->id % MODULO);
         std::string r = std::get<2>(m);
         auto error_data = c_decoding_graph[r].get_error_chain_data(v, w);
         auto error_chain = error_data.error_chain;
@@ -201,9 +206,12 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                     auto e12 = c_decoding_graph.get_edge(v1, v2);
                     auto e13 = c_decoding_graph.get_edge(v1, v3);
                     auto e23 = c_decoding_graph.get_edge(v2, v3);
-                    xor_entry_into(e12, f_boundary);
-                    xor_entry_into(e13, f_boundary);
-                    xor_entry_into(e23, f_boundary);
+                    bool bb12 = is_colored_boundary(v1) && is_colored_boundary(v2),
+                            bb13 = is_colored_boundary(v1) && is_colored_boundary(v3),
+                            bb23 = is_colored_boundary(v2) && is_colored_boundary(v3);
+                    if (!bb12)  xor_entry_into(e12, f_boundary);
+                    if (!bb13)  xor_entry_into(e13, f_boundary);
+                    if (!bb23)  xor_entry_into(e23, f_boundary);
 
                     local_corr ^= face_corr_list[ii];
                 }
@@ -232,16 +240,18 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 best_intersect_with_cc = int_with_cc.size();
                 best_cc_boundary = f_boundary;
                 best_cc_corr = local_corr;
+                std::cout << "\tbest in cc now face set " << i << "\n";
             } else if (int_with_no_cc.size() > best_intersect_with_no_cc) {
                 best_intersect_with_no_cc = int_with_no_cc.size();
                 best_no_cc_boundary = f_boundary;
                 best_no_cc_corr = local_corr;
+                std::cout << "\tbest no cc now face set " << i << " (corr = " << local_corr[0] << ")\n";
             }
         }
         std::set<colored_edge_t*> best_boundary;
         stim::simd_bits best_corr(obs);
         // Choose boundary with minimum size
-        if (best_intersect_with_cc < best_intersect_with_no_cc) {
+        if (best_intersect_with_cc > best_intersect_with_no_cc) {
             best_boundary = best_cc_boundary;
             best_corr = best_cc_corr;
         } else {
@@ -253,10 +263,6 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #endif
         // Commit the correction for the boundary and erase the edges.
         corr ^= best_corr;
-        for (auto e : best_boundary) {
-            all_in_cc.erase(e);
-            out_of_cc.erase(e);
-        }
     }
     
 #ifdef DEBUG
