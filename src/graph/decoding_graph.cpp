@@ -370,7 +370,7 @@ ColoredDecodingGraph::are_matched_through_boundary(
 }
 
 std::set<face_t>
-ColoredDecodingGraph::get_all_incident_faces(colored_vertex_t* v) {
+ColoredDecodingGraph::get_all_incident_faces(colored_vertex_t* v, int modulo) {
     // Memoize this function -- we will expect to access this quite frequently.
     static std::map<colored_vertex_t*, std::set<face_t>> memo;
     if (memo.count(v))  return memo[v];
@@ -378,10 +378,13 @@ ColoredDecodingGraph::get_all_incident_faces(colored_vertex_t* v) {
     auto v_adj = get_neighbors(v);
     std::set<face_t> faces;
     for (auto w : v_adj) {
+        if (modulo > 0 && !is_colored_boundary(w)) w = get_vertex(w->id % modulo);
         for (auto u : get_common_neighbors(v, w)) {
-            if (u->color != v->color && v->color != w->color && u->color != w->color) {
-                faces.insert(make_face(v, w, u));
-            }
+            if (modulo > 0 && !is_colored_boundary(u)) u = get_vertex(u->id % modulo);
+
+            if (u->color == v->color || v->color == w->color || u->color == w->color)   continue;
+            if (u == v || v == w || u == w) continue;
+            faces.insert(make_face(v, w, u));
         }
     }
     memo[v] = faces;
@@ -457,12 +460,12 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
 
         stim::DetectorErrorModel dem = 
             stim::ErrorAnalyzer::circuit_to_detector_error_model(
-                circuit,
-                true,  // decompose_errors
-                true,  // fold loops
-                true, // allow gauge detectors
-                1.0,   // approx disjoint errors threshold
-                true, // ignore decomposition failures
+                sc,
+                true,   // decompose_errors
+                true,   // fold loops
+                false,  // allow gauge detectors
+                1.0,    // approx disjoint errors threshold
+                false,  // ignore decomposition failures
                 false
             );
         // Nothing needs to be done for the detector callback as we have already
@@ -497,7 +500,6 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
                         if (c == "g")   dets.push_back(BLUE_BOUNDARY_INDEX);
                         else            dets.push_back(GREEN_BOUNDARY_INDEX);
                     }
-                    dets.push_back(BOUNDARY_INDEX);
                 }
                 // Now, there are only two detectors.
                 auto v1 = graph.get_vertex(dets[0]);

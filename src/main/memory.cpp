@@ -4,7 +4,7 @@
 
 
 #define DISABLE_MPI
-#define USE_NEURAL_NET
+//#define USE_NEURAL_NET
 
 #include <decoder/mwpm.h>
 #include <decoder/restriction.h>
@@ -29,6 +29,10 @@ get_circuit(const schedule_t& sch, fp_t p) {
 
     tables::ErrorAndTiming et;
     et = et * (1000 * p);
+    et.e_g1q = 0.0;
+    et.e_m1w0 = 0.0;
+    et.e_m0w1 = 0.0;
+    et.e_g2q = 0.0;
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
@@ -77,11 +81,9 @@ int main(int argc, char* argv[]) {
     dec.config.max_epochs = epochs;
     dec.training_circuit = get_circuit(sch, p);
 #else
-    MWPMDecoder dec(error_model);
-#endif
-    /*
+    //MWPMDecoder dec(error_model);
     RestrictionDecoder dec(error_model);
-    */
+#endif
 
     // Setup experiment.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
