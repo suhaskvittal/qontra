@@ -30,6 +30,11 @@ protected:
     typedef std::tuple<uint64_t, uint64_t, std::string> match_t;
     typedef std::tuple<uint64_t, uint64_t, std::vector<match_t>, std::string> cc_t;
 
+    match_t make_match(uint64_t x, uint64_t y, std::string color) {
+        if (x > y) std::swap(x, y);
+        return std::make_tuple(x, y, color);
+    }
+
     std::vector<match_t>    blossom_subroutine(const std::vector<uint>&);
     std::vector<cc_t>       compute_connected_components(const std::vector<match_t>&);
 

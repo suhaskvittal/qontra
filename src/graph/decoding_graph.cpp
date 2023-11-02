@@ -21,10 +21,11 @@ read_detector_error_model(const stim::DetectorErrorModel&,
 using namespace decoding;
 
 std::string
-print_v(vertex_t* v) {
+print_v(colored_vertex_t* v) {
     std::string s;
-    if (is_boundary(v) || is_colored_boundary(v)) s += "B";
-    else                        s += std::to_string(v->id);
+    if (is_colored_boundary(v)) s += "B";
+    else                s += std::to_string(v->id);
+    s += "[" + v->color + "]";
     return s;
 }
 
@@ -34,7 +35,6 @@ print_v(vertex_t* v) {
 
 void
 DecodingGraph::build_distance_matrix() {
-    std::cout << "n = " << get_vertices().size() << "\n";
     ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
     {
         auto e = this->get_edge(v1, v2);
@@ -384,6 +384,7 @@ ColoredDecodingGraph::are_matched_through_boundary(
     // Ignore both endpoints.
     colored_vertex_t* b1 = nullptr;
     colored_vertex_t* b2 = nullptr;
+    if (path[0] != v1) std::reverse(path.begin(), path.end());
     for (uint i = 1; i < path.size()-1; i++) {
         auto w = (colored_vertex_t*)path[i];
         if (is_colored_boundary(w)) {
