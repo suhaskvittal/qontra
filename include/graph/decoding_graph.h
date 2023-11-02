@@ -170,6 +170,9 @@ inline int color_to_int(std::string x) {
 class ColoredDecodingGraph : public __ColoredDecodingGraphParent {
 public:
     ColoredDecodingGraph(DecodingGraph::Mode mode=DecodingGraph::Mode::NORMAL);
+    ~ColoredDecodingGraph() {
+        for (auto& gr : restricted_graphs) gr.dealloc_on_delete = false;
+    }
 
     bool    add_vertex(decoding::colored_vertex_t*) override;
     bool    add_edge(decoding::colored_edge_t*) override;

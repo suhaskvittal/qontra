@@ -12,7 +12,6 @@ typedef std::function<void(fp_t, std::vector<uint64_t>, std::set<uint>)>
     error_callback_t;
 typedef std::function<void(uint, std::array<fp_t, N_COORD>)>
     detector_callback_t;
-
 void
 read_detector_error_model(const stim::DetectorErrorModel&, 
         uint n_iter, uint& det_offset, 
@@ -21,20 +20,25 @@ read_detector_error_model(const stim::DetectorErrorModel&,
 
 using namespace decoding;
 
+std::string
+print_v(vertex_t* v) {
+    std::string s;
+    if (is_boundary(v) || is_colored_boundary(v)) s += "B";
+    else                        s += std::to_string(v->id);
+    return s;
+}
+
 //
 // DecodingGraph Definitions
 //
 
 void
 DecodingGraph::build_distance_matrix() {
+    std::cout << "n = " << get_vertices().size() << "\n";
     ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
     {
         auto e = this->get_edge(v1, v2);
-        if (e == nullptr) {
-            return 1000000000.0;
-        } else {
-            return e->edge_weight;
-        }
+        return e->edge_weight;
     };
     distance::callback_t<vertex_t, matrix_entry_t> cb = 
     [&] (vertex_t* src,
@@ -53,6 +57,9 @@ DecodingGraph::build_distance_matrix() {
             while (curr != src) {
                 auto next = pred.at(curr);
                 if (curr == next) {
+                    std::cout << "could not find path from "
+                        << print_v((colored_vertex_t*)src) << " to " 
+                        << print_v((colored_vertex_t*)dst) << "\n";
                     weight = 1000000000;
                     path.clear();
                     found_boundary = false;
@@ -72,6 +79,10 @@ DecodingGraph::build_distance_matrix() {
                 curr = next;
             }
             path.push_back(src);
+        } else {
+            std::cout << "could not find path from "
+                        << print_v((colored_vertex_t*)src) << " to " 
+                        << print_v((colored_vertex_t*)dst) << "\n";
         }
 failed:
         fp_t prob = pow(10, -weight);
@@ -129,9 +140,9 @@ to_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
             circuit,
             true,  // decompose_errors
             true,  // fold loops
-            true, // allow gauge detectors
+            false, // allow gauge detectors
             1.0,   // approx disjoint errors threshold
-            true, // ignore decomposition failures
+            false, // ignore decomposition failures
             false
         );
     // Create callbacks.
@@ -216,9 +227,6 @@ ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
     restricted_color_map(),
     restricted_graphs()
 {
-    restricted_graphs.fill(DecodingGraph(mode));
-    for (auto& gr : restricted_graphs)  gr.dealloc_on_delete = false;
-
     restricted_color_map["rg"] = 0;
     restricted_color_map["gr"] = 0;
     restricted_color_map["rb"] = 1;
@@ -229,9 +237,10 @@ ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
     // Modify each decoding graph by introducing two boundaries -- one for each color.
     // Delete their existing boundaries.
     for (uint i = 0; i < 3; i++) {
-        DecodingGraph& gr = restricted_graphs[i];
+        DecodingGraph gr(mode);
         auto boundary = gr.get_vertex(BOUNDARY_INDEX);
         gr.delete_vertex(boundary);
+        restricted_graphs[i] = gr;
     }
     colored_vertex_t* bred = new colored_vertex_t;
     colored_vertex_t* bgreen = new colored_vertex_t;
@@ -255,14 +264,20 @@ ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
     erg->src = (void*)bred;
     erg->dst = (void*)bgreen;
     erg->is_undirected = true;
+    erg->edge_weight = 1e-3;
+    erg->error_probability = 1.0;
 
     erb->src = (void*)bred;
     erb->dst = (void*)bblue;
     erb->is_undirected = true;
+    erb->edge_weight = 1e-3;
+    erb->error_probability = 1.0;
 
     egb->src = (void*)bgreen;
     egb->dst = (void*)bblue;
     egb->is_undirected = true;
+    egb->edge_weight = 1e-3;
+    egb->error_probability = 1.0;
 
     add_edge(erg);
     add_edge(erb);
@@ -272,7 +287,7 @@ ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
 bool
 ColoredDecodingGraph::add_vertex(colored_vertex_t* v) {
     if (!__ColoredDecodingGraphParent::add_vertex(v))   return false;
-    for (auto pair : restricted_color_map) {
+    for (auto& pair : restricted_color_map) {
         std::string r = pair.first;
         if (r[0] != v->color[0])    continue;
         DecodingGraph& gr = restricted_graphs[pair.second];
@@ -290,11 +305,22 @@ ColoredDecodingGraph::add_edge(colored_edge_t* e) {
     colored_vertex_t* src = (colored_vertex_t*)e->src;
     colored_vertex_t* dst = (colored_vertex_t*)e->dst;
 
-    std::string lat = src->color + dst->color;
-    DecodingGraph& gr = restricted_graphs[restricted_color_map[lat]];
-    if (!gr.add_edge(e)) {
-        __ColoredDecodingGraphParent::delete_edge(e);
-        return false;
+    if (src->color == dst->color) {
+        for (auto& pair : restricted_color_map) {
+            std::string r = pair.first;
+            DecodingGraph& gr = restricted_graphs[pair.second];
+            if (r[0] == src->color[0] && !gr.add_edge(e)) {
+                __ColoredDecodingGraphParent::delete_edge(e);
+                return false;
+            }
+        }
+    } else {
+        std::string lat = src->color + dst->color;
+        DecodingGraph& gr = restricted_graphs[restricted_color_map[lat]];
+        if (!gr.add_edge(e)) {
+            __ColoredDecodingGraphParent::delete_edge(e);
+            return false;
+        }
     }
     return true;
 }
@@ -306,7 +332,7 @@ ColoredDecodingGraph::delete_vertex(colored_vertex_t* v) {
         std::string r = pair.first;
         if (r[0] != v->color[0])    continue;
         DecodingGraph& gr = restricted_graphs[pair.second];
-        __ColoredDecodingGraphParent::delete_vertex(v);
+        gr.delete_vertex(v);
     }
     // Finally, delete the final reference to the vertex.
     __ColoredDecodingGraphParent::delete_vertex(v);
@@ -317,9 +343,19 @@ ColoredDecodingGraph::delete_edge(colored_edge_t* e) {
     colored_vertex_t* src = (colored_vertex_t*)e->src;
     colored_vertex_t* dst = (colored_vertex_t*)e->dst;
 
-    std::string lat = src->color + dst->color;
-    DecodingGraph& gr = restricted_graphs[restricted_color_map[lat]];
-    gr.delete_edge(e);
+    if (src->color == dst->color) {
+        for (auto& pair : restricted_color_map) {
+            std::string r = pair.first;
+            DecodingGraph& gr = restricted_graphs[pair.second];
+            if (r[0] == src->color[0]) {
+                gr.delete_edge(e);
+            }
+        }
+    } else {
+        std::string lat = src->color + dst->color;
+        DecodingGraph& gr = restricted_graphs[restricted_color_map[lat]];
+        gr.delete_edge(e);
+    }
     __ColoredDecodingGraphParent::delete_edge(e);
 }
 
@@ -430,7 +466,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
             // Check the color of the detector.
             int color_id = (int) op.target_data.args[0];
             std::string color = int_to_color(color_id);
-            uint64_t detector = (detector_ctr++);
+            uint64_t detector = detector_ctr;
             for (uint i = 0; i < 3; i++) {
                 std::string r = restrictions[i];
                 if (r[0] == color[0] || r[1] == color[0]) {
@@ -446,8 +482,8 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
             colored_vertex_t* v = new colored_vertex_t;
             v->id = detector;
             v->color = color;
-            std::cout << "found vertex " << detector << " with color " << color << "(" << color_id << ")\n";
             graph.add_vertex(v);
+            detector_ctr++;
         } else {
             for (auto& sc : subcircuits) sc.append_operation(op);
         }
@@ -490,10 +526,10 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
                     uint64_t d = dets[0];
                     auto v = graph.get_vertex(d);
                     std::string c = v->color;
-                    if (r == "rg") {
+                    if (r == "rg" || r == "gr") {
                         if (c == "r")   dets.push_back(GREEN_BOUNDARY_INDEX);
                         else            dets.push_back(RED_BOUNDARY_INDEX);
-                    } else if (r == "rb") {
+                    } else if (r == "rb" || r == "br") {
                         if (c == "r")   dets.push_back(BLUE_BOUNDARY_INDEX);
                         else            dets.push_back(RED_BOUNDARY_INDEX);
                     } else {

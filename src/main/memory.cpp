@@ -3,7 +3,7 @@
  * */
 
 
-#define DISABLE_MPI
+//#define DISABLE_MPI
 //#define USE_NEURAL_NET
 
 #include <decoder/mwpm.h>
@@ -30,13 +30,11 @@ get_circuit(const schedule_t& sch, fp_t p) {
     tables::ErrorAndTiming et;
     et = et * (1000 * p);
     et.e_g1q = 0.0;
-    et.e_m1w0 = 0.0;
-    et.e_m0w1 = 0.0;
     et.e_g2q = 0.0;
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
-    stim::Circuit circ = schedule_to_stim(sch, errors, timing);
+    stim::Circuit circ = schedule_to_stim(sch, errors, timing, p);
     return circ;
 }
 

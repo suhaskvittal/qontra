@@ -8,6 +8,8 @@
 
 #include "graph/graph.h"
 
+#include <math.h>
+
 namespace qontra {
 namespace graph {
 namespace distance {
@@ -57,7 +59,7 @@ dijkstra(
         pqv_t pv = queue.top();
         auto v = pv.v;
         queue.pop();
-        if (pv.s != distances[v])  continue;   // This entry is outdated.
+        if (fabsl(pv.s - distances[v]) > 1e-8) continue;   // This entry is outdated.
 
         auto adj = graph->get_neighbors(v);
         for (V_t* w : adj) {
@@ -89,6 +91,7 @@ create_distance_matrix(
         std::map<V_t*, fp_t> dist;
         dijkstra(graph, src, dist, pred, edge_w_func);
         for (uint j = 0; j < vertices.size(); j++) {
+            if (i == j) continue;
             V_t* dst = vertices[j];
             data_t x = cb(src, dst, dist, pred);
             tlm::put(mat, src, dst, x);

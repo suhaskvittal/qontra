@@ -6,8 +6,8 @@
 #include "decoder/restriction.h"
 
 #define DEBUG
+#define MODULO 18
 
-#define MODULO 3
 namespace qontra {
 
 using namespace graph;
@@ -30,7 +30,6 @@ print_v(colored_vertex_t* v) {
 
 Decoder::result_t
 RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
-
 #ifdef DEBUG
     std::cout << "===================================\n";
 #endif
@@ -62,13 +61,16 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     for (cc_t& comp : comps) {
         std::vector<match_t> matches = std::get<2>(comp);
         std::set<colored_edge_t*> es;
+#ifdef DEBUG
+        std::cout << "connected component:\n";
+#endif
         for (match_t& m : matches) {
             auto v = c_decoding_graph.get_vertex(std::get<0>(m));
             auto w = c_decoding_graph.get_vertex(std::get<1>(m));
-            if (!is_colored_boundary(v)) v = c_decoding_graph.get_vertex(v->id % MODULO);
-            if (!is_colored_boundary(w)) w = c_decoding_graph.get_vertex(w->id % MODULO);
-
-            if (v == w) continue;
+            
+#ifdef DEBUG
+            std::cout << "\t" << print_v(v) << " <--> " << print_v(w) << ":";
+#endif
 
             std::string r = std::get<2>(m);
             auto error_data = c_decoding_graph[r].get_error_chain_data(v, w);
@@ -76,6 +78,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             for (uint j = 1; j < error_chain.size(); j++) {
                 colored_vertex_t* u1 = (colored_vertex_t*)error_chain[j-1];
                 colored_vertex_t* u2 = (colored_vertex_t*)error_chain[j];
+                if (is_colored_boundary(u1) && is_colored_boundary(u2)) continue;
                 // Flatten the vertices.
                 colored_vertex_t* fu1;
                 colored_vertex_t* fu2;
@@ -86,28 +89,32 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 else                            fu2 = c_decoding_graph.get_vertex(u2->id % MODULO);
 
                 auto e = c_decoding_graph.get_edge(fu1, fu2);
-                if (e == nullptr) {
-                    std::cout << "does not exist: " << fu1->id << ", " << fu2->id << "\n";
-                    continue;
-                }
-                es.insert(e);
-                all_in_cc.insert(e);
+                if (e == nullptr)   continue;
+#ifdef DEBUG
+                std::cout << " " << print_v(fu1) << ", " << print_v(fu2);
+#endif
+                xor_entry_into(e, es);
             }
+#ifdef DEBUG
+            std::cout << "\n";
+#endif
         }
+        for (auto e : es) xor_entry_into(e, all_in_cc);
         in_cc_array.push_back(std::make_pair(es, std::get<3>(comp)));
     }
     // Now compute out of cc, which contains anything not in cc.
     for (match_t& m : matchings) {
         colored_vertex_t* v = c_decoding_graph.get_vertex(std::get<0>(m));
         colored_vertex_t* w = c_decoding_graph.get_vertex(std::get<1>(m));
-        if (!is_colored_boundary(v)) v = c_decoding_graph.get_vertex(v->id % MODULO);
-        if (!is_colored_boundary(w)) w = c_decoding_graph.get_vertex(w->id % MODULO);
+
         std::string r = std::get<2>(m);
+        if (r == "gb" || r == "bg") continue;
         auto error_data = c_decoding_graph[r].get_error_chain_data(v, w);
         auto error_chain = error_data.error_chain;
         for (uint j = 1; j < error_chain.size(); j++) {
             colored_vertex_t* u1 = (colored_vertex_t*)error_chain[j-1];
             colored_vertex_t* u2 = (colored_vertex_t*)error_chain[j];
+            if (is_colored_boundary(u1) && is_colored_boundary(u2)) continue;
             // Flatten the vertices.
             colored_vertex_t* fu1;
             colored_vertex_t* fu2;
@@ -118,9 +125,22 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             else                            fu2 = c_decoding_graph.get_vertex(u2->id % MODULO);
 
             auto e = c_decoding_graph.get_edge(fu1, fu2);
-            if (e == nullptr) continue;
-            if (!all_in_cc.count(e)) out_of_cc.insert(e);
+            if (e == nullptr)   continue;
+            if (!all_in_cc.count(e)) {
+                xor_entry_into(e, out_of_cc);
+            }
         }
+    }
+
+    const uint obs = circuit.count_observables();
+    if (all_in_cc.empty() && out_of_cc.empty()) {
+        stim::simd_bits corr(obs);
+        corr.clear();
+        return (Decoder::result_t) {
+            0.0,
+            corr,
+            is_error(corr, syndrome)
+        };
     }
     
     std::set<colored_vertex_t*> out_of_cc_incident = c_decoding_graph.get_all_incident_vertices(out_of_cc, "r");
@@ -134,10 +154,8 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     for (auto v : in_cc_incident)       all_incident.insert(v);
 
     // Finally, compute the correction.
-    const uint obs = circuit.count_observables();
     stim::simd_bits corr(obs);
     corr.clear();
-
 #ifdef DEBUG
     std::cout << "Edges in cc, out of cc: " << all_in_cc.size() << ", " << out_of_cc.size() << "\n";
     std::cout << "In CC:";
@@ -161,7 +179,6 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #endif
 
     for (auto v : all_incident) {
-        if (is_colored_boundary(v)) continue;
         // Can only match one of out_of_cc or in_cc.
         std::set<face_t> incident_faces = c_decoding_graph.get_all_incident_faces(v, MODULO);
         uint64_t nf = incident_faces.size();
@@ -172,14 +189,16 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #ifdef DEBUG
         std::cout << "nf of " << print_v(v) << " = " << nf << ":\n";
         for (face_t f : incident_faces) {
-            std::cout << "\t< " << print_v(std::get<0>(f)) << ", "
-                << print_v(std::get<1>(f))
+            std::cout << "\t< " << print_v(std::get<0>(f))
+                << ", " << print_v(std::get<1>(f))
                 << ", " << print_v(std::get<2>(f)) 
                 << ", " << get_correction_for_face(f)[0] << " >\n";
         }
 #endif
         uint64_t enf = 1L << nf;
 
+        uint64_t faces_cc = std::numeric_limits<uint64_t>::max();
+        uint64_t faces_no_cc = std::numeric_limits<uint64_t>::max();
         uint64_t best_intersect_with_cc = 0;
         uint64_t best_intersect_with_no_cc = 0;
         // We need to track intersections on both sides.
@@ -196,6 +215,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             stim::simd_bits local_corr(obs);
             local_corr.clear();
             uint ii = 0;
+            uint64_t faces = 0;
             while (j) {
                 if (j & 1) {
                     face_t f = *it;
@@ -206,14 +226,14 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                     auto e12 = c_decoding_graph.get_edge(v1, v2);
                     auto e13 = c_decoding_graph.get_edge(v1, v3);
                     auto e23 = c_decoding_graph.get_edge(v2, v3);
-                    bool bb12 = is_colored_boundary(v1) && is_colored_boundary(v2),
-                            bb13 = is_colored_boundary(v1) && is_colored_boundary(v3),
-                            bb23 = is_colored_boundary(v2) && is_colored_boundary(v3);
-                    if (!bb12)  xor_entry_into(e12, f_boundary);
-                    if (!bb13)  xor_entry_into(e13, f_boundary);
-                    if (!bb23)  xor_entry_into(e23, f_boundary);
-
+                    if ((v1 == v || v2 == v) && (!is_colored_boundary(v1) || !is_colored_boundary(v2)))
+                        xor_entry_into(e12, f_boundary);
+                    if ((v1 == v || v3 == v) && (!is_colored_boundary(v1) || !is_colored_boundary(v3)))
+                        xor_entry_into(e13, f_boundary);
+                    if ((v2 == v || v3 == v) && (!is_colored_boundary(v2) || !is_colored_boundary(v3)))
+                        xor_entry_into(e23, f_boundary);
                     local_corr ^= face_corr_list[ii];
+                    faces++;
                 }
                 j >>= 1;
                 it++;
@@ -236,22 +256,35 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             if (int_with_cc.size() > 0 && int_with_no_cc.size() > 0)    continue;
             if (int_with_cc.size() > 0 && int_with_cc.size() != f_boundary.size())  continue;
             if (int_with_no_cc.size() > 0 && int_with_no_cc.size() != f_boundary.size())  continue;
-            if (int_with_cc.size() > best_intersect_with_cc) {
+            if (int_with_cc.size() > best_intersect_with_cc
+                || (int_with_cc.size() == best_intersect_with_cc && faces < faces_cc)) 
+            {
                 best_intersect_with_cc = int_with_cc.size();
+                faces_cc = faces;
                 best_cc_boundary = f_boundary;
                 best_cc_corr = local_corr;
-                std::cout << "\tbest in cc now face set " << i << "\n";
-            } else if (int_with_no_cc.size() > best_intersect_with_no_cc) {
+#ifdef DEBUG
+                std::cout << "\tbest in cc now face set " << i << " (corr = " << local_corr[0] << ", int = " << best_intersect_with_cc << ")\n";
+#endif
+            } 
+            if (int_with_no_cc.size() > best_intersect_with_no_cc
+                || (int_with_no_cc.size() == best_intersect_with_no_cc && faces < faces_no_cc)) 
+            {
                 best_intersect_with_no_cc = int_with_no_cc.size();
+                faces_no_cc = faces;
                 best_no_cc_boundary = f_boundary;
                 best_no_cc_corr = local_corr;
-                std::cout << "\tbest no cc now face set " << i << " (corr = " << local_corr[0] << ")\n";
+#ifdef DEBUG
+                std::cout << "\tbest no cc now face set " << i << " (corr = " << local_corr[0] << ", int = " << best_intersect_with_no_cc << ")\n";
+#endif
             }
         }
         std::set<colored_edge_t*> best_boundary;
         stim::simd_bits best_corr(obs);
         // Choose boundary with minimum size
-        if (best_intersect_with_cc > best_intersect_with_no_cc) {
+        if (best_intersect_with_cc > best_intersect_with_no_cc
+            || (best_intersect_with_cc == best_intersect_with_no_cc && v->color != "r")) 
+        {
             best_boundary = best_cc_boundary;
             best_corr = best_cc_corr;
         } else {
@@ -343,7 +376,6 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
                         vj = vb2;
                     }
                     node_to_pref_boundary[vi] = vj;
-                    std::cout << "\t" << di << " prefers the " << vj->color << " boundary.\n";
                 } else {
                     vj = c_decoding_graph.get_vertex(dj);
                 }
@@ -366,8 +398,7 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
             match_t m = std::make_tuple(vi->id, vj->id, rcolors[k]);
 #ifdef DEBUG
             auto error_data = c_decoding_graph[rcolors[k]].get_error_chain_data(vi, vj);
-            std::cout << "\t" << vi->id << "[" << vi->color << "] <--> " 
-                << vj->id << "[" << vj->color << "] (thru b = " 
+            std::cout << "\t" << print_v(vi) << " <--> " << print_v(vj) << " (thru b = " 
                 << error_data.error_chain_runs_through_boundary << ")\n";
 #endif
             match_list.push_back(m);
@@ -438,7 +469,9 @@ RestrictionDecoder::compute_connected_components(const std::vector<RestrictionDe
     std::vector<cc_t> cc_list;
     // Compute connected components.
     auto rb = c_decoding_graph.get_vertex(RED_BOUNDARY_INDEX);  // Look from
+    std::set<v_t*> skip_set;     // If we have a loop CC, then we need to skip certain searches.
     for (auto n : connectivity_graph.get_neighbors(rb)) {
+        if (skip_set.count(n))  continue;
         e_t* rb_n_e = connectivity_graph.get_edge(rb, n);
         std::vector<match_t> match_list{std::make_tuple(RED_BOUNDARY_INDEX, n->id, rb_n_e->color)};
 
@@ -465,6 +498,9 @@ RestrictionDecoder::compute_connected_components(const std::vector<RestrictionDe
             std::string cc_color;
             if (b2 == RED_BOUNDARY_INDEX || b2 == BLUE_BOUNDARY_INDEX) {
                 cc_color = "g";
+                if (b2 == RED_BOUNDARY_INDEX) {
+                    skip_set.insert(prev[curr]);
+                }
             } else if (b2 == GREEN_BOUNDARY_INDEX) {
                 cc_color = "b";
             }
@@ -486,6 +522,7 @@ RestrictionDecoder::get_correction_for_face(face_t fc) {
     const uint obs = circuit.count_observables();
     stim::simd_bits corr(obs);
     corr.clear();
+    corr.invert_bits();
 
     colored_vertex_t* varray[] = {v1, v2, v3};
     for (uint i = 0; i < 3; i++) {
@@ -504,7 +541,7 @@ RestrictionDecoder::get_correction_for_face(face_t fc) {
             for (uint fr : error_data.frame_changes) {
                 local_corr[fr] = 1;
             }
-            corr |= local_corr;
+            corr &= local_corr;
         }
     }
     return corr;
