@@ -36,7 +36,7 @@ struct lp_expr_t {
         constant(c)
     {}
 
-    lp_expr_t(lp_var_t<T>* v) 
+    lp_expr_t(lp_var_t<T> v) 
         :coefs(),
         constant(0)
     {
@@ -101,7 +101,7 @@ struct lp_expr_t {
     }
 
     fp_t constant;
-    std::map<lp_var_t<T>*, fp_t>   coefs;
+    std::map<lp_var_t<T>, fp_t>   coefs;
 };
 
 template <typename T> lp_expr_t<T> operator-(lp_expr_t<T> e) {
@@ -120,7 +120,6 @@ template <typename T> lp_expr_t<T> operator/(lp_expr_t<T> e, fp_t x) { return (e
 template <typename T> lp_expr_t<T> operator+(fp_t x, lp_expr_t<T> e) { return e+x; }
 template <typename T> lp_expr_t<T> operator-(fp_t x, lp_expr_t<T> e) { return -e+x; }
 template <typename T> lp_expr_t<T> operator*(fp_t x, lp_expr_t<T> e) { return e*x; }
-template <typename T> lp_expr_t<T> operator/(fp_t x, lp_expr_t<T> e) { return e/x; }
 
 enum class VarBounds { none, lower, upper, both, fixed };
 enum class VarDomain { continuous, integer, binary };
@@ -136,20 +135,33 @@ struct lp_var_t {
 
     VarBounds bounds_type;
     VarDomain var_type;
+
+    bool operator==(const lp_var_t<T>& other) const {
+        return lp_ptr == other.lp_ptr && column == other.column;
+    }
+
+    bool operator<(const lp_var_t<T>& other) const {
+        return column < other.column;
+    }
 };
 
-/*
-template <typename T> lp_expr_t<T> operator+(lp_var_t<T>* v, lp_var_t<T>* w) { return lp_expr_t<T>(v) + lp_expr_t<T>(w); }
-template <typename T> lp_expr_t<T> operator-(lp_var_t<T>* v, lp_var_t<T>* w) { return lp_expr_t<T>(v) - lp_expr_t<T>(w); }
-template <typename T> lp_expr_t<T> operator+(lp_var_t<T>* v, fp_t x) { return lp_expr_t<T>(v) + x; }
-template <typename T> lp_expr_t<T> operator-(lp_var_t<T>* v, fp_t x) { return lp_expr_t<T>(v) - x; }
-template <typename T> lp_expr_t<T> operator*(lp_var_t<T>* v, fp_t x) { return lp_expr_t<T>(v) * x; }
-template <typename T> lp_expr_t<T> operator/(lp_var_t<T>* v, fp_t x) { return lp_expr_t<T>(v) / x; }
-template <typename T> lp_expr_t<T> operator+(fp_t x, lp_var_t<T>* v) { return v + x; }
-template <typename T> lp_expr_t<T> operator-(fp_t x, lp_var_t<T>* v) { return v - x; }
-template <typename T> lp_expr_t<T> operator*(fp_t x, lp_var_t<T>* v) { return v * x; }
-template <typename T> lp_expr_t<T> operator/(fp_t x, lp_var_t<T>* v) { return v / x; }
-*/
+template <typename T> lp_expr_t<T> operator-(lp_var_t<T> v) { return -lp_expr_t<T>(v); }
+
+template <typename T> lp_expr_t<T> operator+(lp_var_t<T> v, lp_var_t<T> w) { return lp_expr_t<T>(v) + lp_expr_t<T>(w); }
+template <typename T> lp_expr_t<T> operator-(lp_var_t<T> v, lp_var_t<T> w) { return lp_expr_t<T>(v) - lp_expr_t<T>(w); }
+
+template <typename T> lp_expr_t<T> operator+(lp_var_t<T> v, lp_expr_t<T> w) { return lp_expr_t<T>(v) + w; }
+template <typename T> lp_expr_t<T> operator-(lp_var_t<T> v, lp_expr_t<T> w) { return lp_expr_t<T>(v) - w; }
+template <typename T> lp_expr_t<T> operator+(lp_expr_t<T> v, lp_var_t<T> w) { return w + v; }
+template <typename T> lp_expr_t<T> operator-(lp_expr_t<T> v, lp_var_t<T> w) { return -w + v; }
+
+template <typename T> lp_expr_t<T> operator+(lp_var_t<T> v, fp_t x) { return lp_expr_t<T>(v) + x; }
+template <typename T> lp_expr_t<T> operator-(lp_var_t<T> v, fp_t x) { return lp_expr_t<T>(v) - x; }
+template <typename T> lp_expr_t<T> operator*(lp_var_t<T> v, fp_t x) { return lp_expr_t<T>(v) * x; }
+template <typename T> lp_expr_t<T> operator/(lp_var_t<T> v, fp_t x) { return lp_expr_t<T>(v) / x; }
+template <typename T> lp_expr_t<T> operator+(fp_t x, lp_var_t<T> v) { return v + x; }
+template <typename T> lp_expr_t<T> operator-(fp_t x, lp_var_t<T> v) { return -v + x; }
+template <typename T> lp_expr_t<T> operator*(fp_t x, lp_var_t<T> v) { return v * x; }
 
 enum class ConstraintDirection { ge, le, eq, neq };
 
@@ -213,7 +225,6 @@ public:
     }
 
     ~LPManager() {
-        for (auto v : variables) delete v;
         cpxfreeprog();
         if (env_is_initialized_by_object) {
             cpxexit(&env);
@@ -233,21 +244,21 @@ public:
         char* vtypes = (char*) calloc(columns, sizeof(char));
 
         for (int32_t i = 0; i < columns; i++) {
-            lp_var_t<T>* v = variables[i];
+            lp_var_t<T> v = variables[i];
             if (objective.coefs.count(v)) obj[i] = objective.coefs[v];
 
-            bool lwr_defined = v->bounds_type == VarBounds::lower
-                                || v->bounds_type == VarBounds::both
-                                || v->bounds_type == VarBounds::fixed;
-            bool upp_defined = v->bounds_type == VarBounds::upper
-                                || v->bounds_type == VarBounds::both
-                                || v->bounds_type == VarBounds::fixed;
+            bool lwr_defined = v.bounds_type == VarBounds::lower
+                                || v.bounds_type == VarBounds::both
+                                || v.bounds_type == VarBounds::fixed;
+            bool upp_defined = v.bounds_type == VarBounds::upper
+                                || v.bounds_type == VarBounds::both
+                                || v.bounds_type == VarBounds::fixed;
             
-            lb[i] = lwr_defined ? v->lwr : -CPX_INFBOUND;
-            ub[i] = upp_defined ? v->upp : CPX_INFBOUND;
-            if (v->var_type == VarDomain::continuous) {
+            lb[i] = lwr_defined ? v.lwr : -CPX_INFBOUND;
+            ub[i] = upp_defined ? v.upp : CPX_INFBOUND;
+            if (v.var_type == VarDomain::continuous) {
                 vtypes[i] = 'C';
-            } else if (v->var_type == VarDomain::integer) {
+            } else if (v.var_type == VarDomain::integer) {
                 vtypes[i] = 'I';
             } else {
                 vtypes[i] = 'B';
@@ -291,8 +302,8 @@ public:
 
             rmatbeg[i] = offset;
             for (auto kv : con.lhs.coefs) {
-                lp_var_t<T>* v = kv.first;
-                rmatind[offset] = v->column;
+                lp_var_t<T> v = kv.first;
+                rmatind[offset] = v.column;
                 rmatval[offset] = kv.second;
                 offset++;
             }
@@ -324,28 +335,28 @@ public:
         return objective;
     }
 
-    lp_var_t<T>* get_var(T label) {
+    lp_var_t<T> get_var(T label) {
         return label_to_lp_var[label];
     }
 
     fp_t get_value(T label) {
-        int c = label_to_lp_var[label]->column;
+        int c = label_to_lp_var[label].column;
         return prog_soln[c];
     }
 
-    lp_var_t<T>* add_slack_var(fp_t lower, fp_t upper, VarBounds btype, VarDomain vtype) {
-        lp_var_t<T>* v = new lp_var_t<T>;
-        v->lp_ptr = this;
-        v->column = columns++;
-        v->lwr = lower;
-        v->upp = upper;
-        v->bounds_type = btype;
-        v->var_type = vtype;
+    lp_var_t<T> add_slack_var(fp_t lower, fp_t upper, VarBounds btype, VarDomain vtype) {
+        lp_var_t<T> v;
+        v.lp_ptr = this;
+        v.column = columns++;
+        v.lwr = lower;
+        v.upp = upper;
+        v.bounds_type = btype;
+        v.var_type = vtype;
         variables.push_back(v);
         return v;
     }
 
-    lp_var_t<T>* add_var(T label, fp_t lower, fp_t upper, VarBounds btype, VarDomain vtype) {
+    lp_var_t<T> add_var(T label, fp_t lower, fp_t upper, VarBounds btype, VarDomain vtype) {
         auto v = add_slack_var(lower, upper, btype, vtype);
         label_to_lp_var[label] = v;
         return v;
@@ -356,7 +367,7 @@ public:
             const fp_t M = 10'000'000;
             // We will need to expand this constraint into multiple constraints.
             // To do so, we will need to introduce a slack variable y.
-            lp_var_t<T>* y = add_slack_var(0, 1, VarBounds::both, VarDomain::binary);
+            lp_var_t<T> y = add_slack_var(0, 1, VarBounds::both, VarDomain::binary);
             // Want to add constraints:
             // lhs - My <= rhs-1
             // lhs - My >= rhs+1-M
@@ -371,8 +382,8 @@ public:
         }
     }
 
-    std::vector<lp_var_t<T>*>       variables;
-    std::vector<lp_constr_t<T>>     constraints;
+    std::vector<lp_var_t<T>>    variables;
+    std::vector<lp_constr_t<T>> constraints;
 private:
     void cpxfreeprog(void) {
         if (prog != NULL) {
@@ -385,7 +396,7 @@ private:
         prog = CPXXcreateprob(env, &status, "lp");
     }
 
-    std::map<T, lp_var_t<T>*> label_to_lp_var;
+    std::map<T, lp_var_t<T>> label_to_lp_var;
 
     int32_t columns;
     int32_t rows;

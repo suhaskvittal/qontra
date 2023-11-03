@@ -91,7 +91,8 @@ make_fault_tolerant(css_code_data_t);
 // Helper functions:
 LPManager<uint>*
 construct_scheduling_program(stab_vertex_t*,
-                                StabilizerGraph&, 
+                                StabilizerGraph&,
+                                css_code_data_t*,
                                 int max_stabilizer_weight);
 
 }   // protean

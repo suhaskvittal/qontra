@@ -135,7 +135,9 @@ if (COMPILE_PROTEAN)
     target_compile_options(protean PUBLIC -O3 -fno-strict-aliasing)
 
     add_executable(protean_scheduler_test src/main/protean/tests/scheduler.cpp)
+    add_executable(protean_writing_test src/main/protean/tests/writing.cpp)
     target_link_libraries(protean_scheduler_test PRIVATE protean)
+    target_link_libraries(protean_writing_test PRIVATE protean)
 endif()
 
 if (COMPILE_TESTS)

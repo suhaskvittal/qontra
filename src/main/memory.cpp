@@ -2,7 +2,6 @@
  *  date:   28 August 2023
  * */
 
-#define MLPACK_ENABLE_ANN_SERIALIZATION
 #define ARMA_OPENMP_THREADS 32
 #define DISABLE_MPI
 #define USE_NEURAL_NET
@@ -20,9 +19,8 @@
 
 #ifdef USE_NEURAL_NET
 #include <decoder/neural.h>
-#endif
-
 #include <armadillo>
+#endif
 
 using namespace qontra;
 
@@ -35,7 +33,7 @@ get_circuit(const schedule_t& sch, fp_t p) {
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
-    stim::Circuit circ = schedule_to_stim(sch, errors, timing, p);
+    stim::Circuit circ = schedule_to_stim(sch, errors, timing);
     return circ;
 }
 

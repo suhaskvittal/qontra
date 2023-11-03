@@ -40,7 +40,6 @@ struct css_code_data_t {
     std::map<uint, std::vector<uint>>   parity_to_flags;
     TwoLevelMap<uint, uint, uint>       flag_usage;
 
-
     void print_schedule(std::ostream& out) {
         out << "---------------- X Stabilizers -------------------\n";
         for (uint xp : xparity_list) {

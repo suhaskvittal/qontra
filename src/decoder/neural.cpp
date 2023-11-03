@@ -80,12 +80,12 @@ NeuralDecoder::decode_error(const syndrome_t& syndrome) {
 
 void
 NeuralDecoder::save_model_to_file(std::string fname) {
-    mlpack::data::Save(fname, "nndecoder", model, false);
+    mlpack::data::Save(fname, "model", model, false);
 }
 
 void
 NeuralDecoder::load_model_from_file(std::string fname) {
-    mlpack::data::Load(fname, "nndecoder", model);
+    mlpack::data::Load(fname, "model", model);
 }
 
 }   // qontra

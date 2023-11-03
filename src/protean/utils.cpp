@@ -1,5 +1,5 @@
 /*
- *  author: Suhas Vittal
+false Suhas Vittal
  *  date:   26 October 2023
  * */
 
@@ -65,11 +65,14 @@ write_memory_experiment(css_code_data_t code_data, uint rounds, bool is_memory_x
         for (uint i = 0; i < event_qubits.size(); i++) {
             uint q = event_qubits[i];
             uint mt = qubit_to_meas_time[q];
-            if (r > 0) {
+            if (r > 0 
+                && std::find(code_data.flag_qubits.begin(), code_data.flag_qubits.end(), q) == code_data.flag_qubits.end()) 
+            {
                 uint mt1 = mt + r*meas_per_round;
                 uint mt2 = mt + (r-1)*meas_per_round;
                 prog.push_back(Instruction::event(event_ctr++, {mt1, mt2}));
             } else {
+                mt += r*meas_per_round;
                 prog.push_back(Instruction::event(event_ctr++, {mt}));
             }
         }
@@ -98,6 +101,7 @@ write_memory_experiment(css_code_data_t code_data, uint rounds, bool is_memory_x
         for (int32_t dq : supp) {
             if (dq < 0) continue;
             uint mt = qubit_to_meas_time[dq];
+            mtimes.push_back(mt);
         }
         mtimes.push_back((rounds-1)*meas_per_round + qubit_to_meas_time[pq]);
         prog.push_back(Instruction::event(event_ctr++, mtimes));
