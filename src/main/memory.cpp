@@ -2,7 +2,8 @@
  *  date:   28 August 2023
  * */
 
-
+#define MLPACK_ENABLE_ANN_SERIALIZATION
+#define ARMA_OPENMP_THREADS 32
 #define DISABLE_MPI
 #define USE_NEURAL_NET
 
@@ -20,6 +21,8 @@
 #ifdef USE_NEURAL_NET
 #include <decoder/neural.h>
 #endif
+
+#include <armadillo>
 
 using namespace qontra;
 
@@ -74,6 +77,10 @@ int main(int argc, char* argv[]) {
     // Define Decoder.
     stim::Circuit error_model = get_circuit(sch, p);
 #ifdef USE_NEURAL_NET
+    std::cout << "arma config: " << arma::arma_config::mp_threads << "\n";
+    std::cout << "arma threads: " << arma::mp_thread_limit::get() << "," << arma::mp_thread_limit::in_parallel() << "\n";
+    std::cout << "omp threads: " << omp_get_max_threads() << "\n";
+
     using namespace mlpack;
     NeuralDecoder dec(error_model);
     // Check if model file exists. If so, load it in. 
@@ -111,7 +118,6 @@ int main(int argc, char* argv[]) {
         std::filesystem::path output_folder(output_path.parent_path());
         safe_create_directory(output_folder);
     }
-
     bool write_header = !std::filesystem::exists(output_path);
 #ifndef DISABLE_MPI
     MPI_Barrier(MPI_COMM_WORLD);

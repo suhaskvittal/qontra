@@ -6,8 +6,6 @@
 #ifndef NEURAL_DECODER_h
 #define NEURAL_DECODER_h
 
-#define MLPACK_ENABLE_ANN_SERIALIZATION
-
 #include "decoder/decoder.h"
 #include "experiments.h"
 
