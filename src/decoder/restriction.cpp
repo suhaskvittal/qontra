@@ -6,7 +6,7 @@
 #include "decoder/restriction.h"
 
 #define DEBUG
-#define MODULO 30
+#define MODULO 8
 
 namespace qontra {
 
@@ -30,6 +30,8 @@ print_v(colored_vertex_t* v) {
 
 Decoder::result_t
 RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
+    const uint det = circuit.count_detectors();
+    const uint obs = circuit.count_observables();
 #ifdef DEBUG
     std::cout << "===================================\n";
 #endif
@@ -43,6 +45,8 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     }
     std::cout << "\n";
 #endif
+    stim::simd_bits obs_bits(obs);
+    for (uint i = 0; i < obs; i++) obs_bits[i] = syndrome[det+i];
 
     std::vector<match_t> matchings = blossom_subroutine(detectors);
     std::vector<cc_t> comps = compute_connected_components(matchings);
@@ -147,7 +151,6 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 #endif
     }
 
-    const uint obs = circuit.count_observables();
     if (all_in_cc.empty() && out_of_cc.empty()) {
         stim::simd_bits corr(obs);
         corr.clear();
@@ -212,7 +215,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             std::cout << "\t< " << print_v(std::get<0>(f))
                 << ", " << print_v(std::get<1>(f))
                 << ", " << print_v(std::get<2>(f)) 
-                << ", " << get_correction_for_face(f)[0] << " >\n";
+                << ", " << get_correction_for_face(f) << " >\n";
         }
 #endif
         uint64_t enf = 1L << nf;
@@ -238,7 +241,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 
             uint64_t faces = 0;
             std::set<face_t> face_set;
-            uint64_t n_boundary_edges = 0;
+            uint64_t n_extra_boundary_edges = 0;
             while (j) {
                 if (j & 1) {
                     face_t f = *it;
@@ -254,9 +257,8 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                             auto exy = c_decoding_graph.get_edge(vx, vy);
                             bool bx = is_colored_boundary(vx),
                                  by = is_colored_boundary(vy);
-                            if ((vx == v || vy == v) && (!bx || !by)) {
+                            if (vx == v || vy == v) {
                                 xor_entry_into(exy, f_boundary);
-                                n_boundary_edges += bx || by;
                             }
                         }
                     }
@@ -286,8 +288,18 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             // face partially matches both, or matches some outside of both
             // sets.
             if (int_with_cc.size() > 0 && int_with_no_cc.size() > 0)    continue;
-            if (int_with_cc.size() > 0 && int_with_cc.size() + n_boundary_edges < f_boundary.size())  continue;
-            if (int_with_no_cc.size() > 0 && int_with_no_cc.size() + n_boundary_edges < f_boundary.size())  continue;
+            if (int_with_cc.size() > 0 && int_with_cc.size() < f_boundary.size()) {
+#ifdef DEBUG
+//              std::cout << "\tskipping face set " << i << " (int, extra, boundary) = (" << int_with_cc.size() << ", " << n_extra_boundary_edges << ", " << f_boundary.size() << ")\n";
+#endif
+                continue;
+            }
+            if (int_with_no_cc.size() > 0 && int_with_no_cc.size() < f_boundary.size()) {
+#ifdef DEBUG
+//              std::cout << "\tskipping face set " << i << " (int, extra, boundary) = (" << int_with_no_cc.size() << ", " << n_extra_boundary_edges << ", " << f_boundary.size() << ")\n";
+#endif
+                continue;
+            }
             if (int_with_cc.size() > best_intersect_with_cc
                 || (int_with_cc.size() == best_intersect_with_cc && faces < faces_cc)) 
             {
@@ -297,7 +309,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 best_cc_boundary = f_boundary;
                 best_cc_corr = local_corr;
 #ifdef DEBUG
-                std::cout << "\tbest in cc now face set " << i << " (corr = " << local_corr[0] << ", int = " << best_intersect_with_cc << ")\n";
+                std::cout << "\tbest in cc now face set " << i << " (corr = " << local_corr << ", int = " << best_intersect_with_cc << ")\n";
 #endif
             } 
             if (int_with_no_cc.size() > best_intersect_with_no_cc
@@ -309,7 +321,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 best_no_cc_boundary = f_boundary;
                 best_no_cc_corr = local_corr;
 #ifdef DEBUG
-                std::cout << "\tbest no cc now face set " << i << " (corr = " << local_corr[0] << ", int = " << best_intersect_with_no_cc << ")\n";
+                std::cout << "\tbest no cc now face set " << i << " (corr = " << local_corr << ", int = " << best_intersect_with_no_cc << ")\n";
 #endif
             }
         }
@@ -328,14 +340,14 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             for (face_t fc : best_face_set_no_cc) committed_faces.insert(fc);
         }
 #ifdef DEBUG
-        std::cout << "final face boundary has correction: " << best_corr[0] << ", true error: " << syndrome[circuit.count_detectors()] << "\n";
+        std::cout << "final face boundary has correction: " << best_corr << ", true error: " << obs_bits << "\n";
 #endif
         // Commit the correction for the boundary and erase the edges.
         corr ^= best_corr;
     }
     
 #ifdef DEBUG
-    std::cout << "final correction: " << corr[0] << ", true error: " << syndrome[circuit.count_detectors()] << "\n";
+    std::cout << "final correction: " << corr << ", true error: " << obs_bits << "\n";
     std::cout << "is error: " << is_error(corr, syndrome) << "\n";
 #endif
 
@@ -552,7 +564,6 @@ RestrictionDecoder::get_correction_for_face(face_t fc) {
     const uint obs = circuit.count_observables();
     stim::simd_bits corr(obs);
     corr.clear();
-    corr.invert_bits();
 
     colored_vertex_t* varray[] = {v1, v2, v3};
     for (uint i = 0; i < 3; i++) {
@@ -571,7 +582,7 @@ RestrictionDecoder::get_correction_for_face(face_t fc) {
             for (uint fr : error_data.frame_changes) {
                 local_corr[fr] = 1;
             }
-            corr &= local_corr;
+            corr |= local_corr;
         }
     }
     return corr;
