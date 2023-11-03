@@ -3,8 +3,8 @@
  * */
 
 
-//#define DISABLE_MPI
-//#define USE_NEURAL_NET
+#define DISABLE_MPI
+#define USE_NEURAL_NET
 
 #include <decoder/mwpm.h>
 #include <decoder/restriction.h>
@@ -29,10 +29,6 @@ get_circuit(const schedule_t& sch, fp_t p) {
 
     tables::ErrorAndTiming et;
     et = et * (1000 * p);
-//  et.e_m1w0 = 0.0;
-//  et.e_m0w1 = 0.0;
-    et.e_g1q = 0.0;
-    et.e_g2q = 0.0;
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
@@ -56,6 +52,7 @@ int main(int argc, char* argv[]) {
 
     uint64_t tshots = 10'000'000;
     uint64_t epochs = 100;
+    std::string model_file = "model.bin";
 
     if (!pp.get_string("asm", asm_file))    return 1;
     if (!pp.get_string("out", output_file)) return 1;
@@ -64,6 +61,13 @@ int main(int argc, char* argv[]) {
 
     pp.get_uint64("epochs", epochs);
     pp.get_uint64("tshots", tshots);
+    pp.get_string("model-file", model_file);
+
+    // Setup experiment settings.
+    experiments::G_SHOTS_PER_BATCH = 1'000'000;
+#ifdef DISABLE_MPI
+    experiments::G_USE_MPI = false;
+#endif
 
     // Get schedule from file.
     schedule_t sch = schedule_from_file(asm_file);
@@ -72,31 +76,32 @@ int main(int argc, char* argv[]) {
 #ifdef USE_NEURAL_NET
     using namespace mlpack;
     NeuralDecoder dec(error_model);
-    dec.model.Add<Linear>(256);
-    dec.model.Add<TanH>();
-    dec.model.Add<Linear>(64);
-    dec.model.Add<TanH>();
-    dec.model.Add<Linear>(error_model.count_observables());
-    dec.model.Add<TanH>();
-    dec.config.max_epochs = epochs;
-    dec.training_circuit = get_circuit(sch, p);
+    // Check if model file exists. If so, load it in. 
+    // If not, then make and train it.
+    std::filesystem::path model_file_path(model_file);
+    if (std::filesystem::exists(model_file_path)) {
+        dec.load_model_from_file(model_file);
+    } else {
+        dec.model.Add<Linear>(256);
+        dec.model.Add<TanH>();
+        dec.model.Add<Linear>(64);
+        dec.model.Add<TanH>();
+        dec.model.Add<Linear>(error_model.count_observables());
+        dec.model.Add<TanH>();
+        dec.config.max_epochs = epochs;
+        dec.training_circuit = get_circuit(sch, p);
+
+        std::cout << "starting training...\n";
+        dec.train(tshots);
+
+        dec.save_model_to_file(model_file);
+    }
 #else
     //MWPMDecoder dec(error_model);
     RestrictionDecoder dec(error_model);
 #endif
-
-    // Setup experiment.
-    experiments::G_SHOTS_PER_BATCH = 1'000'000;
-#ifdef DISABLE_MPI
-    experiments::G_USE_MPI = false;
-#endif
     experiments::memory_params_t params;
     params.shots = shots;
-    
-#ifdef USE_NEURAL_NET
-    std::cout << "starting training...\n";
-    dec.train(tshots);
-#endif
     // Run experiment.
     experiments::memory_result_t res = memory_experiment(&dec, params);
 

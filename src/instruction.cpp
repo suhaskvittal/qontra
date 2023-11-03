@@ -50,6 +50,8 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         bool inject_timing_error = inst.annotations.count(ANNOT_INJECT_TIMING_ERROR);
         bool operation_takes_time = !inst.annotations.count(ANNOT_NO_TICK);
 
+        bool has_predicate = inst.properties.count(PROPERTY_PREDICATE);
+
         bool is_2q_op = IS_2Q_OPERATOR.count(inst.name);
         if (inst.name == "measure") {
             // Add X error before.

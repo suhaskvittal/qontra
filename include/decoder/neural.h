@@ -6,6 +6,8 @@
 #ifndef NEURAL_DECODER_h
 #define NEURAL_DECODER_h
 
+#define MLPACK_ENABLE_ANN_SERIALIZATION
+
 #include "decoder/decoder.h"
 #include "experiments.h"
 
@@ -22,8 +24,10 @@ public:
 
     void                train(uint64_t shots, bool verbose=true);
     Decoder::result_t   decode_error(const syndrome_t&) override;
+    void                load_model_from_file(std::string);
+    void                save_model_to_file(std::string);
 
-    std::string         name() override { return "NeuralDecoder"; }
+    std::string name() override { return "NeuralDecoder"; }
 
     mlpack::FFN<mlpack::MeanSquaredError> model;
 

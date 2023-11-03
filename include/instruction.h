@@ -136,6 +136,8 @@ const std::set<std::string> IS_DECODE_TYPE4 {
 #define PROPERTY_COLOR_GREEN    1
 #define PROPERTY_COLOR_BLUE     2
 
+#define PROPERTY_PREDICATE  "predicate"
+
 struct Instruction {
     std::string name;
 
