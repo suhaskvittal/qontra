@@ -60,7 +60,7 @@ int main() {
     }
 
     dd.print_schedule(std::cout);
-    dd = protean::make_fault_tolerant(dd);
+    dd = protean::make_fault_tolerant_simple(dd);
 
     schedule_t mxp = write_memory_experiment(dd, 4, false);
 

@@ -35,21 +35,51 @@ int main(int argc, char* argv[]) {
     uint rounds;
     bool is_memory_x = false;
 
-    int start = 0;
+    int seed = 0;
 
     if (!pp.get_string("tanner", tanner_graph_file))    return 1;
     if (!pp.get_uint32("r", rounds)) return 1;
     if (!pp.get_string("out", output_file)) return 1;
     
-    pp.get_int32("seed", start);
+    pp.get_int32("seed", seed);
     is_memory_x = pp.option_set("x");
+
+    // OPTIMIZATION FLAGS
+    protean::oracle::EN_OPT_OBS = pp.option_set("oobs");
+    pp.get_float("cobs", protean::oracle::C_OPT_OBS);
 
     graph::TannerGraph tg = graph::create_graph_from_file(tanner_graph_file, &graph::io::update_tanner_graph);
     print_tanner_graph(tg);
-    auto code_data = protean::compute_schedule_from_tanner_graph(tg, start);
+
+    protean::css_code_data_t code_data;
+    std::cout << "seed = " << seed << "\n";
+    if (seed < 0) {
+        // Do an exhaustive search for the min depth schedule.
+        code_data.schedule_depth = std::numeric_limits<uint>::max();
+        const int num_checks = tg.get_vertices_by_type(graph::tanner::vertex_t::Type::zparity).size()
+                                + tg.get_vertices_by_type(graph::tanner::vertex_t::Type::xparity).size();
+
+        std::cout << "Searching for best schedule (seed progress):";
+        std::cout.flush();
+        for (seed = 0; seed < num_checks; seed++) {
+            auto tmp = protean::compute_schedule_from_tanner_graph(tg, seed);
+            if (tmp.schedule_depth < code_data.schedule_depth) {
+                std::cout << " " << seed;
+                std::cout.flush();
+                code_data = tmp;
+            }
+        }
+        std::cout << "\n";
+    } else {
+        code_data = protean::compute_schedule_from_tanner_graph(tg, seed);
+    }
 
     code_data.print_schedule(std::cout);
-    code_data = protean::make_fault_tolerant(code_data);
+    if (pp.option_set("smart-flags")) {
+        code_data = protean::make_fault_tolerant_smart(code_data);
+    } else {
+        code_data = protean::make_fault_tolerant_simple(code_data);
+    }
     std::cout << "qubits: " << code_data.data_qubits.size() << " data, "
                     << code_data.parity_qubits.size() << " parity, "
                     << code_data.flag_qubits.size() << " flags.\n";

@@ -86,7 +86,10 @@ css_code_data_t
 compute_schedule_from_tanner_graph(graph::TannerGraph&, int start=0);
 
 css_code_data_t
-make_fault_tolerant(css_code_data_t);
+make_fault_tolerant_simple(css_code_data_t);
+
+css_code_data_t
+make_fault_tolerant_smart(css_code_data_t);
 
 // Helper functions:
 LPManager<uint>*
@@ -94,6 +97,26 @@ construct_scheduling_program(stab_vertex_t*,
                                 StabilizerGraph&,
                                 css_code_data_t*,
                                 int max_stabilizer_weight);
+// Setup for the linear programs.
+namespace oracle {
+
+// LP optimizations. Each optimization will increase running time.
+//
+// OPT_OBS: optimize schedule so errors do not easily propagate onto observables.
+//
+// By default, nothing is enabled.
+//
+// EN_xyz is a boolean variable for enabling each optimization. C_xyz is the coefficient
+// of the optimization in the objective function. Note that the objective function is
+// already populated with a variable corresponding to the depth of the schedule (its
+// coefficient is already 1).
+
+extern bool EN_OPT_OBS;
+
+extern fp_t C_OPT_OBS;  // Default is 0.5.
+
+
+}   // oracle
 
 }   // protean
 }   // qontra

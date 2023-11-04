@@ -1,9 +1,9 @@
-/* author: Suhas Vittal date:   23 October 2023
+/* 
+ *  author: Suhas Vittal 
+ *  date:   23 October 2023
  * */
 
 #include "protean/scheduler.h"
-
-#define PROTEAN_OBS_OPT
 
 namespace qontra {
 
@@ -11,6 +11,14 @@ using namespace graph;
 using namespace enumerator;
 
 namespace protean {
+
+namespace oracle {
+
+bool EN_OPT_OBS = false;
+
+fp_t C_OPT_OBS = 0.5;
+
+}   // oracle
 
 mq_pauli_op_t
 mul(const mq_pauli_op_t& p1, const mq_pauli_op_t& p2) {
@@ -143,7 +151,12 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int start) {
         // Compute schedule for this stabilizer.
         // First construct an ILP.
         LPManager<uint>* mgr = construct_scheduling_program(s, gr, &code_data, max_stab_weight);
-        mgr->solve();
+        fp_t obj;
+        int status;
+        if (mgr->solve(&obj, &status)) {
+            std::cout << "Lp solve failed. Status: " << status << " (CPLEX = " << mgr->get_status() << ")\n";
+            exit(1);
+        }
         // Get variable values.
         for (uint q : s->support) {
             int t = (int) round(mgr->get_value(q));
@@ -184,7 +197,7 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int start) {
 }
 
 css_code_data_t
-make_fault_tolerant(css_code_data_t code_data) {
+make_fault_tolerant_simple(css_code_data_t code_data) {
     bool _g_use_mpi = experiments::G_USE_MPI;
     experiments::G_USE_MPI = false;
 
@@ -220,6 +233,133 @@ make_fault_tolerant(css_code_data_t code_data) {
     add_flags(code_data.zparity_list, code_data.zflag_list);
     add_flags(code_data.xparity_list, code_data.xflag_list);
 
+    experiments::G_USE_MPI = _g_use_mpi;
+    return code_data;
+}
+
+css_code_data_t
+make_fault_tolerant_smart(css_code_data_t code_data) {
+    bool _g_use_mpi = experiments::G_USE_MPI;
+    experiments::G_USE_MPI = false;
+
+    std::vector<stabilizer_t> stab = get_stabilizers(code_data);
+    // Finally, when introducing flag qubits for a check C and data qubit
+    // D1, we will connect the flag to the upcoming data qubit D2 in the
+    // schedule. Hence, we maintain a next qubit table.
+    TwoLevelMap<uint, uint, uint> next_qubit_in_schedule;
+    for (auto& check_sch_pair : code_data.check_schedules) {
+        uint check = check_sch_pair.first;
+        auto& data_qubit_order = check_sch_pair.second;
+        int32_t prev = -1;
+        for (int32_t dq : data_qubit_order) {
+            if (dq >= 0) {
+                if (prev >= 0) {
+                    tlm::put(next_qubit_in_schedule, check, (uint)prev, (uint)dq);
+                }
+                prev = dq;
+            }
+        }
+    }
+    // We will analyze the errors on the syndrome extraction schedule.
+    schedule_t sxt_sch = write_syndrome_extraction_ops(code_data);
+    std::vector<error_record_t> all_errors = enumerate_errors(sxt_sch);
+    // Now, we will examine these errors and introduce flag qubits wherever
+    // necessary.
+    uint flag_qubit_ctr = code_data.data_qubits.size() + code_data.parity_qubits.size();
+    for (error_record_t& rc : all_errors) {
+        Instruction& inst = std::get<1>(rc);
+        uint qubit = (uint)std::get<2>(rc);
+        if (inst.name != "cx") continue; // Nothing we can do.
+        stim::simd_bits x_errors = std::get<4>(rc);
+        stim::simd_bits z_errors = std::get<5>(rc);
+        // Compute pauli operator for error.
+        mq_pauli_op_t error_op;
+        for (uint dq : code_data.data_qubits) {
+            if (x_errors[dq] & z_errors[dq])    error_op.push_back(std::make_pair(pauli::y, dq));
+            else if (x_errors[dq])              error_op.push_back(std::make_pair(pauli::x, dq));
+            else if (z_errors[dq])              error_op.push_back(std::make_pair(pauli::z, dq));
+        }
+        if (error_op.size() == 1) continue; // Not an issue.
+        // Check if the error operator forms a stabilizer generator.
+        // Ideally, we'd like to check if it forms a stabilizer, but that's
+        // a bit harder.
+        //
+        // Also compute minimum weight dual error (product of stab with error).
+        //
+        // We can exit early if w == 1 (not an issue) or w == 0 (error is a
+        // stabilizer).
+        mq_pauli_op_t min_weight_dual;
+        uint w = std::numeric_limits<uint>::max();
+        for (const stabilizer_t& s : stab) {
+            mq_pauli_op_t dual = mul(error_op, s);
+            if (dual.size() < w) {
+                min_weight_dual = dual;
+                w = dual.size();
+                if (w <= 1) break;
+            }
+        }
+        if (w <= 1) continue;
+        if (min_weight_dual.size() < error_op.size()) error_op = min_weight_dual;
+        // Now, we must analyze and check for errors. Check against the
+        // observables.
+        pauli pauli_array[] = { pauli::x, pauli::z };
+        std::vector<std::vector<uint>> obs_list_array[] = { code_data.x_obs_list, code_data.z_obs_list };
+        bool is_fault_tolerant = true;
+        for (int i = 0; i < 2; i++) {
+            pauli p = pauli_array[i];
+            const auto& obs_list = obs_list_array[i];
+            for (const auto& obs : obs_list) {
+                mq_pauli_op_t obs_op;
+                for (uint q : obs) obs_op.push_back(std::make_pair(p, q));
+                int c = count_anticommutations(error_op, obs_op);
+                if (c > 1) {
+                    is_fault_tolerant = false;
+                    goto obs_cmp_exit;
+                }
+            }
+        }
+obs_cmp_exit:
+        if (is_fault_tolerant) continue;
+        // Check CX instruction
+        uint other_qubit;
+        // Find other other qubit in the CNOT.
+        for (uint i = 0; i < inst.operands.qubits.size(); i += 2) {
+            uint q1 = inst.operands.qubits[i];
+            uint q2 = inst.operands.qubits[i+1];
+            if (q1 == qubit) {
+                other_qubit = q2;
+                break;
+            }
+            if (q2 == qubit) {
+                other_qubit = q1;
+                break;
+            }
+        }
+        // One of the qubit operands is a check qubit.
+        uint data_qubit = qubit, check_qubit = other_qubit;
+        if (code_data.check_schedules.count(qubit)) {
+            data_qubit = other_qubit;
+            check_qubit = qubit;
+        }
+        // If the data qubit is already assigned a flag qubit, move on.
+        if (code_data.flag_usage[check_qubit].count(data_qubit)) continue;
+        uint next_data_qubit = next_qubit_in_schedule[check_qubit][data_qubit];
+        // It should never be the case that the next data qubit is already
+        // assigned a flag.
+        assert(!code_data.flag_usage[check_qubit].count(next_data_qubit));
+        tlm::put(code_data.flag_usage, check_qubit, data_qubit, flag_qubit_ctr);
+        tlm::put(code_data.flag_usage, check_qubit, next_data_qubit, flag_qubit_ctr);
+        if (std::find(code_data.xparity_list.begin(), code_data.xparity_list.end(), check_qubit)
+                != code_data.xparity_list.end())
+        {
+            code_data.xflag_list.push_back(flag_qubit_ctr);
+        } else {
+            code_data.zflag_list.push_back(flag_qubit_ctr);
+        }
+        code_data.parity_to_flags[check_qubit].push_back(flag_qubit_ctr);
+        code_data.flag_qubits.push_back(flag_qubit_ctr);
+        flag_qubit_ctr++;
+    }
     experiments::G_USE_MPI = _g_use_mpi;
     return code_data;
 }
@@ -297,24 +437,28 @@ construct_scheduling_program(
     // The objective function is as follows (maximization):
     //  -max_of_all
     //      +   sum of (|q_i - q_{i+1}|) normalized by number of pairs.   
-    //              if observable optimization is enabled (PROTEAN_OBS_OPT)
+    //              if observable optimization is enabled (EN_OBS_OPT)
     // Build the LP.
     lp_expr_t<uint> obj = -max_of_all;
-#ifdef PROTEAN_OBS_OPT
-    if (css_data_p != nullptr) {
+    // Apply any optimizations specified.
+    if (css_data_p != nullptr && oracle::EN_OPT_OBS) {
         // This optimization really only works for CSS codes. I'm not sure how to extend it to general
         // stabilizer codes.
         bool is_x_type = s0->stabilizer[0].first == pauli::x;  // A quick and dirty way to figure out what stabilizer we're working with.
         // X stabilizers may propagate X hooks (and Z is the similarly so). So we care about the same type stabilizer.
         auto obs_ref = is_x_type ? css_data_p->x_obs_list : css_data_p->z_obs_list;
 
-        uint pairs = 0;
+        uint n_terms = 0;
         lp_expr_t<uint> obs_opt_obj;
         std::set<std::pair<uint, uint>> visited;
         for (auto obs : obs_ref) {
             for (uint q1 : obs) {
+                // Check if q1 is in the support of this check.
+                if (std::find(support.begin(), support.end(), q1) == support.end()) continue;
+
                 auto q1v = mgr->get_var(q1);
                 for (uint q2 : obs) {
+                    if (std::find(support.begin(), support.end(), q2) == support.end()) continue;
                     if (q1 == q2) continue;
 
                     auto q1_q2 = std::make_pair(q1, q2);
@@ -322,16 +466,15 @@ construct_scheduling_program(
                     if (visited.count(q1_q2) || visited.count(q2_q1)) continue;
 
                     auto q2v = mgr->get_var(q2);
-                    pairs++;
                     // We need to add a slack variable and a constraint.
                     auto y = mgr->add_slack_var(0, 0, VarBounds::lower, VarDomain::integer);
                     auto b = mgr->add_slack_var(0, 1, VarBounds::both, VarDomain::binary);
                     // Want y to be max(q1 - q2, q2 - q1)
                     const fp_t M = 100000;
-                    lp_constr_t<uint> con1(y, q1v, ConstraintDirection::ge);
-                    lp_constr_t<uint> con2(y, q2v, ConstraintDirection::ge);
-                    lp_constr_t<uint> con3(y, q1v + M*b, ConstraintDirection::le);
-                    lp_constr_t<uint> con4(y, q2v + M*(1.0-b), ConstraintDirection::le);
+                    lp_constr_t<uint> con1(y, q1v - q2v, ConstraintDirection::ge);
+                    lp_constr_t<uint> con2(y, q2v - q1v, ConstraintDirection::ge);
+                    lp_constr_t<uint> con3(y, q1v - q2v + M*b, ConstraintDirection::le);
+                    lp_constr_t<uint> con4(y, q2v - q1v + M - M*b, ConstraintDirection::le);
 
                     mgr->add_constraint(con1);
                     mgr->add_constraint(con2);
@@ -339,18 +482,15 @@ construct_scheduling_program(
                     mgr->add_constraint(con4);
 
                     obs_opt_obj += y;
-                    pairs++;
+                    n_terms++;
                     visited.insert(q1_q2);
                     visited.insert(q2_q1);
                 }
             }
         }
-        std::cout << "pairs: " << pairs << "\n";
-        obs_opt_obj *= 1.0/((fp_t)pairs);
-
-        obj += obs_opt_obj;
+        obs_opt_obj *= 1.0/((fp_t)n_terms);
+        obj += obs_opt_obj * oracle::C_OPT_OBS;
     }
-#endif
     mgr->build(obj, true);
     return mgr;
 }

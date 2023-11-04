@@ -317,22 +317,17 @@ public:
         free(rmatval);
     }
 
-    fp_t solve() {
-        std::string lpfile = std::string("test") + std::to_string(fno++) + ".alp";
+    bool solve(fp_t* obj_p, int* solstat_p) {
         status = CPXXmipopt(env, prog);
-        status = CPXXwriteprob(env, prog, lpfile.c_str(), NULL);
+        if (status) std::cout << "MIP solve status: " << status << "\n";
 
-        int finrows = CPXXgetnumrows(env, prog);
         int fincols = CPXXgetnumcols(env, prog);
-
-        int solstat;
-        fp_t objective;
 
         if (prog_soln != NULL)  free(prog_soln);
         prog_soln = (fp_t*) malloc(fincols * sizeof(fp_t));
 
-        status = CPXXsolution(env, prog, &solstat, &objective, prog_soln, NULL, NULL, NULL);
-        return objective;
+        status = CPXXsolution(env, prog, solstat_p, obj_p, prog_soln, NULL, NULL, NULL);
+        return (bool)status;
     }
 
     lp_var_t<T> get_var(T label) {
@@ -381,6 +376,8 @@ public:
             return (++rows);
         }
     }
+
+    int get_status() { return status; }
 
     std::vector<lp_var_t<T>>    variables;
     std::vector<lp_constr_t<T>> constraints;
