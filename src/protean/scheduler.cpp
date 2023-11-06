@@ -64,7 +64,7 @@ get_stabilizers(css_code_data_t code_data) {
 }
 
 css_code_data_t
-compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int start) {
+compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int seed) {
     // Translate tanner graph to a StabilizerGraph
     StabilizerGraph gr;
     int max_stab_weight = 0;
@@ -141,7 +141,7 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int start) {
     }
 
     // Now compute the schedule via a BFS on the graph.
-    std::deque<stab_vertex_t*> bfs{vertices[start]};
+    std::deque<stab_vertex_t*> bfs{vertices[seed]};
     std::set<stab_vertex_t*> visited;
     int max_time = 0;
     while (bfs.size()) {
@@ -154,8 +154,9 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int start) {
         fp_t obj;
         int status;
         if (mgr->solve(&obj, &status)) {
-            std::cout << "Lp solve failed. Status: " << status << " (CPLEX = " << mgr->get_status() << ")\n";
-            exit(1);
+            std::cerr << "Lp solve failed (seed = " << seed << "). Status: " 
+                << status << " (CPLEX = " << mgr->get_status() << ")\n";
+            return (css_code_data_t) {};
         }
         // Get variable values.
         for (uint q : s->support) {

@@ -59,27 +59,39 @@ int main(int argc, char* argv[]) {
         const int num_checks = tg.get_vertices_by_type(graph::tanner::vertex_t::Type::zparity).size()
                                 + tg.get_vertices_by_type(graph::tanner::vertex_t::Type::xparity).size();
 
-        std::cout << "Searching for best schedule (seed progress):";
+        std::cout << "Searching for best schedule (seed progress):\n";
         std::cout.flush();
-        for (seed = 0; seed < num_checks; seed++) {
-            auto tmp = protean::compute_schedule_from_tanner_graph(tg, seed);
-            if (tmp.schedule_depth < code_data.schedule_depth) {
-                std::cout << " " << seed;
-                std::cout.flush();
-                code_data = tmp;
+        for (int r = 0; r < 3; r++) {
+            for (seed = 0; seed < num_checks; seed++) {
+                auto tmp = protean::compute_schedule_from_tanner_graph(tg, seed);
+                if (tmp.data_qubits.size() == 0) continue;
+                if (pp.option_set("smart-flags")) {
+                    tmp = protean::make_fault_tolerant_smart(tmp);
+                } else {
+                    tmp = protean::make_fault_tolerant_simple(tmp);
+                }
+
+                const uint d = tmp.schedule_depth, _d = code_data.schedule_depth;
+                const uint f = tmp.flag_qubits.size(), _f = code_data.flag_qubits.size();
+
+#define OBJ(d, f)   ((d) + protean::oracle::EN_OPT_OBS*protean::oracle::C_OPT_OBS*(f))
+                if (OBJ(d, f) < OBJ(_d, _f)) {
+                    std::cout << "\t" << seed << " (depth = " << d << ", flags = " << f << ")\n";
+                    std::cout.flush();
+                    code_data = tmp;
+                }
             }
         }
-        std::cout << "\n";
     } else {
         code_data = protean::compute_schedule_from_tanner_graph(tg, seed);
+        if (pp.option_set("smart-flags")) {
+            code_data = protean::make_fault_tolerant_smart(code_data);
+        } else {
+            code_data = protean::make_fault_tolerant_simple(code_data);
+        }
     }
 
     code_data.print_schedule(std::cout);
-    if (pp.option_set("smart-flags")) {
-        code_data = protean::make_fault_tolerant_smart(code_data);
-    } else {
-        code_data = protean::make_fault_tolerant_simple(code_data);
-    }
     std::cout << "qubits: " << code_data.data_qubits.size() << " data, "
                     << code_data.parity_qubits.size() << " parity, "
                     << code_data.flag_qubits.size() << " flags.\n";

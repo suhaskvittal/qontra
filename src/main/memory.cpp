@@ -3,7 +3,7 @@
  * */
 
 #define ARMA_OPENMP_THREADS 32
-#define DISABLE_MPI
+//#define DISABLE_MPI
 #define USE_NEURAL_NET
 
 #include <decoder/mwpm.h>
@@ -29,6 +29,8 @@ get_circuit(const schedule_t& sch, fp_t p) {
     const uint n = get_number_of_qubits(sch);
 
     tables::ErrorAndTiming et;
+    et.e_g1q *= 0.1;
+    et.e_idle *= 0.1;
     et = et * (1000 * p);
     ErrorTable errors;
     TimeTable timing;
@@ -75,10 +77,6 @@ int main(int argc, char* argv[]) {
     // Define Decoder.
     stim::Circuit error_model = get_circuit(sch, p);
 #ifdef USE_NEURAL_NET
-    std::cout << "arma config: " << arma::arma_config::mp_threads << "\n";
-    std::cout << "arma threads: " << arma::mp_thread_limit::get() << "," << arma::mp_thread_limit::in_parallel() << "\n";
-    std::cout << "omp threads: " << omp_get_max_threads() << "\n";
-
     using namespace mlpack;
     NeuralDecoder dec(error_model);
     // Check if model file exists. If so, load it in. 

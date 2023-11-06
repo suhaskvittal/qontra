@@ -330,6 +330,13 @@ public:
         return (bool)status;
     }
 
+    void solve_pool() {
+        status = CPXXpopulate(env, prog);
+        if (status) std::cout << "MIP solve status: " << status << "\n";
+        // Setup variables with the first member of the solution pool.
+        get_soln_from_pool(0);
+    }
+
     lp_var_t<T> get_var(T label) {
         return label_to_lp_var[label];
     }
@@ -378,6 +385,18 @@ public:
     }
 
     int get_status() { return status; }
+
+    fp_t get_soln_from_pool(int k) { 
+        int fincols = CPXXgetnumcols(env, prog);
+
+        if (prog_soln != NULL)  free(prog_soln);
+        prog_soln = (fp_t*) malloc(fincols * sizeof(fp_t));
+        fp_t obj;
+    
+        status = CPXXgetsolnpoolobjval(env, prog, k, &obj);
+        status = CPXXgetsolnpoolx(env, prog, k, prog_soln, 0, fincols-1);
+        return obj;
+    }
 
     std::vector<lp_var_t<T>>    variables;
     std::vector<lp_constr_t<T>> constraints;

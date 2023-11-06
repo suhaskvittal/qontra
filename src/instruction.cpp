@@ -126,6 +126,12 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                     fp_t t = timing.op2q[inst.name][std::make_pair(x, y)];
                     max_t = t > max_t ? t : max_t;
                 }
+                // Insert idling errors.
+                for (uint i = 0; i < n; i++) {
+                    if (std::find(qubits.begin(), qubits.end(), i) != qubits.end()) continue;
+                    fp_t e_idle = errors.idling[i];
+                    circuit.append_op("DEPOLARIZE1", {i}, e_idle);
+                }
             } else {
                 for (uint x : qubits) {
                     fp_t t = timing.op1q[inst.name][x];
