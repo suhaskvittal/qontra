@@ -36,12 +36,17 @@ int main(int argc, char* argv[]) {
     bool is_memory_x = false;
 
     int seed = 0;
+    int randomness = 0;
+    int max_depth = -1;
 
     if (!pp.get_string("tanner", tanner_graph_file))    return 1;
     if (!pp.get_uint32("r", rounds)) return 1;
     if (!pp.get_string("out", output_file)) return 1;
-    
+
+    pp.get_int32("max-depth", max_depth);
     pp.get_int32("seed", seed);
+    pp.get_int32("rng", randomness);
+
     is_memory_x = pp.option_set("x");
 
     // OPTIMIZATION FLAGS
@@ -52,7 +57,6 @@ int main(int argc, char* argv[]) {
     print_tanner_graph(tg);
 
     protean::css_code_data_t code_data;
-    std::cout << "seed = " << seed << "\n";
     if (seed < 0) {
         // Do an exhaustive search for the min depth schedule.
         code_data.schedule_depth = std::numeric_limits<uint>::max();
@@ -61,9 +65,13 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Searching for best schedule (seed progress):\n";
         std::cout.flush();
-        for (int r = 0; r < 3; r++) {
+
+        int rr = 1;
+        if (!randomness) rr = 5;
+        for (int r = 0; r < rr; r++) {
+            std::cout << "\t[round " << r << "]\n";
             for (seed = 0; seed < num_checks; seed++) {
-                auto tmp = protean::compute_schedule_from_tanner_graph(tg, seed);
+                auto tmp = protean::compute_schedule_from_tanner_graph(tg, seed, randomness, max_depth);
                 if (tmp.data_qubits.size() == 0) continue;
                 if (pp.option_set("smart-flags")) {
                     tmp = protean::make_fault_tolerant_smart(tmp);
@@ -74,16 +82,17 @@ int main(int argc, char* argv[]) {
                 const uint d = tmp.schedule_depth, _d = code_data.schedule_depth;
                 const uint f = tmp.flag_qubits.size(), _f = code_data.flag_qubits.size();
 
-#define OBJ(d, f)   ((d) + protean::oracle::EN_OPT_OBS*protean::oracle::C_OPT_OBS*(f))
+#define OBJ(d, f)   ((d) + protean::oracle::C_OPT_OBS*(f))
                 if (OBJ(d, f) < OBJ(_d, _f)) {
                     std::cout << "\t" << seed << " (depth = " << d << ", flags = " << f << ")\n";
                     std::cout.flush();
                     code_data = tmp;
+                    max_depth = d;
                 }
             }
         }
     } else {
-        code_data = protean::compute_schedule_from_tanner_graph(tg, seed);
+        code_data = protean::compute_schedule_from_tanner_graph(tg, seed, randomness);
         if (pp.option_set("smart-flags")) {
             code_data = protean::make_fault_tolerant_smart(code_data);
         } else {

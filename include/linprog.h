@@ -222,6 +222,10 @@ public:
         if (env == NULL) {
             env = cpxinit();
         }
+
+        CPXXsetdblparam(env, CPXPARAM_MIP_Pool_AbsGap, 0.0);
+        CPXXsetintparam(env, CPXPARAM_MIP_Pool_Intensity, 4);
+        CPXXsetintparam(env, CPXPARAM_MIP_Limits_Populate, 32);
     }
 
     ~LPManager() {
@@ -385,6 +389,7 @@ public:
     }
 
     int get_status() { return status; }
+    int get_soln_pool_size() { return CPXXgetsolnpoolnumsolns(env, prog); }
 
     fp_t get_soln_from_pool(int k) { 
         int fincols = CPXXgetnumcols(env, prog);

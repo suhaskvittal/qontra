@@ -52,8 +52,9 @@ int main(int argc, char* argv[]) {
     std::string output_file;
     fp_t p;
     uint64_t shots;
+    int seed = 0;
 
-    uint64_t tshots = 10'000'000;
+    uint64_t tshots = 0;
     uint64_t epochs = 100;
     std::string model_file = "model.bin";
 
@@ -61,6 +62,10 @@ int main(int argc, char* argv[]) {
     if (!pp.get_string("out", output_file)) return 1;
     if (!pp.get_float("p", p))  return 1;
     if (!pp.get_uint64("shots", shots)) return 1;
+
+    pp.get_int32("seed", seed);
+
+    experiments::G_BASE_SEED = seed;
 
     pp.get_uint64("epochs", epochs);
     pp.get_uint64("tshots", tshots);
@@ -91,6 +96,9 @@ int main(int argc, char* argv[]) {
         dec.model.Add<TanH>();
         dec.model.Add<Linear>(error_model.count_observables());
         dec.model.Add<TanH>();
+    }
+
+    if (tshots > 0) {
         dec.config.max_epochs = epochs;
         dec.training_circuit = get_circuit(sch, p);
 

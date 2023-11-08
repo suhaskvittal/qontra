@@ -40,6 +40,27 @@ struct css_code_data_t {
     std::map<uint, std::vector<uint>>   parity_to_flags;
     TwoLevelMap<uint, uint, uint>       flag_usage;
 
+    std::vector<std::vector<uint>> get_observables_and_products(bool get_x_obs) {
+        auto base_obs_list = get_x_obs ? x_obs_list : z_obs_list;
+        std::vector<std::vector<uint>> all_obs_prods(base_obs_list);
+
+        for (uint i = 0; i < base_obs_list.size(); i++) {
+            for (uint j = i+1; j < base_obs_list.size(); j++) {
+                std::set<uint> prod(base_obs_list[i].begin(), base_obs_list[i].end());
+                for (uint k = 0; k < base_obs_list[j].size(); k++) {
+                    uint q = base_obs_list[j][k];
+                    if (prod.count(q))  prod.erase(q);
+                    else                prod.insert(q);
+                }
+                if (prod.size() > base_obs_list[i].size() && prod.size() > base_obs_list[j].size()) {
+                    continue;
+                }
+                all_obs_prods.push_back(std::vector<uint>(prod.begin(), prod.end()));
+            }
+        }
+        return all_obs_prods;
+    }
+
     void print_schedule(std::ostream& out) {
         out << "---------------- X Stabilizers -------------------\n";
         for (uint xp : xparity_list) {

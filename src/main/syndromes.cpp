@@ -67,16 +67,30 @@ int main(int argc, char* argv[]) {
     // Setup experiemnts callback for writing syndromes to file.
     std::deque<std::vector<uint>> syndrome_list;
     callback_t cb;
+    fp_t hw_sum, __hw_sum = 0.0;
+    fp_t hw_max, __hw_max = 0.0;
     cb.prologue = [&] (stim::simd_bits_range_ref& row) {
         auto detectors = get_nonzero_detectors(row, circuit.count_detectors());
         bool nonzero_obs = row.popcnt() - detectors.size();
         if (detectors.size() >= G_FILTERING_HAMMING_WEIGHT || nonzero_obs) {
             syndrome_list.push_back(detectors);
         }
+        __hw_sum += detectors.size();
+        if (detectors.size() > __hw_max) __hw_max = detectors.size();
     };
     // Execute experiment.
     generate_syndromes(circuit, shots, cb);
     // Now, each MPI process takes turns writing to the file.
+    if (world_size == 1) {
+        hw_sum = __hw_sum;
+        hw_max = __hw_max;
+    }
+    MPI_Reduce(&__hw_sum, &hw_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&__hw_max, &hw_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    hw_sum /= shots;
+    if (world_rank == 0) {
+        out << "Statistics: mean = " << hw_sum << ", max = " << hw_max << "\n";
+    }
     for (int r = 0; r < world_size; r++) {
         MPI_Barrier(MPI_COMM_WORLD);
         if (world_rank == r) {

@@ -82,8 +82,9 @@ typedef graph::Graph<stab_vertex_t, stab_edge_t>    StabilizerGraph;
 // starting stabilizer can yield different results. As the function is fast,
 // it is indeed possible to iterate over all possible starting points and choose
 // the best result.
+
 css_code_data_t
-compute_schedule_from_tanner_graph(graph::TannerGraph&, int start=0);
+compute_schedule_from_tanner_graph(graph::TannerGraph&, int seed=0, int randomness=0, int max_depth=-1);
 
 css_code_data_t
 make_fault_tolerant_simple(css_code_data_t);
@@ -96,7 +97,7 @@ LPManager<uint>*
 construct_scheduling_program(stab_vertex_t*,
                                 StabilizerGraph&,
                                 css_code_data_t*,
-                                int max_stabilizer_weight);
+                                int depth_limit);
 // Setup for the linear programs.
 namespace oracle {
 

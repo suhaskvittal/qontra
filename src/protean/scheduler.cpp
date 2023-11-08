@@ -20,6 +20,8 @@ fp_t C_OPT_OBS = 0.5;
 
 }   // oracle
 
+static std::mt19937_64 rng(0);
+
 mq_pauli_op_t
 mul(const mq_pauli_op_t& p1, const mq_pauli_op_t& p2) {
     std::set<pauli_op_t> ss(p1.begin(), p1.end());
@@ -64,7 +66,8 @@ get_stabilizers(css_code_data_t code_data) {
 }
 
 css_code_data_t
-compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int seed) {
+compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int seed, int randomness, int max_depth) {
+    bool use_soln_pool = (randomness == 1);
     // Translate tanner graph to a StabilizerGraph
     StabilizerGraph gr;
     int max_stab_weight = 0;
@@ -140,6 +143,8 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int seed) {
         code_data.z_obs_list.push_back(qlist);
     }
 
+    if (max_depth < 0) max_depth = 2*max_stab_weight;
+
     // Now compute the schedule via a BFS on the graph.
     std::deque<stab_vertex_t*> bfs{vertices[seed]};
     std::set<stab_vertex_t*> visited;
@@ -150,13 +155,23 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int seed) {
         if (visited.count(s))   continue;
         // Compute schedule for this stabilizer.
         // First construct an ILP.
-        LPManager<uint>* mgr = construct_scheduling_program(s, gr, &code_data, max_stab_weight);
-        fp_t obj;
-        int status;
-        if (mgr->solve(&obj, &status)) {
-            std::cerr << "Lp solve failed (seed = " << seed << "). Status: " 
-                << status << " (CPLEX = " << mgr->get_status() << ")\n";
-            return (css_code_data_t) {};
+        LPManager<uint>* mgr = construct_scheduling_program(s, gr, &code_data, max_depth);
+        if (use_soln_pool) {
+            mgr->solve_pool();
+            int n_soln = mgr->get_soln_pool_size();
+            if (n_soln == 0) {
+//              std::cerr << "Lp solve failed (no solutions)\n";
+                return (css_code_data_t) {};
+            }
+            mgr->get_soln_from_pool(rng() % n_soln);
+        } else {
+            fp_t obj;
+            int status;
+            if (mgr->solve(&obj, &status)) {
+//              std::cerr << "Lp solve failed (seed = " << seed << "). Status: " 
+//                  << status << " (CPLEX = " << mgr->get_status() << ")\n";
+                return (css_code_data_t) {};
+            }
         }
         // Get variable values.
         for (uint q : s->support) {
@@ -304,7 +319,12 @@ make_fault_tolerant_smart(css_code_data_t code_data) {
         // Now, we must analyze and check for errors. Check against the
         // observables.
         pauli pauli_array[] = { pauli::x, pauli::z };
-        std::vector<std::vector<uint>> obs_list_array[] = { code_data.x_obs_list, code_data.z_obs_list };
+        std::vector<std::vector<uint>> obs_list_array[] = { 
+            code_data.x_obs_list,
+            code_data.z_obs_list
+//          code_data.get_observables_and_products(true), 
+//          code_data.get_observables_and_products(false) 
+        };
         bool is_fault_tolerant = true;
         for (int i = 0; i < 2; i++) {
             pauli p = pauli_array[i];
@@ -370,17 +390,17 @@ construct_scheduling_program(
         stab_vertex_t* s0,
         StabilizerGraph& gr,
         css_code_data_t* css_data_p,
-        int max_stabilizer_weight)
+        int depth_limit)
 {
     LPManager<uint>* mgr = new LPManager<uint>;
 
     // This variable is greater than all qubit variables.
-    lp_var_t<uint> max_of_all = mgr->add_slack_var(1, 2*max_stabilizer_weight, VarBounds::both, VarDomain::integer);
+    lp_var_t<uint> max_of_all = mgr->add_slack_var(1, depth_limit, VarBounds::both, VarDomain::integer);
 
     const auto& support = s0->support;
     // Create variables for each qubit.
     for (uint q : support) {
-        lp_var_t<uint> qv = mgr->add_var(q, 1, 2*max_stabilizer_weight, VarBounds::both, VarDomain::integer);
+        lp_var_t<uint> qv = mgr->add_var(q, 1, depth_limit, VarBounds::both, VarDomain::integer);
         lp_constr_t<uint> con(max_of_all - qv, 0.0, ConstraintDirection::ge);
         mgr->add_constraint(con);
     }
@@ -447,7 +467,8 @@ construct_scheduling_program(
         // stabilizer codes.
         bool is_x_type = s0->stabilizer[0].first == pauli::x;  // A quick and dirty way to figure out what stabilizer we're working with.
         // X stabilizers may propagate X hooks (and Z is the similarly so). So we care about the same type stabilizer.
-        auto obs_ref = is_x_type ? css_data_p->x_obs_list : css_data_p->z_obs_list;
+        auto obs_ref = css_data_p->get_observables_and_products(is_x_type);
+//      auto obs_ref = is_x_type ? css_data_p->x_obs_list : css_data_p->z_obs_list;
 
         uint n_terms = 0;
         lp_expr_t<uint> obs_opt_obj;
