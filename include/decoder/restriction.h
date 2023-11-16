@@ -18,9 +18,10 @@ namespace qontra {
 
 class RestrictionDecoder : public Decoder {
 public:
-    RestrictionDecoder(stim::Circuit circuit)
+    RestrictionDecoder(stim::Circuit circuit, uint64_t detectors_per_round)
         :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
-        c_decoding_graph(graph::to_colored_decoding_graph(circuit))
+        c_decoding_graph(graph::to_colored_decoding_graph(circuit)),
+        detectors_per_round(detectors_per_round)
     {}
 
     Decoder::result_t   decode_error(const syndrome_t&) override;
@@ -44,6 +45,8 @@ protected:
         get_incident_vertices(std::set<graph::decoding::colored_edge_t*>, std::string);
 
     graph::ColoredDecodingGraph c_decoding_graph;
+
+    const uint64_t detectors_per_round;
 };
 
 }   // qontra

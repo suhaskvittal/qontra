@@ -56,7 +56,8 @@ int main(int argc, char* argv[]) {
     std::string output_file;
     fp_t p;
     uint64_t shots;
-    int seed = 0;
+
+    int32_t seed = 0;
 
     uint64_t tshots = 0;
     uint64_t epochs = 100;
@@ -113,7 +114,9 @@ int main(int argc, char* argv[]) {
     }
 #else
     //MWPMDecoder dec(error_model);
-    RestrictionDecoder dec(error_model);
+    uint64_t detectors_per_round;
+    if (!pp.get_uint64("dpr", detectors_per_round)) return 1;
+    RestrictionDecoder dec(error_model, detectors_per_round);
 #endif
     experiments::memory_params_t params;
     params.shots = shots;
@@ -148,11 +151,8 @@ int main(int argc, char* argv[]) {
         out << std::filesystem::path(asm_file).filename() << ","
             << p << ","
             << shots << ","
-            << res.logical_error_rate;
-        for (uint i = 0; i < error_model.count_observables(); i++) {
-            out << "," << res.logical_error_rate_by_obs[i];
-        }
-        out << "," << res.hw_mean << ","
+            << res.logical_error_rate << ","
+            << res.hw_mean << ","
             << res.hw_std << ","
             << res.hw_max << ","
             << res.t_mean << ","

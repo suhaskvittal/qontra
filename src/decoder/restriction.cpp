@@ -5,8 +5,7 @@
 
 #include "decoder/restriction.h"
 
-#define DEBUG
-#define MODULO 18
+//#define DEBUG
 
 namespace qontra {
 
@@ -55,10 +54,10 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
 
     std::vector<uint> detectors = get_nonzero_detectors(syndrome);
 #ifdef DEBUG
-    std::cout << "Detectors:";
+    std::cout << "Detectors ( HW = " << detectors.size() << " ):";
     for (uint d : detectors) {
         auto v = c_decoding_graph.get_vertex(d);
-        std::cout << " " << d << "[" << (d % MODULO) << ", " << v->color << "]";
+        std::cout << " " << d << "[" << (d % detectors_per_round) << ", " << v->color << "]";
     }
     std::cout << "\n";
 #endif
@@ -105,9 +104,9 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
                 colored_vertex_t* fu2;
 
                 if (is_colored_boundary(u1))    fu1 = u1;
-                else                            fu1 = c_decoding_graph.get_vertex(u1->id % MODULO);
+                else                            fu1 = c_decoding_graph.get_vertex(u1->id % detectors_per_round);
                 if (is_colored_boundary(u2))    fu2 = u2;
-                else                            fu2 = c_decoding_graph.get_vertex(u2->id % MODULO);
+                else                            fu2 = c_decoding_graph.get_vertex(u2->id % detectors_per_round);
 
                 auto e = c_decoding_graph.get_edge(fu1, fu2);
                 if (e == nullptr)   continue;
@@ -148,20 +147,16 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             colored_vertex_t* fu2;
 
             if (is_colored_boundary(u1))    fu1 = u1;
-            else                            fu1 = c_decoding_graph.get_vertex(u1->id % MODULO);
+            else                            fu1 = c_decoding_graph.get_vertex(u1->id % detectors_per_round);
             if (is_colored_boundary(u2))    fu2 = u2;
-            else                            fu2 = c_decoding_graph.get_vertex(u2->id % MODULO);
+            else                            fu2 = c_decoding_graph.get_vertex(u2->id % detectors_per_round);
 
             auto e = c_decoding_graph.get_edge(fu1, fu2);
             if (e == nullptr)   continue;
 #ifdef DEBUG
             std::cout << " " << print_v(fu1) << ", " << print_v(fu2);
 #endif
-            if (all_in_cc.count(e)) {
-                all_in_cc.erase(e);
-            } else {
-                xor_entry_into(e, out_of_cc);
-            }
+            xor_entry_into(e, out_of_cc);
         }
 #ifdef DEBUG
         std::cout << "\n";
@@ -220,7 +215,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
     std::set<face_t> committed_faces;   // Track which faces have already been used.
     for (auto v : all_incident) {
         // Can only match one of out_of_cc or in_cc.
-        std::set<face_t> incident_faces = c_decoding_graph.get_all_incident_faces(v, MODULO);
+        std::set<face_t> incident_faces = c_decoding_graph.get_all_incident_faces(v, detectors_per_round);
         uint64_t nf = incident_faces.size();
         std::vector<stim::simd_bits> face_corr_list;
         for (face_t fc : incident_faces) {
@@ -292,7 +287,7 @@ RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
             // faces intersect with in_cc or out_of_cc.
             uint int_with_cc = locally_matches(all_in_cc, f_boundary, v);
             uint int_with_no_cc = locally_matches(out_of_cc, f_boundary, v);
-            if (int_with_cc > 0 && int_with_no_cc > 0)  continue;
+//          if (int_with_cc > 0 && int_with_no_cc > 0)  continue;
             if (int_with_cc == 0 && int_with_no_cc == 0) continue;
 
             if (int_with_cc > best_intersect_with_cc

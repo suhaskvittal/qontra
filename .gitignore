@@ -1,20 +1,12 @@
-projects
-projects/*
-projects.tar.gz
-Debug/*
-Release/*
-bin
-bin/*
-src/*.*swp
+*.*swp
 include/*.*swp
-data
-data/*
 python/__pycache__
 python/__pycache__/*
 python/
-src/gulliver/logs/*
 build/*
 build
+scripts/asm/*
+data/*
 
 include/parsing/asm/parser.tab.c
 include/parsing/asm/parser.tab.h
