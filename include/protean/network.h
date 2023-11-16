@@ -104,6 +104,8 @@ public:
         return nullptr;
     }
 private:
+    void add_partial_support_to(
+
     void reduce_connectivity(fp_vertex_t*);
 
     void reduce_connectivity_of_data(fp_vertex_t*);

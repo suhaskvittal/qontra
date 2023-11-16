@@ -225,7 +225,8 @@ make_face(colored_vertex_t* v1, colored_vertex_t* v2, colored_vertex_t* v3) {
 ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
     :Graph(),
     restricted_color_map(),
-    restricted_graphs()
+    restricted_graphs(),
+    face_frame_map()
 {
     restricted_color_map["rg"] = 0;
     restricted_color_map["gr"] = 0;
@@ -566,6 +567,70 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
         coord_offset.fill(0);
         read_detector_error_model(dem, 1, det_offset, coord_offset, err_f, det_f);
     }
+    // Analyze the original circuit to get observable flips.
+    stim::DetectorErrorModel dem = 
+        stim::ErrorAnalyzer::circuit_to_detector_error_model(
+            circuit,
+            false,  // decompose_errors
+            true,   // fold loops
+            false,  // allow gauge detectors
+            1.0,    // approx disjoint errors threshold
+            false,  // ignore decomposition failures
+            false
+        );
+    detector_callback_t det_f = [] (uint64_t d, std::array<fp_t, N_COORD> coords) {};
+
+    error_callback_t err_f =
+        [&] (fp_t prob, std::vector<uint64_t> dets, std::set<uint> frames)
+        {
+            if (frames.size() == 0) return;
+            if (dets.size() == 0) return;   // Nothing to do.
+            if (dets.size() == 1) {
+                // This vertex is adjacent to two boundaries of opposing color.
+                auto v = graph.get_vertex(dets[0]);
+                colored_vertex_t* b1;
+                colored_vertex_t* b2;
+                if (v->color == "r") {
+                    b1 = graph.get_vertex(GREEN_BOUNDARY_INDEX);
+                    b2 = graph.get_vertex(BLUE_BOUNDARY_INDEX);
+                } else if (v->color == "g") {
+                    b1 = graph.get_vertex(RED_BOUNDARY_INDEX);
+                    b2 = graph.get_vertex(BLUE_BOUNDARY_INDEX);
+                } else {
+                    b1 = graph.get_vertex(RED_BOUNDARY_INDEX);
+                    b2 = graph.get_vertex(GREEN_BOUNDARY_INDEX);
+                }
+                face_t fc = make_face(v, b1, b2);
+                graph.face_frame_map[fc] = frames;
+            } else if (dets.size() == 2) {
+                auto v1 = graph.get_vertex(dets[0]);
+                auto v2 = graph.get_vertex(dets[1]);
+                colored_vertex_t* b;
+                if (v1->color == "r") {
+                    if (v2->color == "g")   b = graph.get_vertex(BLUE_BOUNDARY_INDEX);
+                    else                    b = graph.get_vertex(GREEN_BOUNDARY_INDEX);
+                } else if (v1->color == "g") {
+                    if (v2->color == "r")   b = graph.get_vertex(BLUE_BOUNDARY_INDEX);
+                    else                    b = graph.get_vertex(RED_BOUNDARY_INDEX);
+                } else {
+                    if (v2->color == "r")   b = graph.get_vertex(GREEN_BOUNDARY_INDEX);
+                    else                    b = graph.get_vertex(RED_BOUNDARY_INDEX);
+                }
+                face_t fc = make_face(v1, v2, b);
+                graph.face_frame_map[fc] = frames;
+            } else {
+                auto v1 = graph.get_vertex(dets[0]);
+                auto v2 = graph.get_vertex(dets[1]);
+                auto v3 = graph.get_vertex(dets[2]);
+                face_t fc = make_face(v1, v2, v3);
+                graph.face_frame_map[fc] = frames;
+            }
+        };
+    uint det_offset = 0;
+    std::array<fp_t, N_COORD> coord_offset;
+    coord_offset.fill(0);
+    read_detector_error_model(dem, 1, det_offset, coord_offset, err_f, det_f);
+
     return graph;
 }
 

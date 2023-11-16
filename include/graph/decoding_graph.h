@@ -198,6 +198,14 @@ public:
     std::set<decoding::colored_vertex_t*>
         get_all_incident_vertices(const std::set<decoding::colored_edge_t*>&, std::string of_color);
 
+    std::set<uint> get_face_frame_changes(const face_t& fc) { 
+        if (face_frame_map.count(fc)) {
+            return face_frame_map[fc];
+        } else {
+            return std::set<uint>();
+        }
+    }
+
     DecodingGraph& operator[](const std::string& cc) {
         assert(restricted_color_map.count(cc));
         return restricted_graphs.at(restricted_color_map.at(cc));
@@ -209,6 +217,11 @@ public:
 private:
     std::map<std::string, int>      restricted_color_map;
     std::array<DecodingGraph, 3>    restricted_graphs;
+
+    std::map<face_t, std::set<uint>>   face_frame_map;
+
+    friend ColoredDecodingGraph
+        to_colored_decoding_graph(const stim::Circuit&, DecodingGraph::Mode);
 };
 
 ColoredDecodingGraph

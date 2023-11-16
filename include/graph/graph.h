@@ -213,7 +213,7 @@ public:
 
         auto& r_adj_dst = r_adjacency_lists[dst];
         for (auto it = r_adj_dst.begin(); it != r_adj_dst.end();) {
-            if (*it == src) it = r_adj_src.erase(it);
+            if (*it == src) it = r_adj_dst.erase(it);
             else            it++;
         }
 

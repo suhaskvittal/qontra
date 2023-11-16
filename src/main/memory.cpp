@@ -2,9 +2,9 @@
  *  date:   28 August 2023
  * */
 
-#define ARMA_OPENMP_THREADS 32
+//#define ARMA_OPENMP_THREADS 32
 //#define DISABLE_MPI
-#define USE_NEURAL_NET
+//#define USE_NEURAL_NET
 
 #include <decoder/mwpm.h>
 #include <decoder/restriction.h>
@@ -31,11 +31,15 @@ get_circuit(const schedule_t& sch, fp_t p) {
     tables::ErrorAndTiming et;
     et.e_g1q *= 0.1;
     et.e_idle *= 0.1;
+
+    et.e_g2q = 0.0;
+    et.e_g1q = 0.0;
+    et.e_idle = 0.0;
     et = et * (1000 * p);
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
-    stim::Circuit circ = schedule_to_stim(sch, errors, timing);
+    stim::Circuit circ = schedule_to_stim(sch, errors, timing, p);
     return circ;
 }
 
