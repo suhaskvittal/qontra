@@ -44,8 +44,14 @@ template <class V_t, class E_t>
 class Graph {
 public:
     Graph(void)
-        :vertices(), edges(), adjacency_matrix(), adjacency_lists(), id_to_vertex(),
-        graph_has_changed(false), dealloc_on_delete(true)
+        :vertices(),
+        edges(),
+        adjacency_matrix(),
+        adjacency_lists(),
+        r_adjacency_lists(),
+        id_to_vertex(),
+        graph_has_changed(false),
+        dealloc_on_delete(true)
     {}
 
     Graph(const Graph& other)
@@ -53,6 +59,7 @@ public:
         edges(other.edges),
         adjacency_matrix(other.adjacency_matrix),
         adjacency_lists(other.adjacency_lists),
+        r_adjacency_lists(other.r_adjacency_lists),
         id_to_vertex(other.id_to_vertex),
         graph_has_changed(other.graph_has_changed),
         dealloc_on_delete(other.dealloc_on_delete)
@@ -117,10 +124,16 @@ public:
         edges.push_back(e);
 
         tlm::put(adjacency_matrix, src, dst, e);
-        if (e->is_undirected)  tlm::put(adjacency_matrix, dst, src, e);
+        if (e->is_undirected) {
+            tlm::put(adjacency_matrix, dst, src, e);
+        }
 
         adjacency_lists[src].push_back(dst);
-        if (e->is_undirected)  adjacency_lists[dst].push_back(src);
+        r_adjacency_lists[dst].push_back(src);
+        if (e->is_undirected) {
+            adjacency_lists[dst].push_back(src);
+            r_adjacency_lists[src].push_back(dst);
+        }
 
         graph_has_changed = true;
         return true;
@@ -154,22 +167,32 @@ public:
                 // Delete v from the adjacency list of the other vertex.
                 V_t* other = u1;
                 if (u1 == v)    other = u2;
+
                 auto& adj = adjacency_lists[other];
                 for (auto it = adj.begin(); it != adj.end();) {
                     if (*it == v)   it = adj.erase(it);
                     else            it++;
                 }
-                adjacency_matrix[other][v] = nullptr;
-                if (e->is_undirected)   adjacency_matrix[v][other] = nullptr;
-                
-                
+
+                auto& r_adj = r_adjacency_lists[other];
+                for (auto it = r_adj.begin(); it != r_adj.end();) {
+                    if (*it == v)   it = adj.erase(it);
+                    else            it++;
+                }
+
+                adjacency_matrix[u1][u2] = nullptr;
+                if (e->is_undirected) {
+                    adjacency_matrix[u2][u1] = nullptr;
+                }
                 // Now delete the edge itself.
                 it = edges.erase(it); 
                 if (dealloc_on_delete)  delete e;
+            } else {
+                it++;
             }
-            else                    it++;
         }
         adjacency_lists.erase(v);
+        r_adjacency_lists.erase(v);
         graph_has_changed = true;
         if (dealloc_on_delete)  delete v;
     }
@@ -188,11 +211,23 @@ public:
             else            it++;
         }
 
+        auto& r_adj_dst = r_adjacency_lists[dst];
+        for (auto it = r_adj_dst.begin(); it != r_adj_dst.end();) {
+            if (*it == src) it = r_adj_src.erase(it);
+            else            it++;
+        }
+
         if (e->is_undirected) {
             adjacency_matrix[dst][src] = nullptr;
             auto& adj_dst = adjacency_lists[dst];
             for (auto it = adj_dst.begin(); it != adj_dst.end();) {
                 if (*it == src) it = adj_dst.erase(it);
+                else            it++;
+            }
+
+            auto& r_adj_src = r_adjacency_lists[src];
+            for (auto it = r_adj_dst.begin(); it != r_adj_dst.end();) {
+                if (*it == dst) it = r_adj_src.erase(it);
                 else            it++;
             }
         }
@@ -222,8 +257,16 @@ public:
 
     std::vector<V_t*>   get_vertices(void) { return vertices; }
     std::vector<E_t*>   get_edges(void) { return edges; }
+
     std::vector<V_t*>   get_neighbors(V_t* v) { return adjacency_lists[v]; }
+    std::vector<V_t*>   get_incoming(V_t* v) { return r_adjacency_lists[v]; }
+    std::vector<V_t*>   get_outgoing(V_t* v) { return adjacency_lists[v]; }
+
     uint                get_degree(V_t* v) { return get_neighbors(v).size(); }
+    uint                get_indegree(V_t* v) { return get_incoming(v).size(); }
+    uint                get_outdegree(V_t* v) { return get_degree(v); }
+    uint                get_inoutdegree(V_t* v) { return get_indegree(v) + get_outdegree(v); }
+
     fp_t                get_mean_connectivity(void)
                             { return 2 * ((fp_t)edges.size()) / ((fp_t)vertices.size()); }
     uint                get_max_connectivity(void)
@@ -252,6 +295,10 @@ protected:
 
     TwoLevelMap<V_t*, V_t*, E_t*>       adjacency_matrix;
     std::map<V_t*, std::vector<V_t*>>   adjacency_lists;
+
+    // For directed graphs, maintain reverse adjacency lists as well.
+    std::map<V_t*, std::vector<V_t*>>   r_adjacency_lists;
+
     std::map<uint64_t, V_t*>            id_to_vertex;
 
     bool    graph_has_changed;  // Tracks if the graph has changed. May be useful

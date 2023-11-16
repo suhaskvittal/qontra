@@ -20,9 +20,9 @@
 using namespace qontra;
 
 void print_tanner_graph(graph::TannerGraph& gr) {
-    auto data_vertices = gr.get_vertices_by_type(graph::tanner::vertex_t::Type::data);
-    auto zparity_vertices = gr.get_vertices_by_type(graph::tanner::vertex_t::Type::zparity);
-    auto xparity_vertices = gr.get_vertices_by_type(graph::tanner::vertex_t::Type::xparity);
+    auto data_vertices = gr.get_vertices_by_type(graph::tanner::vertex_t::type::data);
+    auto zparity_vertices = gr.get_vertices_by_type(graph::tanner::vertex_t::type::zparity);
+    auto xparity_vertices = gr.get_vertices_by_type(graph::tanner::vertex_t::type::xparity);
     std::cout << "data = " << data_vertices.size() << "\n";
     std::cout << "zparity = " << zparity_vertices.size() << "\n";
     std::cout << "xparity = " << xparity_vertices.size() << "\n";
@@ -60,8 +60,8 @@ int main(int argc, char* argv[]) {
     if (seed < 0) {
         // Do an exhaustive search for the min depth schedule.
         code_data.schedule_depth = std::numeric_limits<uint>::max();
-        const int num_checks = tg.get_vertices_by_type(graph::tanner::vertex_t::Type::zparity).size()
-                                + tg.get_vertices_by_type(graph::tanner::vertex_t::Type::xparity).size();
+        const int num_checks = tg.get_vertices_by_type(graph::tanner::vertex_t::type::zparity).size()
+                                + tg.get_vertices_by_type(graph::tanner::vertex_t::type::xparity).size();
 
         std::cout << "Searching for best schedule (seed progress):\n";
         std::cout.flush();

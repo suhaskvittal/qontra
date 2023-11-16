@@ -78,7 +78,7 @@ typedef graph::Graph<stab_vertex_t, stab_edge_t>    StabilizerGraph;
 // This schedule is computed by traversing across the stabilizers and scheduling
 // each stabilizer with respect to prior scheduled stabilizers.
 //
-// The "start" parameter is optional, but we found that different choices of
+// The "seed" parameter is optional, but we found that different choices of
 // starting stabilizer can yield different results. As the function is fast,
 // it is indeed possible to iterate over all possible starting points and choose
 // the best result.

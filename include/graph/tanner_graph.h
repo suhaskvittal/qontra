@@ -21,8 +21,6 @@ namespace graph {
 
 namespace tanner {
 
-const int VERTEX_ID_AUTOGEN_BIT = 63;
-
 const uint64_t VERTEX_ID_NUMBER_MASK = (1L<<32)-1;
 
 // The upper three bits of the tanner vertex ID are reserved
@@ -37,8 +35,8 @@ const uint64_t VERTEX_ID_XPARITY_FLAG = (1L<<62);
 const uint64_t VERTEX_ID_ZPARITY_FLAG = (1L<<63);
 
 struct vertex_t : graph::base::vertex_t {
-    enum class Type { data, xparity, zparity };
-    Type qubit_type;
+    enum class type { data, xparity, zparity };
+    type qubit_type;
 };
 
 struct edge_t : graph::base::edge_t {
@@ -103,9 +101,9 @@ public:
 
     bool add_vertex(tanner::vertex_t* v) override {
         if (!__TannerGraphParent::add_vertex(v))  return false;
-        if (v->qubit_type == tanner::vertex_t::Type::data)      data_qubits.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::Type::xparity)   xparity_checks.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::Type::zparity)   zparity_checks.push_back(v);
+        if (v->qubit_type == tanner::vertex_t::type::data)      data_qubits.push_back(v);
+        if (v->qubit_type == tanner::vertex_t::type::xparity)   xparity_checks.push_back(v);
+        if (v->qubit_type == tanner::vertex_t::type::zparity)   zparity_checks.push_back(v);
         return true;
     }
 
@@ -113,17 +111,17 @@ public:
         auto v = (tanner::vertex_t*)e->src;
         auto w = (tanner::vertex_t*)e->dst;
         // Make sure the edge preserves the bipartite property.
-        bool src_is_parity = v->qubit_type != tanner::vertex_t::Type::data;
-        bool dst_is_parity = w->qubit_type != tanner::vertex_t::Type::data;
+        bool src_is_parity = v->qubit_type != tanner::vertex_t::type::data;
+        bool dst_is_parity = w->qubit_type != tanner::vertex_t::type::data;
         if (src_is_parity && dst_is_parity) return false;
         return __TannerGraphParent::add_edge(e);
     }
 
     void delete_vertex(tanner::vertex_t* v) override {
         std::vector<tanner::vertex_t*>* cat;
-        if (v->qubit_type == tanner::vertex_t::Type::data)      cat = &data_qubits;
-        if (v->qubit_type == tanner::vertex_t::Type::xparity)   cat = &xparity_checks;
-        if (v->qubit_type == tanner::vertex_t::Type::zparity)   cat = &zparity_checks;
+        if (v->qubit_type == tanner::vertex_t::type::data)      cat = &data_qubits;
+        if (v->qubit_type == tanner::vertex_t::type::xparity)   cat = &xparity_checks;
+        if (v->qubit_type == tanner::vertex_t::type::zparity)   cat = &zparity_checks;
         for (auto it = cat->begin(); it != cat->end();) {
             if (*it == v)   it = cat->erase(it);
             else            it++;
@@ -131,9 +129,9 @@ public:
         __TannerGraphParent::delete_vertex(v);
     }
 
-    std::vector<tanner::vertex_t*> get_vertices_by_type(tanner::vertex_t::Type type) {
-        if (type == tanner::vertex_t::Type::data)           return data_qubits;
-        else if (type == tanner::vertex_t::Type::xparity)   return xparity_checks;
+    std::vector<tanner::vertex_t*> get_vertices_by_type(tanner::vertex_t::type type) {
+        if (type == tanner::vertex_t::type::data)           return data_qubits;
+        else if (type == tanner::vertex_t::type::xparity)   return xparity_checks;
         else                                                return zparity_checks;
     }
 

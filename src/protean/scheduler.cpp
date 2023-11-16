@@ -77,7 +77,7 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int seed, int rand
         std::map<uint, pauli> q2p;
         for (auto dv : tanner_graph.get_neighbors(pv)) {
             pauli p = pauli::x;
-            if (pv->qubit_type == tanner::vertex_t::Type::zparity) {
+            if (pv->qubit_type == tanner::vertex_t::type::zparity) {
                 p = pauli::z;
             }
             uint q = (uint) (tanner::VERTEX_ID_NUMBER_MASK & dv->id);
@@ -126,7 +126,7 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int seed, int rand
     // We will maintain an assignment of tanner graph vertices to qubits.
     std::map<tanner::vertex_t*, uint64_t> tanner_vertex_to_qubit;
     uint64_t next_qubit_id = 0;
-    for (auto dv : tanner_graph.get_vertices_by_type(tanner::vertex_t::Type::data)) {
+    for (auto dv : tanner_graph.get_vertices_by_type(tanner::vertex_t::type::data)) {
         code_data.data_qubits.push_back(next_qubit_id);
         tanner_vertex_to_qubit[dv] = next_qubit_id;
         next_qubit_id++;
@@ -192,7 +192,7 @@ compute_schedule_from_tanner_graph(TannerGraph& tanner_graph, int seed, int rand
     for (auto pv : tanner_graph.get_checks()) {
         code_data.parity_qubits.push_back(next_qubit_id);
         tanner_vertex_to_qubit[pv] = next_qubit_id;
-        if (pv->qubit_type == tanner::vertex_t::Type::xparity) {
+        if (pv->qubit_type == tanner::vertex_t::type::xparity) {
             code_data.xparity_list.push_back(next_qubit_id);
         } else {
             code_data.zparity_list.push_back(next_qubit_id);
