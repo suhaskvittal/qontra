@@ -2,6 +2,8 @@
 include/*.*swp
 python/__pycache__
 python/__pycache__/*
+scripts/__pycache__
+scripts/__pycache__/*
 python/
 build/*
 build
