@@ -3,7 +3,7 @@
 # author: Suhas Vittal
 # date: 16 November 2023
 
-output_file=../data/hex_color_code_threshold.csv
+output_file=../data/hex_color_code_threshold_mini.csv
 shots=$2
 
 proc=$1
@@ -24,13 +24,15 @@ conda deactivate
 
 cd ../build
 
+make -j8
+
 dpr_m=1
 dpr_i=2
-for d in 3 5 7 9
+for d in 7 9
 do
     dpr=$(( 3*dpr_m ))
     echo "dpr = ${dpr}, m = ${dpr_m}, i = ${dpr_i}"
-    for p in 5e-4 6e-4 7e-4 8e-4 9e-4 1e-3 2e-3 3e-3 4e-3 5e-3
+    for p in 8e-4 9e-4 1e-3
     do
         # Write memory asm.
         mpirun -np $proc ./memory \

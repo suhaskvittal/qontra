@@ -79,6 +79,14 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             circuit.append_op("S", qubits);
         } else if (inst.name == "sdg") {
             circuit.append_op("S_DAG", qubits);
+        } else if (inst.name == "clx") {
+            std::vector<uint> args;
+            // Each gate is a measurement+qubit (in terms of operands).
+            for (uint i = 0; i < qubits.size(); i++) {
+                args.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
+                args.push_back(qubits[i]);
+            }
+            circuit.append_op("CX", args);
         } else if (inst.name == "event") {
             std::vector<uint> offsets;
             for (uint i = 0; i < meas.size(); i++) {

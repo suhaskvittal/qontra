@@ -1,6 +1,6 @@
 from asm_gen_base import *
 
-def hexcc(d):
+def hexcc(d, with_flags=False):
     checks = defaultdict(list)
 
     offset = 2
