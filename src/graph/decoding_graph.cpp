@@ -419,7 +419,7 @@ ColoredDecodingGraph::get_all_incident_faces(colored_vertex_t* v, int modulo) {
         if (modulo > 0 && !is_colored_boundary(w)) w = get_vertex(w->id % modulo);
         for (auto u : get_common_neighbors(v, w)) {
             if (modulo > 0 && !is_colored_boundary(u)) u = get_vertex(u->id % modulo);
-
+            if (!contains(u, v) || !contains(v, w) || !contains(u, w)) continue;
             if (u->color == v->color || v->color == w->color || u->color == w->color)   continue;
             if (u == v || v == w || u == w) continue;
             faces.insert(make_face(v, w, u));

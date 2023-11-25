@@ -32,6 +32,8 @@ get_circuit(const schedule_t& sch, fp_t p) {
     et.e_g1q *= 0.1;
     et.e_idle *= 0.1;
 
+    et.e_g1q = 0.0;
+    et.e_g2q = 0.0;
     et.e_idle = 0.0;
     et = et * (1000 * p);
     ErrorTable errors;

@@ -1,5 +1,5 @@
 #!/bin/sh
-#
+ 
 # author: Suhas Vittal
 # date: 16 November 2023
 
@@ -22,18 +22,21 @@ done
 
 conda deactivate
 
+# Run all of the experiments.
+
 cd ../build
 
 make -j8
 
-dpr_m=1
-dpr_i=2
+dpr_m=6
+dpr_i=4
 for d in 7 9
 do
     dpr=$(( 3*dpr_m ))
-    echo "dpr = ${dpr}, m = ${dpr_m}, i = ${dpr_i}"
+    echo "d = ${d} (dpr = ${dpr}, m = ${dpr_m}, i = ${dpr_i})"
     for p in 8e-4 9e-4 1e-3
     do
+        echo "  p = ${p}"
         # Write memory asm.
         mpirun -np $proc ./memory \
             --asm ../scripts/asm/memory_z_d${d}.asm \

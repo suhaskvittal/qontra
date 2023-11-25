@@ -1,5 +1,5 @@
 #!/bin/sh
-#
+ 
 # author: Suhas Vittal
 # date: 16 November 2023
 
@@ -21,6 +21,8 @@ do
 done
 
 conda deactivate
+ 
+# Run all of the experiments.
 
 cd ../build
 
