@@ -398,7 +398,10 @@ def write_asm_file_for_check_sch(code_data, output_file, checks=None, memory='z'
         writer.write('cmpz %s;\n' % concat(data_qubits))
     writer.close()
 
-def write_asm_file_for_css(code_data, rounds, output_file, memory='z'):
+# Flag protocols: 
+#   0 = make flag measurement an event
+#   1 = perform conditional x on data qubit.
+def write_asm_file_for_css(code_data, rounds, output_file, memory='z', flag_protocol=0):
     data_qubits, parity_qubits, flag_qubits, checks, zlist, xlist, z_obs_list, x_obs_list, suppl = code_data
 
     writer = open(output_file, 'w')
@@ -419,6 +422,7 @@ def write_asm_file_for_css(code_data, rounds, output_file, memory='z'):
 
     zflags, xflags = [], []
     flag_dict = None if 'flag_dict' not in suppl else suppl['flag_dict']
+    flag_supp = None if 'flag_supp' not in suppl else suppl['flag_supp']
     if flag_dict is not None:
         for ch in xlist:
             xflags.extend(flag_dict[ch]['all'])
@@ -446,16 +450,22 @@ def write_asm_file_for_css(code_data, rounds, output_file, memory='z'):
                 else:
                     writer.write('event %d, %d, %d;\n' % (ectr, mctr+off+i, mctr+off+i-m_per_round))
                 ectr += 1
-            # Also do zflags.
+            # Handle flags:
             off += len(xlist)
-            for (i, fl) in enumerate(zflags):
-                if 'color' in suppl:
-                    writer.write('@property color %d\n' % suppl['color'][fl])
-                if r == 0:
-                    writer.write('event %d, %d;\n' % (ectr, off+i))
-                else:
-                    writer.write('event %d, %d;\n' % (ectr, mctr+off+i))
-                ectr += 1
+            if flag_protocol == 0:
+                for (i, fl) in enumerate(zflags):
+                    if 'color' in suppl:
+                        writer.write('@property color %d\n' % suppl['color'][fl])
+                    if r == 0:
+                        writer.write('event %d, %d;\n' % (ectr, off+i))
+                    else:
+                        writer.write('event %d, %d;\n' % (ectr, mctr+off+i))
+                    ectr += 1
+            elif flag_protocol == 1:
+                # Perform conditional X.
+                for (i, fl) in enumerate(zflags):
+                    _, q = flag_supp[fl]
+                    writer.write('clz %d, %d;\n' % (mctr+off+i, q))
         else:
             for (i, ch) in enumerate(zlist):
                 if 'color' in suppl:
@@ -466,14 +476,19 @@ def write_asm_file_for_css(code_data, rounds, output_file, memory='z'):
                     writer.write('event %d, %d, %d;\n' % (ectr, mctr+i, mctr+i-m_per_round))
                 ectr += 1
             off = len(zlist) + len(xlist) + len(zflags)
-            for (i, fl) in enumerate(xflags):
-                if 'color' in suppl:
-                    writer.write('@property color %d\n' % suppl['color'][fl])
-                if r == 0:
-                    writer.write('event %d, %d;\n' % (ectr, off+i))
-                else:
-                    writer.write('event %d, %d;\n' % (ectr, mctr+off+i))
-                ectr += 1
+            if flag_protocol == 0:
+                for (i, fl) in enumerate(xflags):
+                    if 'color' in suppl:
+                        writer.write('@property color %d\n' % suppl['color'][fl])
+                    if r == 0:
+                        writer.write('event %d, %d;\n' % (ectr, off+i))
+                    else:
+                        writer.write('event %d, %d;\n' % (ectr, mctr+off+i))
+                    ectr += 1
+            elif flag_protocol == 1:
+                for (i, fl) in enumerate(xflags):
+                    _, q = flag_supp[fl]
+                    writer.write('clx %d, %d;\n' % (mctr+off+i, q))
         mctr += m_per_round
     # Epilogue
     writer.write('\n#\n# EPILOGUE\n#\n\n')

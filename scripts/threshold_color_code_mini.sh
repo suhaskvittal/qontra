@@ -8,33 +8,19 @@ shots=$2
 
 proc=$1
 
-# Write all of the ASM files.
-conda deactivate
-conda activate venv
-
-cd scripts
-mkdir asm
-
-for d in 3 5 7 9
-do
-    python asm_gen_color_code.py asm/memory_z_d${d}.asm $d $d 
-done
-
-conda deactivate
-
 # Run all of the experiments.
 
-cd ../build
+cd build
 
 make -j8
 
-dpr_m=6
-dpr_i=4
-for d in 7 9
+dpr_m=3
+dpr_i=3
+for d in 5 7
 do
     dpr=$(( 3*dpr_m ))
     echo "d = ${d} (dpr = ${dpr}, m = ${dpr_m}, i = ${dpr_i})"
-    for p in 8e-4 9e-4 1e-3
+    for p in 6e-3 7e-3 8e-3
     do
         echo "  p = ${p}"
         # Write memory asm.

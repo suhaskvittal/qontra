@@ -39,6 +39,9 @@ protected:
     std::vector<match_t>    blossom_subroutine(const std::vector<uint>&);
     std::vector<cc_t>       compute_connected_components(const std::vector<match_t>&);
 
+    graph::decoding::colored_vertex_t*  flatten(graph::decoding::colored_vertex_t*);
+
+    std::set<graph::face_t> get_incident_faces(graph::decoding::colored_vertex_t*);
     stim::simd_bits         get_correction_for_face(graph::face_t);
 
     std::set<graph::decoding::colored_vertex_t*>

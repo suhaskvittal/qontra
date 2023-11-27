@@ -34,6 +34,7 @@ const std::vector<std::string> ISA{
     "reset",
     "nop",
     "clx",  // This is a classically controlled X gate.
+    "clz",
     // Control Instructions
     "brifone",  // brifone LABEL, event
     "brifzero",
@@ -56,7 +57,7 @@ const std::vector<std::string> ISA{
 };
 
 const std::set<std::string> IS_QUANTUM {
-    "h", "x", "z", "cx", "rz", "s", "sdg", "t", "tdg", "measure", "reset", "clx"
+    "h", "x", "z", "cx", "rz", "s", "sdg", "t", "tdg", "measure", "reset"
 };
 
 const std::set<std::string> IS_QUANTUM_LIKE {
@@ -74,7 +75,7 @@ const std::set<std::string> IS_2Q_OPERATOR {
 };
 
 const std::set<std::string> IS_CLASSICALLY_CONTROLLED {
-    "clx"
+    "clx", "clz"
 };
 
 const std::set<std::string> IS_BR {

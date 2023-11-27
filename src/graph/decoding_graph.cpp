@@ -407,28 +407,6 @@ ColoredDecodingGraph::are_matched_through_boundary(
     return true;
 }
 
-std::set<face_t>
-ColoredDecodingGraph::get_all_incident_faces(colored_vertex_t* v, int modulo) {
-    // Memoize this function -- we will expect to access this quite frequently.
-    static std::map<colored_vertex_t*, std::set<face_t>> memo;
-    if (memo.count(v))  return memo[v];
-
-    auto v_adj = get_neighbors(v);
-    std::set<face_t> faces;
-    for (auto w : v_adj) {
-        if (modulo > 0 && !is_colored_boundary(w)) w = get_vertex(w->id % modulo);
-        for (auto u : get_common_neighbors(v, w)) {
-            if (modulo > 0 && !is_colored_boundary(u)) u = get_vertex(u->id % modulo);
-            if (!contains(u, v) || !contains(v, w) || !contains(u, w)) continue;
-            if (u->color == v->color || v->color == w->color || u->color == w->color)   continue;
-            if (u == v || v == w || u == w) continue;
-            faces.insert(make_face(v, w, u));
-        }
-    }
-    memo[v] = faces;
-    return faces;
-}
-
 std::set<colored_vertex_t*>
 ColoredDecodingGraph::get_all_incident_vertices(const std::set<colored_edge_t*>& edge_list, std::string color) {
     std::set<colored_vertex_t*> incident;

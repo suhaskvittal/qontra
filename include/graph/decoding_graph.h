@@ -193,8 +193,6 @@ public:
                 decoding::colored_vertex_t*, decoding::colored_vertex_t*, std::string lattice_color,
                 decoding::colored_vertex_t** b1_p, decoding::colored_vertex_t** b2_p);
 
-    std::set<face_t>
-        get_all_incident_faces(decoding::colored_vertex_t*, int modulo=-1);
     std::set<decoding::colored_vertex_t*>
         get_all_incident_vertices(const std::set<decoding::colored_edge_t*>&, std::string of_color);
 
