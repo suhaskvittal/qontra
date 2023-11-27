@@ -74,9 +74,10 @@ public:
         std::vector<assign_t>   error_assignments;
     };
 
-    virtual result_t decode_error(const syndrome_t&) =0;    // This function
-                                                            // will perform decoding
-                                                            // and return a correction.
+    virtual result_t decode_error(stim::simd_bits_range_ref) =0;
+                                                    // This function
+                                                    // will perform decoding
+                                                    // and return a correction.
     virtual std::string name(void) =0;  // Useful for printing out stats.
 
     DetailedStimCircuit get_circuit(void) { return circuit; }
@@ -84,9 +85,10 @@ protected:
     // Other helpful functions:
     //
     // is_error: checks if the provided correction is a logical error.
+    // get_nonzero_detectors: gets nonzero detectors from syndrome.
 
     bool is_error(
-            const stim::simd_bits& correction, const syndrome_t& syndrome)
+            const stim::simd_bits& correction, stim::simd_bits_range_ref syndrome)
     {
         const uint n_detectors = circuit.count_detectors();
         const uint n_observables = circuit.count_observables();
@@ -99,7 +101,7 @@ protected:
 
     template <class T> std::vector<uint>
     // T = stim::simd_bits or stim::simd_bits_range_ref
-    get_nonzero_detectors(const T syndrome) {
+    get_nonzero_detectors(T syndrome) {
         std::vector<uint> det;
         uint64_t w = 0;
         uint64_t last_bit = 0;

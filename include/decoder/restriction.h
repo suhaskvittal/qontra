@@ -24,7 +24,7 @@ public:
         detectors_per_round(detectors_per_round)
     {}
 
-    Decoder::result_t   decode_error(const syndrome_t&) override;
+    Decoder::result_t   decode_error(stim::simd_bits_range_ref) override;
 
     std::string name() override { return "RestrictionDecoder"; }
 protected:

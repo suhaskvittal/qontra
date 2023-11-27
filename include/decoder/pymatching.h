@@ -37,7 +37,7 @@ public:
         solver(init_solver_from_circuit(circuit))
     {}
 
-    Decoder::result_t decode_error(const syndrome_t& syndrome) override {
+    Decoder::result_t decode_error(stim::simd_bits_range_ref syndrome) override {
         const uint n_observables = circuit.count_observables();
 
         std::vector<uint> detectors = get_nonzero_detectors(syndrome);

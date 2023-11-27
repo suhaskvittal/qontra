@@ -38,7 +38,7 @@ uint locally_matches(std::set<colored_edge_t*> s1, std::set<colored_edge_t*> s2,
 }
 
 Decoder::result_t
-RestrictionDecoder::decode_error(const syndrome_t& syndrome) {
+RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
     const uint det = circuit.count_detectors();
     const uint obs = circuit.count_observables();
 #ifdef DEBUG

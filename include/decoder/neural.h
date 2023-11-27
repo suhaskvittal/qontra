@@ -23,7 +23,7 @@ public:
     {}
 
     void                train(uint64_t shots, bool verbose=true);
-    Decoder::result_t   decode_error(const syndrome_t&) override;
+    Decoder::result_t   decode_error(stim::simd_bits_range_ref) override;
     void                load_model_from_file(std::string);
     void                save_model_to_file(std::string);
 

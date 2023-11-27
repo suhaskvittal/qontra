@@ -33,7 +33,7 @@ public:
         detectors_per_round(detectors_per_round)
     {}
 
-    Decoder::result_t   decode_error(const syndrome_t&) override;
+    Decoder::result_t   decode_error(stim::simd_bits_range_ref) override;
                                 // This function (which overrides from
                                 // the superclass) decodes the entire
                                 // provided syndrome over a sliding window.
@@ -44,9 +44,9 @@ public:
 
     // The below functions handle syndromes at different points. The
     // decode_middle_error should be called most often.
-    Decoder::result_t   decode_first_error(const syndrome_t&);
-    Decoder::result_t   decode_middle_error(const syndrome_t&);
-    Decoder::result_t   decode_final_error(const syndrome_t&);
+    Decoder::result_t   decode_first_error(stim::simd_bits_range_ref);
+    Decoder::result_t   decode_middle_error(stim::simd_bits_range_ref);
+    Decoder::result_t   decode_final_error(stim::simd_bits_range_ref);
 
     std::string name(void) override { return "W" + base_decoder->name(); }
 protected:
@@ -54,7 +54,7 @@ protected:
     // result such that only error assignments made involving detectors
     // between the min (inclusive) and max (exclusive) are kept.
     Decoder::result_t   retrieve_result_from_base(
-                                        const syndrome_t& base_syndrome,
+                                        stim::simd_bits_range_ref base_syndrome,
                                         uint min_detector,
                                         uint max_detector);
 private:

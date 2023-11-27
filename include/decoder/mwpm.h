@@ -36,7 +36,7 @@ public:
 
     std::string name(void) override { return "MWPMDecoder"; }
 
-    Decoder::result_t       decode_error(const syndrome_t&) override;
+    Decoder::result_t   decode_error(stim::simd_bits_range_ref) override;
 private:
     //
     // Extra functionality for restriction decoder:

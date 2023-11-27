@@ -8,7 +8,7 @@
 namespace qontra {
 
 Decoder::result_t
-MWPMDecoder::decode_error(const syndrome_t& syndrome) {
+MWPMDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
     const uint n_detectors = circuit.count_detectors();
     const uint n_observables = circuit.count_observables();
 

@@ -49,7 +49,7 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
 }
 
 Decoder::result_t
-NeuralDecoder::decode_error(const syndrome_t& syndrome) {
+NeuralDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
     const uint det = circuit.count_detectors();
     const uint obs = circuit.count_observables();
 

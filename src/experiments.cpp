@@ -204,7 +204,7 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
         if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
             return;
         }
-        syndrome_t syndrome(row);
+        stim::simd_bits syndrome(row);
         auto res = dec->decode_error(syndrome); 
         __logical_errors += res.is_error;
         __t_sum += res.exec_time;

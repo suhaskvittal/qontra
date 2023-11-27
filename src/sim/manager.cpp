@@ -211,7 +211,7 @@ SimManager::simulate_batch(uint64_t shots) {
                     {
                         continue;
                     }
-                    syndrome_t syndrome(eht_tr[t]);
+                    stim::simd_bits syndrome(eht_tr[t]);
                     auto res = decoder->decode_error(syndrome);
                     const uint obs = decoder->get_circuit().count_observables();
                     for (uint i = 0; i < obs; i++) {
