@@ -20,7 +20,7 @@ for d in 5 7
 do
     dpr=$(( 3*dpr_m ))
     echo "d = ${d} (dpr = ${dpr}, m = ${dpr_m}, i = ${dpr_i})"
-    for p in 6e-3 7e-3 8e-3
+    for p in 6e-4 7e-4 8e-4
     do
         echo "  p = ${p}"
         # Write memory asm.

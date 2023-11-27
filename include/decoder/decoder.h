@@ -10,6 +10,7 @@
 
 #include "defs.h"
 #include "graph/decoding_graph.h"
+#include "stimext.h"
 #include "timer.h"
 
 #include <string>
@@ -55,7 +56,7 @@ public:
     // but the backing decoder only uses a few rounds. This may also be 
     // used if the subclass constructs the decoding graph
     // via a custom strategy, or does not need a decoding graph.
-    Decoder(const stim::Circuit& circ, 
+    Decoder(DetailedStimCircuit circ, 
             graph::DecodingGraph::Mode dgr_mode=graph::DecodingGraph::Mode::NORMAL)
         :circuit(circ),
         decoding_graph(graph::to_decoding_graph(circ, dgr_mode))
@@ -78,7 +79,7 @@ public:
                                                             // and return a correction.
     virtual std::string name(void) =0;  // Useful for printing out stats.
 
-    stim::Circuit       get_circuit(void) { return circuit; }
+    DetailedStimCircuit get_circuit(void) { return circuit; }
 protected:
     // Other helpful functions:
     //
@@ -118,7 +119,7 @@ protected:
         return det;
     }
 
-    stim::Circuit           circuit;
+    DetailedStimCircuit     circuit;
     graph::DecodingGraph    decoding_graph;
 
     Timer   timer;

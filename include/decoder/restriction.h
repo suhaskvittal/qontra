@@ -18,7 +18,7 @@ namespace qontra {
 
 class RestrictionDecoder : public Decoder {
 public:
-    RestrictionDecoder(stim::Circuit circuit, uint64_t detectors_per_round)
+    RestrictionDecoder(DetailedStimCircuit circuit, uint64_t detectors_per_round)
         :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
         c_decoding_graph(graph::to_colored_decoding_graph(circuit)),
         detectors_per_round(detectors_per_round)

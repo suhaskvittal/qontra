@@ -22,9 +22,9 @@ pm::Mwpm init_solver_from_circuit(stim::Circuit circuit) {
             circuit,
             true,  // decompose_errors
             true,  // fold loops
-            true, // allow gauge detectors
+            false, // allow gauge detectors
             1.0,   // approx disjoint errors threshold
-            true, // ignore decomposition failures
+            false, // ignore decomposition failures
             false
         );
     return pm::detector_error_model_to_mwpm(dem, pm::NUM_DISTINCT_WEIGHTS);
@@ -32,7 +32,7 @@ pm::Mwpm init_solver_from_circuit(stim::Circuit circuit) {
 
 class PyMatching : public Decoder {
 public:
-    PyMatching(stim::Circuit circuit)
+    PyMatching(DetailedStimCircuit circuit)
         :Decoder(circuit, graph::DecodingGraph::Mode::LOW_MEMORY),
         solver(init_solver_from_circuit(circuit))
     {}

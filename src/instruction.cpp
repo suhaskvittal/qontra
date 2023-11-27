@@ -30,11 +30,11 @@ schedule_to_text(const schedule_t& sch) {
     return out;
 }
 
-stim::Circuit
+DetailedStimCircuit
 schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, fp_t ftedpe) {
     uint n = get_number_of_qubits(sch);
 
-    stim::Circuit circuit;
+    DetailedStimCircuit circuit;
     fp_t time = 0.0;
     // The instructions below can only be Pauli operators, CX,
     // or the following:
@@ -100,10 +100,16 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             for (uint i = 0; i < meas.size(); i++) {
                 offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
-            int64_t tag = 0;
-            if (inst.properties.count("color")) tag = inst.properties.at("color").ival;
 
-            circuit.append_op("DETECTOR", offsets, tag);
+            if (inst.properties.count("color")) {
+                circuit.detection_event_to_color[events[0]] = inst.properties.at("color").ival;
+            }
+
+            if (inst.annotations.count("flag")) {
+                circuit.flag_detection_events.insert(events[0]);
+            }
+
+            circuit.append_op("DETECTOR", offsets);
             continue;
         } else if (inst.name == "obs") {
             std::vector<uint> offsets;

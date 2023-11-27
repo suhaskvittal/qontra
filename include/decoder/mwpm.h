@@ -30,7 +30,7 @@ const fp_t MWPM_INTEGER_SCALE = 1000.0;
 
 class MWPMDecoder : public Decoder {
 public:
-    MWPMDecoder(const stim::Circuit& circ)
+    MWPMDecoder(DetailedStimCircuit circ)
         :Decoder(circ)
     {}
 

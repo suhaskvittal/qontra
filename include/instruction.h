@@ -8,6 +8,7 @@
 
 #include "defs.h"
 #include "tables.h"
+#include "stimext.h"
 
 #include <stim.h>
 
@@ -290,16 +291,16 @@ typedef std::vector<Instruction>    schedule_t;
 //  as coordinate declarations. The output is the max number of qubits in the
 //  circuit.
 
-uint            get_number_of_qubits(const schedule_t&);
+uint    get_number_of_qubits(const schedule_t&);
 
-std::string     schedule_to_text(const schedule_t&);
-stim::Circuit   schedule_to_stim(const schedule_t&, ErrorTable&, TimeTable&, 
+std::string         schedule_to_text(const schedule_t&);
+DetailedStimCircuit schedule_to_stim(const schedule_t&, ErrorTable&, TimeTable&, 
                                     fp_t fix_timing_error_as_depolarizing_error=-1);
 
 // The below functions are for parsing ASM (either in a file or in a string).
-schedule_t      schedule_from_file(std::string fname);
-schedule_t      schedule_from_text(std::string);
-schedule_t      schedule_after_parse(void);
+schedule_t  schedule_from_file(std::string fname);
+schedule_t  schedule_from_text(std::string);
+schedule_t  schedule_after_parse(void);
 
 }   // qontra
 

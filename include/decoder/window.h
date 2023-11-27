@@ -23,7 +23,7 @@ namespace qontra {
 
 class WindowDecoder : public Decoder {
 public:
-    WindowDecoder(const stim::Circuit& target_circuit,
+    WindowDecoder(DetailedStimCircuit target_circuit,
                     Decoder* base,
                     uint commit_window, 
                     uint detectors_per_round)

@@ -17,7 +17,7 @@ namespace qontra {
 
 class NeuralDecoder : public Decoder {
 public:
-    NeuralDecoder(const stim::Circuit& circ)
+    NeuralDecoder(DetailedStimCircuit circ)
         :Decoder(circ, graph::DecodingGraph::Mode::DO_NOT_BUILD),
         training_circuit(circ)
     {}
@@ -29,13 +29,12 @@ public:
 
     std::string name() override { return "NeuralDecoder"; }
 
-    mlpack::FFN<mlpack::MeanSquaredError> model;
-
-    stim::Circuit training_circuit;
-
     struct {
         int max_epochs = 100;
     } config;
+
+    mlpack::FFN<mlpack::MeanSquaredError> model;
+    DetailedStimCircuit training_circuit;
 };
 
 }   // qontra
