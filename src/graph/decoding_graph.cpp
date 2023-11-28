@@ -33,106 +33,147 @@ print_v(colored_vertex_t* v) {
 // DecodingGraph Definitions
 //
 
-DecodingGraph::matrix_entry_t
-DecodingGraph::get_error_chain_data_considering_flags(
-        decoding::vertex_t* v1,
-        decoding::vertex_t* v2,
-        const std::set<decoding::vertex_t*>& flags)
+void
+DecodingGraph::setup_flagged_decoding_graph(
+        const std::vector<vertex_t*>& detectors,
+        const std::set<vertex_t*>& active_flags,
+        const std::set<vertex_t*>& all_flags)
 {
-    auto error_data = get_error_chain_data(v1, v2);
-    if (flags.empty()) return error_data;
-    // Check if any flag lies on the path between these two vertices.
-    // Update the probability of the error chain correspondingly (this update
-    // does NOT modify the distance_matrix data structure).
-    const auto& path = error_data.error_chain;
-    fp_t logprob = log(error_data.probability);
-    bool found_any_flags_in_path = false;
-    // Check if any vertices on the path (adjacent)
-    // have a common flag that is in flags. 
-    // If so, update the error probability.
-    for (uint i = 1; i < path.size(); i++) {
-        auto vx = path[i-1];
-        auto vy = path[i];
-        auto common = get_common_neighbors(vx, vy);
-        for (auto vf : flags) {
-            if (std::find(common.begin(), common.end(), vf) != common.end()) {
-                const std::vector<vertex_t*> vx_vy{vx, vy};
-                for (auto w : vx_vy) {
-                    auto e = get_edge(w, vf);
-                    logprob -= log(e->error_probability);
-                }
-                found_any_flags_in_path = true;
+    const fp_t EPS = 1e-8;
+
+    build_flagged_decoding_graph();
+    // Update edge weights in the graph.
+    // Here, we will do a BFS from the existing flags. We will
+    // set all of their incident edges to EPS. If a flag is connected
+    // to another flag, we will do the same to that.
+    std::deque<vertex_t*> bfs(active_flags.begin(), active_flags.end());
+    std::set<vertex_t*> visited;
+    std::cout << "\tUpdated edges:";
+    while (bfs.size()) {
+        auto v = bfs.front();
+        bfs.pop_front();
+        if (visited.count(v)) continue;
+        for (auto w : flagged_decoding_graph->get_neighbors(v)) {
+            if (is_colored_boundary(w)) continue;
+            auto e = flagged_decoding_graph->get_edge(v, w);
+            e->edge_weight = 1.0;
+            std::cout << " (" << v->id << ", " << w->id << ")";
+            if (all_flags.count(w)) {
+                bfs.push_back(w);
             }
         }
+        visited.insert(v);
     }
-    if (!found_any_flags_in_path) return error_data;
-    fp_t prob = pow(M_E, logprob);
-    if (prob > 1.0) prob = 0.5;
-    // Compute adjusted weight.
-    std::cout << "reweighted from " << error_data.weight << " (pr = " << error_data.probability << ")";
-    error_data.probability = prob;
-    error_data.weight = (fp_t)log10((1-prob)/prob);
-    std::cout << " to " << error_data.weight << " (pr = " << error_data.probability << ")\n";
-    return error_data;
+    std::cout << "\n";
+    // Now, redo dijkstras.
+    ewf_t<vertex_t> wf = [&] (vertex_t* v1, vertex_t* v2) {
+        return flagged_decoding_graph->_ewf(v1, v2);
+    };
+    std::cout << "\tnew path weights:\n";
+    for (uint i = 0; i < detectors.size(); i++) {
+        auto v = detectors[i];
+        std::map<vertex_t*, fp_t> dist;
+        std::map<vertex_t*, vertex_t*> pred;
+        distance::dijkstra(flagged_decoding_graph, v, dist, pred, wf);
+        // Update distance matrix.
+        for (uint j = 0; j < detectors.size(); j++) {
+            if (i == j) continue;
+            auto w = detectors[j];
+            std::cout << v->id << ", " << w->id << ": prev = " << flagged_decoding_graph->distance_matrix[v][w].weight;
+            auto new_entry = flagged_decoding_graph->_dijkstra_cb(v, w, dist, pred);
+            std::cout << ", new = " << new_entry.weight << "\n";
+            tlm::put(flagged_decoding_graph->distance_matrix, v, w, new_entry);
+        }
+    }
+    graph_has_changed = false;  // Avoid later updates.
+}
+
+fp_t
+DecodingGraph::_ewf(vertex_t* v1, vertex_t* v2) {
+    auto e = get_edge(v1, v2);
+    return e->edge_weight;
+}
+
+DecodingGraph::matrix_entry_t
+DecodingGraph::_dijkstra_cb(vertex_t* src,
+                            vertex_t* dst,
+                            const std::map<vertex_t*, fp_t>& dist,
+                            const std::map<vertex_t*, vertex_t*>& pred)
+{
+    uint32_t length = 0;
+    std::set<uint> frames;
+
+    fp_t weight = dist.at(dst);
+    bool found_boundary = false;
+    std::vector<vertex_t*> path;
+    if (weight < 1000) {
+        auto curr = dst;
+        while (curr != src) {
+            auto next = pred.at(curr);
+            if (curr == next) {
+                weight = 1000000000;
+                path.clear();
+                found_boundary = false;
+                goto failed;
+            }
+            auto e = get_edge(next, curr);
+            std::set<uint> new_frames;
+            std::set_symmetric_difference(
+                    frames.begin(), frames.end(),
+                    e->frames.begin(), e->frames.end(),
+                    std::inserter(new_frames, new_frames.end()));
+            // Update data
+            frames = new_frames;
+            length++;
+            path.push_back(curr);
+            found_boundary |= (is_boundary(curr) || is_colored_boundary(curr)) && (curr != dst);
+            curr = next;
+        }
+        path.push_back(src);
+    }
+failed:
+    fp_t prob = pow(10, -weight);
+    return (matrix_entry_t) {length, prob, weight, frames, path, found_boundary};
 }
 
 void
 DecodingGraph::build_distance_matrix() {
-    ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
-    {
-        auto e = this->get_edge(v1, v2);
-        return e->edge_weight;
+    ewf_t<vertex_t> wf = [&] (vertex_t* v1, vertex_t* v2) {
+        return this->_ewf(v1, v2);
     };
-    distance::callback_t<vertex_t, matrix_entry_t> cb = 
-    [&] (vertex_t* src,
-        vertex_t* dst,
-        const std::map<vertex_t*, fp_t>& dist,
-        const std::map<vertex_t*, vertex_t*>& pred)
+    distance::callback_t<vertex_t, matrix_entry_t> d_cb = 
+    [&] (vertex_t* v1, 
+            vertex_t* v2,
+            const std::map<vertex_t*, fp_t>& dist,
+            const std::map<vertex_t*, vertex_t*>& pred)
     {
-        uint32_t length = 0;
-        std::set<uint> frames;
-
-        fp_t weight = dist.at(dst);
-        bool found_boundary = false;
-        std::vector<vertex_t*> path;
-        if (weight < 1000) {
-            auto curr = dst;
-            while (curr != src) {
-                auto next = pred.at(curr);
-                if (curr == next) {
-                    std::cout << "could not find path from "
-                        << print_v((colored_vertex_t*)src) << " to " 
-                        << print_v((colored_vertex_t*)dst) << "\n";
-                    weight = 1000000000;
-                    path.clear();
-                    found_boundary = false;
-                    goto failed;
-                }
-                auto e = this->get_edge(next, curr);
-                std::set<uint> new_frames;
-                std::set_symmetric_difference(
-                        frames.begin(), frames.end(),
-                        e->frames.begin(), e->frames.end(),
-                        std::inserter(new_frames, new_frames.end()));
-                // Update data
-                frames = new_frames;
-                length++;
-                path.push_back(curr);
-                found_boundary |= (is_boundary(curr) || is_colored_boundary(curr)) && (curr != dst);
-                curr = next;
-            }
-            path.push_back(src);
-        } else {
-            std::cout << "could not find path from "
-                        << print_v((colored_vertex_t*)src) << " to " 
-                        << print_v((colored_vertex_t*)dst) << "\n";
-        }
-failed:
-        fp_t prob = pow(10, -weight);
-        return (matrix_entry_t) {length, prob, weight, frames, path, found_boundary};
+        return this->_dijkstra_cb(v1, v2, dist, pred);
     };
+    distance_matrix = distance::create_distance_matrix(this, wf, d_cb);
+}
 
-    distance_matrix = distance::create_distance_matrix(this, w, cb);
+void
+DecodingGraph::build_flagged_decoding_graph() {
+    if (flagged_decoding_graph != nullptr) {
+        for (auto e : flagged_decoding_graph->get_edges()) delete e;
+        delete flagged_decoding_graph;
+    }
+    // Now, make a new graph.
+    flagged_decoding_graph = new DecodingGraph();
+    flagged_decoding_graph->dealloc_on_delete = false;
+    // Copy vertices over, but make new edge pointers.
+    for (auto v : get_vertices()) flagged_decoding_graph->add_vertex(v);
+    for (auto e : get_edges()) {
+        edge_t* _e = new edge_t;
+        _e->src = e->src;
+        _e->dst = e->dst;
+        _e->edge_weight = e->edge_weight;
+        _e->error_probability = e->error_probability;
+        _e->frames = e->frames;
+        flagged_decoding_graph->add_edge(_e);
+    }
+    // Copy distance matrix over.
+    flagged_decoding_graph->distance_matrix = distance_matrix;
 }
 
 void

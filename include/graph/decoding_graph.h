@@ -71,7 +71,12 @@ public:
     };
 
     DecodingGraph(Mode m=Mode::NORMAL)
-        :Graph(), distance_matrix(), error_polynomial(), expected_errors(), mode(m)
+        :Graph(),
+        distance_matrix(),
+        flagged_decoding_graph(nullptr),
+        error_polynomial(),
+        expected_errors(),
+        mode(m)
     {
         std::array<fp_t, N_COORD> boundary_coords;
         boundary_coords.fill(-1);
@@ -85,6 +90,7 @@ public:
     DecodingGraph(const DecodingGraph& other)
         :Graph(other),
         distance_matrix(other.distance_matrix),
+        flagged_decoding_graph(nullptr), // Do NOT copy.
         error_polynomial(other.error_polynomial),
         expected_errors(other.expected_errors),
         mode(other.mode)
@@ -107,9 +113,19 @@ public:
         return distance_matrix[v1][v2];
     }
 
+    // The below function only recomputes the paths for the specified detectors,
+    // while setting any flag edges to 0 (well actually 1e-8) weight. The resulting
+    // graph is placed in the flagged_decoding_graph object, which has the same
+    // data as DecodingGraph aside from the updated distance matrix.
+    void setup_flagged_decoding_graph(
+            const std::vector<decoding::vertex_t*>& detectors, 
+            const std::set<decoding::vertex_t*>& active_flags,
+            const std::set<decoding::vertex_t*>& all_flags);
+
     matrix_entry_t
-    get_error_chain_data_considering_flags(
-            decoding::vertex_t*, decoding::vertex_t*, const std::set<decoding::vertex_t*>&);
+    get_error_chain_data_from_flagged_graph(decoding::vertex_t* v1, decoding::vertex_t* v2) {
+        return flagged_decoding_graph->get_error_chain_data(v1, v2);
+    }
 
     // We can represent the number of errors as a polynomial where the coefficient
     // of xk corresponds to the probability of having k errors.
@@ -123,16 +139,34 @@ public:
 protected:
     bool    update_state(void) override;
 private:
+    fp_t _ewf(decoding::vertex_t*, decoding::vertex_t*);
+    matrix_entry_t _dijkstra_cb(
+                        decoding::vertex_t*,
+                        decoding::vertex_t*,
+                        const std::map<decoding::vertex_t*, fp_t>&,
+                        const std::map<decoding::vertex_t*, decoding::vertex_t*>&);
+
     void    build_distance_matrix(void);
+    void    build_flagged_decoding_graph(void); // This is a partial copy.
     void    build_error_polynomial(void);
 
     distance::DistanceMatrix<decoding::vertex_t, matrix_entry_t>    distance_matrix;
+
+    // Flag support:
+    DecodingGraph* flagged_decoding_graph;  // This is a variant of the DecodingGraph
+                                            // for some flag setup. The user can set this
+                                            // up when computing with flag detection events.
 
     poly_t  error_polynomial;
     fp_t    expected_errors;
 
     Mode mode;
 };
+
+ewf_t<decoding::vertex_t>
+    build_ewf(DecodingGraph*);
+distance::callback_t<decoding::vertex_t, DecodingGraph::matrix_entry_t>
+    build_dijkstra_cb(DecodingGraph*);
 
 // This is standard method of building decoding graphs, where each error is assumed
 // to flip exactly two detectors. This works for codes like the surface code.
