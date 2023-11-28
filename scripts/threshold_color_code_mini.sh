@@ -12,13 +12,15 @@ proc=$1
 
 cd build
 
-make -j8
+make -j${proc}
 
 dpr_m=3
 dpr_i=3
-for d in 5 7
+dpr_f=6
+for d in 5
 do
-    dpr=$(( 3*dpr_m ))
+#   dpr=$(( 3*dpr_m ))
+    dpr=$(( d*dpr_f ))
     echo "d = ${d} (dpr = ${dpr}, m = ${dpr_m}, i = ${dpr_i})"
     for p in 6e-4 7e-4 8e-4
     do
@@ -33,5 +35,6 @@ do
     done
     dpr_m=$(( dpr_m+dpr_i ))
     dpr_i=$(( dpr_i+1 ))
+    dpr_f=$(( dpr_f+3 ))
 done
 

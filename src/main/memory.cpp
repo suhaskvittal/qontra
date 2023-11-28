@@ -11,6 +11,7 @@
 #include <experiments.h>
 #include <parsing/cmd.h>
 #include <instruction.h>
+#include <stimext.h>
 #include <tables.h>
 
 #include <filesystem>
@@ -24,7 +25,7 @@
 
 using namespace qontra;
 
-stim::Circuit
+DetailedStimCircuit
 get_circuit(const schedule_t& sch, fp_t p) {
     const uint n = get_number_of_qubits(sch);
 
@@ -35,13 +36,13 @@ get_circuit(const schedule_t& sch, fp_t p) {
 //  et.e_m1w0 = 0.0;
 //  et.e_m0w1 = 0.0;
 //  et.e_g1q = 0.0;
-    et.e_g2q = 0.0;
+//  et.e_g2q = 0.0;
     et.e_idle = 0.0;
     et = et * (1000 * p);
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
-    stim::Circuit circ = schedule_to_stim(sch, errors, timing, p);
+    DetailedStimCircuit circ = schedule_to_stim(sch, errors, timing, p);
     return circ;
 }
 
@@ -87,7 +88,7 @@ int main(int argc, char* argv[]) {
     // Get schedule from file.
     schedule_t sch = schedule_from_file(asm_file);
     // Define Decoder.
-    stim::Circuit error_model = get_circuit(sch, p);
+    DetailedStimCircuit error_model = get_circuit(sch, p);
 #ifdef USE_NEURAL_NET
     using namespace mlpack;
     NeuralDecoder dec(error_model);

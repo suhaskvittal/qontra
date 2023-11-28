@@ -7,6 +7,8 @@
 
 namespace qontra {
 
+#define DEBUG
+
 using namespace graph;
 using namespace decoding;
 
@@ -50,9 +52,26 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
     std::cout << "Detectors ( HW = " << detectors.size() << " ):";
     for (uint d : detectors) {
         auto v = c_decoding_graph.get_vertex(d);
-        std::cout << " " << d << "[" << (d % detectors_per_round) << ", " << v->color << "]";
+        std::cout << " " << d << "[";
+        if (circuit.flag_detection_events.count(d)) {
+            std::cout << "F";
+        } else {
+            std::cout << (d % detectors_per_round) << ", " << v->color;
+        }
+        std::cout << "]";
     }
     std::cout << "\n";
+    // Print flag stats.
+    for (uint d : detectors) {
+        if (!circuit.flag_detection_events.count(d)) continue;
+        std::cout << d << "[F] hits:";
+        auto v = c_decoding_graph.get_vertex(d);
+        for (auto w : c_decoding_graph.get_neighbors(v)) {
+            std::cout << " " << print_v(w);
+            if (circuit.flag_detection_events.count(w->id)) std::cout << "[F]";
+        }
+        std::cout << "\n";
+    }
 #endif
     stim::simd_bits obs_bits(obs);
     for (uint i = 0; i < obs; i++) obs_bits[i] = syndrome[det+i];
@@ -395,25 +414,34 @@ std::vector<RestrictionDecoder::match_t>
 RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
     // Partition the detectors into syndromes for each restricted lattice and
     // compute the MWPM.
-    std::array<std::vector<uint>, 3> restricted_syndromes;
-    restricted_syndromes.fill(std::vector<uint>());
+    std::array<std::vector<uint>, 3> restricted_syndromes_stabilizers;
+    std::array<std::vector<uint>, 3> restricted_syndromes_flags;
+    restricted_syndromes_stabilizers.fill(std::vector<uint>());
+    restricted_syndromes_flags.fill(std::vector<uint>());
+    uint n = 0;
     for (uint d : detectors) {
         auto v = c_decoding_graph.get_vertex(d);
+        int i1, i2;
         if (v->color == "r") {
-            restricted_syndromes[0].push_back(d);
-            restricted_syndromes[1].push_back(d);
+            i1 = 0; i2 = 1;
         } else if (v->color == "g") {
-            restricted_syndromes[0].push_back(d);
-            restricted_syndromes[2].push_back(d);
+            i1 = 0; i2 = 2;
         } else {
-            restricted_syndromes[1].push_back(d);
-            restricted_syndromes[2].push_back(d);
+            i1 = 1; i2 = 2;
+        }
+        
+        if (circuit.flag_detection_events.count(d)) {
+            restricted_syndromes_flags[i1].push_back(d);
+            restricted_syndromes_flags[i2].push_back(d);
+        } else {
+            restricted_syndromes_stabilizers[i1].push_back(d);
+            restricted_syndromes_stabilizers[i2].push_back(d);
         }
     }
 
-    // Add boundaries if necessary.
-    for (std::vector<uint>& rs : restricted_syndromes) {
-        if (rs.size() & 1)  rs.push_back(BOUNDARY_INDEX);
+    // Add boundaries wherever needed.
+    for (auto& rs : restricted_syndromes_stabilizers) {
+        if (rs.size() & 1) rs.push_back(BOUNDARY_INDEX);
     }
 
     // Perform MWPM. As this is a bit specialized, we just implement by hand.
@@ -423,7 +451,9 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
 #ifdef DEBUG
         std::cout << "For restricted lattice " << k << ":\n";
 #endif
-        const uint n = restricted_syndromes[k].size();
+        std::vector<uint> stab_events = restricted_syndromes_stabilizers[k],
+                            flag_events = restricted_syndromes_flags[k];
+        const uint n = stab_events.size();
         const uint m = (n*(n+1))/2;
         PerfectMatching pm(n, m);
         pm.options.verbose = false;
@@ -431,10 +461,10 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
         std::map<colored_vertex_t*, colored_vertex_t*> node_to_pref_boundary;
 
         for (uint i = 0; i < n; i++) {
-            uint di = restricted_syndromes[k][i];
+            uint di = stab_events[i];
             auto vi = c_decoding_graph.get_vertex(di);
             for (uint j = i+1; j < n; j++) {
-                uint dj = restricted_syndromes[k][j];
+                uint dj = stab_events[j];
                 colored_vertex_t* vj;
                 if (dj == BOUNDARY_INDEX) {
                     // We need to get the correct boundary, which is the one
@@ -460,7 +490,7 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
                 } else {
                     vj = c_decoding_graph.get_vertex(dj);
                 }
-                auto error_data = c_decoding_graph[rcolors[k]].get_error_chain_data(vi, vj);
+                auto error_data = get_error_chain_data(vi, vj, flag_events, rcolors[k]);
                 
                 uint32_t edge_weight;
                 if (error_data.weight > 1000.0) edge_weight = 1000000000;
@@ -472,8 +502,8 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
         for (uint i = 0; i < n; i++) {
             uint j = pm.GetMatch(i);
             if (i >= j) continue;
-            uint di = restricted_syndromes[k][i],
-                dj = restricted_syndromes[k][j];
+            uint di = stab_events[i],
+                dj = stab_events[j];
             auto vi = c_decoding_graph.get_vertex(di);
             auto vj = dj == BOUNDARY_INDEX ? node_to_pref_boundary[vi] : c_decoding_graph.get_vertex(dj);
             // Split the match into two if it passes through the boundary.

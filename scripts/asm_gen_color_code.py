@@ -28,10 +28,11 @@ def w_h(writer, qubits):
 def w_cx(writer, qubits):
     __w_op(writer, qubits, 'cx')
 
-def w_measure(writer, qubits, mctr_map):
+def w_measure(writer, qubits, mctr_map, update_map=True):
     __w_op(writer, qubits, 'measure')
-    for (i, q) in enumerate(qubits):
-        mctr_map[q] = mctr_map['curr']+i
+    if update_map:
+        for (i, q) in enumerate(qubits):
+            mctr_map[q] = mctr_map['curr']+i
     mctr_map['curr'] += len(qubits)
 
 def w_event(writer, event_id, *meas_id_array):
@@ -73,7 +74,7 @@ def write_color_code_asm(code_data, output_file, rounds, memory='z', flag_protoc
         prev_mctr_map = mctr_map.copy()
 
         w_big_comment(writer, 'ROUND %d' % r)
-        for part in ['x', 'z']:
+        for part in ['z', 'x']:
             __w_annotation(writer, 'inject_timing_error')
             # First, initialize all the parity qubits in |+>
             w_comment(writer, 'Parity qubit initialization (%s)' % part)
@@ -160,6 +161,7 @@ def write_color_code_asm(code_data, output_file, rounds, memory='z', flag_protoc
                     # Note that we only care about flags during the "opposite" stabilizer measurements.
                     if memory != part:
                         for fq in flag_qubits:
+                            __w_annotation(writer, 'flag')
                             w_color(writer, color_map[fq])
                             w_event(writer, ectr, mctr_map[fq])
                             ectr += 1
@@ -179,7 +181,7 @@ def write_color_code_asm(code_data, output_file, rounds, memory='z', flag_protoc
             w_comment(writer, 'Stabilizer measurement (%s)' % part)
             if part == 'x':
                 w_h(writer, parity_qubits)
-            w_measure(writer, parity_qubits, mctr_map)
+            w_measure(writer, parity_qubits, mctr_map, update_map=(memory==part))
             w_reset(writer, parity_qubits)
             if memory == part:
                 # Create detection events.
@@ -280,7 +282,7 @@ def hexcc(d, using_flags=True):
                 fq = n
                 if q1 is None or q2 is None:
                     continue
-                color_map[fq] = i % 3
+                color_map[fq] = (i+1) % 3
                 flag_map[pq]['all'].append(fq)
                 flag_map[pq][q1] = fq
                 flag_map[pq][q2] = fq
@@ -308,5 +310,5 @@ if __name__ == '__main__':
     output_file = argv[1]
     d = int(argv[2])
     r = int(argv[3])
-    write_color_code_asm(hexcc(d, True), output_file, r, memory='z', flag_protocol=1)
+    write_color_code_asm(hexcc(d, True), output_file, r, memory='z', flag_protocol=0)
 

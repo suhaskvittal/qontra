@@ -101,15 +101,17 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                 offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
 
+            int64_t color_id = 0;
             if (inst.properties.count("color")) {
-                circuit.detection_event_to_color[events[0]] = inst.properties.at("color").ival;
+                color_id = inst.properties.at("color").ival;
+                circuit.detection_event_to_color[events[0]] = color_id;
             }
 
             if (inst.annotations.count("flag")) {
                 circuit.flag_detection_events.insert(events[0]);
             }
 
-            circuit.append_op("DETECTOR", offsets);
+            circuit.append_op("DETECTOR", offsets, color_id);
             continue;
         } else if (inst.name == "obs") {
             std::vector<uint> offsets;

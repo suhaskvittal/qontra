@@ -85,6 +85,7 @@ protected:
     // Other helpful functions:
     //
     // is_error: checks if the provided correction is a logical error.
+    // get_error_chain_data: retrieves error chain data, adjusted for flag detections.
     // get_nonzero_detectors: gets nonzero detectors from syndrome.
 
     bool is_error(
@@ -119,6 +120,29 @@ protected:
             w += (i >= 64);
         }
         return det;
+    }
+
+    graph::DecodingGraph::matrix_entry_t
+    get_error_chain_data(uint deta, uint detb, const std::vector<uint>& detectors) {
+        auto va = decoding_graph.get_vertex(deta);
+        auto vb = decoding_graph.get_vertex(detb);
+        return get_error_chain_data(va, vb, detectors);
+    }
+
+    graph::DecodingGraph::matrix_entry_t
+    get_error_chain_data(
+            graph::decoding::vertex_t* va, 
+            graph::decoding::vertex_t* vb, 
+            const std::vector<uint>& detectors) 
+    {
+        // First check which flags have been flipped.
+        std::set<graph::decoding::vertex_t*> active_flags;
+        for (uint df : circuit.flag_detection_events) {
+            if (std::find(detectors.begin(), detectors.end(), df) != detectors.end()) {
+                active_flags.insert(decoding_graph.get_vertex(df));
+            }
+        }
+        return decoding_graph.get_error_chain_data_considering_flags(va, vb, active_flags);
     }
 
     DetailedStimCircuit     circuit;

@@ -107,6 +107,10 @@ public:
         return distance_matrix[v1][v2];
     }
 
+    matrix_entry_t
+    get_error_chain_data_considering_flags(
+            decoding::vertex_t*, decoding::vertex_t*, const std::set<decoding::vertex_t*>&);
+
     // We can represent the number of errors as a polynomial where the coefficient
     // of xk corresponds to the probability of having k errors.
     //

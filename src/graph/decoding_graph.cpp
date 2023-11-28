@@ -33,6 +33,49 @@ print_v(colored_vertex_t* v) {
 // DecodingGraph Definitions
 //
 
+DecodingGraph::matrix_entry_t
+DecodingGraph::get_error_chain_data_considering_flags(
+        decoding::vertex_t* v1,
+        decoding::vertex_t* v2,
+        const std::set<decoding::vertex_t*>& flags)
+{
+    auto error_data = get_error_chain_data(v1, v2);
+    if (flags.empty()) return error_data;
+    // Check if any flag lies on the path between these two vertices.
+    // Update the probability of the error chain correspondingly (this update
+    // does NOT modify the distance_matrix data structure).
+    const auto& path = error_data.error_chain;
+    fp_t logprob = log(error_data.probability);
+    bool found_any_flags_in_path = false;
+    // Check if any vertices on the path (adjacent)
+    // have a common flag that is in flags. 
+    // If so, update the error probability.
+    for (uint i = 1; i < path.size(); i++) {
+        auto vx = path[i-1];
+        auto vy = path[i];
+        auto common = get_common_neighbors(vx, vy);
+        for (auto vf : flags) {
+            if (std::find(common.begin(), common.end(), vf) != common.end()) {
+                const std::vector<vertex_t*> vx_vy{vx, vy};
+                for (auto w : vx_vy) {
+                    auto e = get_edge(w, vf);
+                    logprob -= log(e->error_probability);
+                }
+                found_any_flags_in_path = true;
+            }
+        }
+    }
+    if (!found_any_flags_in_path) return error_data;
+    fp_t prob = pow(M_E, logprob);
+    if (prob > 1.0) prob = 0.5;
+    // Compute adjusted weight.
+    std::cout << "reweighted from " << error_data.weight << " (pr = " << error_data.probability << ")";
+    error_data.probability = prob;
+    error_data.weight = (fp_t)log10((1-prob)/prob);
+    std::cout << " to " << error_data.weight << " (pr = " << error_data.probability << ")\n";
+    return error_data;
+}
+
 void
 DecodingGraph::build_distance_matrix() {
     ewf_t<vertex_t> w = [&] (vertex_t* v1, vertex_t* v2)
@@ -553,7 +596,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
             true,   // fold loops
             false,  // allow gauge detectors
             1.0,    // approx disjoint errors threshold
-            false,  // ignore decomposition failures
+            true,   // ignore decomposition failures
             false
         );
     detector_callback_t det_f = [] (uint64_t d, std::array<fp_t, N_COORD> coords) {};

@@ -31,9 +31,37 @@ protected:
     typedef std::tuple<uint64_t, uint64_t, std::string> match_t;
     typedef std::tuple<uint64_t, uint64_t, std::vector<match_t>, std::string> cc_t;
 
-    match_t make_match(uint64_t x, uint64_t y, std::string color) {
+    match_t 
+    make_match(uint64_t x, uint64_t y, std::string color) {
         if (x > y) std::swap(x, y);
         return std::make_tuple(x, y, color);
+    }
+
+    graph::DecodingGraph::matrix_entry_t
+    get_error_chain_data(uint deta, uint detb, const std::vector<uint>& detectors, std::string rcolor) {
+        auto va = c_decoding_graph.get_vertex(deta);
+        auto vb = c_decoding_graph.get_vertex(detb);
+        return get_error_chain_data(va, vb, detectors, rcolor);
+    }
+
+    graph::DecodingGraph::matrix_entry_t
+    get_error_chain_data(
+            graph::decoding::colored_vertex_t* va,
+            graph::decoding::colored_vertex_t* vb,
+            const std::vector<uint>& detectors,
+            std::string rcolor)
+    {
+        // First check which flags have been flipped.
+        std::set<graph::decoding::vertex_t*> active_flags;
+        for (auto df : circuit.flag_detection_events) {
+            if (std::find(detectors.begin(), detectors.end(), df) != detectors.end()) {
+                active_flags.insert((graph::decoding::vertex_t*) c_decoding_graph.get_vertex(df));
+            }
+        }
+        return c_decoding_graph[rcolor].get_error_chain_data_considering_flags(
+                                                        (graph::decoding::vertex_t*)va,
+                                                        (graph::decoding::vertex_t*)vb,
+                                                        active_flags);
     }
 
     std::vector<match_t>    blossom_subroutine(const std::vector<uint>&);
