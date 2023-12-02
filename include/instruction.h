@@ -7,6 +7,7 @@
 #define INSTRUCTION_h
 
 #include "defs.h"
+#include "graph/decoding_graph.h"
 #include "tables.h"
 #include "stimext.h"
 
@@ -192,21 +193,8 @@ struct Instruction {
 
     std::vector<uint>   get_qubit_operands(void) const;
 
-    std::string str(void) const {
+    std::string inst_str(void) const {
         std::string out;
-        // Add annotations and properties.
-        for (std::string annot : annotations) {
-            out += "@annotation " + annot + "\n";
-        }
-        for (auto prop_kv : properties) {
-            out += "@property " + prop_kv.first;
-            if (prop_kv.second.fval != 0.0) {
-                out += std::to_string(prop_kv.second.fval);
-            } else {
-                out += std::to_string(prop_kv.second.ival);
-            }
-            out += "\n";
-        }
         // Depending on the type of instruction, print out differently.
         out += name;
         if (IS_QUANTUM.count(name)) {
@@ -216,18 +204,37 @@ struct Instruction {
                 out += std::to_string(operands.qubits[i]);
             }
         } else if (IS_DECODE_TYPE1.count(name)) {
-            out += "\t";
+            out += " ";
             out += std::to_string(operands.events[0]);
             for (uint i = 0; i < operands.measurements.size(); i++) {
                 out += ", " + std::to_string(operands.measurements[i]);
             }
         } else if (IS_DECODE_TYPE2.count(name)) {
-            out += "\t";
+            out += " ";
             out += std::to_string(operands.observables[0]);
             for (uint i = 0; i < operands.measurements.size(); i++) {
                 out += ", " + std::to_string(operands.measurements[i]);
             }
         } // In construction :)
+        return out;
+    }
+
+    std::string str(void) const {
+        std::string out;
+        // Add annotations and properties.
+        for (std::string annot : annotations) {
+            out += "@annotation " + annot + "\n";
+        }
+        for (auto prop_kv : properties) {
+            out += "@property " + prop_kv.first + " ";
+            if (prop_kv.second.fval != 0.0) {
+                out += std::to_string(prop_kv.second.fval);
+            } else {
+                out += std::to_string(prop_kv.second.ival);
+            }
+            out += "\n";
+        }
+        out += inst_str();
         return out;
     }
 

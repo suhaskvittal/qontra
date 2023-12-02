@@ -30,17 +30,23 @@ struct DetailedStimCircuit : public stim::Circuit {
     DetailedStimCircuit(const DetailedStimCircuit& other)
         :stim::Circuit(other),
         detection_event_to_color(other.detection_event_to_color),
-        flag_detection_events(other.flag_detection_events)
+        flag_detection_events(other.flag_detection_events),
+        flag_edge_table(other.flag_edge_table)
     {}
 
     DetailedStimCircuit(const DetailedStimCircuit&& other)
         :stim::Circuit(other),
         detection_event_to_color(std::move(other.detection_event_to_color)),
-        flag_detection_events(std::move(other.flag_detection_events))
+        flag_detection_events(std::move(other.flag_detection_events)),
+        flag_edge_table(other.flag_edge_table)
     {}
+
+    typedef std::tuple<uint, uint, uint>    flag_edge_t;
 
     std::map<uint, int> detection_event_to_color;
     std::set<uint>      flag_detection_events;
+
+    std::map<uint, flag_edge_t> flag_edge_table;
 };
 
 }   // qontra

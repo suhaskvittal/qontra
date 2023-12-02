@@ -15,10 +15,12 @@ make -j${proc}
 
 dpr_m=1
 dpr_i=2
+dpr_f=3
 for d in 3 5 7 9
 do
-    dpr=$(( 3*dpr_m ))
-    echo "dpr = ${dpr}, m = ${dpr_m}, i = ${dpr_i}"
+#   dpr=$(( 3*dpr_m ))
+    dpr=$(( d*dpr_f ))
+    echo "d = ${d} (dpr = ${dpr})"
     for p in 6e-4 8e-4 1e-3
     do
         echo "   p = ${p}"
@@ -33,5 +35,6 @@ do
     done
     dpr_m=$(( dpr_m+dpr_i ))
     dpr_i=$(( dpr_i+1 ))
+    dpr_f=$(( dpr_f+3 ))
 done
 
