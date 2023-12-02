@@ -656,7 +656,7 @@ RestrictionDecoder::flatten(colored_vertex_t* v) {
         // In a circuit-level error model, flattening to the lowest level of detectors
         // (the first round) is not good as this ignores CNOT errors that occur in a prior
         // round. Thus, we instead flatten to the second round of detectors.
-        uint64_t id = (v->id % detectors_per_round) + detectors_per_round;
+        uint64_t id = (v->id % detectors_per_round);
         colored_vertex_t* fv = c_decoding_graph.get_vertex(id);
         return fv;
     }

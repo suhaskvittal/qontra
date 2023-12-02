@@ -53,6 +53,27 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         bool has_predicate = inst.properties.count(PROPERTY_PREDICATE);
 
         bool is_2q_op = IS_2Q_OPERATOR.count(inst.name);
+        
+        // Inject timing errors if requested.
+        if (inject_timing_error) {
+            for (uint x = 0; x < n; x++) {
+                if (ftedpe > 0) {
+                    circuit.append_op("DEPOLARIZE1", {x}, ftedpe);
+                } else {
+                    fp_t t1 = timing.t1[x];
+                    fp_t t2 = timing.t2[x];
+
+                    fp_t e_ad = 0.25*(1 - exp(-time/t1));
+                    fp_t e_pd = 0.5*(1 - exp(-time/t2));
+
+                    circuit.append_op("X_ERROR", {x}, e_ad);
+                    circuit.append_op("Y_ERROR", {x}, e_ad);
+                    circuit.append_op("Z_ERROR", {x}, e_pd-e_ad);
+                }
+            }
+            time = 0;
+        }
+
         if (inst.name == "measure") {
             // Add X error before.
             if (inject_op_error) {
@@ -121,26 +142,6 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             circuit.append_op("OBSERVABLE_INCLUDE", offsets, obs[0]);
             continue;
         } else { continue; }    // Ignore all other instructions.
-        
-        // Inject timing errors if requested.
-        if (inject_timing_error) {
-            for (uint x = 0; x < n; x++) {
-                if (ftedpe > 0) {
-                    circuit.append_op("DEPOLARIZE1", {x}, ftedpe);
-                } else {
-                    fp_t t1 = timing.t1[x];
-                    fp_t t2 = timing.t2[x];
-
-                    fp_t e_ad = 0.25*(1 - exp(-time/t1));
-                    fp_t e_pd = 0.5*(1 - exp(-time/t2));
-
-                    circuit.append_op("X_ERROR", {x}, e_ad);
-                    circuit.append_op("Y_ERROR", {x}, e_ad);
-                    circuit.append_op("Z_ERROR", {x}, e_pd-e_ad);
-                }
-            }
-            time = 0;
-        }
         // Update operation latency.
         if (operation_takes_time) {
             fp_t max_t = 0.0;
