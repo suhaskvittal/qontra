@@ -25,19 +25,30 @@
 
 using namespace qontra;
 
+enum class model_style { cc, pheno, circuit };
+
 DetailedStimCircuit
-get_circuit(const schedule_t& sch, fp_t p) {
+get_circuit(const schedule_t& sch, fp_t p, model_style m=model_style::circuit) {
     const uint n = get_number_of_qubits(sch);
 
     tables::ErrorAndTiming et;
     et.e_g1q *= 0.1;
     et.e_idle *= 0.1;
 
-//  et.e_m1w0 = 0.0;
-//  et.e_m0w1 = 0.0;
-//  et.e_g1q = 0.0;
-//  et.e_g2q = 0.0;
+    // TEMPORARY MODIFICATIONS START
     et.e_idle = 0.0;
+    // TEMPORARY MODIFICATIONS END
+
+    if (m == model_style::pheno) {
+        et.e_g1q = 0.0;
+        et.e_g2q = 0.0;
+    }
+    if (m == model_style::cc) {
+        et.e_g1q = 0.0;
+        et.e_g2q = 0.0;
+        et.e_m1w0 = 0.0;
+        et.e_m0w1 = 0.0;
+    }
     et = et * (1000 * p);
     ErrorTable errors;
     TimeTable timing;
@@ -61,6 +72,7 @@ int main(int argc, char* argv[]) {
     uint64_t shots;
 
     int32_t seed = 0;
+    model_style m = model_style::circuit;
 
     uint64_t tshots = 0;
     uint64_t epochs = 100;
@@ -72,6 +84,9 @@ int main(int argc, char* argv[]) {
     if (!pp.get_uint64("shots", shots)) return 1;
 
     pp.get_int32("seed", seed);
+
+    if (pp.option_set("pheno")) m = model_style::pheno;
+    if (pp.option_set("cc")) m = model_style::cc;
 
     experiments::G_BASE_SEED = seed;
 
@@ -88,7 +103,7 @@ int main(int argc, char* argv[]) {
     // Get schedule from file.
     schedule_t sch = schedule_from_file(asm_file);
     // Define Decoder.
-    DetailedStimCircuit error_model = get_circuit(sch, p);
+    DetailedStimCircuit error_model = get_circuit(sch, p, m);
 #ifdef USE_NEURAL_NET
     using namespace mlpack;
     NeuralDecoder dec(error_model);
@@ -108,7 +123,7 @@ int main(int argc, char* argv[]) {
 
     if (tshots > 0) {
         dec.config.max_epochs = epochs;
-        dec.training_circuit = get_circuit(sch, p);
+        dec.training_circuit = get_circuit(sch, p, m);
 
         std::cout << "starting training...\n";
         dec.train(tshots);

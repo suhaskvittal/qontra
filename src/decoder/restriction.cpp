@@ -7,7 +7,7 @@
 
 namespace qontra {
 
-#define DEBUG
+//#define DEBUG
 
 using namespace graph;
 using namespace decoding;

@@ -27,7 +27,7 @@ do
         echo "  p = ${p}"
         # Write memory asm.
         mpirun -np $proc ./memory \
-            --asm ../scripts/asm/memory_z_d${d}.asm \
+            --asm ../data/asm/memory_z_d${d}.asm \
             --out $output_file \
             --p $p \
             --shots $shots \
