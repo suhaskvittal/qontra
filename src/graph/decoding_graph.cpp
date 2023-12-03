@@ -36,40 +36,27 @@ print_v(colored_vertex_t* v) {
 void
 DecodingGraph::setup_flagged_decoding_graph(
         const std::vector<vertex_t*>& detectors,
-        const std::set<vertex_t*>& active_flags,
-        const std::set<vertex_t*>& all_flags)
+        const std::vector<flag_edge_t>& flag_edges)
 {
     const fp_t EPS = 1e-8;
 
     build_flagged_decoding_graph();
     // Update edge weights in the graph.
-    // Here, we will do a BFS from the existing flags. We will
-    // set all of their incident edges to EPS. If a flag is connected
-    // to another flag, we will do the same to that.
-    std::deque<vertex_t*> bfs(active_flags.begin(), active_flags.end());
-    std::set<vertex_t*> visited;
-    std::cout << "\tUpdated edges:";
-    while (bfs.size()) {
-        auto v = bfs.front();
-        bfs.pop_front();
-        if (visited.count(v)) continue;
-        for (auto w : flagged_decoding_graph->get_neighbors(v)) {
-            if (is_colored_boundary(w)) continue;
-            auto e = flagged_decoding_graph->get_edge(v, w);
-            e->edge_weight = 1.0;
-            std::cout << " (" << v->id << ", " << w->id << ")";
-            if (all_flags.count(w)) {
-                bfs.push_back(w);
-            }
-        }
-        visited.insert(v);
+    for (flag_edge_t fe : flag_edges) {
+        auto src = std::get<0>(fe),
+             thru = std::get<1>(fe),
+             dst = std::get<2>(fe);
+        auto e1 = flagged_decoding_graph->get_edge(src, thru);
+        auto e2 = flagged_decoding_graph->get_edge(thru, dst);
+        if (e1 == nullptr || e2 == nullptr) continue;
+        e1->edge_weight = 1.0;
+        e2->edge_weight = 1.0;
     }
-    std::cout << "\n";
+
     // Now, redo dijkstras.
     ewf_t<vertex_t> wf = [&] (vertex_t* v1, vertex_t* v2) {
         return flagged_decoding_graph->_ewf(v1, v2);
     };
-    std::cout << "\tnew path weights:\n";
     for (uint i = 0; i < detectors.size(); i++) {
         auto v = detectors[i];
         std::map<vertex_t*, fp_t> dist;
@@ -79,9 +66,7 @@ DecodingGraph::setup_flagged_decoding_graph(
         for (uint j = 0; j < detectors.size(); j++) {
             if (i == j) continue;
             auto w = detectors[j];
-            std::cout << v->id << ", " << w->id << ": prev = " << flagged_decoding_graph->distance_matrix[v][w].weight;
             auto new_entry = flagged_decoding_graph->_dijkstra_cb(v, w, dist, pred);
-            std::cout << ", new = " << new_entry.weight << "\n";
             tlm::put(flagged_decoding_graph->distance_matrix, v, w, new_entry);
         }
     }
@@ -446,12 +431,22 @@ ColoredDecodingGraph::delete_edge(colored_edge_t* e) {
 
 bool
 ColoredDecodingGraph::are_matched_through_boundary(
-        colored_vertex_t* v1, colored_vertex_t* v2, std::string r, colored_vertex_t** b1_p, colored_vertex_t** b2_p)
+        colored_vertex_t* v1,
+        colored_vertex_t* v2,
+        std::string r,
+        colored_vertex_t** b1_p,
+        colored_vertex_t** b2_p,
+        bool use_flagged_graph)
 {
     typedef std::pair<colored_vertex_t*, colored_vertex_t*> cvp_t;
     static std::map<std::pair<cvp_t, std::string>, cvp_t> memo; // We'll memoize any data to keep this
                                         // fast for repeated requests.
-    auto error_data = (*this)[r].get_error_chain_data(v1, v2);
+    DecodingGraph::matrix_entry_t error_data;
+    if (use_flagged_graph) {
+        error_data = (*this)[r].get_error_chain_data_from_flagged_graph(v1, v2);
+    } else {
+        error_data = (*this)[r].get_error_chain_data(v1, v2);
+    }
     if (!error_data.error_chain_runs_through_boundary)  return false;
 
     cvp_t v1_v2 = std::make_pair(v1, v2);
@@ -528,18 +523,24 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
         std::string gate_name(op.gate->name);
         if (gate_name == "DETECTOR") {
             // Check the color of the detector.
-            int color_id = (int) op.target_data.args[0];
-            std::string color = int_to_color(color_id);
             uint64_t detector = detector_ctr;
-            for (uint i = 0; i < 3; i++) {
-                std::string r = restrictions[i];
-                if (r[0] == color[0] || r[1] == color[0]) {
-                    // Then, this detector belongs to this restricted lattice.
-                    labeled_det_t sub_detector = std::make_pair(sub_detector_ctr[i]++, r);
-                    sub_detector_map[sub_detector] = detector;
-                    // Add this operation to the corresponding subcircuit as well.
-                    subcircuits[i].append_operation(op);
+            int color_id = (int) op.target_data.args[0];
+
+            std::string color;
+            if (color_id >= 0) {
+                color = int_to_color(color_id);
+                for (uint i = 0; i < 3; i++) {
+                    std::string r = restrictions[i];
+                    if (r[0] == color[0] || r[1] == color[0]) {
+                        // Then, this detector belongs to this restricted lattice.
+                        labeled_det_t sub_detector = std::make_pair(sub_detector_ctr[i]++, r);
+                        sub_detector_map[sub_detector] = detector;
+                        // Add this operation to the corresponding subcircuit as well.
+                        subcircuits[i].append_operation(op);
+                    }
                 }
+            } else {
+                color = "none";
             }
             // Finally, to avoid issues down the line, make the vertex for the
             // detector here.
@@ -645,7 +646,6 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
     error_callback_t err_f =
         [&] (fp_t prob, std::vector<uint64_t> dets, std::set<uint> frames)
         {
-            if (frames.size() == 0) return;
             if (dets.size() == 0) return;   // Nothing to do.
             if (dets.size() == 1) {
                 // This vertex is adjacent to two boundaries of opposing color.

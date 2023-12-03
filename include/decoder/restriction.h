@@ -21,6 +21,7 @@ public:
     RestrictionDecoder(DetailedStimCircuit circuit, uint64_t detectors_per_round)
         :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
         c_decoding_graph(graph::to_colored_decoding_graph(circuit)),
+        flags_are_active(false),
         detectors_per_round(detectors_per_round)
     {}
 
@@ -30,6 +31,12 @@ public:
 protected:
     typedef std::tuple<uint64_t, uint64_t, std::string> match_t;
     typedef std::tuple<uint64_t, uint64_t, std::vector<match_t>, std::string> cc_t;
+
+    template <class V> graph::DecodingGraph::matrix_entry_t
+    get_error_chain_data(V* x, V* y, std::string rc) {
+        if (flags_are_active)   return c_decoding_graph[rc].get_error_chain_data_from_flagged_graph(x, y);
+        else                    return c_decoding_graph[rc].get_error_chain_data(x, y);
+    }
 
     match_t 
     make_match(uint64_t x, uint64_t y, std::string color) {
@@ -50,7 +57,8 @@ protected:
 
     graph::ColoredDecodingGraph c_decoding_graph;
 
-    const uint64_t detectors_per_round;
+    bool            flags_are_active;
+    const uint64_t  detectors_per_round;
 };
 
 }   // qontra

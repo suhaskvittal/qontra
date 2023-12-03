@@ -7,7 +7,7 @@
 
 namespace qontra {
 
-//#define DEBUG
+#define DEBUG
 
 using namespace graph;
 using namespace decoding;
@@ -48,6 +48,11 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
 #endif
 
     std::vector<uint> detectors = get_nonzero_detectors(syndrome);
+    // Check if any flags are set.
+    flags_are_active = false;
+    for (uint d : detectors) {
+        flags_are_active |= circuit.flag_detection_events.count(d);
+    }
 #ifdef DEBUG
     std::cout << "Detectors ( HW = " << detectors.size() << " ):";
     for (uint d : detectors) {
@@ -61,17 +66,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
         std::cout << "]";
     }
     std::cout << "\n";
-    // Print flag stats.
-    for (uint d : detectors) {
-        if (!circuit.flag_detection_events.count(d)) continue;
-        std::cout << d << "[F] hits:";
-        auto v = c_decoding_graph.get_vertex(d);
-        for (auto w : c_decoding_graph.get_neighbors(v)) {
-            std::cout << " " << print_v(w);
-            if (circuit.flag_detection_events.count(w->id)) std::cout << "[F]";
-        }
-        std::cout << "\n";
-    }
 #endif
     stim::simd_bits obs_bits(obs);
     for (uint i = 0; i < obs; i++) obs_bits[i] = syndrome[det+i];
@@ -107,7 +101,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
             std::cout << "\t" << print_v(v) << " <--> " << print_v(w) << ":";
 #endif
             std::string r = std::get<2>(m);
-            auto error_data = c_decoding_graph[r].get_error_chain_data(v, w);
+            auto error_data = get_error_chain_data(v, w, r);
             auto error_chain = error_data.error_chain;
             for (uint j = 1; j < error_chain.size(); j++) {
                 colored_vertex_t* u1 = (colored_vertex_t*)error_chain[j-1];
@@ -150,10 +144,11 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
 
         std::string r = std::get<2>(m);
         if (r == "gb" || r == "bg") continue;
-        auto error_data = c_decoding_graph[r].get_error_chain_data(v, w);
+        auto error_data = get_error_chain_data(v, w, r);
         auto error_chain = error_data.error_chain;
 #ifdef DEBUG
-            std::cout << "\t" << print_v(v) << " <--> " << print_v(w) << ":";
+        std::cout << "\t" << print_v(v) << " <--> " << print_v(w) 
+                << " (length = " << (error_chain.size()-1) << "):";
 #endif
         for (uint j = 1; j < error_chain.size(); j++) {
             colored_vertex_t* u1 = (colored_vertex_t*)error_chain[j-1];
@@ -165,12 +160,12 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
             auto e = c_decoding_graph.get_edge(fu1, fu2);
             if (e == nullptr) {
 #ifdef DEBUG
-                std::cout << " (dne)" << print_v(fu1) << ", " << print_v(fu2);
+                std::cout << " -- (dne)" << print_v(fu1) << ", " << print_v(fu2);
 #endif
                 continue;
             }
 #ifdef DEBUG
-            std::cout << " " << print_v(fu1) << ", " << print_v(fu2);
+            std::cout << " -- " << print_v(fu1) << ", " << print_v(fu2);
 #endif
             not_cc_set.insert(e);
             not_cc_count_map[e]++;
@@ -417,25 +412,22 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
     // Partition the detectors into syndromes for each restricted lattice and
     // compute the MWPM.
     std::array<std::vector<uint>, 3> restricted_syndromes_stabilizers;
-    std::array<std::vector<uint>, 3> restricted_syndromes_flags;
+    std::vector<uint> flag_events;
+
     restricted_syndromes_stabilizers.fill(std::vector<uint>());
-    restricted_syndromes_flags.fill(std::vector<uint>());
-    uint n = 0;
     for (uint d : detectors) {
-        auto v = c_decoding_graph.get_vertex(d);
-        int i1, i2;
-        if (v->color == "r") {
-            i1 = 0; i2 = 1;
-        } else if (v->color == "g") {
-            i1 = 0; i2 = 2;
-        } else {
-            i1 = 1; i2 = 2;
-        }
-        
         if (circuit.flag_detection_events.count(d)) {
-            restricted_syndromes_flags[i1].push_back(d);
-            restricted_syndromes_flags[i2].push_back(d);
+            flag_events.push_back(d);
         } else {
+            auto v = c_decoding_graph.get_vertex(d);
+            int i1, i2;
+            if (v->color == "r") {
+                i1 = 0; i2 = 1;
+            } else if (v->color == "g") {
+                i1 = 0; i2 = 2;
+            } else {
+                i1 = 1; i2 = 2;
+            }
             restricted_syndromes_stabilizers[i1].push_back(d);
             restricted_syndromes_stabilizers[i2].push_back(d);
         }
@@ -454,18 +446,16 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
 #ifdef DEBUG
         std::cout << "For restricted lattice " << k << ":\n";
 #endif
-        std::vector<uint> stab_events = restricted_syndromes_stabilizers[k],
-                            flag_events = restricted_syndromes_flags[k];
+        std::vector<uint> stab_events = restricted_syndromes_stabilizers[k];
         const uint n = stab_events.size();
         const uint m = (n*(n+1))/2;
         PerfectMatching pm(n, m);
         pm.options.verbose = false;
 
         // Create flagged decoding graph if necessary.
-        const bool flags_are_active = !flag_events.empty();
         if (flags_are_active) {
             std::vector<vertex_t*> detector_list;
-            std::set<vertex_t*> flag_set;
+            std::vector<DecodingGraph::flag_edge_t> flag_edge_list;
             for (auto d : stab_events) {
                 if (d == BOUNDARY_INDEX) {
                     if (rc[0] == 'r' || rc[1] == 'r') {
@@ -482,16 +472,70 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
                 }
             }
             for (auto f : flag_events) {
-                flag_set.insert(c_decoding_graph.get_vertex(f));
+                auto flag_edge = circuit.flag_edge_table[f];
+                uint src_id = std::get<0>(flag_edge),
+                     thru_id = std::get<1>(flag_edge),
+                     dst_id = std::get<2>(flag_edge);
+                auto vthru = c_decoding_graph.get_vertex(thru_id);
+                // Need to handle the case where one of src or dst are the boundary.
+                if (src_id == -1) std::swap(src_id, dst_id);
+                auto vsrc = c_decoding_graph.get_vertex(src_id);
+
+                // If the source is not even in the restricted lattice, continue.
+                if (!c_decoding_graph[rc].contains(vsrc)) continue;
+
+                colored_vertex_t* vdst;
+                if (dst_id == BOUNDARY_INDEX) {
+                    if (vsrc->color == "r") {
+                        vdst = c_decoding_graph.get_vertex(RED_BOUNDARY_INDEX);
+                    } else if (vsrc->color == "g") {
+                        vdst = c_decoding_graph.get_vertex(GREEN_BOUNDARY_INDEX);
+                    } else {
+                        vdst = c_decoding_graph.get_vertex(BLUE_BOUNDARY_INDEX);
+                    }
+                } else {
+                    vdst = c_decoding_graph.get_vertex(dst_id);
+                }
+                // We also need to handle the case when vthru is not in the restricted lattice.
+                // However, we know that as color(src) = color(dst) != color(thru), there is a
+                // vertex adjacent to all three of these vertices that is in the restricted lattice.
+#ifdef DEBUG
+                std::cout << "\tflag " << f << " is active: " << print_v(vsrc) 
+                            << ", " << print_v(vthru) << ", " << print_v(vdst) << "\n";
+#endif
+                if (!c_decoding_graph[rc].contains(vthru)) {
+                    bool found = false;
+                    uint round_of_flag = src_id / detectors_per_round;
+                    for (auto x : c_decoding_graph.get_neighbors(vsrc)) {
+                        if (!is_colored_boundary(x)
+                            && c_decoding_graph[rc].contains(x)
+                            && c_decoding_graph.contains(x, vthru)
+                            && c_decoding_graph.contains(x, vdst)
+                            && (x->id / detectors_per_round) == round_of_flag)
+                        {
+                            vthru = x;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+#ifdef DEBUG
+                        std::cout << "\t\tfailed to find replacement vthru...\n";
+#endif
+                        continue;
+                    }
+#ifdef DEBUG
+                    std::cout << "\t\treplaced vthru with " << print_v(vthru) << "\n";
+#endif
+                }
+                DecodingGraph::flag_edge_t fe = std::make_tuple(vsrc, vthru, vdst);
+                flag_edge_list.push_back(fe);
             }
-            c_decoding_graph[rc].setup_flagged_decoding_graph(detector_list, flag_set, all_flags);
+            c_decoding_graph[rc].setup_flagged_decoding_graph(detector_list, flag_edge_list);
         }
         
         std::map<colored_vertex_t*, colored_vertex_t*> node_to_pref_boundary;
 
-#define __GET_ERROR_CHAIN(v, w) flags_are_active\
-                                ? c_decoding_graph[rc].get_error_chain_data_from_flagged_graph((v), (w))\
-                                : c_decoding_graph[rc].get_error_chain_data((v), (w))
         for (uint i = 0; i < n; i++) {
             uint di = stab_events[i];
             auto vi = c_decoding_graph.get_vertex(di);
@@ -511,8 +555,8 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
                     auto vb1 = c_decoding_graph.get_vertex(b1);
                     auto vb2 = c_decoding_graph.get_vertex(b2);
 
-                    auto b1_error_data = __GET_ERROR_CHAIN(vi, vb1);
-                    auto b2_error_data = __GET_ERROR_CHAIN(vi, vb2);
+                    auto b1_error_data = get_error_chain_data(vi, vb1, rc);
+                    auto b2_error_data = get_error_chain_data(vi, vb2, rc);
                     if (b1_error_data.weight < b2_error_data.weight) {
                         vj = vb1;
                     } else {
@@ -522,7 +566,7 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
                 } else {
                     vj = c_decoding_graph.get_vertex(dj);
                 }
-                auto error_data = __GET_ERROR_CHAIN(vi, vj);
+                auto error_data = get_error_chain_data(vi, vj, rc);
                 
                 uint32_t edge_weight;
                 if (error_data.weight > 1000.0) edge_weight = 1000000000;
@@ -541,7 +585,7 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
             // Split the match into two if it passes through the boundary.
             colored_vertex_t* bi;
             colored_vertex_t* bj;
-            if (c_decoding_graph.are_matched_through_boundary(vi, vj, rcolors[k], &bi, &bj)) {
+            if (c_decoding_graph.are_matched_through_boundary(vi, vj, rcolors[k], &bi, &bj, flags_are_active)) {
                 match_t m1 = make_match(vi->id, bi->id, rcolors[k]);
                 match_t m2 = make_match(vj->id, bj->id, rcolors[k]);
                 match_list.push_back(m1);
@@ -551,8 +595,9 @@ RestrictionDecoder::blossom_subroutine(const std::vector<uint>& detectors) {
                 match_list.push_back(m);
             }
 #ifdef DEBUG
-            auto error_data = __GET_ERROR_CHAIN(vi, vj);
-            std::cout << "\t" << print_v(vi) << " <--> " << print_v(vj) << " (thru b = " 
+            auto error_data = get_error_chain_data(vi, vj, rc);
+            std::cout << "\t" << print_v(vi) << " <--> " << print_v(vj) << " (w = "
+                << error_data.weight << ", thru b = " 
                 << error_data.error_chain_runs_through_boundary << ")\n";
 #endif
         }
@@ -656,7 +701,7 @@ RestrictionDecoder::flatten(colored_vertex_t* v) {
         // In a circuit-level error model, flattening to the lowest level of detectors
         // (the first round) is not good as this ignores CNOT errors that occur in a prior
         // round. Thus, we instead flatten to the second round of detectors.
-        uint64_t id = (v->id % detectors_per_round);
+        uint64_t id = (v->id % detectors_per_round) + detectors_per_round;
         colored_vertex_t* fv = c_decoding_graph.get_vertex(id);
         return fv;
     }
@@ -684,6 +729,7 @@ RestrictionDecoder::get_incident_faces(colored_vertex_t* v) {
             if (u == v || u == w) continue;
             if (!c_decoding_graph.contains(u, v) || !c_decoding_graph.contains(u, w)) continue;
             face_t fc = make_face(v, w, u);
+            if (!c_decoding_graph.contains_face(fc)) continue;
             face_set.insert(fc);
         }
     }

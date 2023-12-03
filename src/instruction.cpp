@@ -130,9 +130,10 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
 
             if (inst.annotations.count("flag")) {
                 circuit.flag_detection_events.insert(events[0]);
+                color_id = -1;
                 // Get flag edges.
                 int isrc = inst.properties.at("flag_edge_src").ival;
-                int ithru = inst.properties.at("flag_edge_from").ival;
+                int ithru = inst.properties.at("flag_edge_thru").ival;
                 int idst = inst.properties.at("flag_edge_dst").ival;
                 // Convert to uint
                 uint src = isrc < 0 ? graph::BOUNDARY_INDEX : isrc;

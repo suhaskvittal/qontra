@@ -114,13 +114,13 @@ public:
     }
 
     // The below function only recomputes the paths for the specified detectors,
-    // while setting any flag edges to 0 (well actually 1e-8) weight. The resulting
-    // graph is placed in the flagged_decoding_graph object, which has the same
+    // The resulting graph is placed in the flagged_decoding_graph object, which has the same
     // data as DecodingGraph aside from the updated distance matrix.
+    typedef std::tuple<decoding::vertex_t*, decoding::vertex_t*, decoding::vertex_t*> flag_edge_t;
+
     void setup_flagged_decoding_graph(
             const std::vector<decoding::vertex_t*>& detectors, 
-            const std::set<decoding::vertex_t*>& active_flags,
-            const std::set<decoding::vertex_t*>& all_flags);
+            const std::vector<flag_edge_t>& flag_edges);
 
     matrix_entry_t
     get_error_chain_data_from_flagged_graph(decoding::vertex_t* v1, decoding::vertex_t* v2) {
@@ -229,10 +229,13 @@ public:
     // function returns true.
     bool    are_matched_through_boundary(
                 decoding::colored_vertex_t*, decoding::colored_vertex_t*, std::string lattice_color,
-                decoding::colored_vertex_t** b1_p, decoding::colored_vertex_t** b2_p);
+                decoding::colored_vertex_t** b1_p, decoding::colored_vertex_t** b2_p,
+                bool use_flagged_graph=false);
 
     std::set<decoding::colored_vertex_t*>
         get_all_incident_vertices(const std::set<decoding::colored_edge_t*>&, std::string of_color);
+
+    bool contains_face(const face_t& fc) { return face_frame_map.count(fc); }
 
     std::set<uint> get_face_frame_changes(const face_t& fc) { 
         if (face_frame_map.count(fc)) {

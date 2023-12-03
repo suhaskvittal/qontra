@@ -15,8 +15,8 @@ make -j${proc}
 
 dpr_m=1
 dpr_i=2
-dpr_f=3
-for d in 3 5 7 9
+dpr_f=6
+for d in 5
 do
 #   dpr=$(( 3*dpr_m ))
     dpr=$(( d*dpr_f ))
