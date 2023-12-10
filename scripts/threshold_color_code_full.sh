@@ -16,12 +16,12 @@ make -j${proc}
 dpr_m=1
 dpr_i=2
 dpr_f=6
-for d in 5
+for d in 5 7
 do
-#   dpr=$(( 3*dpr_m ))
-    dpr=$(( d*dpr_f ))
+    dpr=$(( 3*dpr_m ))
+#   dpr=$(( d*dpr_f ))
     echo "d = ${d} (dpr = ${dpr})"
-    for p in 6e-4 8e-4 1e-3
+    for p in 1e-4 2e-4 3e-4 4e-4
     do
         echo "   p = ${p}"
         # Write memory asm.

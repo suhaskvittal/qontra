@@ -7,7 +7,7 @@
 
 namespace qontra {
 
-#define DEBUG
+//#define DEBUG
 
 using namespace graph;
 using namespace decoding;
@@ -37,6 +37,10 @@ uint locally_matches(std::set<colored_edge_t*> s1, std::set<colored_edge_t*> s2,
         }
     }
     return shared_edges.size();
+}
+
+colored_vertex_t* switch_out_boundary(colored_vertex_t* boundary, colored_vertex_t* other) {
+
 }
 
 Decoder::result_t
@@ -382,6 +386,12 @@ r_compute_correction:
     if (in_cc_set.size() > 1 || not_cc_set.size() > 1) {
         if (tries < 100) {
             tries++;
+            // Change all boundaries in case of issues. Maybe wrong boundary.
+            for (auto e  : in_cc_set) {
+                if (is_colored_boundary(e->src)) {
+
+                }
+            }
             goto r_compute_correction;
         } else {
 #ifdef DEBUG
