@@ -44,7 +44,6 @@ set(QONTRA_FILES
     src/sim/clifford_sim.cpp
     src/sim/enumerator.cpp
     src/sim/frame_sim.cpp
-    src/sim/manager.cpp
     src/sim/state_sim.cpp
     )
 
