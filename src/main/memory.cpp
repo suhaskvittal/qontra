@@ -7,7 +7,7 @@
 //#define USE_NEURAL_NET
 
 #include <decoder/mwpm.h>
-#include <decoder/restriction.h>
+//#include <decoder/restriction.h>
 #include <experiments.h>
 #include <parsing/cmd.h>
 #include <instruction.h>
@@ -134,7 +134,8 @@ int main(int argc, char* argv[]) {
     //MWPMDecoder dec(error_model);
     uint64_t detectors_per_round;
     if (!pp.get_uint64("dpr", detectors_per_round)) return 1;
-    RestrictionDecoder dec(error_model, detectors_per_round);
+//  RestrictionDecoder dec(error_model, detectors_per_round);
+    MWPMDecoder dec(error_model);
 #endif
     experiments::memory_params_t params;
     params.shots = shots;

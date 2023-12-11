@@ -21,14 +21,13 @@ namespace graph {
 namespace lattice {
 
 struct vertex_t : base::vertex_t {
-    uint8_t qubit_type;
+    enum class type { data, xparity, zparity, flag };
 
-    const static uint8_t DATA =     0x0;
-    const static uint8_t XPARITY =  0x2;
-    const static uint8_t ZPARITY =  0x3;
+    type qubit_type;
 };
 
 struct edge_t : base::edge_t {
+    uint cx_time;
 };
 
 }   // lattice
@@ -38,13 +37,11 @@ struct edge_t : base::edge_t {
 class LatticeGraph : public __LatticeGraphParent {
 public:
     LatticeGraph(void)
-        :Graph(),
-        meas_order()
+        :Graph()
     {}
 
     LatticeGraph(const LatticeGraph& other)
-        :Graph(other),
-        meas_order(other.meas_order)
+        :Graph(other)
     {}
 
     typedef struct {    // Each pair of vertices has this entry where
@@ -63,38 +60,15 @@ public:
         return distance_matrix[v1][v2];
     }
 
-    lattice::vertex_t*  get_qubit_at_meas_t(uint t) { return meas_order[t]; }
-
-    void    add_to_meas_order(lattice::vertex_t* v) { meas_order.push_back(v); }
+    std::vector<std::vector<lattice::vertex_t*>> z_obs_list;
+    std::vector<std::vector<lattice::vertex_t*>> x_obs_list;
 protected:
     bool    update_state(void) override;
 private:
     void    build_distance_matrix(void);
 
-    std::vector<lattice::vertex_t*> meas_order;
     distance::DistanceMatrix<lattice::vertex_t, matrix_entry_t> distance_matrix;
 };
-
-namespace io {
-
-// Function for io callback.
-//
-// The lattice graph file should be formatted as follows:
-//  Data Decl:      D,<data-qubit-1>,<data-qubit-2>,...
-//      i.e.            D,0,1,2,3,4
-//  Parity Decl:    P<Z,X>,<parity-qubit-1>,<parity-qubit-2>
-//      i.e.            PZ,17,18,19,20
-//                      PX,21,22,23,24
-//                      -- The parity qubits should be listed in the same
-//                          order of their measurements.
-//  Edge Decl:      E,<edge1-src>,<edge1-dst>,<edge2-src>,<edge2-dst>...
-//      i.e.            E,0,17,1,17
-//
-// The declarations can be split up and can be listed in any order.
-
-void    update_lattice_graph(LatticeGraph&, std::string);
-
-}   // io
 
 }   // graph
 }   // qontra

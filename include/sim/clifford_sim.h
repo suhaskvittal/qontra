@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   18 June 2023
  *
  *  Fast Clifford simulator.
@@ -39,6 +38,22 @@ public:
     {
         init_tables();
     }
+
+    CliffordSimulator(const CliffordSimulator& other)
+        :StateSimulator(other),
+        x_width(other.x_width),
+        z_width(other.z_width),
+        r_width(other.r_width),
+        leak_width(other.leak_width),
+        x_table(other.x_table),
+        z_table(other.z_table),
+        r_table(other.r_table),
+        leak_table(other.leak_table),
+        x_table_cpy(other.x_table_cpy),
+        z_table_cpy(other.z_table_cpy),
+        r_table_cpy(other.r_table_cpy),
+        leak_table_cpy(other.leak_table_cpy)
+    {}
 
     void reset_sim(void) override {
         StateSimulator::reset_sim();

@@ -24,6 +24,16 @@ public:
         leak_table_cpy(n, max_shots)
     {}
 
+    FrameSimulator(const FrameSimulator& other)
+        :StateSimulator(other),
+        x_table(other.x_table),
+        z_table(other.z_table),
+        leak_table(other.leak_table),
+        x_table_cpy(other.x_table_cpy),
+        z_table_cpy(other.z_table_cpy),
+        leak_table_cpy(other.leak_table_cpy)
+    {}
+
     void reset_sim(void) override {
         StateSimulator::reset_sim();
 

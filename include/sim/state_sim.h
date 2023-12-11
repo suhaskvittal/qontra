@@ -48,6 +48,16 @@ public:
         reset_sim();
     }
 
+    StateSimulator(const StateSimulator& other)
+        :n_qubits(other.n_qubits),
+        max_shots(other.max_shots),
+        record_table(other.record_table),
+        lock_table(other.lock_table),
+        record_table_cpy(other.record_table_cpy),
+        lock_table_cpy(other.lock_table_cpy),
+        rng(other.rng)
+    {}
+
     void    set_seed(uint64_t x) { rng.seed(x); }
 
     virtual void reset_sim(void) {
@@ -224,6 +234,11 @@ public:
 
     fp_t get_negative_log_probability_of_no_error(void) {
         return no_error_nlog_probability;
+    }
+
+    fp_t get_probability_sample_from_rng(void) {
+        static std::uniform_real_distribution<> dist(0.0, 1.0);
+        return dist(rng);
     }
 
     stim::simd_bit_table    record_table;

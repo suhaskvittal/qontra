@@ -29,7 +29,7 @@ set(QONTRA_FILES
     # Decoders
     src/decoder/mwpm.cpp
     src/decoder/window.cpp
-    src/decoder/restriction.cpp
+#   src/decoder/restriction.cpp
     # Parsing
     src/parsing/cmd.cpp
     src/parsing/asm.cpp
@@ -45,6 +45,7 @@ set(QONTRA_FILES
     src/sim/enumerator.cpp
     src/sim/frame_sim.cpp
     src/sim/state_sim.cpp
+    src/sim/memory_sim.cpp
     )
 
 # Compatability
