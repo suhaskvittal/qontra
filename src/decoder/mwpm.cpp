@@ -35,9 +35,8 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
             auto error_data = decoding_graph.get_error_chain_data(vi, vj);
 
             wgt_t edge_weight;
-            if (override_weights.count(vi_vj))      edge_weight = override_weights[vi_vj];
-            else if (error_data.weight > 1000.0)    edge_weight = 10000000;
-            else                                    edge_weight = MWPM_TO_INT(error_data.weight);
+            if (error_data.weight > 1000.0) edge_weight = 10000000;
+            else                            edge_weight = MWPM_TO_INT(error_data.weight);
             pm.AddEdge(i, j, edge_weight);
         }
     }
@@ -72,21 +71,6 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
         is_error(corr, syndrome),
         error_assignments
     };
-
-    if (res.is_error) {
-        std::cout << "---------------------------------\n";
-        std::cout << "Detectors:";
-        for (uint x : detectors) std::cout << " " << (x % 8) << "(" << (x/8) << ")";
-        std::cout << "\n";
-        std::cout << "Matching:\n";
-        for (auto mate : error_assignments) {
-            uint x = std::get<0>(mate), y = std::get<1>(mate);
-            if (x > y)  continue;
-            std::cout << "\t" << (x % 8) << "(" << (x/8) << ")" 
-                << " ---> " << (y % 8) << "(" << (y/8) << ")\n";
-        }
-    }
-
     return res;
 }
 

@@ -19,21 +19,21 @@ surface_code_lattice_graph(uint d) {
     const uint n_data = d*d;
     const uint n_parity = d*d-1;
     for (uint i = 0; i < n_data; i++) {
-        vertex_t* v = new vertex_t;
+        sptr<vertex_t> v = std::make_shared<vertex_t>();
         v->id = i;
         v->qubit_type = vertex_t::type::data;
         gr.add_vertex(v);
     }
 
     typedef std::tuple<int, int>  coord_t;
-    std::map<coord_t, vertex_t*> loc_to_check_map;
+    std::map<coord_t, sptr<vertex_t>> loc_to_check_map;
     // Make boundary checks.
     uint i = n_data;
     for (uint r = 1; r < d; r += 2) {
-        auto pv1 = new vertex_t;
+        auto pv1 = std::make_shared<vertex_t>();
         pv1->id = (i++);
         pv1->qubit_type = vertex_t::type::zparity;
-        auto pv2 = new vertex_t;
+        auto pv2 = std::make_shared<vertex_t>();
         pv2->id = (i++);
         pv2->qubit_type = vertex_t::type::zparity;
 
@@ -45,10 +45,10 @@ surface_code_lattice_graph(uint d) {
     }
 
     for (uint c = 1; c < d; c += 2) {
-        auto pv1 = new vertex_t;
+        auto pv1 = std::make_shared<vertex_t>();
         pv1->id = (i++);
         pv1->qubit_type = vertex_t::type::xparity;
-        auto pv2 = new vertex_t;
+        auto pv2 = std::make_shared<vertex_t>();
         pv2->id = (i++);
         pv2->qubit_type = vertex_t::type::xparity;
 
@@ -61,7 +61,7 @@ surface_code_lattice_graph(uint d) {
     // Now do checks in the bulk.
     for (uint r = 1; r < d; r++) {
         for (uint c = 1; c < d; c++) {
-            auto pv = new vertex_t;
+            auto pv = std::make_shared<vertex_t>();
             pv->id = (i++);
             pv->qubit_type = (r+c) & 0x1 ? vertex_t::type::zparity : vertex_t::type::xparity;
 
@@ -100,15 +100,15 @@ surface_code_lattice_graph(uint d) {
                 continue;
             }
             auto dv = gr.get_vertex((uint64_t)order[j]);
-            auto e = new edge_t;
-            e->src = (void*)pv;
-            e->dst = (void*)dv;
+            auto e = std::make_shared<edge_t>();
+            e->src = std::static_pointer_cast<void>(pv);
+            e->dst = std::static_pointer_cast<void>(dv);
             e->cx_time = j;
             gr.add_edge(e);
         }
     }
     // Create observables.
-    std::vector<vertex_t*> x_obs, z_obs;
+    std::vector<sptr<vertex_t>> x_obs, z_obs;
     for (uint j = 0; j < d; j++) {
         x_obs.push_back(gr.get_vertex(j));
         z_obs.push_back(gr.get_vertex(d*j + d-1));
@@ -159,12 +159,8 @@ MemorySimulator::MemorySimulator(LatticeGraph& gr)
         }
     }
     n_qubits = all_qubits.size();
-    sim = new FrameSimulator(n_qubits, experiments::G_SHOTS_PER_BATCH);
+    sim = std::make_unique<FrameSimulator>(n_qubits, experiments::G_SHOTS_PER_BATCH);
     reset();
-}
-
-MemorySimulator::~MemorySimulator() {
-    delete sim;
 }
 
 void

@@ -20,10 +20,10 @@ LatticeGraph::update_state() {
 void
 LatticeGraph::build_distance_matrix() {
     distance::callback_t<vertex_t, matrix_entry_t> d_cb =
-        [&] (vertex_t* src,
-                vertex_t* dst,
-                const std::map<vertex_t*, fp_t>& dist,
-                const std::map<vertex_t*, vertex_t*>& pred)
+        [&] (sptr<vertex_t> src,
+                sptr<vertex_t> dst,
+                const std::map<sptr<vertex_t>, fp_t>& dist,
+                const std::map<sptr<vertex_t>, sptr<vertex_t>>& pred)
         {
             matrix_entry_t entry;
 

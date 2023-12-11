@@ -37,7 +37,6 @@ set(QONTRA_FILES
     ${FLEX_ASMLexer_OUTPUTS}
     # Graphs
     src/graph/decoding_graph.cpp 
-    src/graph/dependence_graph.cpp
     src/graph/lattice_graph.cpp
     src/graph/tanner_graph.cpp
     # Simulators

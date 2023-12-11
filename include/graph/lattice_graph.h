@@ -52,18 +52,18 @@ public:
                         //      more useful for pairs of parity qubits.
                         //  (2) physical_path is the same as above but also
                         //      includes parity qubits.
-        std::vector<lattice::vertex_t*> error_chain;
-        std::vector<lattice::vertex_t*> physical_path;
+        std::vector<sptr<lattice::vertex_t>> error_chain;
+        std::vector<sptr<lattice::vertex_t>> physical_path;
     } matrix_entry_t;
 
     matrix_entry_t
-    get_path_data(lattice::vertex_t* v1, lattice::vertex_t* v2) {
+    get_path_data(sptr<lattice::vertex_t> v1, sptr<lattice::vertex_t> v2) {
         update_state();
         return distance_matrix[v1][v2];
     }
 
-    std::vector<std::vector<lattice::vertex_t*>> z_obs_list;
-    std::vector<std::vector<lattice::vertex_t*>> x_obs_list;
+    std::vector<std::vector<sptr<lattice::vertex_t>>> z_obs_list;
+    std::vector<std::vector<sptr<lattice::vertex_t>>> x_obs_list;
 protected:
     bool    update_state(void) override;
 private:

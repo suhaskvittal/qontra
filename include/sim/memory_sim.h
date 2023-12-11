@@ -34,7 +34,6 @@ graph::LatticeGraph surface_code_lattice_graph(uint distance);
 class MemorySimulator {
 public:
     MemorySimulator(graph::LatticeGraph&);
-    ~MemorySimulator();
 
     void    reset();
 
@@ -79,7 +78,7 @@ private:
 
     std::vector<std::vector<uint>>  obs_list;
 
-    FrameSimulator* sim;
+    uptr<FrameSimulator> sim;
     stim::simd_bit_table syndromes;
     // Tracking data structures.
     time_t  elapsed_time;

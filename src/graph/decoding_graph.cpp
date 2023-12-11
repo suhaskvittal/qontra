@@ -12,16 +12,20 @@ typedef std::function<void(fp_t, std::vector<uint64_t>, std::set<uint>)>
     error_callback_t;
 typedef std::function<void(uint, std::array<fp_t, N_COORD>)>
     detector_callback_t;
+
 void
-read_detector_error_model(const stim::DetectorErrorModel&, 
-        uint n_iter, uint& det_offset, 
+read_detector_error_model(
+        const stim::DetectorErrorModel&, 
+        uint n_iter,
+        uint& det_offset, 
         std::array<fp_t, N_COORD>& coord_offset,
-        error_callback_t, detector_callback_t);
+        error_callback_t,
+        detector_callback_t);
 
 using namespace decoding;
 
 std::string
-print_v(colored_vertex_t* v) {
+print_v(sptr<colored_vertex_t> v) {
     std::string s;
     if (is_colored_boundary(v)) s += "B";
     else                s += std::to_string(v->id);
@@ -35,7 +39,7 @@ print_v(colored_vertex_t* v) {
 
 void
 DecodingGraph::setup_flagged_decoding_graph(
-        const std::vector<vertex_t*>& detectors,
+        const std::vector<sptr<vertex_t>>& detectors,
         const std::vector<flag_edge_t>& flag_edges)
 {
     const fp_t EPS = 1e-8;
@@ -54,14 +58,14 @@ DecodingGraph::setup_flagged_decoding_graph(
     }
 
     // Now, redo dijkstras.
-    ewf_t<vertex_t> wf = [&] (vertex_t* v1, vertex_t* v2) {
+    ewf_t<vertex_t> wf = [&] (sptr<vertex_t> v1, sptr<vertex_t> v2) {
         return flagged_decoding_graph->_ewf(v1, v2);
     };
     for (uint i = 0; i < detectors.size(); i++) {
         auto v = detectors[i];
-        std::map<vertex_t*, fp_t> dist;
-        std::map<vertex_t*, vertex_t*> pred;
-        distance::dijkstra(flagged_decoding_graph, v, dist, pred, wf);
+        std::map<sptr<vertex_t>, fp_t> dist;
+        std::map<sptr<vertex_t>, sptr<vertex_t>> pred;
+        distance::dijkstra(flagged_decoding_graph.get(), v, dist, pred, wf);
         // Update distance matrix.
         for (uint j = 0; j < detectors.size(); j++) {
             if (i == j) continue;
@@ -74,23 +78,23 @@ DecodingGraph::setup_flagged_decoding_graph(
 }
 
 fp_t
-DecodingGraph::_ewf(vertex_t* v1, vertex_t* v2) {
+DecodingGraph::_ewf(sptr<vertex_t> v1, sptr<vertex_t> v2) {
     auto e = get_edge(v1, v2);
     return e->edge_weight;
 }
 
 DecodingGraph::matrix_entry_t
-DecodingGraph::_dijkstra_cb(vertex_t* src,
-                            vertex_t* dst,
-                            const std::map<vertex_t*, fp_t>& dist,
-                            const std::map<vertex_t*, vertex_t*>& pred)
+DecodingGraph::_dijkstra_cb(sptr<vertex_t> src,
+                            sptr<vertex_t> dst,
+                            const std::map<sptr<vertex_t>, fp_t>& dist,
+                            const std::map<sptr<vertex_t>, sptr<vertex_t>>& pred)
 {
     uint32_t length = 0;
     std::set<uint> frames;
 
     fp_t weight = dist.at(dst);
     bool found_boundary = false;
-    std::vector<vertex_t*> path;
+    std::vector<sptr<vertex_t>> path;
     if (weight < 1000) {
         auto curr = dst;
         while (curr != src) {
@@ -123,14 +127,14 @@ failed:
 
 void
 DecodingGraph::build_distance_matrix() {
-    ewf_t<vertex_t> wf = [&] (vertex_t* v1, vertex_t* v2) {
+    ewf_t<vertex_t> wf = [&] (sptr<vertex_t> v1, sptr<vertex_t> v2) {
         return this->_ewf(v1, v2);
     };
     distance::callback_t<vertex_t, matrix_entry_t> d_cb = 
-    [&] (vertex_t* v1, 
-            vertex_t* v2,
-            const std::map<vertex_t*, fp_t>& dist,
-            const std::map<vertex_t*, vertex_t*>& pred)
+    [&] (sptr<vertex_t> v1, 
+            sptr<vertex_t> v2,
+            const std::map<sptr<vertex_t>, fp_t>& dist,
+            const std::map<sptr<vertex_t>, sptr<vertex_t>>& pred)
     {
         return this->_dijkstra_cb(v1, v2, dist, pred);
     };
@@ -139,17 +143,11 @@ DecodingGraph::build_distance_matrix() {
 
 void
 DecodingGraph::build_flagged_decoding_graph() {
-    if (flagged_decoding_graph != nullptr) {
-        for (auto e : flagged_decoding_graph->get_edges()) delete e;
-        delete flagged_decoding_graph;
-    }
-    // Now, make a new graph.
-    flagged_decoding_graph = new DecodingGraph();
-    flagged_decoding_graph->dealloc_on_delete = false;
+    flagged_decoding_graph = std::make_unique<DecodingGraph>();
     // Copy vertices over, but make new edge pointers.
     for (auto v : get_vertices()) flagged_decoding_graph->add_vertex(v);
     for (auto e : get_edges()) {
-        edge_t* _e = new edge_t;
+        sptr<edge_t> _e = std::make_shared<edge_t>();
         _e->src = e->src;
         _e->dst = e->dst;
         _e->edge_weight = e->edge_weight;
@@ -218,9 +216,9 @@ to_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
     detector_callback_t det_f =
         [&graph](uint64_t det, std::array<fp_t, N_COORD> coords) 
         {
-            vertex_t* v;
-            if ((v=graph.get_vertex(det)) == nullptr) {
-                v = new vertex_t;
+            sptr<vertex_t> v = graph.get_vertex(det);
+            if (v == nullptr) {
+                v = std::make_shared<vertex_t>();
                 v->id = det;
                 graph.add_vertex(v);
             }
@@ -238,16 +236,16 @@ to_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
                 dets.push_back(BOUNDARY_INDEX);
             }
             // Now, we should only have two entries in det.
-            vertex_t* v1;
-            vertex_t* v2;
-            if ((v1=graph.get_vertex(dets[0])) == nullptr) {
-                vertex_t* v = new vertex_t;
+            sptr<vertex_t> v1 = graph.get_vertex(dets[0]);
+            sptr<vertex_t> v2 = graph.get_vertex(dets[1]);
+            if (v1 == nullptr) {
+                sptr<vertex_t> v = std::make_shared<vertex_t>();
                 v->id = dets[0];
                 graph.add_vertex(v);
                 v1 = v;
             }
-            if ((v2=graph.get_vertex(dets[1])) == nullptr) {
-                vertex_t* v = new vertex_t;
+            if (v2 == nullptr) {
+                sptr<vertex_t> v = std::make_shared<vertex_t>();
                 v->id = dets[1];
                 graph.add_vertex(v);
                 v2 = v;
@@ -261,9 +259,9 @@ to_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
                 }
             } else {
                 // Create new edge if it does not exist.
-                e = new edge_t;
-                e->src = (void*)v1;
-                e->dst = (void*)v2;
+                e = std::make_shared<edge_t>();
+                e->src = std::static_pointer_cast<void>(v1);
+                e->dst = std::static_pointer_cast<void>(v2);
                 graph.add_edge(e);
             }
             fp_t edge_weight = (fp_t)log10((1-prob)/prob);
@@ -285,8 +283,8 @@ to_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
 //
 
 face_t
-make_face(colored_vertex_t* v1, colored_vertex_t* v2, colored_vertex_t* v3) {
-    std::vector<colored_vertex_t*> vertices{v1, v2, v3};
+make_face(sptr<colored_vertex_t> v1, sptr<colored_vertex_t> v2, sptr<colored_vertex_t> v3) {
+    std::vector<sptr<colored_vertex_t>> vertices{v1, v2, v3};
     std::sort(vertices.begin(), vertices.end());
     return std::make_tuple(vertices[0], vertices[1], vertices[2]);
 }
@@ -312,9 +310,9 @@ ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
         gr.delete_vertex(boundary);
         restricted_graphs[i] = gr;
     }
-    colored_vertex_t* bred = new colored_vertex_t;
-    colored_vertex_t* bgreen = new colored_vertex_t;
-    colored_vertex_t* bblue = new colored_vertex_t;
+    sptr<colored_vertex_t> bred = std::make_shared<colored_vertex_t>();
+    sptr<colored_vertex_t> bgreen = std::make_shared<colored_vertex_t>();
+    sptr<colored_vertex_t> bblue = std::make_shared<colored_vertex_t>();
 
     bred->id = RED_BOUNDARY_INDEX;
     bred->color = "r";
@@ -327,24 +325,24 @@ ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
     add_vertex(bgreen);
     add_vertex(bblue);
     // Add edges between each boundary.
-    colored_edge_t* erg = new colored_edge_t;
-    colored_edge_t* erb = new colored_edge_t;
-    colored_edge_t* egb = new colored_edge_t;
+    sptr<colored_edge_t> erg = std::make_shared<colored_edge_t>();
+    sptr<colored_edge_t> erb = std::make_shared<colored_edge_t>();
+    sptr<colored_edge_t> egb = std::make_shared<colored_edge_t>();
 
-    erg->src = (void*)bred;
-    erg->dst = (void*)bgreen;
+    erg->src = std::static_pointer_cast<void>(bred);
+    erg->dst = std::static_pointer_cast<void>(bgreen);
     erg->is_undirected = true;
     erg->edge_weight = 1e-3;
     erg->error_probability = 1.0;
 
-    erb->src = (void*)bred;
-    erb->dst = (void*)bblue;
+    erb->src = std::static_pointer_cast<void>(bred);
+    erb->dst = std::static_pointer_cast<void>(bblue);
     erb->is_undirected = true;
     erb->edge_weight = 1e-3;
     erb->error_probability = 1.0;
 
-    egb->src = (void*)bgreen;
-    egb->dst = (void*)bblue;
+    egb->src = std::static_pointer_cast<void>(bgreen);
+    egb->dst = std::static_pointer_cast<void>(bblue);
     egb->is_undirected = true;
     egb->edge_weight = 1e-3;
     egb->error_probability = 1.0;
@@ -355,7 +353,7 @@ ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
 }
 
 bool
-ColoredDecodingGraph::add_vertex(colored_vertex_t* v) {
+ColoredDecodingGraph::add_vertex(sptr<colored_vertex_t> v) {
     if (!__ColoredDecodingGraphParent::add_vertex(v))   return false;
     for (auto& pair : restricted_color_map) {
         std::string r = pair.first;
@@ -370,10 +368,10 @@ ColoredDecodingGraph::add_vertex(colored_vertex_t* v) {
 }
 
 bool
-ColoredDecodingGraph::add_edge(colored_edge_t* e) {
+ColoredDecodingGraph::add_edge(sptr<colored_edge_t> e) {
     if (!__ColoredDecodingGraphParent::add_edge(e)) return false;
-    colored_vertex_t* src = (colored_vertex_t*)e->src;
-    colored_vertex_t* dst = (colored_vertex_t*)e->dst;
+    sptr<colored_vertex_t> src = std::reinterpret_pointer_cast<colored_vertex_t>(e->src);
+    sptr<colored_vertex_t> dst = std::reinterpret_pointer_cast<colored_vertex_t>(e->dst);
 
     if (src->color == dst->color) {
         for (auto& pair : restricted_color_map) {
@@ -396,7 +394,7 @@ ColoredDecodingGraph::add_edge(colored_edge_t* e) {
 }
 
 void
-ColoredDecodingGraph::delete_vertex(colored_vertex_t* v) {
+ColoredDecodingGraph::delete_vertex(sptr<colored_vertex_t> v) {
     // Delete the vertex in the corresponding decoding graphs.
     for (auto pair : restricted_color_map) {
         std::string r = pair.first;
@@ -409,9 +407,9 @@ ColoredDecodingGraph::delete_vertex(colored_vertex_t* v) {
 }
 
 void
-ColoredDecodingGraph::delete_edge(colored_edge_t* e) {
-    colored_vertex_t* src = (colored_vertex_t*)e->src;
-    colored_vertex_t* dst = (colored_vertex_t*)e->dst;
+ColoredDecodingGraph::delete_edge(sptr<colored_edge_t> e) {
+    sptr<colored_vertex_t> src = std::reinterpret_pointer_cast<colored_vertex_t>(e->src);
+    sptr<colored_vertex_t> dst = std::reinterpret_pointer_cast<colored_vertex_t>(e->dst);
 
     if (src->color == dst->color) {
         for (auto& pair : restricted_color_map) {
@@ -431,14 +429,14 @@ ColoredDecodingGraph::delete_edge(colored_edge_t* e) {
 
 bool
 ColoredDecodingGraph::are_matched_through_boundary(
-        colored_vertex_t* v1,
-        colored_vertex_t* v2,
+        sptr<colored_vertex_t> v1,
+        sptr<colored_vertex_t> v2,
         std::string r,
-        colored_vertex_t** b1_p,
-        colored_vertex_t** b2_p,
+        sptr<colored_vertex_t>* b1_p,
+        sptr<colored_vertex_t>* b2_p,
         bool use_flagged_graph)
 {
-    typedef std::pair<colored_vertex_t*, colored_vertex_t*> cvp_t;
+    typedef std::pair<sptr<colored_vertex_t>, sptr<colored_vertex_t>> cvp_t;
     static std::map<std::pair<cvp_t, std::string>, cvp_t> memo; // We'll memoize any data to keep this
                                         // fast for repeated requests.
     DecodingGraph::matrix_entry_t error_data;
@@ -462,11 +460,11 @@ ColoredDecodingGraph::are_matched_through_boundary(
     // Otherwise, we have to compute the two boundaries.
     auto path = error_data.error_chain;
     // Ignore both endpoints.
-    colored_vertex_t* b1 = nullptr;
-    colored_vertex_t* b2 = nullptr;
+    sptr<colored_vertex_t> b1 = nullptr;
+    sptr<colored_vertex_t> b2 = nullptr;
     if (path[0] != v1) std::reverse(path.begin(), path.end());
     for (uint i = 1; i < path.size()-1; i++) {
-        auto w = (colored_vertex_t*)path[i];
+        auto w = std::static_pointer_cast<colored_vertex_t>(path[i]);
         if (is_colored_boundary(w)) {
             if (b1 == nullptr) {
                 b1 = w;
@@ -486,12 +484,12 @@ ColoredDecodingGraph::are_matched_through_boundary(
     return true;
 }
 
-std::set<colored_vertex_t*>
-ColoredDecodingGraph::get_all_incident_vertices(const std::set<colored_edge_t*>& edge_list, std::string color) {
-    std::set<colored_vertex_t*> incident;
+std::set<sptr<colored_vertex_t>>
+ColoredDecodingGraph::get_all_incident_vertices(const std::set<sptr<colored_edge_t>>& edge_list, std::string color) {
+    std::set<sptr<colored_vertex_t>> incident;
     for (auto e : edge_list) {
-        auto v1 = (colored_vertex_t*)e->src;
-        auto v2 = (colored_vertex_t*)e->dst;
+        auto v1 = std::reinterpret_pointer_cast<colored_vertex_t>(e->src);
+        auto v2 = std::reinterpret_pointer_cast<colored_vertex_t>(e->dst);
         if (v1->color == color) incident.insert(v1);
         if (v2->color == color) incident.insert(v2);
     }
@@ -544,7 +542,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
             }
             // Finally, to avoid issues down the line, make the vertex for the
             // detector here.
-            colored_vertex_t* v = new colored_vertex_t;
+            sptr<colored_vertex_t> v = std::make_shared<colored_vertex_t>();
             v->id = detector;
             v->color = color;
             graph.add_vertex(v);
@@ -614,9 +612,9 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
                     }
                 } else {
                     // Create new edge if it does not exist.
-                    e = new colored_edge_t;
-                    e->src = (void*)v1;
-                    e->dst = (void*)v2;
+                    e = std::make_shared<colored_edge_t>();
+                    e->src = std::static_pointer_cast<void>(v1);
+                    e->dst = std::static_pointer_cast<void>(v2);
                     graph.add_edge(e);
                 }
                 fp_t edge_weight = (fp_t)log10((1-prob)/prob);
@@ -650,8 +648,8 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
             if (dets.size() == 1) {
                 // This vertex is adjacent to two boundaries of opposing color.
                 auto v = graph.get_vertex(dets[0]);
-                colored_vertex_t* b1;
-                colored_vertex_t* b2;
+                sptr<colored_vertex_t> b1;
+                sptr<colored_vertex_t> b2;
                 if (v->color == "r") {
                     b1 = graph.get_vertex(GREEN_BOUNDARY_INDEX);
                     b2 = graph.get_vertex(BLUE_BOUNDARY_INDEX);
@@ -667,7 +665,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
             } else if (dets.size() == 2) {
                 auto v1 = graph.get_vertex(dets[0]);
                 auto v2 = graph.get_vertex(dets[1]);
-                colored_vertex_t* b;
+                sptr<colored_vertex_t> b;
                 if (v1->color == "r") {
                     if (v2->color == "g")   b = graph.get_vertex(BLUE_BOUNDARY_INDEX);
                     else                    b = graph.get_vertex(GREEN_BOUNDARY_INDEX);

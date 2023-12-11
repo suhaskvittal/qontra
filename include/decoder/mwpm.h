@@ -37,13 +37,6 @@ public:
     std::string name(void) override { return "MWPMDecoder"; }
 
     Decoder::result_t   decode_error(stim::simd_bits_range_ref) override;
-private:
-    //
-    // Extra functionality for restriction decoder:
-    //
-    friend class RestrictionDecoder;
-    std::map<std::pair<graph::decoding::vertex_t*, graph::decoding::vertex_t*>, fp_t> 
-        override_weights;
 };
 
 }   // qontra
