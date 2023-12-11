@@ -20,6 +20,7 @@
 
 #include <stim.h>
 
+#include <malloc.h>
 #include <math.h>
 #include <mpi.h>
 #include <stdio.h>
@@ -34,6 +35,7 @@ graph::LatticeGraph surface_code_lattice_graph(uint distance);
 class MemorySimulator {
 public:
     MemorySimulator(graph::LatticeGraph&);
+    ~MemorySimulator() { delete sim; }
 
     void    reset();
 
@@ -78,7 +80,7 @@ private:
 
     std::vector<std::vector<uint>>  obs_list;
 
-    uptr<FrameSimulator> sim;
+    FrameSimulator* sim;
     stim::simd_bit_table syndromes;
     // Tracking data structures.
     time_t  elapsed_time;

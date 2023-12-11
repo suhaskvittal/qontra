@@ -38,18 +38,14 @@ int main(int argc, char* argv[]) {
     
     is_memory_x = pp.option_set("mx");
 
-    // Make trace folder if it does not exist.
-    std::filesystem::path syndrome_output_folder_path(syndrome_output_folder);
-    if (!std::filesystem::exists(syndrome_output_folder_path)) {
-        safe_create_directory(syndrome_output_folder_path);
-    }
-
     graph::LatticeGraph lattice = sim::surface_code_lattice_graph(distance);
     MemorySimulator sim(lattice);
 
     // Instantiate error model.
     tables::ErrorAndTiming et;
     et = et * (1000*error_rate);
+    et.e_g1q *= 0.1;
+    et.e_idle *= 0.1;
     tables::populate(lattice.get_vertices().size(), sim.config.errors, sim.config.timing, et);
 
     sim.config.distance = distance;

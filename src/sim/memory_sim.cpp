@@ -159,7 +159,7 @@ MemorySimulator::MemorySimulator(LatticeGraph& gr)
         }
     }
     n_qubits = all_qubits.size();
-    sim = std::make_unique<FrameSimulator>(n_qubits, experiments::G_SHOTS_PER_BATCH);
+    sim = new FrameSimulator(n_qubits, experiments::G_SHOTS_PER_BATCH);
     reset();
 }
 
@@ -406,21 +406,21 @@ MemorySimulator::run(uint64_t shots) {
     }
     const uint64_t local_shots = shots / world_size + (world_rank == 0 ? shots % world_size : 0);
 
-    std::ofstream stim_out(config.stim_output_file);
-    std::ofstream data_out(config.data_output_file);
-
     uint64_t shots_left = local_shots;
     int batchno = world_rank;
 
     is_recording_stim_instructions = (world_rank == 0);
     sim->set_seed(G_BASE_SEED + world_rank);
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    if (G_USE_MPI) {
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
     while (shots_left) {
         const uint64_t shots_this_batch = shots_left < G_SHOTS_PER_BATCH ? shots_left : G_SHOTS_PER_BATCH;
         run_batch(shots_this_batch);
         // Record results.
         if (is_recording_stim_instructions && world_rank == 0) {
+            std::ofstream stim_out(config.stim_output_file);
             stim_out << sample_circuit.str() << "\n";
             is_recording_stim_instructions = false;
         }
@@ -443,10 +443,10 @@ MemorySimulator::run(uint64_t shots) {
 
 void
 MemorySimulator::run_batch(uint64_t shots) {
-    reset();
-
     sim->shots = shots;
     const bool mx = config.is_memory_x;
+
+    reset();
     //
     // PROLOGUE
     //
