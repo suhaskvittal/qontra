@@ -29,7 +29,7 @@ surface_code_lattice_graph(uint d) {
     std::map<coord_t, vertex_t*> loc_to_check_map;
     // Make boundary checks.
     uint i = n_data;
-    for (uint r = 0; r < d-1; r += 2) {
+    for (uint r = 1; r < d; r += 2) {
         auto pv1 = new vertex_t;
         pv1->id = (i++);
         pv1->qubit_type = vertex_t::type::zparity;
@@ -40,11 +40,11 @@ surface_code_lattice_graph(uint d) {
         gr.add_vertex(pv1);
         gr.add_vertex(pv2);
 
-        loc_to_check_map[std::make_tuple(r, -1)] = pv1;
+        loc_to_check_map[std::make_tuple(r, 0)] = pv1;
         loc_to_check_map[std::make_tuple(r+1, d)] = pv2;
     }
 
-    for (uint c = 0; c < d-1; c += 2) {
+    for (uint c = 1; c < d; c += 2) {
         auto pv1 = new vertex_t;
         pv1->id = (i++);
         pv1->qubit_type = vertex_t::type::xparity;
@@ -56,11 +56,11 @@ surface_code_lattice_graph(uint d) {
         gr.add_vertex(pv2);
 
         loc_to_check_map[std::make_tuple(d, c)] = pv1;
-        loc_to_check_map[std::make_tuple(-1, c+1)] = pv1;
+        loc_to_check_map[std::make_tuple(0, c+1)] = pv2;
     }
     // Now do checks in the bulk.
-    for (uint r = 0; r < d; r++) {
-        for (uint c = 0; c < d; c++) {
+    for (uint r = 1; r < d; r++) {
+        for (uint c = 1; c < d; c++) {
             auto pv = new vertex_t;
             pv->id = (i++);
             pv->qubit_type = (r+c) & 0x1 ? vertex_t::type::zparity : vertex_t::type::xparity;
@@ -71,21 +71,35 @@ surface_code_lattice_graph(uint d) {
         }
     }
     // Now create edges between data and parity qubits.
+    const int64_t _d = d;
     for (auto& pair : loc_to_check_map) {
         coord_t crd = pair.first;
         int r = std::get<0>(crd),
             c = std::get<1>(crd);
         auto pv = pair.second;
 
-        int64_t q1 = c + r,
-                q2 = d*c + r,
-                q3 = c + r+1,
-                q4 = d*c + r+1;
+        //  q1      q2
+        //      C
+        //  q3      q4
+
+        // 1, 2 --> 3 4 6 7
+
+        int64_t q1 = _d*(c-1) + r-1,
+                q2 = _d*c + r-1,
+                q3 = _d*(c-1) + r,
+                q4 = _d*c + r;
+        if (r == 0) { q1 = -1; q2 = -1; }
+        if (r == d) { q3 = -1; q4 = -1; }
+        if (c == 0) { q1 = -1; q3 = -1; }
+        if (c == d) { q2 = -1; q4 = -1; }
+
         int64_t order[] = { q4, q2, q3, q1 };
         if (pv->qubit_type == vertex_t::type::xparity) std::swap(order[1], order[2]);
         for (uint j = 0; j < 4; j++) {
+            if (order[j] < 0 || order[j] >= n_data) {
+                continue;
+            }
             auto dv = gr.get_vertex((uint64_t)order[j]);
-            if (dv == nullptr) continue;
             auto e = new edge_t;
             e->src = (void*)pv;
             e->dst = (void*)dv;
@@ -95,9 +109,9 @@ surface_code_lattice_graph(uint d) {
     }
     // Create observables.
     std::vector<vertex_t*> x_obs, z_obs;
-    for (uint i = 0; i < d; i++) {
-        x_obs.push_back(gr.get_vertex(i));
-        z_obs.push_back(gr.get_vertex(d*i + d-1));
+    for (uint j = 0; j < d; j++) {
+        x_obs.push_back(gr.get_vertex(j));
+        z_obs.push_back(gr.get_vertex(d*j + d-1));
     }
     gr.x_obs_list.push_back(x_obs);
     gr.z_obs_list.push_back(z_obs);
@@ -298,8 +312,6 @@ MemorySimulator::do_measurement(std::vector<uint> operands) {
 void
 MemorySimulator::create_event_or_obs(std::vector<uint> operands, bool create_event) {
     uint64_t index = create_event ? event_ctr : n_detection_events+obs_ctr;
-    syndromes[index].clear();
-
     std::vector<uint> offsets;   // Needed for Stim circuit.
     for (uint meas_time : operands) {
         syndromes[index] ^= sim->record_table[meas_time];
@@ -405,7 +417,9 @@ MemorySimulator::run(uint64_t shots) {
     int batchno = world_rank;
 
     is_recording_stim_instructions = (world_rank == 0);
+    sim->set_seed(G_BASE_SEED + world_rank);
 
+    MPI_Barrier(MPI_COMM_WORLD);
     while (shots_left) {
         const uint64_t shots_this_batch = shots_left < G_SHOTS_PER_BATCH ? shots_left : G_SHOTS_PER_BATCH;
         run_batch(shots_this_batch);
@@ -424,6 +438,7 @@ MemorySimulator::run(uint64_t shots) {
         const stim::simd_bits ref(n_syndrome_bits);
         stim::write_table_data(fout, shots_this_batch, n_syndrome_bits, ref, syndromes,
                                 stim::SampleFormat::SAMPLE_FORMAT_DETS, 'D', 'L', n_detection_events);
+        fclose(fout);
 
         batchno += world_size;
         shots_left -= shots_this_batch;
@@ -434,6 +449,7 @@ void
 MemorySimulator::run_batch(uint64_t shots) {
     reset();
 
+    sim->shots = shots;
     const bool mx = config.is_memory_x;
     //
     // PROLOGUE

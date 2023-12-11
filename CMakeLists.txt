@@ -140,6 +140,13 @@ if (COMPILE_PROTEAN)
     target_link_libraries(protean_writing_test PRIVATE protean)
 endif()
 
+if (COMPILE_PROBIUS)
+    add_executable(probius_tracer src/main/probius/tracer.cpp)
+    add_executable(probius_memory src/main/probius/memory.cpp)
+    target_link_libraries(probius_tracer PRIVATE qontra)
+    target_link_libraries(probius_memory PRIVATE qontra)
+endif()
+
 if (COMPILE_TESTS)
     message("Will compile TEST executables.")
 

@@ -41,7 +41,9 @@ public:
     {}
 
     LatticeGraph(const LatticeGraph& other)
-        :Graph(other)
+        :Graph(other),
+        x_obs_list(other.x_obs_list),
+        z_obs_list(other.z_obs_list)
     {}
 
     typedef struct {    // Each pair of vertices has this entry where
