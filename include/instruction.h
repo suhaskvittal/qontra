@@ -23,17 +23,24 @@ namespace qontra {
 
 const std::vector<std::string> ISA{
     // Quantum Processor instructions
+    // 
+    // Cliffords and Paulis:
     "h",
     "x",
     "z",
     "cx",
     "s",
     "sdg",
+    // Special Instructions
+    "liswap"
+    // Non-cliffords:
     "t",
     "tdg",
     "rz",
+    // Collapsing operations:
     "measure",
     "reset",
+    // Other:
     "nop",
     "clx",  // This is a classically controlled X gate.
     "clz",
@@ -59,7 +66,7 @@ const std::vector<std::string> ISA{
 };
 
 const std::set<std::string> IS_QUANTUM {
-    "h", "x", "z", "cx", "rz", "s", "sdg", "t", "tdg", "measure", "reset"
+    "h", "x", "z", "cx", "liswap", "rz", "s", "sdg", "t", "tdg", "measure", "reset"
 };
 
 const std::set<std::string> IS_QUANTUM_LIKE {
@@ -73,7 +80,7 @@ const std::set<std::string> INSTRUCTION_USES_ANGLES {
 };
 
 const std::set<std::string> IS_2Q_OPERATOR {
-    "cx"
+    "cx", "liswap"
 };
 
 const std::set<std::string> IS_CLASSICALLY_CONTROLLED {

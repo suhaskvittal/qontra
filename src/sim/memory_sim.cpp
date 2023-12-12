@@ -187,6 +187,10 @@ MemorySimulator::reset() {
 
     sim->reset_sim();
     syndromes.clear();
+
+#ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
+    lrc_reset();
+#endif
 }
 
 MemorySimulator::time_t
@@ -491,10 +495,18 @@ MemorySimulator::run_batch(uint64_t shots) {
         elapsed_time += do_gate("h", xp_qubits);
         inject_idling_error_negative(xp_qubits);
 
+#ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
+        if (config.lrc_policy == lrc_policy_t::always) {
+            lrc_execute_lrcs_from_await_queue();
+            goto memory_sim_make_detection_events;
+        }
+#endif
+
         elapsed_time += do_measurement(parity_qubits);
         inject_idling_error_positive(data_qubits);
         elapsed_time += do_gate("reset", parity_qubits);
-        inject_idling_error_positive(data_qubits);
+
+memory_sim_make_detection_events:
         // Create detection events.
         for (uint pi : syndrome_parity_qubits) {
             std::vector<uint> meas_list{ (uint) meas_ctr_map[pi] };

@@ -86,6 +86,35 @@ FrameSimulator::CX(std::vector<uint> operands) {
 }
 
 void
+FrameSimulator::LEAKAGE_ISWAP(std::vector<uint> operands) {
+    for (uint i = 0; i < operands.size(); i += 2) {
+        uint j1 = operands[i], j2 = operands[i+1];
+    
+        stim::simd_bits lock_both(lock_table[j1]);
+        lock_both |= lock_table[j2];
+
+        x_table[j1].for_each_word(
+            z_table[j1],
+            leak_table[j1],
+            x_table[j2],
+            z_table[j2],
+            leak_table[j2],
+            lock_both,
+        [&] (auto& x1, auto& z1, auto& l1,
+            auto& x2, auto& z2, auto& l2,
+            auto& lock)
+        {
+            // Swap in |02>/|11> subspace.
+            auto s02_11 = ~x1 & l2;
+            auto s11_02 = x1 & ~l2;
+            x2 ^= s02_11 & ~lock;
+            l2 ^= (s02_11 | s11_02) & ~lock;
+            x1 ^= ~lock;
+        });
+    }
+}
+
+void
 FrameSimulator::M(
         std::vector<uint> operands, 
         std::vector<fp_t> m1w0,

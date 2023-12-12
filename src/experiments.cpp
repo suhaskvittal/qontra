@@ -22,6 +22,14 @@ uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
 using namespace experiments;
 
 void
+configure_optimal_batch_size() {
+    const uint64_t take_up_lines = 4;
+
+    uint64_t cache_line_size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);  // In bytes.
+    G_SHOTS_PER_BATCH = (cache_line_size << 3) * take_up_lines;   // Need to convert to bits.
+}
+
+void
 generate_syndromes(const stim::Circuit& circuit, 
                     uint64_t shots, 
                     callback_t callbacks)

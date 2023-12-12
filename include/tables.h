@@ -114,7 +114,7 @@ populate(
 {
     // Assume z, rz, s, sdg, t, tdg are implemented via a virtual RZ.
     const std::vector<std::string> g1q{"h", "x", "rx", "ry", "reset"};
-    const std::vector<std::string> g2q{"cx"};
+    const std::vector<std::string> g2q{"cx", "liswap"};
 
     set_all_1q(n_qubits, params.t1, timing.t1);
     set_all_1q(n_qubits, params.t2, timing.t2);

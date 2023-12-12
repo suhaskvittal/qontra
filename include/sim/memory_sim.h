@@ -41,6 +41,8 @@ public:
 
     void    run(uint64_t shots);
 
+    enum class lrc_policy_t { none, always, optimal, eraser };
+    enum class lrc_circuit_t { swap, dqlr };
     struct {
         uint distance;
         uint rounds;
@@ -52,6 +54,10 @@ public:
         std::string data_output_file;
 
         bool is_memory_x=false;
+        
+        lrc_policy_t    lrc_policy = lrc_policy_t::none;
+        lrc_circuit_t   lrc_circuit = lrc_circuit_t::swap;
+        uint            lrc_stride_size = 1;
     } config;
 private:
     typedef fp_t time_t;
@@ -94,6 +100,32 @@ private:
 
     stim::Circuit   sample_circuit;
     bool            is_recording_stim_instructions;
+
+    // 
+    // LRC functions:
+    //
+    void    lrc_reset(void);
+    void    lrc_execute_lrcs_from_await_queue(void);
+
+    std::map<uint, uint>    lrc_solve_maximum_matching(
+                                    const std::vector<uint>& avail_data,
+                                    const std::vector<uint>& avail_parity);
+    //
+    // LRC variables:
+    //
+    std::deque<uint> lrc_await_queue;   // Only used by "always" LRCs.
+ 
+    //
+    // ERASER functions:
+    //
+    void    eraser_initialize(void);
+    void    eraser_reset(void);
+    std::map<uint, uint> eraser_make_lrc_decisions(void);
+    //
+    // ERASER variables:
+    //
+    std::set<uint>                      eraser_recently_scheduled_qubits;
+    std::map<uint, std::array<uint, 2>> eraser_swap_lookup_table;
 };
 
 }   // qontra

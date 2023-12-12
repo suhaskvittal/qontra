@@ -50,6 +50,8 @@ public:
     void    M(std::vector<uint>, std::vector<fp_t>, std::vector<fp_t>, int record=-1) override;
     void    R(std::vector<uint>) override;
 
+    void    LEAKAGE_ISWAP(std::vector<uint>) override;
+
     StateSimulator::label_1q_t  eDP1(uint, uint64_t) override;
     StateSimulator::label_1q_t  eX(uint, uint64_t) override;
     StateSimulator::label_1q_t  eY(uint, uint64_t) override;

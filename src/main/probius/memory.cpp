@@ -3,7 +3,16 @@
  *  date:   11 December 2023
  * */
 
+#ifdef QONTRA_PYMATCHING_ENABLED
+
+#include <decoder/pymatching.h>
+
+#else
+
 #include <decoder/mwpm.h>
+
+#endif
+
 #include <experiments.h>
 #include <parsing/cmd.h>
 
@@ -51,7 +60,11 @@ int main(int argc, char* argv[]) {
                 << "Logical Error Rate\n";
     }
     // Run memory experiment.
+#ifdef QONTRA_PYMATCHING_AVAILABLE
+    PyMatching dec(error_model);
+#else
     MWPMDecoder dec(error_model);
+#endif
     experiments::memory_params_t params;
     params.trace_folder = trace_folder;
 

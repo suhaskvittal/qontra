@@ -15,6 +15,7 @@
 
 #include <mpi.h>
 #include <stdio.h>
+#include <strings.h>
 #include <unistd.h>
 
 namespace qontra {
@@ -80,6 +81,8 @@ extern uint64_t G_FILTERING_HAMMING_WEIGHT;         // Default is 2.
 #define SQR(x)              (x)*(x)
 #define MEAN(s, n)          ((fp_t)(s))/((fp_t)(n))
 #define STD(m, ss, n)       sqrt( ((fp_t)(ss))/((fp_t)(n)) - SQR(m) )
+
+void    configure_optimal_batch_size(void);
 
 // Experiments functions:
 //

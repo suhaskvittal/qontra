@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ version selection")
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(SIMD_WIDTH 128)
 
-set(ARCH_OPT "-O2")
+set(ARCH_OPT "-O3")
 # https://stackoverflow.com/a/8591946 (RTC1 incompatible with O2 flag)
 STRING (REGEX REPLACE "/RTC(su|[1su])" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 

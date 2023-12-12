@@ -58,17 +58,31 @@ endif()
 #
 # For example, PACE does not support MLPACK natively.
 
+if (COMPILE_MEMORY_SIM_EXT)
+    message(STATUS "Will compile memory simulator extensions.")
+    set(QONTRA_FILES
+            ${QONTRA_FILES}
+            src/sim/memory_sim_ext/lrc.cpp)
+endif()
+
+if (COMPILE_PYMATCHING)
+    message(STATUS "Will compile PyMatching.")
+    add_subdirectory(pymatching)
+endif()
+
 if (COMPILE_NEURAL_DECODER)
-    message("Will compile NEURAL DECODER.")
+    message(STATUS "Will compile NEURAL DECODER.")
     find_package(Armadillo REQUIRED)
     set(QONTRA_FILES ${QONTRA_FILES} src/decoder/neural.cpp)
 endif()
 
 if (COMPILE_UNIVERSAL_SIM)
-    message("Will compile UNIVERSAL SIM.")
+    message(STATUS "Will compile UNIVERSAL SIM.")
     add_subdirectory(cytnx)
     set(QONTRA_FILES ${QONTRA_FILES} src/sim/universal_sim.cpp)
 endif()
+
+find_package(MPI REQUIRED)
 
 add_library(qontra ${QONTRA_FILES})
 
@@ -78,7 +92,9 @@ else()
     target_compile_options(qontra PUBLIC -ggdb3 -fno-strict-aliasing)
 endif()
 
-find_package(MPI REQUIRED)
+if (COMPILE_MEMORY_SIM_EXT)
+    target_compile_definitions(qontra PUBLIC QONTRA_MEMORY_SIM_EXT_ENABLED)
+endif()
 
 target_include_directories(qontra PUBLIC "include" ${MPI_INCLUDE_PATH} "/usr/local/include")
 
@@ -90,20 +106,45 @@ if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
     target_link_libraries(qontra PUBLIC "stdc++fs")
 endif()
 
+if (COMPILE_PYMATCHING)
+    target_link_libraries(qontra PUBLIC libpym)
+    target_compile_definitions(qontra PUBLIC QONTRA_PYMATCHING_ENABLED)
+endif()
+
 if (COMPILE_NEURAL_DECODER)
-    message("Adding Armadillo include and libs")
+    message(STATUS "Adding Armadillo include and libs")
     target_include_directories(qontra PUBLIC ${ARMADILLO_INCLUDE_DIRS})
     target_link_libraries(qontra PUBLIC ${ARMADILLO_LIBRARIES})
 
     find_package(OpenMP)
     if (OpenMP_CXX_FOUND)
-        message("Found OpenMP for the NN Decoder.")
+        message(STATUS "Found OpenMP for the NN Decoder.")
         target_link_libraries(qontra PUBLIC OpenMP::OpenMP_CXX)
     endif()
 endif()
 
 if (COMPILE_UNIVERSAL_SIM)
     target_link_libraries(qontra PUBLIC cytnx)
+endif()
+
+if (LINK_LEMON)
+    if (DEFINED LEMON_INSTALL_DIR)
+        set(LEMON_LIBRARY_DIR "${LEMON_INSTALL_DIR}/lemon/lib")
+        set(LEMON_INCLUDE_DIR "${LEMON_INSTALL_DIR}/lemon/include")
+    endif()
+
+    if (NOT DEFINED LEMON_LIBRARY_DIR)
+        message(FATAL_ERROR "COMPILE_LEMON is set, but LEMON_LIBRARY_DIR is not defined.")
+    elseif(NOT DEFINED LEMON_INCLUDE_DIR)
+        message(FATAL_ERROR "COMPILE_LEMON is set, but LEMON_INCLUDE_DIR is not defined.")
+    else()
+        # Everything checks out. Link lemon.
+        message(STATUS "Will link Lemon, LEMON_LIBRARY_DIR=${LEMON_LIBRARY_DIR}, LEMON_INCLUDE_DIR=${LEMON_INCLUDE_DIR}")
+        add_library(lemon STATIC IMPORTED)
+        set_target_properties(lemon PROPERTIES IMPORTED_LOCATION "${LEMON_LIBRARY_DIR}/libemon.a")
+        target_link_libraries(qontra PUBLIC lemon)
+        target_include_directories(qontra PUBLIC ${LEMON_INCLUDE_DIR})
+    endif()
 endif()
 
 add_subdirectory(stim)

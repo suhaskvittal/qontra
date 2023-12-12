@@ -77,6 +77,9 @@ public:
     virtual void    CX(std::vector<uint>) =0;
     virtual void    R(std::vector<uint>) =0;
 
+    // Other operations that are not guaranteed to have an implementation.
+    virtual void    LEAKAGE_ISWAP(std::vector<uint>) {};
+
     // As these operations are non-Clifford, we
     // provide a default implementation that does
     // nothing.
