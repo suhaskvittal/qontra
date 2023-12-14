@@ -84,15 +84,16 @@ int main(int argc, char* argv[]) {
     tables::ErrorAndTiming et;
     et = et * (1000*error_rate);
     et.e_g1q *= 0.1;
-    et.e_idle *= 0.05;
+    et.e_idle *= 0.1;
     tables::populate(n, sim.config.errors, sim.config.timing, et);
     // Add leakage errors.
     if (sim_leakage) {
+        sim.config.enable_leakage = true;
         for (uint i = 0; i < n; i++) {
             for (uint j = 0; j < n; j++) {
                 if (i == j) continue;
                 auto i_j = std::make_pair(i, j);
-                sim.config.errors.op2q_leakage_transport["cx"][i_j] = 0.2;
+                sim.config.errors.op2q_leakage_transport["cx"][i_j] = 0.1;
                 sim.config.errors.op2q_leakage_injection["cx"][i_j] = 0.1*error_rate;
             }
         }

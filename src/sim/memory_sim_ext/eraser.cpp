@@ -34,6 +34,8 @@ MemorySimulator::eraser_initialize() {
         eraser_swap_lookup_table[i][0] = pv_earliest->id;
         eraser_swap_lookup_table[i][1] = pv_latest->id;
     }
+    eraser_syndrome_buffer = stim::simd_bit_table(parity_qubits.size(), experiments::G_SHOTS_PER_BATCH);
+    eraser_syndrome_buffer.clear();
 }
 
 void

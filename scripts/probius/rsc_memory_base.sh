@@ -9,7 +9,6 @@ model_folder="../data/probius/surface_code_memory/${POLICY_NAME}/stim"
 output_file="../data/probius/${POLICY_NAME}.csv"
 
 cd build
-make -j8
 
 rm -rf $trace_folder
 rm -rf $model_folder

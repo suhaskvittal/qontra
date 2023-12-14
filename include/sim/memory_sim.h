@@ -54,6 +54,7 @@ public:
         std::string data_output_file;
 
         bool is_memory_x=false;
+        bool enable_leakage=false;
         
         lrc_policy_t    lrc_policy = lrc_policy_t::none;
         lrc_circuit_t   lrc_circuit = lrc_circuit_t::swap;
@@ -106,6 +107,9 @@ private:
     //
     void    lrc_reset(void);
     void    lrc_execute_lrcs_from_await_queue(void);
+    void    lrc_optimal_oracle(void);
+
+    void    lrc_measure_qubits(const std::map<uint, uint>& swap_set);
 
     std::map<uint, uint>    lrc_solve_maximum_matching(
                                     const std::vector<uint>& avail_data,
@@ -126,6 +130,7 @@ private:
     //
     std::set<uint>                      eraser_recently_scheduled_qubits;
     std::map<uint, std::array<uint, 2>> eraser_swap_lookup_table;
+    stim::simd_bit_table                eraser_syndrome_buffer;
 };
 
 }   // qontra

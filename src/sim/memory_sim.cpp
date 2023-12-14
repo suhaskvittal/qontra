@@ -141,7 +141,13 @@ MemorySimulator::MemorySimulator(LatticeGraph& gr)
     n_detection_events(0),
     n_observables(0),
     sim(nullptr),
-    syndromes(1, 1)
+    syndromes(1, 1),
+    // Variables for LRC:
+    lrc_await_queue(),
+    // Variables for ERASER:
+    eraser_recently_scheduled_qubits(),
+    eraser_swap_lookup_table(),
+    eraser_syndrome_buffer(1,1)
 {
     auto vertex_list = lattice_graph.get_vertices();
     for (auto v : vertex_list) {
@@ -190,6 +196,7 @@ MemorySimulator::reset() {
 
 #ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
     lrc_reset();
+    eraser_reset();
 #endif
 }
 
@@ -220,6 +227,8 @@ MemorySimulator::do_gate(std::string op, std::vector<uint> operands) {
         if (is_recording_stim_instructions) {
             sample_circuit.append_op("R", operands);
         }
+    } else if (op == "liswap") {
+        sim->LEAKAGE_ISWAP(operands);
     }
     else return 0;  // Nothing to be done -- treat as NOP.
     // Inject any errors.
@@ -350,7 +359,9 @@ MemorySimulator::inject_timing_error(std::vector<uint> qubits) {
             sample_circuit.append_op("Z_ERROR", {q}, e_pd-e_ad);
         }
     }
-    sim->error_channel<&StateSimulator::eL>(qubits, li_array);
+    if (config.enable_leakage) {
+        sim->error_channel<&StateSimulator::eL>(qubits, li_array);
+    }
     sim->error_channel<&StateSimulator::eX>(qubits, xy_array);
     sim->error_channel<&StateSimulator::eY>(qubits, xy_array);
     sim->error_channel<&StateSimulator::eZ>(qubits, z_array);
@@ -413,12 +424,21 @@ MemorySimulator::run(uint64_t shots) {
     uint64_t shots_left = local_shots;
     int batchno = world_rank;
 
+    // Set the seed. For the first batch only, the 0th process will record instructions to
+    // write to a Stim file.
     is_recording_stim_instructions = (world_rank == 0);
     sim->set_seed(G_BASE_SEED + world_rank);
 
-    if (G_USE_MPI) {
-        MPI_Barrier(MPI_COMM_WORLD);
+    // Perform any policy initialization here.
+#ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
+    if (config.lrc_policy == lrc_policy_t::eraser) {
+        eraser_initialize();
     }
+#endif
+
+    // Synchronize before starting.
+    if (G_USE_MPI)  MPI_Barrier(MPI_COMM_WORLD);
+
     while (shots_left) {
         const uint64_t shots_this_batch = shots_left < G_SHOTS_PER_BATCH ? shots_left : G_SHOTS_PER_BATCH;
         run_batch(shots_this_batch);

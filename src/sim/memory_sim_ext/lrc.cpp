@@ -27,12 +27,9 @@ MemorySimulator::lrc_reset() {
 
 void
 MemorySimulator::lrc_execute_lrcs_from_await_queue() {
-    uint k = parity_qubits.size();    // We can support at most this many LRCs.
     auto it = lrc_await_queue.begin();
 
     std::set<uint> qubits_in_use;
-    std::vector<uint> measure_list;
-    std::map<uint, uint> swap_map;
 
     std::deque<uint> lrc_await_queue_new_entries;
     // First go through and identify which parity qubits must be scheduled.
@@ -44,8 +41,6 @@ MemorySimulator::lrc_execute_lrcs_from_await_queue() {
         auto v = lattice_graph.get_vertex(q);
         if (v->qubit_type != vertex_t::type::data) {
             qubits_in_use.insert(q);
-            measure_list.push_back(q);
-            swap_map[q] = q;
 
             lrc_await_queue_new_entries.push_back(q);
         } else {
@@ -79,28 +74,39 @@ MemorySimulator::lrc_execute_lrcs_from_await_queue() {
     }
     // Update lrc_await_queue.
     for (uint x : lrc_await_queue_new_entries) lrc_await_queue.push_back(x);
+    // Finally do the LRC.
+    lrc_measure_qubits(lrc_map);
+}
 
+void
+MemorySimulator::lrc_optimal_oracle() {
+    // Just need to identify which qubits are leaked.
+}
+
+void
+MemorySimulator::lrc_measure_qubits(const std::map<uint, uint>& swap_map) {
+    std::map<uint, uint> swap_map_inv;
+    // Compute LRC operands and populate swap_map_inv.
     std::vector<uint> lrc_operands;
-    for (auto pair : lrc_map) {
-        swap_map[pair.first] = pair.second;
-        measure_list.push_back(pair.first);
-        qubits_in_use.insert(pair.second);
-
+    for (auto& pair : swap_map) {
         lrc_operands.push_back(pair.first);
         lrc_operands.push_back(pair.second);
+
+        swap_map_inv[pair.second] = pair.first;
     }
-    // Finally update the measure_list. If the size is < # parity qubits, then
-    // add unused parity qubits.
-    if (measure_list.size() < k) {
-        for (uint pq : parity_qubits) {
-            if (qubits_in_use.count(pq)) continue;
-            measure_list.push_back(pq);
-            if (measure_list.size() == k) break;
-        }
-    }
-    // Do the LRC operation of choice.
     std::vector<uint> lrc_operands_r(lrc_operands.rbegin(), lrc_operands.rend());
+    // Perform any gates now.
     if (config.lrc_circuit == lrc_circuit_t::swap) {
+        // Identify which qubits must be measured.
+        std::vector<uint> measure_list;
+        for (uint pq : parity_qubits) {
+            if (swap_map_inv.count(pq)) {
+                measure_list.push_back(swap_map_inv[pq]);
+            } else {
+                measure_list.push_back(pq);
+            }
+        }
+
         if (lrc_operands.size()) {
             elapsed_time += do_gate("cx", lrc_operands);
             inject_idling_error_negative(lrc_operands);
@@ -123,6 +129,7 @@ MemorySimulator::lrc_execute_lrcs_from_await_queue() {
                 meas_ctr_map.erase(q1);
             }
         }
+
         if (lrc_operands.size()) {
             elapsed_time += do_gate("cx", lrc_operands_r);
             inject_idling_error_negative(lrc_operands);

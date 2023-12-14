@@ -65,6 +65,8 @@ int main(int argc, char* argv[]) {
 #else
     MWPMDecoder dec(error_model);
 #endif
+    experiments::G_FILTER_OUT_SYNDROMES = false;
+
     experiments::memory_params_t params;
     params.trace_folder = trace_folder;
 
@@ -72,7 +74,7 @@ int main(int argc, char* argv[]) {
 
     if (world_rank == 0) {
         fout << std::filesystem::path(trace_folder).filename() << ","
-                << result.logical_error_rate << "\n";
+            << result.logical_error_rate << "\n"
     }
     MPI_Finalize();
     return 0;
