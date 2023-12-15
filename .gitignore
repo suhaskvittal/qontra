@@ -24,3 +24,6 @@ tracer_build/
 tracer_build/*
 memory_build/
 memory_build/*
+
+*/logs/
+*/logs/*
