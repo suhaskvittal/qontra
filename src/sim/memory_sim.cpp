@@ -146,8 +146,9 @@ MemorySimulator::MemorySimulator(LatticeGraph& gr)
     lrc_await_queue(),
     lrc_optimal_lrc_map_table(),
     // Variables for ERASER:
-    eraser_recently_scheduled_qubits(),
+    eraser_qubit_to_syndrome_buffer_index_map(),
     eraser_swap_lookup_table(),
+    eraser_recently_scheduled_qubits_table(1,1),
     eraser_syndrome_buffer(1,1)
 {
     auto vertex_list = lattice_graph.get_vertices();
@@ -562,12 +563,16 @@ MemorySimulator::run_batch(uint64_t shots) {
         inject_idling_error_negative(xp_qubits);
 
 #ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
+        stim::simd_bits eraser_shots_using_lrcs(1);
         if (config.lrc_policy == lrc_policy_t::always) {
             lrc_execute_lrcs_from_await_queue();
             goto memory_sim_make_detection_events;
         } else if (config.lrc_policy == lrc_policy_t::optimal) {
             lrc_optimal_perform_lrcs();
             // Save the state of the simulator.
+            sim->snapshot();
+        } else if (config.lrc_policy == lrc_policy_t::eraser) {
+            eraser_shots_using_lrcs = eraser_execute_lrcs();
             sim->snapshot();
         }
 #endif
@@ -580,6 +585,10 @@ MemorySimulator::run_batch(uint64_t shots) {
         if (config.lrc_policy == lrc_policy_t::optimal) {
             // Now, rollback any changes on trials that had LRCs.
             sim->rollback_where(lrc_shots_with_leakage);
+        } else if (config.lrc_policy == lrc_policy_t::eraser) {
+            sim->rollback_where(eraser_shots_using_lrcs);
+            // Update Eraser's syndrome buffer.
+            eraser_update_syndrome_buffer(prev_meas_ctr_map);
         }
 #endif
 

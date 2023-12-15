@@ -131,19 +131,22 @@ private:
     //
     std::deque<uint> lrc_await_queue;   // Only used by "always" LRCs.
     std::map<uint64_t, std::map<uint, uint>> lrc_optimal_lrc_map_table;
- 
     //
     // ERASER functions:
     //
     void    eraser_initialize(void);
     void    eraser_reset(void);
-    std::map<uint, uint> eraser_make_lrc_decisions(void);
+
+    stim::simd_bits eraser_execute_lrcs(void);   // Returns 1 wherever an LRC was used.
+    void            eraser_update_syndrome_buffer(const std::map<uint, uint64_t>& prev_meas_ctr_map);
     //
     // ERASER variables:
     //
-    std::set<uint>                      eraser_recently_scheduled_qubits;
+    std::map<uint, uint> eraser_qubit_to_syndrome_buffer_index_map;
     std::map<uint, std::array<uint, 2>> eraser_swap_lookup_table;
-    stim::simd_bit_table                eraser_syndrome_buffer;
+    // The recently_scheduled_qubits_table should be #shots by #qubits for better cache usage.
+    stim::simd_bit_table    eraser_recently_scheduled_qubits_table;
+    stim::simd_bit_table    eraser_syndrome_buffer;
 };
 
 }   // qontra

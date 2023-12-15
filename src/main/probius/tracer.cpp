@@ -98,6 +98,10 @@ int main(int argc, char* argv[]) {
             }
         }
     }
+    // Set reset error to p.
+    for (uint i = 0; i < n; i++) {
+        sim.config.errors.op1q["reset"][i] = error_rate;
+    }
 
     sim.config.distance = distance;
     sim.config.rounds = rounds;
