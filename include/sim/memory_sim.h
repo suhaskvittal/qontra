@@ -118,7 +118,8 @@ private:
     void    lrc_reset(void);
     void    lrc_execute_lrcs_from_await_queue(void);
 
-    stim::simd_bits lrc_optimal_oracle(void);   // Returns 1 wherever an LRC was used.
+    stim::simd_bits lrc_optimal_identify_lrcs(void);
+    void            lrc_optimal_perform_lrcs(void);   // Returns 1 wherever an LRC was used.
 
     void    lrc_measure_qubits(const std::map<uint, uint>& swap_set, int64_t trial=-1);
 
@@ -129,6 +130,7 @@ private:
     // LRC variables:
     //
     std::deque<uint> lrc_await_queue;   // Only used by "always" LRCs.
+    std::map<uint64_t, std::map<uint, uint>> lrc_optimal_lrc_map_table;
  
     //
     // ERASER functions:

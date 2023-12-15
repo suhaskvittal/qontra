@@ -144,6 +144,7 @@ MemorySimulator::MemorySimulator(LatticeGraph& gr)
     syndromes(1, 1),
     // Variables for LRC:
     lrc_await_queue(),
+    lrc_optimal_lrc_map_table(),
     // Variables for ERASER:
     eraser_recently_scheduled_qubits(),
     eraser_swap_lookup_table(),
@@ -525,6 +526,10 @@ MemorySimulator::run_batch(uint64_t shots) {
     for (uint r = 0; r < config.rounds; r++) {
         std::map<uint, uint64_t> prev_meas_ctr_map(meas_ctr_map);
 
+#ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
+        stim::simd_bits lrc_shots_with_leakage = lrc_optimal_identify_lrcs();
+#endif
+
         inject_timing_error(data_qubits);
         elapsed_time += do_gate("h", xp_qubits);
         inject_idling_error_negative(xp_qubits);
@@ -557,12 +562,11 @@ MemorySimulator::run_batch(uint64_t shots) {
         inject_idling_error_negative(xp_qubits);
 
 #ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
-        stim::simd_bits lrc_shots_with_lrcs(1);
         if (config.lrc_policy == lrc_policy_t::always) {
             lrc_execute_lrcs_from_await_queue();
             goto memory_sim_make_detection_events;
         } else if (config.lrc_policy == lrc_policy_t::optimal) {
-            lrc_shots_with_lrcs = lrc_optimal_oracle();
+            lrc_optimal_perform_lrcs();
             // Save the state of the simulator.
             sim->snapshot();
         }
@@ -575,7 +579,7 @@ MemorySimulator::run_batch(uint64_t shots) {
 #ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
         if (config.lrc_policy == lrc_policy_t::optimal) {
             // Now, rollback any changes on trials that had LRCs.
-            sim->rollback_where(lrc_shots_with_lrcs);
+            sim->rollback_where(lrc_shots_with_leakage);
         }
 #endif
 
