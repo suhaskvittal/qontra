@@ -276,10 +276,17 @@ FrameSimulator::eLI(uint q1, uint q2, uint64_t t) {
     return std::make_pair(IL[c1], IL[c2]);
 }
 
+#define QONTRA_USE_MESSY_LEAKAGE_TRANSPORT
+
 StateSimulator::label_2q_t 
 FrameSimulator::eLT(uint q1, uint q2, uint64_t t) {
+#ifdef QONTRA_USE_MESSY_LEAKAGE_TRANSPORT
     bool c1 = leak_table[q2][t] & ~leak_table[q1][t];
     bool c2 = leak_table[q1][t] & ~leak_table[q2][t];
+#else
+    bool c1 = leak_table[q1][t] ^ leak_table[q2][t];
+    bool c2 = c1;
+#endif
     leak_table[q1][t] ^= c1;
     leak_table[q2][t] ^= c2;
     return std::make_pair(IL[c1], IL[c2]);

@@ -542,13 +542,34 @@ MemorySimulator::run(uint64_t shots) {
 
         std::ofstream fout(data_output_file_path, std::ios::app);
         if (write_header) {
-            fout << "LRCs per Round";
+            fout << "Distance,"
+                    << "Rounds,"
+                    << "CX Error Rate,"
+                    << "LRC Policy,"
+                    << "LRC Circuit,"
+                    << "LRCs per Round";
             for (uint r = 0; r < config.rounds; r++) {
                 fout << ",LPR Round " << r;
-        }
+            }
             fout << "\n";
         }
-        fout << stats["lrcs_per_round"].str();
+        // Write stats.
+        std::string lrc_policy_name;
+        if (config.lrc_policy == lrc_policy_t::none)            lrc_policy_name = "N/A";
+        else if (config.lrc_policy == lrc_policy_t::always)     lrc_policy_name = "Always-LRCs";
+        else if (config.lrc_policy == lrc_policy_t::optimal)    lrc_policy_name = "Optimal-LRCs";
+        else if (config.lrc_policy == lrc_policy_t::eraser)     lrc_policy_name = "ERASER";
+
+        std::string lrc_circuit_name;
+        if (config.lrc_circuit == lrc_circuit_t::swap)  lrc_circuit_name = "SWAP";
+        if (config.lrc_circuit == lrc_circuit_t::dqlr)  lrc_circuit_name = "DQLR";
+
+        fout << config.distance << ","
+                << config.rounds << ","
+                << config.errors.op2q["cx"][std::make_pair(0, 1)] << ","
+                << lrc_policy_name << ","
+                << lrc_circuit_name << ","
+                << stats["lrcs_per_round"].str();
         for (uint r = 0; r < config.rounds; r++) {
             fout << "," << stats["leakage_population_ratio_round_" + std::to_string(r)].str();
         }

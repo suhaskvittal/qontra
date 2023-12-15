@@ -183,10 +183,11 @@ MemorySimulator::lrc_measure_qubits(const std::map<uint, uint>& swap_map, int64_
         inject_idling_error_positive(data_qubits, trial);
         local_elapsed_time += do_gate("reset", parity_qubits, trial);
 
-        local_elapsed_time += do_gate("liswap", lrc_operands_r, trial);
-        inject_idling_error_negative(lrc_operands, trial);
-
-        local_elapsed_time += do_gate("reset", parity_qubits, trial);
+        if (lrc_operands.size()) {
+            local_elapsed_time += do_gate("liswap", lrc_operands_r, trial);
+            inject_idling_error_negative(lrc_operands, trial);
+            local_elapsed_time += do_gate("reset", parity_qubits, trial);
+        }
     }
     // Now, update the elapsed_time (trial < 0) or shot_time_delta_map (trial >= 0).
     if (trial >= 0) {

@@ -1,21 +1,14 @@
 #!/bin/sh
 
-DISTANCES="3 5 7"
-ERRORS="1e-3"
-ROUND_MULTIPLIER=5
-
-stats_folder="../data/probius/surface_code_memory/${POLICY_NAME}/simstats"
 trace_folder="../data/probius/surface_code_memory/${POLICY_NAME}/traces"
 model_folder="../data/probius/surface_code_memory/${POLICY_NAME}/stim"
 output_file="../data/probius/${POLICY_NAME}.csv"
 
 cd build
 
-rm -rf $stats_folder
 rm -rf $trace_folder
 rm -rf $model_folder
 
-mkdir -p $stats_folder
 mkdir -p $model_folder
 
 # Make traces
@@ -36,7 +29,7 @@ do
                                            --rounds $rounds \
                                            --stim-out "${model_folder}/${name}.stim" \
                                            --trace-out "${trace_folder}/${name}" \
-                                           --stats-out "${stats_folder}/${name}.csv" \
+                                           --stats-out "${STATS_FOLDER}/${name}.csv" \
                                            $LEAKAGE_OPTIONS
 
         echo "    ---> decoding......."

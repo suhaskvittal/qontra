@@ -84,9 +84,17 @@ int main(int argc, char* argv[]) {
     // Instantiate error model.
     const uint n = lattice.get_vertices().size();
     tables::ErrorAndTiming et;
+
+    et.e_g1q = 1e-4;
+    et.e_g2q = 1e-3;
+    et.e_m1w0 = 1e-3;
+    et.e_m0w1 = 3e-3;
+    et.e_idle = 1e-4;
+
+    et.t1 = 500e3;
+    et.t2 = 250e3;
+
     et = et * (1000*error_rate);
-    et.e_g1q *= 0.1;
-    et.e_idle *= 0.1;
     tables::populate(n, sim.config.errors, sim.config.timing, et);
     // Add leakage errors.
     if (sim_leakage) {
@@ -97,6 +105,8 @@ int main(int argc, char* argv[]) {
                 auto i_j = std::make_pair(i, j);
                 sim.config.errors.op2q_leakage_transport["cx"][i_j] = 0.1;
                 sim.config.errors.op2q_leakage_injection["cx"][i_j] = 0.1*error_rate;
+                sim.config.errors.op2q_leakage_transport["liswap"][i_j] = 0.1;
+                sim.config.errors.op2q_leakage_injection["liswap"][i_j] = 0.1*error_rate;
             }
         }
     }
