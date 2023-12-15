@@ -121,7 +121,11 @@ surface_code_lattice_graph(uint d) {
 }   // sim
 
 MemorySimulator::MemorySimulator(LatticeGraph& gr)
-    :lattice_graph(gr),
+    :
+    // Global variables
+    stats(),
+    // Private variables
+    lattice_graph(gr),
     meas_ctr(0),
     event_ctr(0),
     obs_ctr(0),
@@ -172,12 +176,7 @@ MemorySimulator::MemorySimulator(LatticeGraph& gr)
 }
 
 void
-MemorySimulator::reset() {
-    meas_ctr = 0;
-    event_ctr = 0;
-    obs_ctr = 0;
-    elapsed_time = 0;
-    shot_time_delta_map.clear();
+MemorySimulator::initialize() {
     // We'll just remake the following data in case the config has changed.
     syndrome_parity_qubits = config.is_memory_x ? xp_qubits : zp_qubits;
     auto vertex_obs_list = config.is_memory_x ? lattice_graph.x_obs_list : lattice_graph.z_obs_list;
@@ -192,6 +191,19 @@ MemorySimulator::reset() {
     n_observables = obs_list.size();
 
     syndromes = stim::simd_bit_table(n_detection_events+n_observables, experiments::G_SHOTS_PER_BATCH);
+
+#ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
+    eraser_initialize();
+#endif
+}
+
+void
+MemorySimulator::reset() {
+    meas_ctr = 0;
+    event_ctr = 0;
+    obs_ctr = 0;
+    elapsed_time = 0;
+    shot_time_delta_map.clear();
 
     sim->reset_sim();
     syndromes.clear();
@@ -472,12 +484,15 @@ MemorySimulator::run(uint64_t shots) {
     is_recording_stim_instructions = (world_rank == 0);
     sim->set_seed(G_BASE_SEED + world_rank);
 
-    // Perform any policy initialization here.
-#ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
-    if (config.lrc_policy == lrc_policy_t::eraser) {
-        eraser_initialize();
+    initialize();
+
+    // Initialize statistics here.
+    stats.clear();
+
+    stats.decl("lrcs_per_round", MPI_DOUBLE, MPI_SUM);
+    for (uint r = 0; r < config.rounds; r++) {
+        stats.decl("leakage_population_ratio_round_" + std::to_string(r), MPI_DOUBLE, MPI_SUM);
     }
-#endif
 
     // Synchronize before starting.
     if (G_USE_MPI)  MPI_Barrier(MPI_COMM_WORLD);
@@ -505,6 +520,39 @@ MemorySimulator::run(uint64_t shots) {
 
         batchno += world_size;
         shots_left -= shots_this_batch;
+    }
+    // 
+    // Accumulate statistics.
+    //
+    StatFile acc = stats.mpi_acc();
+    // If any statistics are means, handle that now.
+    acc["lrcs_per_round"] /= (fp_t) (config.rounds * shots);
+    for (uint r = 0; r < config.rounds; r++) {
+        acc["leakage_population_ratio_round_" + std::to_string(r)] /= (fp_t) (n_qubits * shots);
+    }
+    stats = acc;
+    // Write statistics to output file.
+    if (world_rank == 0) {
+        std::filesystem::path data_output_file_path(config.data_output_file);
+        bool write_header = false;
+        if (!std::filesystem::exists(data_output_file_path)) {
+            write_header = true;
+            safe_create_directory(data_output_file_path.root_directory());
+        }
+
+        std::ofstream fout(data_output_file_path, std::ios::app);
+        if (write_header) {
+            fout << "LRCs per Round";
+            for (uint r = 0; r < config.rounds; r++) {
+                fout << ",LPR Round " << r;
+        }
+            fout << "\n";
+        }
+        fout << stats["lrcs_per_round"].str();
+        for (uint r = 0; r < config.rounds; r++) {
+            fout << "," << stats["leakage_population_ratio_round_" + std::to_string(r)].str();
+        }
+        fout << "\n";
     }
 }
 
@@ -600,6 +648,13 @@ memory_sim_make_detection_events:
                 meas_list.push_back(prev_meas_ctr_map[pi]);
             }
             create_event_or_obs(meas_list);
+        }
+        //
+        // Update statistics:
+        //      leakage_population_ratio
+        //
+        for (uint q = 0; q < n_qubits; q++) {
+            stats["leakage_population_ratio_round_" + std::to_string(r)] += (fp_t)sim->leak_table[q].popcnt();
         }
     }
     //

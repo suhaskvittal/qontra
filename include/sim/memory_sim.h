@@ -10,6 +10,7 @@
 #include "instruction.h"
 #include "graph/lattice_graph.h"
 #include "sim/frame_sim.h"
+#include "stats.h"
 #include "tables.h"
 
 #include <filesystem>
@@ -37,7 +38,8 @@ public:
     MemorySimulator(graph::LatticeGraph&);
     ~MemorySimulator() { delete sim; }
 
-    void    reset();
+    void    initialize(void);
+    void    reset(void);
 
     void    run(uint64_t shots);
 
@@ -60,6 +62,8 @@ public:
         lrc_circuit_t   lrc_circuit = lrc_circuit_t::swap;
         uint            lrc_stride_size = 1;
     } config;
+
+    StatFile stats;
 private:
     typedef fp_t time_t;
 

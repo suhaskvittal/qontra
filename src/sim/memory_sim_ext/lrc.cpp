@@ -194,6 +194,12 @@ MemorySimulator::lrc_measure_qubits(const std::map<uint, uint>& swap_map, int64_
     } else {
         elapsed_time += local_elapsed_time;
     }
+    //
+    // Update statistics: 
+    //      LRCs used per round.
+    //
+    if (trial >= 0) stats["lrcs_per_round"] += swap_map.size();
+    else            stats["lrcs_per_round"] += sim->shots * swap_map.size();
 }
 
 std::map<uint, uint>

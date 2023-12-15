@@ -23,7 +23,7 @@ using namespace experiments;
 
 void
 configure_optimal_batch_size() {
-    const uint64_t take_up_lines = 4;
+    const uint64_t take_up_lines = 1;
 
     uint64_t cache_line_size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);  // In bytes.
     G_SHOTS_PER_BATCH = (cache_line_size << 3) * take_up_lines;   // Need to convert to bits.

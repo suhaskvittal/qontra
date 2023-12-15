@@ -31,6 +31,7 @@ int main(int argc, char* argv[]) {
     uint64_t shots;
     fp_t error_rate;
 
+    std::string stats_output_file;
     std::string stim_output_file;
     std::string syndrome_output_folder;
 
@@ -54,6 +55,7 @@ int main(int argc, char* argv[]) {
     rounds = distance;
     pp.get_uint32("rounds", rounds);
 
+    if (!pp.get_string("stats-out", stats_output_file)) return 1;
     if (!pp.get_string("stim-out", stim_output_file)) return 1;
     if (!pp.get_string("trace-out", syndrome_output_folder)) return 1;
     
@@ -107,6 +109,7 @@ int main(int argc, char* argv[]) {
     sim.config.rounds = rounds;
     sim.config.stim_output_file = stim_output_file;
     sim.config.syndrome_output_folder = syndrome_output_folder;
+    sim.config.data_output_file = stats_output_file;
     sim.config.is_memory_x = is_memory_x;
 
     sim.run(shots);
