@@ -70,30 +70,38 @@ public:
     // As operations are expected to be executed on simd_bits, each
     // simulator will have to implement the basic operations themselves.
 
-    virtual void    H(std::vector<uint>) =0;
-    virtual void    X(std::vector<uint>) =0;
-    virtual void    Z(std::vector<uint>) =0;
-    virtual void    S(std::vector<uint>) =0;
-    virtual void    CX(std::vector<uint>) =0;
-    virtual void    R(std::vector<uint>) =0;
+    // Below: tr = trial. If -1 (default), then that means to execute on all trials.
+    // This allows for fine-grained updates. Updates that between all trials and single
+    // trials (i.e. a subset of trials) should save the state and rollback after performing
+    // a gate, or simply perform the gate for each single trial (a judgement call).
+    virtual void    H(std::vector<uint>, int64_t tr=-1) =0;
+    virtual void    X(std::vector<uint>, int64_t tr=-1) =0;
+    virtual void    Z(std::vector<uint>, int64_t tr=-1) =0;
+    virtual void    S(std::vector<uint>, int64_t tr=-1) =0;
+    virtual void    CX(std::vector<uint>, int64_t tr=-1) =0;
+    virtual void    R(std::vector<uint>, int64_t tr=-1) =0;
 
     // Other operations that are not guaranteed to have an implementation.
-    virtual void    LEAKAGE_ISWAP(std::vector<uint>) {};
+    virtual void    LEAKAGE_ISWAP(std::vector<uint>, int64_t tr=-1) {};
 
     // As these operations are non-Clifford, we
     // provide a default implementation that does
     // nothing.
-    virtual void    T(std::vector<uint>) {}
-    virtual void    RX(fp_t, std::vector<uint>) {}
-    virtual void    RY(fp_t, std::vector<uint>) {}
-    virtual void    RZ(fp_t, std::vector<uint>) {}
+    virtual void    T(std::vector<uint>, int64_t tr=-1) {}
+    virtual void    RX(fp_t, std::vector<uint>, int64_t tr=-1) {}
+    virtual void    RY(fp_t, std::vector<uint>, int64_t tr=-1) {}
+    virtual void    RZ(fp_t, std::vector<uint>, int64_t tr=-1) {}
 
     // Measurement is a special operation. 
     // The first argument is the operands (as with other operations).
     // The second and third arguments (mXwY) is the probability that we
     //  measured a value X but the correct state was Y.
     // The last value is the location in the record table to store the measurement.
-    virtual void    M(std::vector<uint>, std::vector<fp_t> m1w0, std::vector<fp_t> m0w1, int record=-1) =0;
+    virtual void    M(std::vector<uint>,
+                        std::vector<fp_t> m1w0,
+                        std::vector<fp_t> m0w1,
+                        int record=-1,
+                        int64_t tr=-1) =0;
 
     enum class ErrorLabel { I, X, Y, Z, L };
     // 

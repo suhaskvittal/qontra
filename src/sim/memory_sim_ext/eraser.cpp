@@ -13,11 +13,13 @@ using namespace lattice;
 void
 MemorySimulator::eraser_initialize() {
     // Setup swap lookup table (depth = 2).
-    for (auto dv : data_qubits) {
+    for (auto dq : data_qubits) {
         uint earliest_cx_time = std::numeric_limits<uint>::max();
         uint latest_cx_time = 0;
         sptr<vertex_t> pv_earliest = nullptr;
         sptr<vertex_t> pv_latest = nullptr;
+
+        auto dv = lattice_graph.get_vertex(dq);
         for (auto pv : lattice_graph.get_neighbors(dv)) {
             auto e = lattice_graph.get_edge(dv, pv);
             uint t = e->cx_time;
@@ -30,9 +32,9 @@ MemorySimulator::eraser_initialize() {
                 pv_latest = pv;
             }
         }
-        eraser_swap_lookup_table[i] = std::array<uint, 2>();
-        eraser_swap_lookup_table[i][0] = pv_earliest->id;
-        eraser_swap_lookup_table[i][1] = pv_latest->id;
+        eraser_swap_lookup_table[dq] = std::array<uint, 2>();
+        eraser_swap_lookup_table[dq][0] = pv_earliest->id;
+        eraser_swap_lookup_table[dq][1] = pv_latest->id;
     }
     eraser_syndrome_buffer = stim::simd_bit_table(parity_qubits.size(), experiments::G_SHOTS_PER_BATCH);
     eraser_syndrome_buffer.clear();

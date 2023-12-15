@@ -29,7 +29,7 @@ set(QONTRA_FILES
     # Decoders
     src/decoder/mwpm.cpp
     src/decoder/window.cpp
-#   src/decoder/restriction.cpp
+#   src/decoder/restriction.cpp     # DISABLED FOR NOW -- RE-ENABLE LATER
     # Parsing
     src/parsing/cmd.cpp
     src/parsing/asm.cpp
@@ -40,7 +40,7 @@ set(QONTRA_FILES
     src/graph/lattice_graph.cpp
     src/graph/tanner_graph.cpp
     # Simulators
-    src/sim/clifford_sim.cpp
+#   src/sim/clifford_sim.cpp        # DISABLED FOR NOW -- RE-ENABLE LATER
     src/sim/enumerator.cpp
     src/sim/frame_sim.cpp
     src/sim/state_sim.cpp
@@ -62,7 +62,8 @@ if (COMPILE_MEMORY_SIM_EXT)
     message(STATUS "Will compile memory simulator extensions.")
     set(QONTRA_FILES
             ${QONTRA_FILES}
-            src/sim/memory_sim_ext/lrc.cpp)
+            src/sim/memory_sim_ext/lrc.cpp
+            src/sim/memory_sim_ext/eraser.cpp)
 endif()
 
 if (COMPILE_PYMATCHING)

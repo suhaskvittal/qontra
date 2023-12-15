@@ -65,12 +65,22 @@ private:
 
     void    run_batch(uint64_t shots_in_batch);
 
-    time_t  do_gate(std::string op, std::vector<uint> operands);
-    time_t  do_measurement(std::vector<uint> operands);
+    // do_gate and do_measurement accept an optional trial argument. By default, trial = -1,
+    // which means both functions perform the operation across all trials and inject errors
+    // stochastically.
+    //
+    // When trial >= 0, then we will only perform an operation (and the corresponding errors)
+    // for that specified trial.
+    time_t  do_gate(std::string op, std::vector<uint> operands, int64_t trial=-1);
+    time_t  do_measurement(std::vector<uint> operands, int64_t trial=-1);
+    void    inject_idling_error_positive(std::vector<uint> on_qubits, int64_t trial=-1);
+    void    inject_idling_error_negative(std::vector<uint> not_on_qubits, int64_t trial=-1);
+
+    // The below functions are deterministic and should not vary from trial to trial.
+    // But, they may leverage trial-specific information (i.e. timing error may be different
+    // between trials).
     void    create_event_or_obs(std::vector<uint> operands, bool create_event=true);
     void    inject_timing_error(std::vector<uint> qubits);
-    void    inject_idling_error_positive(std::vector<uint> on_qubits);
-    void    inject_idling_error_negative(std::vector<uint> not_on_qubits);
     
     graph::LatticeGraph lattice_graph;
     uint64_t n_qubits;
@@ -109,7 +119,7 @@ private:
     void    lrc_execute_lrcs_from_await_queue(void);
     void    lrc_optimal_oracle(void);
 
-    void    lrc_measure_qubits(const std::map<uint, uint>& swap_set);
+    void    lrc_measure_qubits(const std::map<uint, uint>& swap_set, int64_t trial=-1);
 
     std::map<uint, uint>    lrc_solve_maximum_matching(
                                     const std::vector<uint>& avail_data,

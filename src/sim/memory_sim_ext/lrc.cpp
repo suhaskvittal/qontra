@@ -27,7 +27,7 @@ MemorySimulator::lrc_reset() {
 
 void
 MemorySimulator::lrc_execute_lrcs_from_await_queue() {
-    auto it = lrc_await_queue.begin();
+    const uint k = parity_qubits.size();
 
     std::set<uint> qubits_in_use;
 
@@ -81,10 +81,26 @@ MemorySimulator::lrc_execute_lrcs_from_await_queue() {
 void
 MemorySimulator::lrc_optimal_oracle() {
     // Just need to identify which qubits are leaked.
+    std::vector<uint> usable_parity_qubits;
+    std::vector<uint> leaked_qubits;
+    // leak_table_tr has better cache locality than leak_table.
+    stim::simd_bit_table leak_table_tr = sim->leak_table.transposed();
+    for (uint64_t t = 0; t < sim->shots; t++) {
+        if (leak_table_tr[t].popcnt() == 0) continue;   // No leakage.
+        for (uint dq : data_qubits) {
+            if (leak_table_tr[t][dq])   leaked_qubits.push_back(dq);
+        }
+        for (uint pq : parity_qubits) {
+            if (!leak_table_tr[t][pq])  usable_parity_qubits.push_back(pq);
+        }
+        // Perform maximum matching and schedule the LRCs.
+        std::map<uint, uint> lrc_map = lrc_solve_maximum_matching(leaked_qubits, usable_parity_qubits);
+        lrc_measure_qubits(lrc_map, (int64_t)t);
+    }
 }
 
 void
-MemorySimulator::lrc_measure_qubits(const std::map<uint, uint>& swap_map) {
+MemorySimulator::lrc_measure_qubits(const std::map<uint, uint>& swap_map, int64_t trial) {
     std::map<uint, uint> swap_map_inv;
     // Compute LRC operands and populate swap_map_inv.
     std::vector<uint> lrc_operands;
@@ -96,6 +112,7 @@ MemorySimulator::lrc_measure_qubits(const std::map<uint, uint>& swap_map) {
     }
     std::vector<uint> lrc_operands_r(lrc_operands.rbegin(), lrc_operands.rend());
     // Perform any gates now.
+    time_t local_elapsed_time = 0;
     if (config.lrc_circuit == lrc_circuit_t::swap) {
         // Identify which qubits must be measured.
         std::vector<uint> measure_list;
@@ -108,43 +125,55 @@ MemorySimulator::lrc_measure_qubits(const std::map<uint, uint>& swap_map) {
         }
 
         if (lrc_operands.size()) {
-            elapsed_time += do_gate("cx", lrc_operands);
-            inject_idling_error_negative(lrc_operands);
-            elapsed_time += do_gate("cx", lrc_operands_r);
-            inject_idling_error_negative(lrc_operands);
-            elapsed_time += do_gate("cx", lrc_operands);
-            inject_idling_error_negative(lrc_operands);
+            local_elapsed_time += do_gate("cx", lrc_operands, trial);
+            inject_idling_error_negative(lrc_operands, trial);
+            local_elapsed_time += do_gate("cx", lrc_operands_r, trial);
+            inject_idling_error_negative(lrc_operands, trial);
+            local_elapsed_time += do_gate("cx", lrc_operands, trial);
+            inject_idling_error_negative(lrc_operands, trial);
         }
 
-        elapsed_time += do_measurement(measure_list);
-        inject_idling_error_negative(measure_list);
-        elapsed_time += do_gate("reset", measure_list);
+        local_elapsed_time += do_measurement(measure_list, trial);
+        inject_idling_error_negative(measure_list, trial);
+        local_elapsed_time += do_gate("reset", measure_list, trial);
+        // ONLY DO THE BELOW IF trial < 0. THE meas_ctrs ARE UNDEFINED WHEN trial >= 0. 
+        // It should be fine regardless as if the rest of the trials eventually measure,
+        // the meas_ctrs should be in the right place.
+        //
         // We now have to update the measurement counters, as we measured some data qubits.
-        for (auto pair : swap_map) {
-            uint q1 = pair.first, q2 = pair.second;
-            if (q1 == q2) continue;
-            auto v1 = lattice_graph.get_vertex(q1);
-            if (v1->qubit_type == vertex_t::type::data) {
-                meas_ctr_map[q2] = meas_ctr_map[q1];
-                meas_ctr_map.erase(q1);
+        if (trial < 0) {
+            for (auto pair : swap_map) {
+                uint q1 = pair.first, q2 = pair.second;
+                if (q1 == q2) continue;
+                auto v1 = lattice_graph.get_vertex(q1);
+                if (v1->qubit_type == vertex_t::type::data) {
+                    meas_ctr_map[q2] = meas_ctr_map[q1];
+                    meas_ctr_map.erase(q1);
+                }
             }
         }
 
         if (lrc_operands.size()) {
-            elapsed_time += do_gate("cx", lrc_operands_r);
-            inject_idling_error_negative(lrc_operands);
-            elapsed_time += do_gate("cx", lrc_operands);
-            inject_idling_error_negative(lrc_operands);
+            local_elapsed_time += do_gate("cx", lrc_operands_r, trial);
+            inject_idling_error_negative(lrc_operands, trial);
+            local_elapsed_time += do_gate("cx", lrc_operands, trial);
+            inject_idling_error_negative(lrc_operands, trial);
         }
     } else if (config.lrc_circuit == lrc_circuit_t::dqlr) {
-        elapsed_time += do_measurement(parity_qubits);
-        inject_idling_error_positive(data_qubits);
-        elapsed_time += do_gate("reset", parity_qubits);
+        local_elapsed_time += do_measurement(parity_qubits, trial);
+        inject_idling_error_positive(data_qubits, trial);
+        local_elapsed_time += do_gate("reset", parity_qubits, trial);
 
-        elapsed_time += do_gate("liswap", lrc_operands_r);
-        inject_idling_error_negative(lrc_operands);
+        local_elapsed_time += do_gate("liswap", lrc_operands_r, trial);
+        inject_idling_error_negative(lrc_operands, trial);
 
-        elapsed_time += do_gate("reset", parity_qubits);
+        local_elapsed_time += do_gate("reset", parity_qubits, trial);
+    }
+    // Now, update the elapsed_time (trial < 0) or shot_time_delta_map (trial >= 0).
+    if (trial >= 0) {
+        shot_time_delta_map[trial] += local_elapsed_time;
+    } else {
+        elapsed_time += local_elapsed_time;
     }
 }
 

@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
 
     if (world_rank == 0) {
         fout << std::filesystem::path(trace_folder).filename() << ","
-            << result.logical_error_rate << "\n"
+            << result.logical_error_rate << "\n";
     }
     MPI_Finalize();
     return 0;

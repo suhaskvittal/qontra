@@ -201,34 +201,36 @@ MemorySimulator::reset() {
 }
 
 MemorySimulator::time_t
-MemorySimulator::do_gate(std::string op, std::vector<uint> operands) {
+MemorySimulator::do_gate(std::string op, std::vector<uint> operands, int64_t trial) {
+    // Note -- we do not want to record trial-specific errors and instructions.
+    // Thus, we only record instructions/errors in Stim if trial < 0.
     if (op == "h") {
-        sim->H(operands);
-        if (is_recording_stim_instructions) {
+        sim->H(operands, trial);
+        if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.append_op("H", operands);
         }
     } else if (op == "x") {
-        sim->X(operands);
-        if (is_recording_stim_instructions) {
+        sim->X(operands, trial);
+        if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.append_op("X", operands);
         }
     } else if (op == "z") {
-        sim->Z(operands);
-        if (is_recording_stim_instructions) {
+        sim->Z(operands, trial);
+        if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.append_op("Z", operands);
         }
     } else if (op == "cx") {
-        sim->CX(operands);
-        if (is_recording_stim_instructions) {
+        sim->CX(operands, trial);
+        if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.append_op("CX", operands);
         }
     } else if (op == "reset") {
-        sim->R(operands);
-        if (is_recording_stim_instructions) {
+        sim->R(operands, trial);
+        if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.append_op("R", operands);
         }
     } else if (op == "liswap") {
-        sim->LEAKAGE_ISWAP(operands);
+        sim->LEAKAGE_ISWAP(operands, trial);
     }
     else return 0;  // Nothing to be done -- treat as NOP.
     // Inject any errors.
@@ -250,16 +252,26 @@ MemorySimulator::do_gate(std::string op, std::vector<uint> operands) {
             lt_array.push_back(e_lt);
             li_array.push_back(e_li);
             dp_array.push_back(e_dp);
-            if (is_recording_stim_instructions) {
+            if (is_recording_stim_instructions && trial < 0) {
                 if (e_dp > 0) sample_circuit.append_op("DEPOLARIZE2", {q1, q2}, e_dp);
             }
             // Get instruction latency.
             fp_t t = config.timing.op2q[op][q1_q2];
             if (t > instruction_latency) instruction_latency = t;
         }
-        sim->error_channel<&StateSimulator::eLT>(operands, lt_array);
-        sim->error_channel<&StateSimulator::eLI>(operands, li_array);
-        sim->error_channel<&StateSimulator::eDP2>(operands, dp_array);
+        if (trial >= 0) {
+            // We are injecting errors on a specific trial.
+            for (uint i = 0; i < lt_array.size(); i++) {
+                uint q1 = operands[2*i], q2 = operands[2*i+1];
+                if (sim->get_probability_sample_from_rng() < lt_array[i]) sim->eLT(q1, q2, trial);
+                if (sim->get_probability_sample_from_rng() < li_array[i]) sim->eLI(q1, q2, trial);
+                if (sim->get_probability_sample_from_rng() < dp_array[i]) sim->eDP2(q1, q2, trial);
+            }
+        } else {
+            sim->error_channel<&StateSimulator::eLT>(operands, lt_array);
+            sim->error_channel<&StateSimulator::eLI>(operands, li_array);
+            sim->error_channel<&StateSimulator::eDP2>(operands, dp_array);
+        }
     } else {
         std::vector<fp_t> error_rates;
         for (uint i = 0; i < operands.size(); i++) {
@@ -268,7 +280,7 @@ MemorySimulator::do_gate(std::string op, std::vector<uint> operands) {
 
             error_rates.push_back(e);
 
-            if (is_recording_stim_instructions) {
+            if (is_recording_stim_instructions && trial < 0) {
                 if (e > 0) {
                     if (op == "reset") {
                         sample_circuit.append_op("X_ERROR", {q}, e);
@@ -281,17 +293,33 @@ MemorySimulator::do_gate(std::string op, std::vector<uint> operands) {
             fp_t t = config.timing.op1q[op][q];
             if (t > instruction_latency) instruction_latency = t;
         }
-        if (op == "reset") {
-            sim->error_channel<&StateSimulator::eX>(operands, error_rates);
+        if (trial >= 0) {
+            // We are injecting errors for a specific trial.
+            for (uint i = 0; i < error_rates.size(); i++) {
+                uint q = operands[i];
+                if (sim->get_probability_sample_from_rng() < error_rates[i]) {
+                    if (op == "reset")  sim->eX(q, trial);
+                    else                sim->eDP1(q, trial);
+                }
+            }
         } else {
-            sim->error_channel<&StateSimulator::eDP1>(operands, error_rates);
+            if (op == "reset") {
+                sim->error_channel<&StateSimulator::eX>(operands, error_rates);
+            } else {
+                sim->error_channel<&StateSimulator::eDP1>(operands, error_rates);
+            }
         }
     }
     return instruction_latency;
 }
 
 MemorySimulator::time_t
-MemorySimulator::do_measurement(std::vector<uint> operands) {
+MemorySimulator::do_measurement(std::vector<uint> operands, int64_t trial) {
+    // Like with do_gate, we will only record instructions for Stim if trial < 0,
+    // as this implies a measurement done across all trials.
+    //
+    // TODO: implement non-deterministic measurement counters.
+    //
     std::vector<fp_t> m1w0_array, m0w1_array;
     time_t instruction_latency = 0.0;
     for (uint i = 0; i < operands.size(); i++) {
@@ -300,22 +328,59 @@ MemorySimulator::do_measurement(std::vector<uint> operands) {
         m0w1_array.push_back(config.errors.m0w1[q]);
         // Stim doesn't have a way to implement biased measurements.
         // So, we just take the mean.
-        if (is_recording_stim_instructions) {
+        if (is_recording_stim_instructions && trial < 0) {
             fp_t emean = 0.5 * (config.errors.m1w0[q]+config.errors.m0w1[q]);
             sample_circuit.append_op("X_ERROR", {q}, emean);
         }
-        // Update measurement counter.
-        meas_ctr_map[q] = meas_ctr+i;
+        // Update measurement counter (only if trial < 0 -- otherwise we run into issues).
+        if (trial < 0)  meas_ctr_map[q] = meas_ctr+i;
         // Get instruction latency.
         fp_t t = config.timing.op1q["measure"][q];
         if (t > instruction_latency) instruction_latency = t;
     }
-    sim->M(operands, m1w0_array, m0w1_array, meas_ctr);
-    if (is_recording_stim_instructions) {
+    // Perform the measurement.
+    sim->M(operands, m1w0_array, m0w1_array, meas_ctr, trial);
+    if (is_recording_stim_instructions && trial < 0) {
         sample_circuit.append_op("M", operands);
     }
-    meas_ctr += operands.size();
+    // We will only update the counter if this is a common measurement.
+    if (trial < 0)  meas_ctr += operands.size();
+
     return instruction_latency;
+}
+
+void
+MemorySimulator::inject_idling_error_positive(std::vector<uint> on_qubits, int64_t trial) {
+    // Do NOT record the error if trial >= 0.
+    std::vector<fp_t> error_rates;
+    for (auto q : on_qubits) {
+        fp_t e = config.errors.idling[q];
+        error_rates.push_back(e);
+        if (is_recording_stim_instructions && trial < 0) {
+            sample_circuit.append_op("DEPOLARIZE1", {q}, e);
+        }
+    }
+
+    if (trial >= 0) {
+        // We are only injecting the error on a single trial.
+        for (uint i = 0; i < error_rates.size(); i++) {
+            uint q = on_qubits[i];
+            if (sim->get_probability_sample_from_rng() < error_rates[i]) sim->eDP1(q, trial);
+        }
+    } else {
+        sim->error_channel<&StateSimulator::eDP1>(on_qubits, error_rates);
+    }
+}
+
+void
+MemorySimulator::inject_idling_error_negative(std::vector<uint> not_on_qubits, int64_t trial) {
+    std::vector<uint> on_qubits;
+    for (uint i = 0; i < n_qubits; i++) {
+        if (std::find(not_on_qubits.begin(), not_on_qubits.end(), i) == not_on_qubits.end()) {
+            on_qubits.push_back(i);
+        }
+    }
+    inject_idling_error_positive(on_qubits, trial);
 }
 
 void
@@ -384,30 +449,6 @@ MemorySimulator::inject_timing_error(std::vector<uint> qubits) {
     }
     elapsed_time = 0;
     shot_time_delta_map.clear();
-}
-
-void
-MemorySimulator::inject_idling_error_positive(std::vector<uint> on_qubits) {
-    std::vector<fp_t> error_rates;
-    for (auto q : on_qubits) {
-        fp_t e = config.errors.idling[q];
-        error_rates.push_back(e);
-        if (is_recording_stim_instructions) {
-            sample_circuit.append_op("DEPOLARIZE1", {q}, e);
-        }
-    }
-    sim->error_channel<&StateSimulator::eDP1>(on_qubits, error_rates);
-}
-
-void
-MemorySimulator::inject_idling_error_negative(std::vector<uint> not_on_qubits) {
-    std::vector<uint> on_qubits;
-    for (uint i = 0; i < n_qubits; i++) {
-        if (std::find(not_on_qubits.begin(), not_on_qubits.end(), i) == not_on_qubits.end()) {
-            on_qubits.push_back(i);
-        }
-    }
-    inject_idling_error_positive(on_qubits);
 }
 
 void
