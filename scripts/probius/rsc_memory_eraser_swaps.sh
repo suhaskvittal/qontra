@@ -3,12 +3,7 @@
 POLICY_NAME="eraser_swaps"
 LEAKAGE_OPTIONS="-enl --lrc-policy eraser"
 
-PROC=$1
-SHOTS=$2
-
 (
-    export PROC
-    export SHOTS
     export POLICY_NAME
     export LEAKAGE_OPTIONS
 

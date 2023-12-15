@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
                 << "Logical Error Rate\n";
     }
     // Run memory experiment.
-#ifdef QONTRA_PYMATCHING_AVAILABLE
+#ifdef QONTRA_PYMATCHING_ENABLED
     PyMatching dec(error_model);
 #else
     MWPMDecoder dec(error_model);

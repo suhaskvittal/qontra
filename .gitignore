@@ -19,3 +19,8 @@ include/parsing/sdl/lex.yy.c
 
 .DS_Store
 */.DS_Store
+
+tracer_build/
+tracer_build/*
+memory_build/
+memory_build/*

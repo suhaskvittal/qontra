@@ -1,8 +1,15 @@
-# Declare CMAKE version 
+# Declare CMAKE version
 cmake_minimum_required(VERSION 3.20.2)
 project(QontraSim VERSION 0.1)
+
 # Declare CPP Version
 set(CMAKE_CXX_STANDARD 17)
+# Some libraries may require C++ versions higher than 17.
+#   -- Pymatching uses <bit>, which requires C++20.
+if (COMPILE_PYMATCHING)
+    set(CMAKE_CXX_STANDARD 20)
+endif()
+
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(FLEX REQUIRED)
@@ -32,8 +39,7 @@ set(QONTRA_FILES
     src/decoder/window.cpp
 #   src/decoder/restriction.cpp     # DISABLED FOR NOW -- RE-ENABLE LATER
     # Parsing
-    src/parsing/cmd.cpp
-    src/parsing/asm.cpp
+    src/parsing/cmd.cpp src/parsing/asm.cpp
     ${BISON_ASMParser_OUTPUTS}
     ${FLEX_ASMLexer_OUTPUTS}
     # Graphs
@@ -183,10 +189,28 @@ if (COMPILE_PROTEAN)
 endif()
 
 if (COMPILE_PROBIUS)
-    add_executable(probius_tracer src/main/probius/tracer.cpp)
-    add_executable(probius_memory src/main/probius/memory.cpp)
-    target_link_libraries(probius_tracer PRIVATE qontra)
-    target_link_libraries(probius_memory PRIVATE qontra)
+    # This is because PyMatching needs C++20, but LEMON does not work with
+    # C++20 for whatever reason.
+    if (COMPILE_PROBIUS_TRACER_ONLY)
+        set(COMPILE_PROBIUS_TRACER ON)
+        set(COMPILE_PROBIUS_MEMORY OFF)
+    elseif (COMPILE_PROBIUS_MEMORY_ONLY)
+        set(COMPILE_PROBIUS_TRACER OFF)
+        set(COMPILE_PROBIUS_MEMORY ON)
+    else()
+        set(COMPILE_PROBIUS_TRACER ON)
+        set(COMPILE_PROBIUS_MEMORY ON)
+    endif()
+
+    if (COMPILE_PROBIUS_TRACER)
+        add_executable(probius_tracer src/main/probius/tracer.cpp)
+        target_link_libraries(probius_tracer PRIVATE qontra)
+    endif()
+
+    if (COMPILE_PROBIUS_MEMORY)
+        add_executable(probius_memory src/main/probius/memory.cpp)
+        target_link_libraries(probius_memory PRIVATE qontra)
+    endif()
 endif()
 
 if (COMPILE_TESTS)
