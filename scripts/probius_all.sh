@@ -18,3 +18,11 @@ echo "RSC ALWAYS LRCS, SWAP--------------------------------------"
 echo "RSC ALWAYS LRCS, DQLR--------------------------------------"
 
 ./scripts/probius/rsc_memory_always_lrcs_dqlr.sh $proc $shots
+
+echo "RSC OPTIMAL LRCS, SWAP-------------------------------------"
+
+./scripts/probius/rsc_memory_optimal_lrcs_swaps.sh $proc $shots
+
+echo "RSC OPTIMAL LRCS, DQLR-------------------------------------"
+
+./scripts/probius/rsc_memory_optimal_lrcs_dqlr.sh $proc $shots

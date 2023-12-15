@@ -557,15 +557,27 @@ MemorySimulator::run_batch(uint64_t shots) {
         inject_idling_error_negative(xp_qubits);
 
 #ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
+        stim::simd_bits lrc_shots_with_lrcs(1);
         if (config.lrc_policy == lrc_policy_t::always) {
             lrc_execute_lrcs_from_await_queue();
             goto memory_sim_make_detection_events;
+        } else if (config.lrc_policy == lrc_policy_t::optimal) {
+            lrc_shots_with_lrcs = lrc_optimal_oracle();
+            // Save the state of the simulator.
+            sim->snapshot();
         }
 #endif
 
         elapsed_time += do_measurement(parity_qubits);
         inject_idling_error_positive(data_qubits);
         elapsed_time += do_gate("reset", parity_qubits);
+
+#ifdef QONTRA_MEMORY_SIM_EXT_ENABLED
+        if (config.lrc_policy == lrc_policy_t::optimal) {
+            // Now, rollback any changes on trials that had LRCs.
+            sim->rollback_where(lrc_shots_with_lrcs);
+        }
+#endif
 
 memory_sim_make_detection_events:
         // Create detection events.

@@ -78,13 +78,16 @@ MemorySimulator::lrc_execute_lrcs_from_await_queue() {
     lrc_measure_qubits(lrc_map);
 }
 
-void
+stim::simd_bits
 MemorySimulator::lrc_optimal_oracle() {
     // Just need to identify which qubits are leaked.
     std::vector<uint> usable_parity_qubits;
     std::vector<uint> leaked_qubits;
     // leak_table_tr has better cache locality than leak_table.
     stim::simd_bit_table leak_table_tr = sim->leak_table.transposed();
+
+    stim::simd_bits shots_with_leakage(sim->shots);
+    shots_with_leakage.clear();
     for (uint64_t t = 0; t < sim->shots; t++) {
         if (leak_table_tr[t].popcnt() == 0) continue;   // No leakage.
         for (uint dq : data_qubits) {
@@ -96,7 +99,10 @@ MemorySimulator::lrc_optimal_oracle() {
         // Perform maximum matching and schedule the LRCs.
         std::map<uint, uint> lrc_map = lrc_solve_maximum_matching(leaked_qubits, usable_parity_qubits);
         lrc_measure_qubits(lrc_map, (int64_t)t);
+        // Finally, set the corresponding bit shots_with_leakage.
+        shots_with_leakage[t] = 1;
     }
+    return shots_with_leakage;
 }
 
 void

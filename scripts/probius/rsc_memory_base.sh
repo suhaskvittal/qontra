@@ -1,7 +1,7 @@
 #!/bin/sh
 
-DISTANCES="3 5 7 9"
-ERRORS="5e-4 1e-3"
+DISTANCES="3 5 7"
+ERRORS="1e-3"
 ROUND_MULTIPLIER=5
 
 trace_folder="../data/probius/surface_code_memory/${POLICY_NAME}/traces"
