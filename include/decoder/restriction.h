@@ -32,8 +32,8 @@ protected:
     typedef std::tuple<uint64_t, uint64_t, std::string> match_t;
     typedef std::tuple<uint64_t, uint64_t, std::vector<match_t>, std::string> cc_t;
 
-    template <class V> graph::DecodingGraph::matrix_entry_t
-    get_error_chain_data(V* x, V* y, std::string rc) {
+    template <class VPTR> graph::DecodingGraph::matrix_entry_t
+    get_error_chain_data(VPTR x, VPTR y, std::string rc) {
         if (flags_are_active)   return c_decoding_graph[rc].get_error_chain_data_from_flagged_graph(x, y);
         else                    return c_decoding_graph[rc].get_error_chain_data(x, y);
     }
@@ -47,13 +47,14 @@ protected:
     std::vector<match_t>    blossom_subroutine(const std::vector<uint>&);
     std::vector<cc_t>       compute_connected_components(const std::vector<match_t>&);
 
-    graph::decoding::colored_vertex_t*  flatten(graph::decoding::colored_vertex_t*);
+    sptr<graph::decoding::colored_vertex_t> flatten(sptr<graph::decoding::colored_vertex_t>);
 
-    std::set<graph::face_t> get_incident_faces(graph::decoding::colored_vertex_t*);
+    std::set<graph::face_t> get_incident_faces(sptr<graph::decoding::colored_vertex_t>);
     stim::simd_bits         get_correction_for_face(graph::face_t);
 
-    std::set<graph::decoding::colored_vertex_t*>
-        get_incident_vertices(std::set<graph::decoding::colored_edge_t*>, std::string);
+    // Switches out the boundary connected to other. Used in case we can't make faces with the boundary.
+    std::set<sptr<graph::decoding::colored_edge_t>>
+        switch_out_boundaries(const std::set<sptr<graph::decoding::colored_edge_t>>&);
 
     graph::ColoredDecodingGraph c_decoding_graph;
 

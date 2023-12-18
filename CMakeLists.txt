@@ -1,6 +1,18 @@
-# Declare CMAKE version
 cmake_minimum_required(VERSION 3.20.2)
 project(QontraSim VERSION 0.1)
+
+#
+# QontraSim CMAKE Options:
+#   (1) COMPILE_MEMORY_SIM_EXT : compiles memory simulator extensions (i.e. LRCs).
+#   (2) COMPILE_NEURAL_DECODER : compiles the neural network decoder written with MLPACK.
+#   (3) COMPILE_PYMATCHING : compiles PyMatching v2.
+#   (4) LINK_LEMON : user must specify one of:
+#                       (i) LEMON_LIBRARY_DIR and LEMON_INCLUDE_DIR
+#                       (ii) LEMON_INSTALL_PATH, which sets 
+#                               LEMON_LIBRARY_DIR=${LEMON_INSTALL_PATH}/lemon/lib
+#                               LEMON_INCLUDE_DIR=${LEMON_INSTALL_PATH}/lemon/include
+#                    The user must compile LEMON on their end.
+#
 
 # Declare CPP Version
 set(CMAKE_CXX_STANDARD 17)
@@ -37,7 +49,7 @@ set(QONTRA_FILES
     # Decoders
     src/decoder/mwpm.cpp
     src/decoder/window.cpp
-#   src/decoder/restriction.cpp     # DISABLED FOR NOW -- RE-ENABLE LATER
+    src/decoder/restriction.cpp
     # Parsing
     src/parsing/cmd.cpp src/parsing/asm.cpp
     ${BISON_ASMParser_OUTPUTS}
@@ -84,12 +96,6 @@ if (COMPILE_NEURAL_DECODER)
     set(QONTRA_FILES ${QONTRA_FILES} src/decoder/neural.cpp)
 endif()
 
-if (COMPILE_UNIVERSAL_SIM)
-    message(STATUS "Will compile UNIVERSAL SIM.")
-    add_subdirectory(cytnx)
-    set(QONTRA_FILES ${QONTRA_FILES} src/sim/universal_sim.cpp)
-endif()
-
 find_package(MPI REQUIRED)
 
 add_library(qontra ${QONTRA_FILES})
@@ -129,10 +135,6 @@ if (COMPILE_NEURAL_DECODER)
         message(STATUS "Found OpenMP for the NN Decoder.")
         target_link_libraries(qontra PUBLIC OpenMP::OpenMP_CXX)
     endif()
-endif()
-
-if (COMPILE_UNIVERSAL_SIM)
-    target_link_libraries(qontra PUBLIC cytnx)
 endif()
 
 if (LINK_LEMON)

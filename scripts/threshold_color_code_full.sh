@@ -13,15 +13,15 @@ cd build
 
 make -j${proc}
 
-dpr_m=1
-dpr_i=2
+dpr_m=3
+dpr_i=3
 dpr_f=6
-for d in 5 7
+for d in 5
 do
-    dpr=$(( 3*dpr_m ))
-#   dpr=$(( d*dpr_f ))
+#   dpr=$(( 3*dpr_m ))
+    dpr=$(( d*dpr_f ))
     echo "d = ${d} (dpr = ${dpr})"
-    for p in 1e-4 2e-4 3e-4 4e-4
+    for p in 1e-3
     do
         echo "   p = ${p}"
         # Write memory asm.
