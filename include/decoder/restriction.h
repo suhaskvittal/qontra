@@ -47,14 +47,26 @@ protected:
     std::vector<match_t>    blossom_subroutine(const std::vector<uint>&);
     std::vector<cc_t>       compute_connected_components(const std::vector<match_t>&);
 
+    void    insert_error_chain_into(std::set<sptr<graph::decoding::colored_edge_t>>&,
+                                    std::map<sptr<graph::decoding::colored_edge_t>, uint>& incidence_map,
+                                    std::string component_color,
+                                    sptr<graph::decoding::colored_vertex_t> src,
+                                    sptr<graph::decoding::colored_vertex_t> dst,
+                                    std::string r_color);
+
     sptr<graph::decoding::colored_vertex_t> flatten(sptr<graph::decoding::colored_vertex_t>);
 
     std::set<graph::face_t> get_incident_faces(sptr<graph::decoding::colored_vertex_t>);
     stim::simd_bits         get_correction_for_face(graph::face_t);
 
     // Switches out the boundary connected to other. Used in case we can't make faces with the boundary.
-    std::set<sptr<graph::decoding::colored_edge_t>>
-        switch_out_boundaries(const std::set<sptr<graph::decoding::colored_edge_t>>&);
+    void switch_out_boundaries(
+                    std::set<sptr<graph::decoding::colored_edge_t>>&,
+                    std::map<sptr<graph::decoding::colored_edge_t>, uint>& incidence_map);
+    // Changes boundary edges to non-boundary edges/
+    void remap_boundary_edges(
+                    std::set<sptr<graph::decoding::colored_edge_t>>&,
+                    std::map<sptr<graph::decoding::colored_edge_t>, uint>& incidence_map);
 
     graph::ColoredDecodingGraph c_decoding_graph;
 

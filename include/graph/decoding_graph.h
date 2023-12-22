@@ -265,6 +265,10 @@ public:
         }
     }
 
+    fp_t get_face_probability(const face_t& fc) {
+        return face_prob_map[fc];
+    }
+
     DecodingGraph& operator[](const std::string& cc) {
         assert(restricted_color_map.count(cc));
         return restricted_graphs.at(restricted_color_map.at(cc));
@@ -277,7 +281,8 @@ private:
     std::map<std::string, int>      restricted_color_map;
     std::array<DecodingGraph, 3>    restricted_graphs;
 
-    std::map<face_t, std::set<uint>>   face_frame_map;
+    std::map<face_t, std::set<uint>>    face_frame_map;
+    std::map<face_t, fp_t>              face_prob_map;
 
     friend ColoredDecodingGraph
         to_colored_decoding_graph(const stim::Circuit&, DecodingGraph::Mode);

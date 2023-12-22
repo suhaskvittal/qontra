@@ -662,6 +662,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
                 }
                 face_t fc = make_face(v, b1, b2);
                 graph.face_frame_map[fc] = frames;
+                graph.face_prob_map[fc] = prob;
             } else if (dets.size() == 2) {
                 auto v1 = graph.get_vertex(dets[0]);
                 auto v2 = graph.get_vertex(dets[1]);
@@ -678,12 +679,14 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
                 }
                 face_t fc = make_face(v1, v2, b);
                 graph.face_frame_map[fc] = frames;
+                graph.face_prob_map[fc] = prob;
             } else {
                 auto v1 = graph.get_vertex(dets[0]);
                 auto v2 = graph.get_vertex(dets[1]);
                 auto v3 = graph.get_vertex(dets[2]);
                 face_t fc = make_face(v1, v2, v3);
                 graph.face_frame_map[fc] = frames;
+                graph.face_prob_map[fc] = prob;
             }
         };
     uint det_offset = 0;

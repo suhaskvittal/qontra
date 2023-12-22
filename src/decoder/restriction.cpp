@@ -36,7 +36,7 @@ uint locally_matches(
 {
     std::set<sptr<colored_edge_t>> shared_edges;
     // We want to check that s2 is a subset of s1.
-    for (auto e : s2) {
+    for (sptr<colored_edge_t> e : s2) {
         if (e->src == incident || e->dst == incident) {
             if (!s1.count(e))   return 0;
             else                shared_edges.insert(e);
@@ -63,7 +63,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
 #ifdef DEBUG
     std::cout << "Detectors ( HW = " << detectors.size() << " ):";
     for (uint d : detectors) {
-        auto v = c_decoding_graph.get_vertex(d);
+        sptr<colored_vertex_t> v = c_decoding_graph.get_vertex(d);
         std::cout << " " << d << "[";
         if (circuit.flag_detection_events.count(d)) {
             std::cout << "F, " << v->color;
@@ -95,49 +95,17 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
     std::set<match_t> cc_match_set;
     for (cc_t& comp : comps) {
         std::vector<match_t> matches = std::get<2>(comp);
-        std::set<sptr<colored_edge_t>> es;
         std::string cc_color = std::get<3>(comp);
-#ifdef DEBUG
-        std::cout << "connected component:\n";
-#endif
+
+        std::set<sptr<colored_edge_t>> es;
         for (match_t& m : matches) {
             cc_match_set.insert(m);
-            auto v = c_decoding_graph.get_vertex(std::get<0>(m));
-            auto w = c_decoding_graph.get_vertex(std::get<1>(m));
-#ifdef DEBUG
-            std::cout << "\t" << print_v(v) << " <--> " << print_v(w) << ":";
-#endif
+            sptr<colored_vertex_t> v = c_decoding_graph.get_vertex(std::get<0>(m)),
+                                    w = c_decoding_graph.get_vertex(std::get<1>(m));
             std::string r = std::get<2>(m);
-            auto error_data = get_error_chain_data(v, w, r);
-            auto error_chain = error_data.error_chain;
-            for (uint j = 1; j < error_chain.size(); j++) {
-                sptr<colored_vertex_t> u1 = std::static_pointer_cast<colored_vertex_t>(error_chain[j-1]);
-                sptr<colored_vertex_t> u2 = std::static_pointer_cast<colored_vertex_t>(error_chain[j]);
-                if (is_colored_boundary(u1) && is_colored_boundary(u2)) continue;
-                if (u1->color != cc_color && u2->color != cc_color) continue;
-                // Flatten the vertices.
-                sptr<colored_vertex_t> fu1 = flatten(u1);
-                sptr<colored_vertex_t> fu2 = flatten(u2);
-                auto e = c_decoding_graph.get_edge(fu1, fu2);
-                if (e == nullptr) {
-#ifdef DEBUG
-                    std::cout << " (dne)" << print_v(fu1) << ", " << print_v(fu2);
-#endif
-                    continue;
-                }
-#ifdef DEBUG
-                std::cout << " " << print_v(fu1) << ", " << print_v(fu2);
-#endif
-                xor_entry_into(e, es);
-            }
-#ifdef DEBUG
-            std::cout << "\n";
-#endif
+            insert_error_chain_into(es, in_cc_count_map, cc_color, v, w, r);
         }
-        for (auto e : es) {
-            in_cc_set.insert(e);
-            in_cc_count_map[e]++;
-        }
+        for (auto e : es) in_cc_set.insert(e);
         in_cc_array.push_back(std::make_pair(es, cc_color));
     }
     // Now compute out of cc, which contains anything not in cc.
@@ -151,35 +119,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
 
         std::string r = std::get<2>(m);
         if (r == "gb" || r == "bg") continue;
-        auto error_data = get_error_chain_data(v, w, r);
-        auto error_chain = error_data.error_chain;
-#ifdef DEBUG
-        std::cout << "\t" << print_v(v) << " <--> " << print_v(w) 
-                << " (length = " << (error_chain.size()-1) << "):";
-#endif
-        for (uint j = 1; j < error_chain.size(); j++) {
-            sptr<colored_vertex_t> u1 = std::static_pointer_cast<colored_vertex_t>(error_chain[j-1]);
-            sptr<colored_vertex_t> u2 = std::static_pointer_cast<colored_vertex_t>(error_chain[j]);
-            if (is_colored_boundary(u1) && is_colored_boundary(u2)) continue;
-            // Flatten the vertices.
-            sptr<colored_vertex_t> fu1 = flatten(u1);
-            sptr<colored_vertex_t> fu2 = flatten(u2);
-            auto e = c_decoding_graph.get_edge(fu1, fu2);
-            if (e == nullptr) {
-#ifdef DEBUG
-                std::cout << " -- (dne)" << print_v(fu1) << ", " << print_v(fu2);
-#endif
-                continue;
-            }
-#ifdef DEBUG
-            std::cout << " -- " << print_v(fu1) << ", " << print_v(fu2);
-#endif
-            not_cc_set.insert(e);
-            not_cc_count_map[e]++;
-        }
-#ifdef DEBUG
-        std::cout << "\n";
-#endif
+        insert_error_chain_into(not_cc_set, not_cc_count_map, "r", v, w, r);
     }
 
     if (in_cc_set.empty() && not_cc_set.empty()) {
@@ -234,6 +174,7 @@ r_compute_correction:
     for (auto v : not_cc_incident) std::cout << " " << print_v(v);
     std::cout << "\n";
 #endif
+    bool no_progress = true;
     for (auto v : all_incident) {
         // Can only match one of not_cc or in_cc.
         std::set<face_t> incident_faces = get_incident_faces(v);
@@ -253,14 +194,12 @@ r_compute_correction:
 #endif
         uint64_t enf = 1L << nf;
 
-        uint64_t faces_cc = std::numeric_limits<uint64_t>::max();
-        uint64_t faces_no_cc = std::numeric_limits<uint64_t>::max();
-        uint64_t best_intersect_with_cc = 0;
-        uint64_t best_intersect_with_no_cc = 0;
         // We need to track intersections on both sides.
         std::set<sptr<colored_edge_t>> best_cc_boundary, best_no_cc_boundary;
         stim::simd_bits best_cc_corr(obs);
         stim::simd_bits best_no_cc_corr(obs);
+        fp_t best_prob_cc = 0.0;
+        fp_t best_prob_no_cc = 0.0;
         for (uint64_t i = 0; i < enf; i++) {
             // Interpret the bits of i as the faces we will examine.
             std::set<sptr<colored_edge_t>> f_boundary;
@@ -272,6 +211,7 @@ r_compute_correction:
             uint ii = 0;
 
             uint64_t faces = 0;
+            fp_t pr = 1.0;
             while (j) {
                 if (j & 1) {
                     face_t f = *it;
@@ -296,6 +236,7 @@ r_compute_correction:
                     }
                     faces++;
                     local_corr ^= face_corr_list[ii];
+                    pr *= c_decoding_graph.get_face_probability(f);
                 }
                 j >>= 1;
                 it++;
@@ -307,35 +248,27 @@ r_compute_correction:
             uint int_with_no_cc = locally_matches(not_cc_set, f_boundary, v);
             if (int_with_cc == 0 && int_with_no_cc == 0) continue;
 
-            if (int_with_cc > best_intersect_with_cc
-                || (int_with_cc == best_intersect_with_cc && faces < faces_cc)) 
-            {
-                best_intersect_with_cc = int_with_cc;
-                faces_cc = faces;
+            if (int_with_cc > 0 && pr > best_prob_cc) {
+                best_prob_cc = pr;
                 best_cc_boundary = f_boundary;
                 best_cc_corr = local_corr;
 #ifdef DEBUG
-                std::cout << "\tbest in cc now face set " << i << " (corr = " << local_corr[0] << ", int = " << best_intersect_with_cc << ")\n";
+                std::cout << "\tbest in cc now face set " << i << " (corr = " << local_corr[0] << ", int = " << int_with_cc << ", pr = " << pr << ")\n";
 #endif
             } 
-            if (int_with_no_cc > best_intersect_with_no_cc
-                || (int_with_no_cc == best_intersect_with_no_cc && faces < faces_no_cc)) 
-            {
-                best_intersect_with_no_cc = int_with_no_cc;
-                faces_no_cc = faces;
+            if (int_with_no_cc > 0 && pr > best_prob_no_cc) {
+                best_prob_no_cc = pr;
                 best_no_cc_boundary = f_boundary;
                 best_no_cc_corr = local_corr;
 #ifdef DEBUG
-                std::cout << "\tbest no cc now face set " << i << " (corr = " << local_corr[0] << ", int = " << best_intersect_with_no_cc << ")\n";
+                std::cout << "\tbest no cc now face set " << i << " (corr = " << local_corr[0] << ", int = " << int_with_no_cc << ", pr = " << pr << ")\n";
 #endif
             }
         }
         std::set<sptr<colored_edge_t>> best_boundary;
         stim::simd_bits best_corr(obs);
         // Choose boundary with minimum size
-        if (best_intersect_with_cc > best_intersect_with_no_cc
-            || (best_intersect_with_cc == best_intersect_with_no_cc && v->color != "r")) 
-        {
+        if (best_prob_cc > best_prob_no_cc) {
             best_boundary = best_cc_boundary;
             best_corr = best_cc_corr;
             for (auto e : best_boundary) {
@@ -353,6 +286,7 @@ r_compute_correction:
 #endif
         // Commit the correction for the boundary and erase the edges.
         corr ^= best_corr;
+        no_progress &= best_boundary.empty();
     }
     // We should now filter out in_cc_set and not_cc_set for any widowed edges (edges that
     // cannot possibly form a face with any other edge).
@@ -393,9 +327,17 @@ r_compute_correction:
     if (in_cc_set.size() > 1 || not_cc_set.size() > 1) {
         if (tries < 100) {
             tries++;
-            // Change all boundaries in case of issues. Maybe wrong boundary.
-            in_cc_set = switch_out_boundaries(in_cc_set);
-            not_cc_set = switch_out_boundaries(not_cc_set);
+            if (no_progress) {
+                if (tries < 10) {
+                    // Change all boundaries in case of issues. Maybe wrong boundary.
+                    switch_out_boundaries(in_cc_set, in_cc_count_map);
+                    switch_out_boundaries(not_cc_set, not_cc_count_map);
+                } else {
+                    // It could also be some weird boundary CX edge.
+                    remap_boundary_edges(in_cc_set, in_cc_count_map);
+                    remap_boundary_edges(not_cc_set, not_cc_count_map);
+                }
+            }
             goto r_compute_correction;
         } else {
 #ifdef DEBUG
@@ -705,6 +647,66 @@ RestrictionDecoder::compute_connected_components(const std::vector<RestrictionDe
     return cc_list;
 }
 
+void
+RestrictionDecoder::insert_error_chain_into(
+        std::set<sptr<colored_edge_t>>& edge_set,
+        std::map<sptr<colored_edge_t>, uint>& incidence_map,
+        std::string component_color,
+        sptr<colored_vertex_t> src,
+        sptr<colored_vertex_t> dst,
+        std::string r_color)
+{
+#ifdef DEBUG
+    std::cout << "\t" << print_v(src) << " <--> " << print_v(dst) << ":";
+#endif
+    auto error_data = get_error_chain_data(src, dst, r_color);
+    auto error_chain = error_data.error_chain;
+    for (uint j = 1; j < error_chain.size(); j++) {
+        sptr<colored_vertex_t> u1 = std::static_pointer_cast<colored_vertex_t>(error_chain[j-1]);
+        sptr<colored_vertex_t> u2 = std::static_pointer_cast<colored_vertex_t>(error_chain[j]);
+        if (is_colored_boundary(u1) && is_colored_boundary(u2)) continue;
+        if (u1->color != component_color && u2->color != component_color) continue;
+        // Flatten the vertices.
+        sptr<colored_vertex_t> fu1 = flatten(u1);
+        sptr<colored_vertex_t> fu2 = flatten(u2);
+        if (fu1 == fu2) continue;
+        auto e = c_decoding_graph.get_edge(fu1, fu2);
+        if (e == nullptr) {
+            // Get path between the two vertices. This is likely some weird CX edge.
+            insert_error_chain_into(edge_set, incidence_map, component_color, fu1, fu2, r_color);
+        } else if (fu1->color == fu2->color) {
+            // This is some weird CX edge. Get a common neighbor of the two vertices.
+            sptr<colored_vertex_t> fu3;
+            for (sptr<vertex_t> x : c_decoding_graph[r_color].get_common_neighbors(u1, u2)) {
+                sptr<colored_vertex_t> _x = std::static_pointer_cast<colored_vertex_t>(x);
+                sptr<colored_vertex_t> fx = flatten(_x);
+                if (fx->color == fu1->color) continue;
+                if (!c_decoding_graph.contains(fu1, fx) || !c_decoding_graph.contains(fu2, fx)) continue;
+                fu3 = fx;
+                break;
+            }
+            auto ex1 = c_decoding_graph.get_edge(fu1, fu3);
+            auto ex2 = c_decoding_graph.get_edge(fu2, fu3);
+#ifdef DEBUG
+            std::cout << " " << print_v(fu1) << ", " << print_v(fu3) << ", " << print_v(fu2);
+#endif
+            edge_set.insert(ex1);
+            edge_set.insert(ex2);
+            incidence_map[ex1]++;
+            incidence_map[ex2]++;
+        } else {
+#ifdef DEBUG
+            std::cout << " " << print_v(fu1) << ", " << print_v(fu2);
+#endif
+            edge_set.insert(e);
+            incidence_map[e]++;
+        }
+    }
+#ifdef DEBUG
+    std::cout << "\n";
+#endif
+}
+
 sptr<colored_vertex_t>
 RestrictionDecoder::flatten(sptr<colored_vertex_t> v) {
     if (is_colored_boundary(v)) return v;
@@ -756,15 +758,19 @@ RestrictionDecoder::get_correction_for_face(face_t fc) {
     return corr;
 }
 
-std::set<sptr<colored_edge_t>>
-RestrictionDecoder::switch_out_boundaries(const std::set<sptr<colored_edge_t>>& edge_set) {
-    std::set<sptr<colored_edge_t>> new_edge_set;
-    for (auto e : edge_set) {
+void
+RestrictionDecoder::switch_out_boundaries(
+        std::set<sptr<colored_edge_t>>& edge_set,
+        std::map<sptr<colored_edge_t>, uint>& incidence_map) 
+{
+    std::set<sptr<colored_edge_t>> new_edges;
+    for (auto it = edge_set.begin(); it != edge_set.end(); ) {
+        sptr<colored_edge_t> e = *it;
         auto src = std::reinterpret_pointer_cast<colored_vertex_t>(e->src);
         auto dst = std::reinterpret_pointer_cast<colored_vertex_t>(e->dst);
 
         if (!is_colored_boundary(src) && !is_colored_boundary(dst)) {
-            new_edge_set.insert(e);
+            it++;
             continue;
         }
         
@@ -789,14 +795,73 @@ RestrictionDecoder::switch_out_boundaries(const std::set<sptr<colored_edge_t>>& 
             else                    boundary_index == RED_BOUNDARY_INDEX;
         }
         auto new_boundary = c_decoding_graph.get_vertex(boundary_index);
-        if (!c_decoding_graph.contains(new_boundary, other)) {
-            new_edge_set.insert(e);
-        } else {
+        if (c_decoding_graph.contains(new_boundary, other)) {
             auto new_e = c_decoding_graph.get_edge(new_boundary, other);
-            new_edge_set.insert(new_e);
+            new_edges.insert(new_e);
+            
+            incidence_map[new_e] = incidence_map[e];
+            incidence_map.erase(e);
+
+            it = edge_set.erase(it);
+        } else {
+            it++;
         }
     }
-    return new_edge_set;
+    for (sptr<colored_edge_t> e : new_edges) edge_set.insert(e);
+}
+
+void
+RestrictionDecoder::remap_boundary_edges(
+        std::set<sptr<colored_edge_t>>& edge_set,
+        std::map<sptr<colored_edge_t>, uint>& incidence_map) 
+{
+    std::set<sptr<colored_edge_t>> new_edges;
+    for (auto it = edge_set.begin(); it != edge_set.end(); ) {
+        sptr<colored_edge_t> e = *it;
+        auto src = std::reinterpret_pointer_cast<colored_vertex_t>(e->src);
+        auto dst = std::reinterpret_pointer_cast<colored_vertex_t>(e->dst);
+        if (!is_colored_boundary(src) && !is_colored_boundary(dst)) {
+            it++;
+            continue;
+        }
+        sptr<colored_vertex_t> boundary, other;
+        if (is_colored_boundary(src)) {
+            boundary = src;
+            other = dst;
+        } else {
+            boundary = dst;
+            other = src;
+        }
+        // We want a common neighbor that is not the boundary, and has the same
+        // color as the existing boundary.
+        sptr<colored_vertex_t> common_non_boundary = nullptr;
+        for (sptr<colored_vertex_t> x : c_decoding_graph.get_common_neighbors(boundary, other)) {
+            if (is_colored_boundary(x)) continue;
+            if (x->color != boundary->color) continue;
+            sptr<colored_vertex_t> fx = flatten(x);
+            if (!c_decoding_graph.contains(fx, other)) continue;
+            common_non_boundary = fx;
+            break;
+        }
+
+        if (common_non_boundary == nullptr) {
+            it++;
+            continue;
+        }
+        // Replace edge with new edge.
+        sptr<colored_edge_t> new_e = c_decoding_graph.get_edge(other, common_non_boundary);
+        if (new_e == nullptr) {
+            it++;
+        } else {
+            new_edges.insert(new_e);
+
+            incidence_map[new_e] = incidence_map[e];
+            incidence_map.erase(e);
+
+            it = edge_set.erase(it);
+        }
+    }
+    for (auto e : new_edges) edge_set.insert(e);
 }
 
 }   // qontra

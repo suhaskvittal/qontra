@@ -13,13 +13,13 @@ cd build
 
 make -j${proc}
 
-dpr_m=3
-dpr_i=3
+dpr_m=10
+dpr_i=5
 dpr_f=6
-for d in 5
+for d in 9 
 do
-#   dpr=$(( 3*dpr_m ))
-    dpr=$(( d*dpr_f ))
+    dpr=$(( 3*dpr_m ))
+#   dpr=$(( d*dpr_f ))
     echo "d = ${d} (dpr = ${dpr})"
     for p in 1e-3
     do
