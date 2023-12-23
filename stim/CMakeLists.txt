@@ -22,7 +22,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY out)
 
 # Convert desired SIMD_WIDTH into machine architecture flags.
 if(NOT(SIMD_WIDTH))
-    set(MACHINE_FLAG "-march=native")
+    set(MACHINE_FLAG "")
+#   set(MACHINE_FLAG "-march=native")
 elseif(SIMD_WIDTH EQUAL 256)
     set(MACHINE_FLAG "-mavx2" "-msse2")
 elseif(SIMD_WIDTH EQUAL 128)
@@ -99,91 +100,6 @@ set(SOURCE_FILES_NO_MAIN
         src/stim/stabilizers/tableau_transposed_raii.cc
         src/stim.cc
         )
-set(TEST_FILES
-        src/stim/arg_parse.test.cc
-        src/stim/circuit/circuit.test.cc
-        src/stim/circuit/gate_data.test.cc
-        src/stim/circuit/gate_target.test.cc
-        src/stim/dem/detector_error_model.test.cc
-        src/stim/gen/circuit_gen_main.test.cc
-        src/stim/gen/circuit_gen_params.test.cc
-        src/stim/gen/gen_color_code.test.cc
-        src/stim/gen/gen_rep_code.test.cc
-        src/stim/gen/gen_surface_code.test.cc
-        src/stim/io/measure_record.test.cc
-        src/stim/io/measure_record_batch.test.cc
-        src/stim/io/measure_record_batch_writer.test.cc
-        src/stim/io/measure_record_reader.test.cc
-        src/stim/io/measure_record_writer.test.cc
-        src/stim/io/sparse_shot.test.cc
-        src/stim/main_namespaced.test.cc
-        src/stim/mem/bit_ref.test.cc
-        src/stim/mem/fixed_cap_vector.test.cc
-        src/stim/mem/monotonic_buffer.test.cc
-        src/stim/mem/simd_bit_table.test.cc
-        src/stim/mem/simd_bits.test.cc
-        src/stim/mem/simd_bits_range_ref.test.cc
-        src/stim/mem/simd_compat.test.cc
-        src/stim/mem/simd_util.test.cc
-        src/stim/mem/sparse_xor_vec.test.cc
-        src/stim/probability_util.test.cc
-        src/stim/search/graphlike/algo.test.cc
-        src/stim/search/graphlike/edge.test.cc
-        src/stim/search/graphlike/graph.test.cc
-        src/stim/search/graphlike/node.test.cc
-        src/stim/search/graphlike/search_state.test.cc
-        src/stim/search/hyper/algo.test.cc
-        src/stim/search/hyper/edge.test.cc
-        src/stim/search/hyper/graph.test.cc
-        src/stim/search/hyper/node.test.cc
-        src/stim/search/hyper/search_state.test.cc
-        src/stim/simulators/dem_sampler.test.cc
-        src/stim/simulators/detection_simulator.test.cc
-        src/stim/simulators/error_analyzer.test.cc
-        src/stim/simulators/error_matcher.test.cc
-        src/stim/simulators/frame_simulator.test.cc
-        src/stim/simulators/matched_error.test.cc
-        src/stim/simulators/measurements_to_detection_events.test.cc
-        src/stim/simulators/tableau_simulator.test.cc
-        src/stim/simulators/vector_simulator.test.cc
-        src/stim/stabilizers/conversions.test.cc
-        src/stim/stabilizers/pauli_string.test.cc
-        src/stim/stabilizers/tableau.test.cc
-        src/stim/stabilizers/tableau_iter.test.cc
-        src/stim.test.cc
-        src/stim_included_twice.test.cc
-        src/stim/str_util.test.cc
-        src/stim/test_util.test.cc
-        )
-set(BENCHMARK_FILES
-        src/stim/benchmark_main.perf.cc
-        src/stim/benchmark_util.perf.cc
-        src/stim/circuit/circuit.perf.cc
-        src/stim/circuit/gate_data.perf.cc
-        src/stim/io/measure_record_reader.perf.cc
-        src/stim/main_namespaced.perf.cc
-        src/stim/mem/simd_bit_table.perf.cc
-        src/stim/mem/simd_bits.perf.cc
-        src/stim/mem/simd_compat.perf.cc
-        src/stim/mem/sparse_xor_vec.perf.cc
-        src/stim/probability_util.perf.cc
-        src/stim/search/graphlike/algo.perf.cc
-        src/stim/simulators/dem_sampler.perf.cc
-        src/stim/simulators/error_analyzer.perf.cc
-        src/stim/simulators/frame_simulator.perf.cc
-        src/stim/simulators/tableau_simulator.perf.cc
-        src/stim/stabilizers/pauli_string.perf.cc
-        src/stim/stabilizers/tableau.perf.cc
-        src/stim/stabilizers/tableau_iter.perf.cc
-        )
-
-#add_executable(stim src/main.cc ${SOURCE_FILES_NO_MAIN})
-#if(NOT(MSVC))
-#    target_compile_options(stim PRIVATE -O3 -Wall -Wpedantic -fno-strict-aliasing ${MACHINE_FLAG})
-#    target_link_options(stim PRIVATE -pthread -O3)
-#else()
-#    target_compile_options(stim PRIVATE ${MACHINE_FLAG})
-#endif()
 
 add_library(libstim ${SOURCE_FILES_NO_MAIN})
 set_target_properties(libstim PROPERTIES PREFIX "")
@@ -193,26 +109,3 @@ if(NOT(MSVC))
     target_link_options(libstim PUBLIC -pthread -O3)
 endif()
 target_compile_options(libstim PUBLIC ${MACHINE_FLAG})
-
-#add_executable(stim_benchmark ${SOURCE_FILES_NO_MAIN} ${BENCHMARK_FILES})
-#if(NOT(MSVC))
-#    target_compile_options(stim_benchmark PRIVATE -Wall -Wpedantic -O3 -fno-strict-aliasing ${MACHINE_FLAG})
-#    target_link_options(stim_benchmark PRIVATE -pthread)
-#else()
-#    target_compile_options(stim_benchmark PRIVATE ${MACHINE_FLAG})
-#endif()
-#
-#find_package(GTest QUIET)
-#if(${GTest_FOUND})
-#    add_executable(stim_test ${SOURCE_FILES_NO_MAIN} ${TEST_FILES})
-#    target_link_libraries(stim_test GTest::gtest GTest::gtest_main)
-#    target_compile_options(stim_test PRIVATE -Wall -Wpedantic -Werror -fno-strict-aliasing -fsanitize=undefined -fsanitize=address ${MACHINE_FLAG})
-#    target_link_options(stim_test PRIVATE -fsanitize=undefined -fsanitize=address -pthread)
-#
-#    add_executable(stim_test_o3 ${SOURCE_FILES_NO_MAIN} ${TEST_FILES})
-#    target_link_libraries(stim_test_o3 GTest::gtest GTest::gtest_main)
-#    target_compile_options(stim_test_o3 PRIVATE -O3 -Wall -Wpedantic -Werror -fno-strict-aliasing ${MACHINE_FLAG})
-#    target_link_options(stim_test_o3 PRIVATE -pthread)
-#else()
-#    message("WARNING: Skipped stim_test target. `GTest` not found. To fix, follow Standalone CMake Project install instructions at https://github.com/google/googletest/blob/master/googletest/README.md")
-#endif()

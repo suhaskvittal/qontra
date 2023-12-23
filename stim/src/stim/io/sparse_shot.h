@@ -17,6 +17,7 @@
 #ifndef _STIM_IO_SPARSE_SHOT_H
 #define _STIM_IO_SPARSE_SHOT_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
