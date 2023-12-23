@@ -74,6 +74,11 @@ asm_add_instruction(struct __asm_inst_t inst_data) {
         for (uint i = 0; i < inst_data.size; i++) {
             inst.operands.qubits.push_back(inst_data.operands[i].integer);
         }
+    } else if (IS_CLASSICALLY_CONTROLLED.count(inst.name)) {
+        for (uint i = 0; i < inst_data.size; i += 2) {
+            inst.operands.measurements.push_back(inst_data.operands[i].integer);
+            inst.operands.qubits.push_back(inst_data.operands[i+1].integer);
+        }
     } else if (INSTRUCTION_USES_ANGLES.count(inst.name)) {
         // Now, we need to check for floats, as those are angles.
         for (uint i = 0; i < inst_data.size; i++) {

@@ -7,8 +7,8 @@
 
 namespace qontra {
 
-const std::regex no_arg_opt("-([1-9A-Za-z]+)");
-const std::regex w_arg_opt("--([1-9A-Za-z-]+)");
+const std::regex no_arg_opt("-([1-9A-Za-z_-]+)");
+const std::regex w_arg_opt("--([1-9A-Za-z_-]+)");
 
 CmdParser::CmdParser(int argc, char* argv[])
     :option_pool(),
@@ -18,11 +18,11 @@ CmdParser::CmdParser(int argc, char* argv[])
     while (ptr < argc) {
         std::string s(argv[ptr]);
         std::smatch m;
-        if (std::regex_match(s, m, no_arg_opt)) {
-            option_pool.insert(m[1]);
-        } else if (std::regex_match(s, m, w_arg_opt)) {
+        if (std::regex_match(s, m, w_arg_opt)) {
             option_pool.insert(m[1]);
             option_to_arg[m[1]] = argv[++ptr];
+        } else if (std::regex_match(s, m, no_arg_opt)) {
+            option_pool.insert(m[1]);
         }
         ptr++;
     }

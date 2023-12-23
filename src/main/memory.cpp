@@ -1,40 +1,59 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   28 August 2023
  * */
 
-#define ARMA_OPENMP_THREADS 32
+//#define ARMA_OPENMP_THREADS 32
+//#define DISABLE_MPI
+//#define USE_NEURAL_NET
 
-#include "decoder/mwpm.h"
-#include "decoder/neural.h"
-#include "decoder/restriction.h"
-#include "experiments.h"
-#include "parsing/cmd.h"
-#include "instruction.h"
-#include "tables.h"
+#include <decoder/mwpm.h>
+#include <decoder/chromobius.h>
+#include <experiments.h>
+#include <parsing/cmd.h>
+#include <instruction.h>
+#include <stimext.h>
+#include <tables.h>
 
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 
-#include <omp.h>
-
+#ifdef USE_NEURAL_NET
+#include <decoder/neural.h>
 #include <armadillo>
+#endif
 
 using namespace qontra;
 
-#define DISABLE_MPI
+enum class model_style { cc, pheno, circuit };
 
-stim::Circuit
-get_circuit(const schedule_t& sch, fp_t p) {
+DetailedStimCircuit
+get_circuit(const schedule_t& sch, fp_t p, model_style m=model_style::circuit) {
     const uint n = get_number_of_qubits(sch);
 
     tables::ErrorAndTiming et;
+    et.e_g1q *= 0.1;
+    et.e_idle *= 0.1;
+
+    // TEMPORARY MODIFICATIONS START
+    et.e_idle = 0.0;
+    // TEMPORARY MODIFICATIONS END
+
+    if (m == model_style::pheno) {
+        et.e_g1q = 0.0;
+        et.e_g2q = 0.0;
+    }
+    if (m == model_style::cc) {
+        et.e_g1q = 0.0;
+        et.e_g2q = 0.0;
+        et.e_m1w0 = 0.0;
+        et.e_m0w1 = 0.0;
+    }
     et = et * (1000 * p);
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
-    stim::Circuit circ = schedule_to_stim(sch, errors, timing);
+    DetailedStimCircuit circ = schedule_to_stim(sch, errors, timing, p);
     return circ;
 }
 
@@ -52,49 +71,77 @@ int main(int argc, char* argv[]) {
     fp_t p;
     uint64_t shots;
 
-    uint64_t tshots = 10'000'000;
+    int32_t seed = 0;
+    model_style m = model_style::circuit;
+
+    uint64_t tshots = 0;
     uint64_t epochs = 100;
+    std::string model_file = "model.bin";
 
     if (!pp.get_string("asm", asm_file))    return 1;
     if (!pp.get_string("out", output_file)) return 1;
     if (!pp.get_float("p", p))  return 1;
     if (!pp.get_uint64("shots", shots)) return 1;
 
+    pp.get_int32("seed", seed);
+
+    if (pp.option_set("pheno")) m = model_style::pheno;
+    if (pp.option_set("cc")) m = model_style::cc;
+
+    experiments::G_BASE_SEED = seed;
+
     pp.get_uint64("epochs", epochs);
     pp.get_uint64("tshots", tshots);
+    pp.get_string("model-file", model_file);
 
-    std::cout << "arma config: " << arma::arma_config::mp_threads << "\n";
-    std::cout << "arma threads: " << arma::mp_thread_limit::get() << "," << arma::mp_thread_limit::in_parallel() << "\n";
-    std::cout << "omp threads: " << omp_get_max_threads() << "\n";
-
-    // Get schedule from file.
-    schedule_t sch = schedule_from_file(asm_file);
-    // Define Decoder.
-    using namespace mlpack;
-    stim::Circuit error_model = get_circuit(sch, p);
-    NeuralDecoder dec(error_model);
-    dec.model.Add<Linear>(256);
-    dec.model.Add<TanH>();
-    dec.model.Add<Linear>(64);
-    dec.model.Add<TanH>();
-    dec.model.Add<Linear>(1);
-    dec.model.Add<TanH>();
-    dec.config.max_epochs = epochs;
-    dec.training_circuit = get_circuit(sch, p);
-    /*
-    MWPMDecoder dec(error_model);
-    RestrictionDecoder dec(error_model);
-    */
-
-    // Setup experiment.
+    // Setup experiment settings.
     experiments::G_SHOTS_PER_BATCH = 1'000'000;
 #ifdef DISABLE_MPI
     experiments::G_USE_MPI = false;
 #endif
+
+    // Get schedule from file.
+    schedule_t sch = schedule_from_file(asm_file);
+    // Define Decoder.
+    DetailedStimCircuit error_model = get_circuit(sch, p, m);
+#ifdef USE_NEURAL_NET
+    using namespace mlpack;
+    NeuralDecoder dec(error_model);
+    // Check if model file exists. If so, load it in. 
+    // If not, then make and train it.
+    std::filesystem::path model_file_path(model_file);
+    if (std::filesystem::exists(model_file_path)) {
+        dec.load_model_from_file(model_file);
+    } else {
+        dec.model.Add<Linear>(256);
+        dec.model.Add<TanH>();
+        dec.model.Add<Linear>(64);
+        dec.model.Add<TanH>();
+        dec.model.Add<Linear>(error_model.count_observables());
+        dec.model.Add<TanH>();
+    }
+
+    if (tshots > 0) {
+        dec.config.max_epochs = epochs;
+        dec.training_circuit = get_circuit(sch, p, m);
+
+        std::cout << "starting training...\n";
+        dec.train(tshots);
+
+        dec.save_model_to_file(model_file);
+    }
+#else
+
+#ifdef QONTRA_CHROMOBIUS_ENABLED
+    Chromobius dec(circuit);
+#else
+    std::cerr << "Chromobius not found.\n";
+    exit(1);
+#endif
+
+#endif
     experiments::memory_params_t params;
     params.shots = shots;
-    
-    dec.train(tshots);
     // Run experiment.
     experiments::memory_result_t res = memory_experiment(&dec, params);
 
@@ -104,7 +151,6 @@ int main(int argc, char* argv[]) {
         std::filesystem::path output_folder(output_path.parent_path());
         safe_create_directory(output_folder);
     }
-
     bool write_header = !std::filesystem::exists(output_path);
 #ifndef DISABLE_MPI
     MPI_Barrier(MPI_COMM_WORLD);

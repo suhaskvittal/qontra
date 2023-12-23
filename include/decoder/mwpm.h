@@ -30,20 +30,13 @@ const fp_t MWPM_INTEGER_SCALE = 1000.0;
 
 class MWPMDecoder : public Decoder {
 public:
-    MWPMDecoder(const stim::Circuit& circ)
+    MWPMDecoder(DetailedStimCircuit circ)
         :Decoder(circ)
     {}
 
     std::string name(void) override { return "MWPMDecoder"; }
 
-    Decoder::result_t       decode_error(const syndrome_t&) override;
-private:
-    //
-    // Extra functionality for restriction decoder:
-    //
-    friend class RestrictionDecoder;
-    std::map<std::pair<graph::decoding::vertex_t*, graph::decoding::vertex_t*>, fp_t> 
-        override_weights;
+    Decoder::result_t   decode_error(stim::simd_bits_range_ref) override;
 };
 
 }   // qontra

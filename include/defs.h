@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <vector>
 
 #include <stdint.h>
@@ -24,7 +25,12 @@ typedef uint32_t uint;
 
 typedef uint64_t                addr_t;
 typedef std::vector<uint64_t>   vlw_t;
-typedef stim::simd_bits         syndrome_t;
+
+template <class T>
+using sptr=std::shared_ptr<T>;
+
+template <class T>
+using uptr=std::unique_ptr<T>;
 
 const fp_t KB = 1024.0;
 const fp_t MB = KB*1024.0;
@@ -82,6 +88,15 @@ xor_into(std::set<T>& s, T x) {
     else            s.insert(x);
 }
 
+template <typename T> int
+number_of_common_elements(const std::vector<T>& arr1, const std::vector<T>& arr2) {
+    std::set<T> ss(arr1.begin(), arr1.end());
+    for (T x : arr2) {
+        if (!ss.count(x)) return false;
+        ss.erase(x);
+    }
+    return ss.size();
+}
 
  // T must either be stim::simd_bits or stim::simd_bits_range_ref
 template <class T> inline vlw_t

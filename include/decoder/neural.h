@@ -6,6 +6,8 @@
 #ifndef NEURAL_DECODER_h
 #define NEURAL_DECODER_h
 
+#define MLPACK_ENABLE_ANN_SERIALIZATION
+
 #include "decoder/decoder.h"
 #include "experiments.h"
 
@@ -15,23 +17,24 @@ namespace qontra {
 
 class NeuralDecoder : public Decoder {
 public:
-    NeuralDecoder(const stim::Circuit& circ)
+    NeuralDecoder(DetailedStimCircuit circ)
         :Decoder(circ, graph::DecodingGraph::Mode::DO_NOT_BUILD),
         training_circuit(circ)
     {}
 
     void                train(uint64_t shots, bool verbose=true);
-    Decoder::result_t   decode_error(const syndrome_t&) override;
+    Decoder::result_t   decode_error(stim::simd_bits_range_ref) override;
+    void                load_model_from_file(std::string);
+    void                save_model_to_file(std::string);
 
-    std::string         name() override { return "NeuralDecoder"; }
-
-    mlpack::FFN<mlpack::MeanSquaredError> model;
-
-    stim::Circuit training_circuit;
+    std::string name() override { return "NeuralDecoder"; }
 
     struct {
         int max_epochs = 100;
     } config;
+
+    mlpack::FFN<mlpack::MeanSquaredError> model;
+    DetailedStimCircuit training_circuit;
 };
 
 }   // qontra

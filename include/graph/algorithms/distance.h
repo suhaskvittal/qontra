@@ -8,12 +8,14 @@
 
 #include "graph/graph.h"
 
+#include <math.h>
+
 namespace qontra {
 namespace graph {
 namespace distance {
 
 template <class V_t, class data_t>
-using DistanceMatrix = TwoLevelMap<V_t*, V_t*, data_t>;
+using DistanceMatrix = TwoLevelMap<sptr<V_t>, sptr<V_t>, data_t>;
 
 // The callback below is for creating a distance matrix over multiple
 // calls of dijkstra's. The function should return some data for a
@@ -22,28 +24,30 @@ using DistanceMatrix = TwoLevelMap<V_t*, V_t*, data_t>;
 // (4) the predecessor entry for each vertex in a path from the 
 // first input to that vertex.
 template <class V_t, class data_t>
-using callback_t = std::function<data_t(V_t*, V_t*, 
-                        const std::map<V_t*, fp_t>&, const std::map<V_t*, V_t*>&)>;
+using callback_t = std::function<data_t(sptr<V_t>,
+                                        sptr<V_t>, 
+                                        const std::map<sptr<V_t>, fp_t>&,
+                                        const std::map<sptr<V_t>, sptr<V_t>>&)>;
 
 // Performs Dijkstra's algorithm given an edge weight function (ewf_t).
 template <class V_t, class E_t> void
 dijkstra(
     Graph<V_t, E_t>* graph, 
-    V_t* src,
-    std::map<V_t*, fp_t>& distances,
-    std::map<V_t*, V_t*>& predecessors,
+    sptr<V_t> src,
+    std::map<sptr<V_t>, fp_t>& distances,
+    std::map<sptr<V_t>, sptr<V_t>>& predecessors,
     ewf_t<V_t> edge_w_func)
 {
-    typedef struct { V_t* v; fp_t s; } pqv_t;
+    typedef struct { sptr<V_t> v; fp_t s; } pqv_t;
     struct cmp {
         bool operator()(const pqv_t& v1, const pqv_t& v2) {
             return v1.s > v2.s;
         }
     };
 
-    std::map<V_t*, pqv_t> v2pv;
+    std::map<sptr<V_t>, pqv_t> v2pv;
     std::priority_queue<pqv_t, std::vector<pqv_t>, cmp> queue;
-    for (V_t* v : graph->get_vertices()) {
+    for (sptr<V_t> v : graph->get_vertices()) {
         if (v == src)   distances[v] = 0;
         else            distances[v] = std::numeric_limits<fp_t>::max();
         predecessors[v] = v;
@@ -57,10 +61,10 @@ dijkstra(
         pqv_t pv = queue.top();
         auto v = pv.v;
         queue.pop();
-        if (pv.s != distances[v])  continue;   // This entry is outdated.
+        if (fabsl(pv.s - distances[v]) > 1e-8) continue;   // This entry is outdated.
 
         auto adj = graph->get_neighbors(v);
-        for (V_t* w : adj) {
+        for (sptr<V_t> w : adj) {
             fp_t new_dist = distances[v] + edge_w_func(v, w);
             if (new_dist < distances[w]) {
                 distances[w] = new_dist;
@@ -84,12 +88,13 @@ create_distance_matrix(
     DistanceMatrix<V_t, data_t> mat;
     auto vertices = graph->get_vertices();
     for (uint i = 0; i < vertices.size(); i++) {
-        V_t* src = vertices[i];
-        std::map<V_t*, V_t*> pred;
-        std::map<V_t*, fp_t> dist;
+        sptr<V_t> src = vertices[i];
+        std::map<sptr<V_t>, sptr<V_t>> pred;
+        std::map<sptr<V_t>, fp_t> dist;
         dijkstra(graph, src, dist, pred, edge_w_func);
         for (uint j = 0; j < vertices.size(); j++) {
-            V_t* dst = vertices[j];
+            if (i == j) continue;
+            sptr<V_t> dst = vertices[j];
             data_t x = cb(src, dst, dist, pred);
             tlm::put(mat, src, dst, x);
         }

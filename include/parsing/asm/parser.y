@@ -30,7 +30,7 @@ void        yyerror(char const*);
 }
 
 %union {
-    uint32_t                integer;
+    int64_t                 integer;
     double                  decimal;
     char*                   name;
     struct __asm_inst_t     instruction;

@@ -8,9 +8,10 @@
 
 #include "defs.h"
 
+#include <iostream>
 #include <map>
 #include <regex>
-#include <set>
+#include <set> 
 #include <string>
 #include <vector>
 
@@ -51,6 +52,16 @@ public:
         if (!option_set(opt))   return false;
         out = std::stoll(option_to_arg[opt]); 
         return true;
+    }
+
+    void print_all_set_options(std::ostream& out) {
+        for (std::string opt : option_pool) {
+            out << opt;
+            if (option_to_arg.count(opt)) {
+                out << ": " << option_to_arg[opt];
+            }
+            out << "\n";
+        }
     }
 private:
     std::set<std::string>               option_pool;

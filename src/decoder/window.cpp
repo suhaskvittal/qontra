@@ -8,13 +8,13 @@
 namespace qontra {
 
 Decoder::result_t
-WindowDecoder::decode_error(const syndrome_t& syndrome) {
+WindowDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
     uint rounds = (circuit.count_detectors() / detectors_per_round) - 1;
 
     const uint det = base_decoder->get_circuit().count_detectors();
     const uint obs = base_decoder->get_circuit().count_observables();
 
-    syndrome_t running_syndrome(syndrome);
+    stim::simd_bits running_syndrome(syndrome);
     auto detectors = get_nonzero_detectors(syndrome);
 
     fp_t exec_time = 0;
@@ -32,7 +32,7 @@ WindowDecoder::decode_error(const syndrome_t& syndrome) {
                             ? det - detectors_per_round 
                             : det - 2*detectors_per_round;
 
-        syndrome_t rxs(det);
+        stim::simd_bits rxs(det);
         rxs.clear();
         for (uint i = 0; i < n_events; i++) {
             if (i + offset >= circuit.count_detectors())  break;
@@ -71,8 +71,8 @@ WindowDecoder::decode_error(const syndrome_t& syndrome) {
 }
 
 Decoder::result_t
-WindowDecoder::decode_first_error(const syndrome_t& syndrome) {
-    syndrome_t base_syndrome(base_decoder->get_circuit().count_detectors());
+WindowDecoder::decode_first_error(stim::simd_bits_range_ref syndrome) {
+    stim::simd_bits base_syndrome(base_decoder->get_circuit().count_detectors());
     base_syndrome.clear();
     base_syndrome |= syndrome;
     return retrieve_result_from_base(
@@ -80,8 +80,8 @@ WindowDecoder::decode_first_error(const syndrome_t& syndrome) {
 }
 
 Decoder::result_t
-WindowDecoder::decode_middle_error(const syndrome_t& syndrome) {
-    syndrome_t base_syndrome(base_decoder->get_circuit().count_detectors());
+WindowDecoder::decode_middle_error(stim::simd_bits_range_ref syndrome) {
+    stim::simd_bits base_syndrome(base_decoder->get_circuit().count_detectors());
     base_syndrome.clear();
     for (uint k : get_nonzero_detectors(syndrome)) {
         base_syndrome[detectors_per_round + k] = syndrome[k];
@@ -93,8 +93,8 @@ WindowDecoder::decode_middle_error(const syndrome_t& syndrome) {
 }
 
 Decoder::result_t
-WindowDecoder::decode_final_error(const syndrome_t& syndrome) {
-    syndrome_t base_syndrome(base_decoder->get_circuit().count_detectors());
+WindowDecoder::decode_final_error(stim::simd_bits_range_ref syndrome) {
+    stim::simd_bits base_syndrome(base_decoder->get_circuit().count_detectors());
     base_syndrome.clear();
     for (uint k : get_nonzero_detectors(syndrome)) {
         base_syndrome[detectors_per_round + k] = syndrome[k];
@@ -107,7 +107,7 @@ WindowDecoder::decode_final_error(const syndrome_t& syndrome) {
 
 Decoder::result_t
 WindowDecoder::retrieve_result_from_base(
-                            const syndrome_t& base_syndrome,
+                            stim::simd_bits_range_ref base_syndrome,
                             uint min_detector,
                             uint max_detector) 
 {

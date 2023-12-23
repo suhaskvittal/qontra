@@ -50,11 +50,11 @@ struct colored_edge_t : edge_t {
 
 }   // decoding
 
-inline bool is_boundary(decoding::vertex_t* v) {
+inline bool is_boundary(sptr<decoding::vertex_t> v) {
     return v->id == BOUNDARY_INDEX;
 }
 
-inline bool is_colored_boundary(decoding::vertex_t* v) {
+inline bool is_colored_boundary(sptr<decoding::vertex_t> v) {
     return v->id == RED_BOUNDARY_INDEX
             || v->id == BLUE_BOUNDARY_INDEX
             || v->id == GREEN_BOUNDARY_INDEX;
@@ -71,12 +71,17 @@ public:
     };
 
     DecodingGraph(Mode m=Mode::NORMAL)
-        :Graph(), distance_matrix(), error_polynomial(), expected_errors(), mode(m)
+        :Graph(),
+        distance_matrix(),
+        flagged_decoding_graph(nullptr),
+        error_polynomial(),
+        expected_errors(),
+        mode(m)
     {
         std::array<fp_t, N_COORD> boundary_coords;
         boundary_coords.fill(-1);
 
-        decoding::vertex_t* boundary = new decoding::vertex_t;
+        sptr<decoding::vertex_t> boundary = std::make_shared<decoding::vertex_t>();
         boundary->id = BOUNDARY_INDEX;
         boundary->coords = boundary_coords;
         add_vertex(boundary);
@@ -85,10 +90,28 @@ public:
     DecodingGraph(const DecodingGraph& other)
         :Graph(other),
         distance_matrix(other.distance_matrix),
+        flagged_decoding_graph(nullptr), // Do NOT copy.
         error_polynomial(other.error_polynomial),
         expected_errors(other.expected_errors),
         mode(other.mode)
     {}
+
+    DecodingGraph(DecodingGraph&& other)
+        :Graph(other),
+        distance_matrix(std::move(other.distance_matrix)),
+        flagged_decoding_graph(nullptr),
+        error_polynomial(std::move(other.error_polynomial)),
+        expected_errors(other.expected_errors),
+        mode(other.mode)
+    {}
+
+    DecodingGraph& operator=(const DecodingGraph& other) {
+        distance_matrix = other.distance_matrix;
+        error_polynomial = other.error_polynomial;
+        expected_errors = other.expected_errors;
+        mode = other.mode;
+        return *this;
+    }
 
     typedef struct {    // Each pair of vertices has this entry, and each entry
                         // corresponds to an error chain.
@@ -97,14 +120,31 @@ public:
         fp_t            weight;         // Weight used for MWPM decoding
         std::set<uint>  frame_changes;  // Pauli frames that are changed by the chain
 
-        std::vector<decoding::vertex_t*>    error_chain;
-        bool                                error_chain_runs_through_boundary;
+        std::vector<sptr<decoding::vertex_t>>    error_chain;
+        bool                                    error_chain_runs_through_boundary;
     } matrix_entry_t;
 
     matrix_entry_t
-    get_error_chain_data(decoding::vertex_t* v1, decoding::vertex_t* v2) {
+    get_error_chain_data(sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2) {
         update_state(); 
         return distance_matrix[v1][v2];
+    }
+
+    // The below function only recomputes the paths for the specified detectors,
+    // The resulting graph is placed in the flagged_decoding_graph object, which has the same
+    // data as DecodingGraph aside from the updated distance matrix.
+    typedef std::tuple<
+                    sptr<decoding::vertex_t>,
+                    sptr<decoding::vertex_t>,
+                    sptr<decoding::vertex_t>> flag_edge_t;
+
+    void setup_flagged_decoding_graph(
+            const std::vector<sptr<decoding::vertex_t>>& detectors, 
+            const std::vector<flag_edge_t>& flag_edges);
+
+    matrix_entry_t
+    get_error_chain_data_from_flagged_graph(sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2) {
+        return flagged_decoding_graph->get_error_chain_data(v1, v2);
     }
 
     // We can represent the number of errors as a polynomial where the coefficient
@@ -119,16 +159,34 @@ public:
 protected:
     bool    update_state(void) override;
 private:
+    fp_t _ewf(sptr<decoding::vertex_t>, sptr<decoding::vertex_t>);
+    matrix_entry_t _dijkstra_cb(
+                        sptr<decoding::vertex_t>,
+                        sptr<decoding::vertex_t>,
+                        const std::map<sptr<decoding::vertex_t>, fp_t>&,
+                        const std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>&);
+
     void    build_distance_matrix(void);
+    void    build_flagged_decoding_graph(void); // This is a partial copy.
     void    build_error_polynomial(void);
 
     distance::DistanceMatrix<decoding::vertex_t, matrix_entry_t>    distance_matrix;
+
+    // Flag support:
+    uptr<DecodingGraph> flagged_decoding_graph;  // This is a variant of the DecodingGraph
+                                                // for some flag setup. The user can set this
+                                                // up when computing with flag detection events.
 
     poly_t  error_polynomial;
     fp_t    expected_errors;
 
     Mode mode;
 };
+
+ewf_t<decoding::vertex_t>
+    build_ewf(sptr<DecodingGraph>);
+distance::callback_t<decoding::vertex_t, DecodingGraph::matrix_entry_t>
+    build_dijkstra_cb(sptr<DecodingGraph>);
 
 // This is standard method of building decoding graphs, where each error is assumed
 // to flip exactly two detectors. This works for codes like the surface code.
@@ -149,11 +207,11 @@ to_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGraph::Mode:
 
 #define __ColoredDecodingGraphParent    Graph<decoding::colored_vertex_t, decoding::colored_edge_t>
 
-typedef std::tuple<decoding::colored_vertex_t*,
-                    decoding::colored_vertex_t*,
-                    decoding::colored_vertex_t*> face_t;
+typedef std::tuple<sptr<decoding::colored_vertex_t>,
+                    sptr<decoding::colored_vertex_t>,
+                    sptr<decoding::colored_vertex_t>> face_t;
 face_t
-make_face(decoding::colored_vertex_t*, decoding::colored_vertex_t*, decoding::colored_vertex_t*);
+make_face(sptr<decoding::colored_vertex_t>, sptr<decoding::colored_vertex_t>, sptr<decoding::colored_vertex_t>);
 
 inline std::string int_to_color(int x) {
     if (x == 0)         return "r";
@@ -171,11 +229,11 @@ class ColoredDecodingGraph : public __ColoredDecodingGraphParent {
 public:
     ColoredDecodingGraph(DecodingGraph::Mode mode=DecodingGraph::Mode::NORMAL);
 
-    bool    add_vertex(decoding::colored_vertex_t*) override;
-    bool    add_edge(decoding::colored_edge_t*) override;
+    bool    add_vertex(sptr<decoding::colored_vertex_t>) override;
+    bool    add_edge(sptr<decoding::colored_edge_t>) override;
 
-    void    delete_vertex(decoding::colored_vertex_t*) override;
-    void    delete_edge(decoding::colored_edge_t*) override;
+    void    delete_vertex(sptr<decoding::colored_vertex_t>) override;
+    void    delete_edge(sptr<decoding::colored_edge_t>) override;
 
     // The get_error_chain_data metadata only tells whether or not two vertices
     // are matched through ANY boundary. For decoding, it is more important to
@@ -187,13 +245,29 @@ public:
     // locations as to where to share the relevant boundary vertices if the
     // function returns true.
     bool    are_matched_through_boundary(
-                decoding::colored_vertex_t*, decoding::colored_vertex_t*, std::string lattice_color,
-                decoding::colored_vertex_t** b1_p, decoding::colored_vertex_t** b2_p);
+                sptr<decoding::colored_vertex_t>,
+                sptr<decoding::colored_vertex_t>,
+                std::string lattice_color,
+                sptr<decoding::colored_vertex_t>* b1_p,
+                sptr<decoding::colored_vertex_t>* b2_p,
+                bool use_flagged_graph=false);
 
-    std::set<face_t>
-        get_all_incident_faces(decoding::colored_vertex_t*);
-    std::set<decoding::colored_vertex_t*>
-        get_all_incident_vertices(const std::set<decoding::colored_edge_t*>&, std::string of_color);
+    std::set<sptr<decoding::colored_vertex_t>>
+        get_all_incident_vertices(const std::set<sptr<decoding::colored_edge_t>>&, std::string of_color);
+
+    bool contains_face(const face_t& fc) { return face_frame_map.count(fc); }
+
+    std::set<uint> get_face_frame_changes(const face_t& fc) { 
+        if (face_frame_map.count(fc)) {
+            return face_frame_map[fc];
+        } else {
+            return std::set<uint>();
+        }
+    }
+
+    fp_t get_face_probability(const face_t& fc) {
+        return face_prob_map[fc];
+    }
 
     DecodingGraph& operator[](const std::string& cc) {
         assert(restricted_color_map.count(cc));
@@ -206,6 +280,12 @@ public:
 private:
     std::map<std::string, int>      restricted_color_map;
     std::array<DecodingGraph, 3>    restricted_graphs;
+
+    std::map<face_t, std::set<uint>>    face_frame_map;
+    std::map<face_t, fp_t>              face_prob_map;
+
+    friend ColoredDecodingGraph
+        to_colored_decoding_graph(const stim::Circuit&, DecodingGraph::Mode);
 };
 
 ColoredDecodingGraph

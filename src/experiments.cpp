@@ -22,6 +22,14 @@ uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
 using namespace experiments;
 
 void
+configure_optimal_batch_size() {
+    const uint64_t take_up_lines = 1;
+
+    uint64_t cache_line_size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);  // In bytes.
+    G_SHOTS_PER_BATCH = (cache_line_size << 3) * take_up_lines;   // Need to convert to bits.
+}
+
+void
 generate_syndromes(const stim::Circuit& circuit, 
                     uint64_t shots, 
                     callback_t callbacks)
@@ -175,6 +183,8 @@ read_syndrome_trace(std::string folder,
 memory_result_t
 memory_experiment(Decoder* dec, experiments::memory_params_t params) {
     const stim::Circuit circuit = dec->get_circuit();
+    const uint det = circuit.count_detectors();
+    const uint obs = circuit.count_observables();
     // Stats that will be placed in memory_result_t
     uint64_t    logical_errors, __logical_errors = 0;
     uint64_t    hw_sum, __hw_sum = 0;
@@ -184,14 +194,16 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
     fp_t        t_sqr_sum, __t_sqr_sum = 0;
     fp_t        t_max, __t_max = 0;
 
+    std::vector<uint64_t> logical_errors_by_obs(obs, 0), __logical_errors_by_obs(obs, 0);
+
     const uint sample_width = 
         circuit.count_detectors() + circuit.count_observables();
     cb_t1 dec_cb = [&] (stim::simd_bits_range_ref& row)
     {
         params.callbacks.prologue(row);
         uint obs_bits = 0;
-        for (uint i = 0; i < circuit.count_observables(); i++) {
-            obs_bits += row[i+circuit.count_detectors()];
+        for (uint i = 0; i < obs; i++) {
+            obs_bits += row[i+det];
         }
         const uint hw = row.popcnt() - obs_bits;
         __hw_sum += hw;
@@ -200,12 +212,17 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
         if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
             return;
         }
-        syndrome_t syndrome(row);
+        stim::simd_bits syndrome(row);
         auto res = dec->decode_error(syndrome); 
         __logical_errors += res.is_error;
         __t_sum += res.exec_time;
         __t_sqr_sum += SQR(res.exec_time);
         __t_max = res.exec_time > __t_max ? res.exec_time : __t_max;
+
+        for (uint i = 0; i < obs; i++) {
+            __logical_errors_by_obs[i] += (bool)(res.corr[i] ^ row[i+det]);
+        }
+
         params.callbacks.epilogue(res);
     };
 
@@ -233,6 +250,9 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
         MPI_Reduce(&__t_sqr_sum, &t_sqr_sum, 1, MPI_DOUBLE, MPI_SUM, 
                     0, MPI_COMM_WORLD);
         MPI_Reduce(&__t_max, &t_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        MPI_Reduce(&__logical_errors_by_obs[0], &logical_errors_by_obs[0], obs, MPI_UNSIGNED_LONG,
+                    MPI_SUM, 0, MPI_COMM_WORLD);
     } else {
         logical_errors = __logical_errors;
         hw_sum = __hw_sum;
@@ -241,12 +261,19 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
         t_sum = __t_sum;
         t_sqr_sum = __t_sqr_sum;
         t_max = __t_max;
+
+        logical_errors_by_obs = __logical_errors_by_obs;
     }
     fp_t ler = ((fp_t)logical_errors) / ((fp_t)shots);
     fp_t hw_mean = MEAN(hw_sum, shots);
     fp_t hw_std = STD(hw_mean, hw_sqr_sum, shots);
     fp_t t_mean = MEAN(t_sum, shots);
     fp_t t_std = STD(t_mean, t_sqr_sum, shots);
+
+    std::vector<fp_t> ler_by_obs(obs);
+    for (uint i = 0; i < obs; i++) {
+        ler_by_obs[i] = ((fp_t)logical_errors_by_obs[i]) / ((fp_t)shots);
+    }
 
     memory_result_t res = {
         ler,
@@ -255,7 +282,9 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
         hw_max,
         t_mean,
         t_std,
-        t_max
+        t_max,
+        // Additional statistics:
+        ler_by_obs
     };
     return res;
 }

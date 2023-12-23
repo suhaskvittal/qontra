@@ -7,7 +7,9 @@
 #define INSTRUCTION_h
 
 #include "defs.h"
+#include "graph/decoding_graph.h"
 #include "tables.h"
+#include "stimext.h"
 
 #include <stim.h>
 
@@ -21,18 +23,27 @@ namespace qontra {
 
 const std::vector<std::string> ISA{
     // Quantum Processor instructions
+    // 
+    // Cliffords and Paulis:
     "h",
     "x",
     "z",
     "cx",
     "s",
     "sdg",
+    // Special Instructions
+    "liswap"
+    // Non-cliffords:
     "t",
     "tdg",
     "rz",
+    // Collapsing operations:
     "measure",
     "reset",
+    // Other:
     "nop",
+    "clx",  // This is a classically controlled X gate.
+    "clz",
     // Control Instructions
     "brifone",  // brifone LABEL, event
     "brifzero",
@@ -55,7 +66,7 @@ const std::vector<std::string> ISA{
 };
 
 const std::set<std::string> IS_QUANTUM {
-    "h", "x", "z", "cx", "rz", "s", "sdg", "t", "tdg", "measure", "reset"
+    "h", "x", "z", "cx", "liswap", "rz", "s", "sdg", "t", "tdg", "measure", "reset"
 };
 
 const std::set<std::string> IS_QUANTUM_LIKE {
@@ -69,7 +80,11 @@ const std::set<std::string> INSTRUCTION_USES_ANGLES {
 };
 
 const std::set<std::string> IS_2Q_OPERATOR {
-    "cx"
+    "cx", "liswap"
+};
+
+const std::set<std::string> IS_CLASSICALLY_CONTROLLED {
+    "clx", "clz"
 };
 
 const std::set<std::string> IS_BR {
@@ -136,6 +151,8 @@ const std::set<std::string> IS_DECODE_TYPE4 {
 #define PROPERTY_COLOR_GREEN    1
 #define PROPERTY_COLOR_BLUE     2
 
+#define PROPERTY_PREDICATE  "predicate"
+
 struct Instruction {
     std::string name;
 
@@ -181,54 +198,50 @@ struct Instruction {
     std::set<std::string> annotations;
     std::map<std::string, property_value_t> properties;
 
-    // Extra metadata (not necessary for general use).
-    //
-    // Usually, applications will fill this out for their own use.
-    // The user should not need to modify this.
-    struct {
-        uint64_t    owning_check_id = 0;    // The id of the tanner graph vertex
-                                            // for which this Instruction is executing
-                                            // the check.
-        bool        is_for_flag = false;
-
-        std::vector<std::pair<uint64_t, bool>>  operators;  
-                                                    // i.e. X1X2X3X4 would be 
-                                                    // (1, true), (2, true), etc.
-    } metadata;
-
     std::vector<uint>   get_qubit_operands(void) const;
 
+    std::string inst_str(void) const {
+        std::string out;
+        // Depending on the type of instruction, print out differently.
+        out += name;
+        if (IS_QUANTUM.count(name)) {
+            out += "\t";
+            for (uint i = 0; i < operands.qubits.size(); i++) {
+                if (i > 0) out += ", ";
+                out += std::to_string(operands.qubits[i]);
+            }
+        } else if (IS_DECODE_TYPE1.count(name)) {
+            out += " ";
+            out += std::to_string(operands.events[0]);
+            for (uint i = 0; i < operands.measurements.size(); i++) {
+                out += ", " + std::to_string(operands.measurements[i]);
+            }
+        } else if (IS_DECODE_TYPE2.count(name)) {
+            out += " ";
+            out += std::to_string(operands.observables[0]);
+            for (uint i = 0; i < operands.measurements.size(); i++) {
+                out += ", " + std::to_string(operands.measurements[i]);
+            }
+        } // In construction :)
+        return out;
+    }
+
     std::string str(void) const {
-        std::string out = name;
-        if (operands.angles.size()) {
-            out += "(" + operands_to_str(operands.angles) + ")";
+        std::string out;
+        // Add annotations and properties.
+        for (std::string annot : annotations) {
+            out += "@annotation " + annot + "\n";
         }
-        if (operands.qubits.size()) {
-            out += " ";
-            out += operands_to_str(operands.qubits);
+        for (auto prop_kv : properties) {
+            out += "@property " + prop_kv.first + " ";
+            if (prop_kv.second.fval != 0.0) {
+                out += std::to_string(prop_kv.second.fval);
+            } else {
+                out += std::to_string(prop_kv.second.ival);
+            }
+            out += "\n";
         }
-        if (operands.measurements.size()) {
-            out += " ";
-            out += operands_to_str(operands.measurements, "M");
-        }
-        if (operands.events.size()) {
-            out += " ";
-            out += operands_to_str(operands.events, "e");
-        }
-        if (operands.observables.size()) {
-            out += " ";
-            out += operands_to_str(operands.observables, "o");
-        }
-        if (operands.frames.size()) {
-            out += " ";
-            out += operands_to_str(operands.frames, "f");
-        }
-        if (operands.labels.size()) {
-            out += " ";
-            out += operands_to_str(operands.labels, "addr");
-        }
-        out += "\n";
-        
+        out += inst_str();
         return out;
     }
 
@@ -238,6 +251,33 @@ struct Instruction {
 
     bool operator==(const Instruction& other) const {
         return name == other.name && operands == other.operands;
+    }
+
+    //
+    // Static functions for common instructions:
+    //
+
+    static Instruction gate(std::string name, std::vector<uint> qubits) {
+        Instruction inst;
+        inst.name = name;
+        inst.operands.qubits = qubits;
+        return inst;
+    }
+    
+    static Instruction event(uint e, std::vector<uint> meas) {
+        Instruction inst;
+        inst.name = "event";
+        inst.operands.events = std::vector<uint>{e};
+        inst.operands.measurements = meas;
+        return inst;
+    }
+
+    static Instruction obs(uint o, std::vector<uint> meas) {
+        Instruction inst;
+        inst.name = "obs";
+        inst.operands.observables = std::vector<uint>{o};
+        inst.operands.measurements = meas;
+        return inst;
     }
 private:
     template <typename T>
@@ -265,16 +305,16 @@ typedef std::vector<Instruction>    schedule_t;
 //  as coordinate declarations. The output is the max number of qubits in the
 //  circuit.
 
-uint            get_number_of_qubits(const schedule_t&);
+uint    get_number_of_qubits(const schedule_t&);
 
-std::string     schedule_to_text(const schedule_t&);
-stim::Circuit   schedule_to_stim(const schedule_t&, ErrorTable&, TimeTable&, 
+std::string         schedule_to_text(const schedule_t&);
+DetailedStimCircuit schedule_to_stim(const schedule_t&, ErrorTable&, TimeTable&, 
                                     fp_t fix_timing_error_as_depolarizing_error=-1);
 
 // The below functions are for parsing ASM (either in a file or in a string).
-schedule_t      schedule_from_file(std::string fname);
-schedule_t      schedule_from_text(std::string);
-schedule_t      schedule_after_parse(void);
+schedule_t  schedule_from_file(std::string fname);
+schedule_t  schedule_from_text(std::string);
+schedule_t  schedule_after_parse(void);
 
 }   // qontra
 

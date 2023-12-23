@@ -8,6 +8,7 @@
 
 #include "defs.h"
 
+#include <limits>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -32,6 +33,8 @@ public:
     TwoLevelMap<std::string, uint, fp_t> op1q;
     TwoLevelMap<std::string, std::pair<uint, uint>, fp_t> op2q;
 
+    std::map<uint, fp_t> idling;
+
     std::map<uint, fp_t> m1w0;
     std::map<uint, fp_t> m0w1;
 
@@ -41,7 +44,6 @@ public:
     TwoLevelMap<std::string, std::pair<uint, uint>, fp_t> op2q_crosstalk;
     TwoLevelMap<std::string, std::pair<uint, uint>, std::vector<corr_t>> op2q_correlated;
 };
-
 class TimeTable {  // Units are in nanoseconds.
 public:
     TimeTable()
@@ -84,6 +86,7 @@ struct ErrorAndTiming {
     fp_t e_g2q = 1e-3;
     fp_t e_m1w0 = 1e-3; // Readout error (read 0 as 1)
     fp_t e_m0w1 = 1e-3; // Readout error (read 1 as 0)
+    fp_t e_idle = 1e-3;
     fp_t t_g1q = 30;    // in nanoseconds.
     fp_t t_g2q = 40;
     fp_t t_ro = 600;
@@ -95,18 +98,9 @@ struct ErrorAndTiming {
         this->e_g2q *= x;
         this->e_m1w0 *= x;
         this->e_m0w1 *= x;
-        this->t1 *= 1.0/x;
-        this->t2 *= 1.0/x;
-        return *this;
-    }
-
-    ErrorAndTiming operator+(fp_t x) {
-        this->e_g1q += x;
-        this->e_g2q += x;
-        this->e_m1w0 += x;
-        this->e_m0w1 += x;
-        this->t1 += x;
-        this->t2 += x;
+        this->e_idle *= x;
+        this->t1 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
+        this->t2 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
         return *this;
     }
 };
@@ -120,7 +114,7 @@ populate(
 {
     // Assume z, rz, s, sdg, t, tdg are implemented via a virtual RZ.
     const std::vector<std::string> g1q{"h", "x", "rx", "ry", "reset"};
-    const std::vector<std::string> g2q{"cx"};
+    const std::vector<std::string> g2q{"cx", "liswap"};
 
     set_all_1q(n_qubits, params.t1, timing.t1);
     set_all_1q(n_qubits, params.t2, timing.t2);
@@ -128,6 +122,7 @@ populate(
         set_all_1q(n_qubits, params.e_g1q, errors.op1q[g]);
         set_all_1q(n_qubits, params.t_g1q, timing.op1q[g]);
     }
+    set_all_1q(n_qubits, params.e_idle, errors.idling);
     // Set measurement characteristics independently.
     set_all_1q(n_qubits, params.e_m1w0, errors.m1w0);
     set_all_1q(n_qubits, params.e_m0w1, errors.m0w1);

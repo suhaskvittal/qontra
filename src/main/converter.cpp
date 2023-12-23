@@ -3,8 +3,8 @@
  * date:    27 August 2023
  * */
 
-#include "instruction.h"
-#include "parsing/cmd.h"
+#include <instruction.h>
+#include <parsing/cmd.h>
 
 #include <fstream>
 #include <iostream>

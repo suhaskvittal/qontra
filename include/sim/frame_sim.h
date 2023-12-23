@@ -24,6 +24,16 @@ public:
         leak_table_cpy(n, max_shots)
     {}
 
+    FrameSimulator(const FrameSimulator& other)
+        :StateSimulator(other),
+        x_table(other.x_table),
+        z_table(other.z_table),
+        leak_table(other.leak_table),
+        x_table_cpy(other.x_table_cpy),
+        z_table_cpy(other.z_table_cpy),
+        leak_table_cpy(other.leak_table_cpy)
+    {}
+
     void reset_sim(void) override {
         StateSimulator::reset_sim();
 
@@ -32,13 +42,15 @@ public:
         leak_table.clear();
     }
 
-    void    H(std::vector<uint>) override;
-    void    X(std::vector<uint>) override;
-    void    Z(std::vector<uint>) override;
-    void    S(std::vector<uint>) override;
-    void    CX(std::vector<uint>) override;
-    void    M(std::vector<uint>, std::vector<fp_t>, std::vector<fp_t>, int record=-1) override;
-    void    R(std::vector<uint>) override;
+    void    H(std::vector<uint>, int64_t fr=-1) override;
+    void    X(std::vector<uint>, int64_t fr=-1) override;
+    void    Z(std::vector<uint>, int64_t fr=-1) override;
+    void    S(std::vector<uint>, int64_t fr=-1) override;
+    void    CX(std::vector<uint>, int64_t fr=-1) override;
+    void    M(std::vector<uint>, std::vector<fp_t>, std::vector<fp_t>, int record=-1, int64_t fr=-1) override;
+    void    R(std::vector<uint>, int64_t fr=-1) override;
+
+    void    LEAKAGE_ISWAP(std::vector<uint>, int64_t fr=-1) override;
 
     StateSimulator::label_1q_t  eDP1(uint, uint64_t) override;
     StateSimulator::label_1q_t  eX(uint, uint64_t) override;
@@ -60,6 +72,8 @@ private:
     stim::simd_bit_table    x_table_cpy;
     stim::simd_bit_table    z_table_cpy;
     stim::simd_bit_table    leak_table_cpy;
+
+    friend class MemorySimulator;
 };
 
 }   // qontra

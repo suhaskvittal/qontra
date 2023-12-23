@@ -3,16 +3,16 @@
  *  date:   16 August 2023
  * */
 
-#include "parsing/cmd.h"
-#include "instruction.h"
-#include "sim/enumerator.h"
+#include <parsing/cmd.h>
+#include <instruction.h>
+#include <sim/enumerator.h>
 
 using namespace qontra;
 
 void f_syntax_analysis(const schedule_t& prog) {
     uint64_t pc = 0;
     for (const auto& inst : prog) {
-        std::cout << "(pc = " << pc << ") " << inst.str();
+        std::cout << "(pc = " << pc << ")\n\t" << inst.inst_str() << "\n";
         std::cout << "\tannotations = [ ";
         for (auto x : inst.annotations) {
             std::cout << "\"" << x << "\" ";

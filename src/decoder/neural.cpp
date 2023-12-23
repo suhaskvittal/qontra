@@ -42,14 +42,14 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
     data_matrix.reshape(det, shots_elapsed);
     y.reshape(obs, shots_elapsed);
 
-    ens::Adam opt(1e-3, 64);
+    ens::Adam opt(1e-3, 512);
     opt.MaxIterations() = shots_elapsed*config.max_epochs;
 
     model.Train(data_matrix, y, opt, ens::ProgressBar(), ens::PrintLoss());
 }
 
 Decoder::result_t
-NeuralDecoder::decode_error(const syndrome_t& syndrome) {
+NeuralDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
     const uint det = circuit.count_detectors();
     const uint obs = circuit.count_observables();
 
@@ -65,7 +65,10 @@ NeuralDecoder::decode_error(const syndrome_t& syndrome) {
     fp_t t = (fp_t)timer.clk_end();
 
     stim::simd_bits corr(obs);
-    corr[0] ^= (pred(0, 0) > 0);
+    corr.clear();
+    for (uint i = 0; i < obs; i++) {
+        corr[i] ^= (bool)(pred(i, 0) > 0);
+    }
 
     Decoder::result_t res = {
         t,
@@ -74,4 +77,15 @@ NeuralDecoder::decode_error(const syndrome_t& syndrome) {
     };
     return res;
 }
+
+void
+NeuralDecoder::save_model_to_file(std::string fname) {
+    mlpack::data::Save(fname, "model", model, false);
+}
+
+void
+NeuralDecoder::load_model_from_file(std::string fname) {
+    mlpack::data::Load(fname, "model", model);
+}
+
 }   // qontra

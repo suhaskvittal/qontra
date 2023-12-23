@@ -10,6 +10,7 @@
 
 #include "defs.h"
 #include "graph/decoding_graph.h"
+#include "stimext.h"
 #include "timer.h"
 
 #include <string>
@@ -19,6 +20,28 @@
 #include <strings.h>
 
 namespace qontra {
+
+template <class T> std::vector<uint>
+// T = stim::simd_bits or stim::simd_bits_range_ref
+get_nonzero_detectors(const T syndrome, uint number_of_detectors) {
+    std::vector<uint> det;
+    uint64_t w = 0;
+    uint64_t last_bit = 0;
+    while (det.size() < syndrome.popcnt()) {
+        uint64_t i = ffsll(syndrome.u64[w] & ~((1L << last_bit)-1));
+        if (i == 0) {   // No match found.
+            last_bit = 0;
+            w++;
+            continue;
+        }
+        uint d = (w << 6) | (i-1);
+        if (d >= number_of_detectors) break;
+        det.push_back(d);
+        last_bit = i & 0x3f;
+        w += (i >= 64);
+    }
+    return det;
+}
 
 class Decoder {
 public: 
@@ -33,7 +56,7 @@ public:
     // but the backing decoder only uses a few rounds. This may also be 
     // used if the subclass constructs the decoding graph
     // via a custom strategy, or does not need a decoding graph.
-    Decoder(const stim::Circuit& circ, 
+    Decoder(DetailedStimCircuit circ, 
             graph::DecodingGraph::Mode dgr_mode=graph::DecodingGraph::Mode::NORMAL)
         :circuit(circ),
         decoding_graph(graph::to_decoding_graph(circ, dgr_mode))
@@ -51,19 +74,22 @@ public:
         std::vector<assign_t>   error_assignments;
     };
 
-    virtual result_t decode_error(const syndrome_t&) =0;    // This function
-                                                            // will perform decoding
-                                                            // and return a correction.
+    virtual result_t decode_error(stim::simd_bits_range_ref) =0;
+                                                    // This function
+                                                    // will perform decoding
+                                                    // and return a correction.
     virtual std::string name(void) =0;  // Useful for printing out stats.
 
-    stim::Circuit       get_circuit(void) { return circuit; }
+    DetailedStimCircuit get_circuit(void) { return circuit; }
 protected:
     // Other helpful functions:
     //
     // is_error: checks if the provided correction is a logical error.
+    // get_error_chain_data: retrieves error chain data, adjusted for flag detections.
+    // get_nonzero_detectors: gets nonzero detectors from syndrome.
 
     bool is_error(
-            const stim::simd_bits& correction, const syndrome_t& syndrome)
+            const stim::simd_bits& correction, stim::simd_bits_range_ref syndrome)
     {
         const uint n_detectors = circuit.count_detectors();
         const uint n_observables = circuit.count_observables();
@@ -76,7 +102,7 @@ protected:
 
     template <class T> std::vector<uint>
     // T = stim::simd_bits or stim::simd_bits_range_ref
-    get_nonzero_detectors(const T syndrome) {
+    get_nonzero_detectors(T syndrome) {
         std::vector<uint> det;
         uint64_t w = 0;
         uint64_t last_bit = 0;
@@ -96,7 +122,7 @@ protected:
         return det;
     }
 
-    stim::Circuit           circuit;
+    DetailedStimCircuit     circuit;
     graph::DecodingGraph    decoding_graph;
 
     Timer   timer;
@@ -105,5 +131,4 @@ protected:
 };
 
 }   // qontra
-
 #endif

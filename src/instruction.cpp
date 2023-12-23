@@ -8,8 +8,7 @@ namespace qontra {
 
 std::vector<uint>
 Instruction::get_qubit_operands() const {
-    return operands.qubits;
-}
+    return operands.qubits; }
 
 uint
 get_number_of_qubits(const schedule_t& sch) {
@@ -31,11 +30,11 @@ schedule_to_text(const schedule_t& sch) {
     return out;
 }
 
-stim::Circuit
+DetailedStimCircuit
 schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, fp_t ftedpe) {
     uint n = get_number_of_qubits(sch);
 
-    stim::Circuit circuit;
+    DetailedStimCircuit circuit;
     fp_t time = 0.0;
     // The instructions below can only be Pauli operators, CX,
     // or the following:
@@ -51,7 +50,30 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         bool inject_timing_error = inst.annotations.count(ANNOT_INJECT_TIMING_ERROR);
         bool operation_takes_time = !inst.annotations.count(ANNOT_NO_TICK);
 
+        bool has_predicate = inst.properties.count(PROPERTY_PREDICATE);
+
         bool is_2q_op = IS_2Q_OPERATOR.count(inst.name);
+        
+        // Inject timing errors if requested.
+        if (inject_timing_error) {
+            for (uint x = 0; x < n; x++) {
+                if (ftedpe > 0) {
+                    circuit.append_op("DEPOLARIZE1", {x}, ftedpe);
+                } else {
+                    fp_t t1 = timing.t1[x];
+                    fp_t t2 = timing.t2[x];
+
+                    fp_t e_ad = 0.25*(1 - exp(-time/t1));
+                    fp_t e_pd = 0.5*(1 - exp(-time/t2));
+
+                    circuit.append_op("X_ERROR", {x}, e_ad);
+                    circuit.append_op("Y_ERROR", {x}, e_ad);
+                    circuit.append_op("Z_ERROR", {x}, e_pd-e_ad);
+                }
+            }
+            time = 0;
+        }
+
         if (inst.name == "measure") {
             // Add X error before.
             if (inject_op_error) {
@@ -78,15 +100,49 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             circuit.append_op("S", qubits);
         } else if (inst.name == "sdg") {
             circuit.append_op("S_DAG", qubits);
+        } else if (inst.name == "clx") {
+            std::vector<uint> args;
+            // Each gate is a measurement+qubit (in terms of operands).
+            for (uint i = 0; i < qubits.size(); i++) {
+                args.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
+                args.push_back(qubits[i]);
+            }
+            circuit.append_op("CX", args);
+        } else if (inst.name == "clz") {
+            std::vector<uint> args;
+            // Each gate is a measurement+qubit (in terms of operands).
+            for (uint i = 0; i < qubits.size(); i++) {
+                args.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
+                args.push_back(qubits[i]);
+            }
+            circuit.append_op("CZ", args);
         } else if (inst.name == "event") {
             std::vector<uint> offsets;
             for (uint i = 0; i < meas.size(); i++) {
                 offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
-            int64_t tag = 0;
-            if (inst.properties.count("color")) tag = inst.properties.at("color").ival;
 
-            circuit.append_op("DETECTOR", offsets, tag);
+            int64_t color_id = 0;
+            if (inst.properties.count("color")) {
+                color_id = inst.properties.at("color").ival;
+                circuit.detection_event_to_color[events[0]] = color_id;
+            }
+
+            if (inst.annotations.count("flag")) {
+                circuit.flag_detection_events.insert(events[0]);
+                color_id = -1;
+                // Get flag edges.
+                int isrc = inst.properties.at("flag_edge_src").ival;
+                int ithru = inst.properties.at("flag_edge_thru").ival;
+                int idst = inst.properties.at("flag_edge_dst").ival;
+                // Convert to uint
+                uint src = isrc < 0 ? graph::BOUNDARY_INDEX : isrc;
+                uint thru = ithru < 0 ? graph::BOUNDARY_INDEX : ithru;
+                uint dst = idst < 0 ? graph::BOUNDARY_INDEX : idst;
+                circuit.flag_edge_table[events[0]] = std::make_tuple(src, thru, dst);
+            }
+
+            circuit.append_op("DETECTOR", offsets, color_id);
             continue;
         } else if (inst.name == "obs") {
             std::vector<uint> offsets;
@@ -96,26 +152,6 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             circuit.append_op("OBSERVABLE_INCLUDE", offsets, obs[0]);
             continue;
         } else { continue; }    // Ignore all other instructions.
-        
-        // Inject timing errors if requested.
-        if (inject_timing_error) {
-            for (uint x = 0; x < n; x++) {
-                if (ftedpe > 0) {
-                    circuit.append_op("DEPOLARIZE1", {x}, ftedpe);
-                } else {
-                    fp_t t1 = timing.t1[x];
-                    fp_t t2 = timing.t2[x];
-
-                    fp_t e_ad = 0.25*(1 - exp(-time/t1));
-                    fp_t e_pd = 0.5*(1 - exp(-time/t2));
-
-                    circuit.append_op("X_ERROR", {x}, e_ad);
-                    circuit.append_op("Y_ERROR", {x}, e_ad);
-                    circuit.append_op("Z_ERROR", {x}, e_pd-e_ad);
-                }
-            }
-            time = 0;
-        }
         // Update operation latency.
         if (operation_takes_time) {
             fp_t max_t = 0.0;
@@ -124,6 +160,12 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                     fp_t x = qubits[i], y = qubits[i+1];
                     fp_t t = timing.op2q[inst.name][std::make_pair(x, y)];
                     max_t = t > max_t ? t : max_t;
+                }
+                // Insert idling errors.
+                for (uint i = 0; i < n; i++) {
+                    if (std::find(qubits.begin(), qubits.end(), i) != qubits.end()) continue;
+                    fp_t e_idle = errors.idling[i];
+                    circuit.append_op("DEPOLARIZE1", {i}, e_idle);
                 }
             } else {
                 for (uint x : qubits) {
