@@ -7,7 +7,7 @@
 //#define USE_NEURAL_NET
 
 #include <decoder/mwpm.h>
-#include <decoder/restriction.h>
+#include <decoder/chromobius.h>
 #include <experiments.h>
 #include <parsing/cmd.h>
 #include <instruction.h>
@@ -131,10 +131,14 @@ int main(int argc, char* argv[]) {
         dec.save_model_to_file(model_file);
     }
 #else
-    //MWPMDecoder dec(error_model);
-    uint64_t detectors_per_round;
-    if (!pp.get_uint64("dpr", detectors_per_round)) return 1;
-    RestrictionDecoder dec(error_model, detectors_per_round);
+
+#ifdef QONTRA_CHROMOBIUS_ENABLED
+    Chromobius dec(circuit);
+#else
+    std::cerr << "Chromobius not found.\n";
+    exit(1);
+#endif
+
 #endif
     experiments::memory_params_t params;
     params.shots = shots;

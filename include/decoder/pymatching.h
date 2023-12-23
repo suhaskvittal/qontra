@@ -33,7 +33,7 @@ pm::Mwpm init_solver_from_circuit(stim::Circuit circuit) {
 class PyMatching : public Decoder {
 public:
     PyMatching(DetailedStimCircuit circuit)
-        :Decoder(circuit, graph::DecodingGraph::Mode::LOW_MEMORY),
+        :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
         solver(init_solver_from_circuit(circuit))
     {}
 

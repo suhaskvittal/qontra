@@ -22,6 +22,10 @@ if (COMPILE_PYMATCHING)
     set(CMAKE_CXX_STANDARD 20)
 endif()
 
+if (COMPILE_CHROMOBIUS)
+    set(CMAKE_CXX_STANDARD 20)
+endif()
+
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package(FLEX REQUIRED)
@@ -49,7 +53,7 @@ set(QONTRA_FILES
     # Decoders
     src/decoder/mwpm.cpp
     src/decoder/window.cpp
-    src/decoder/restriction.cpp
+#   src/decoder/restriction.cpp
     # Parsing
     src/parsing/cmd.cpp src/parsing/asm.cpp
     ${BISON_ASMParser_OUTPUTS}
@@ -90,6 +94,11 @@ if (COMPILE_PYMATCHING)
     add_subdirectory(pymatching)
 endif()
 
+if (COMPILE_CHROMOBIUS)
+    message(STATUS "Will compile Chromobius.")
+    add_subdirectory(chromobius)
+endif()
+
 if (COMPILE_NEURAL_DECODER)
     message(STATUS "Will compile NEURAL DECODER.")
     find_package(Armadillo REQUIRED)
@@ -123,6 +132,11 @@ endif()
 if (COMPILE_PYMATCHING)
     target_link_libraries(qontra PUBLIC libpym)
     target_compile_definitions(qontra PUBLIC QONTRA_PYMATCHING_ENABLED)
+endif()
+
+if (COMPILE_CHROMOBIUS)
+    target_link_libraries(qontra PUBLIC libchromobius)
+    target_compile_definitions(qontra PUBLIC QONTRA_CHROMOBIUS_ENABLED)
 endif()
 
 if (COMPILE_NEURAL_DECODER)
