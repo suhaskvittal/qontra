@@ -16,20 +16,8 @@ cmake_minimum_required(VERSION 3.13)
 project(chromobius)
 include_directories(src)
 set(CMAKE_CXX_STANDARD 20)
-if (NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY out)
-endif()
-if (NOT DEFINED CMAKE_LIBRARY_OUTPUT_DIRECTORY)
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY out)
-endif()
-if (NOT DEFINED CMAKE_ARCHIVE_OUTPUT_DIRECTORY)
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY out)
-endif()
-if (NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
-  set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
-endif()
 
-set(SIMD_WIDTH 128)
+#set(SIMD_WIDTH 128)
 
 set(CHROMOBIUS_FILES
     src/chromobius/datatypes/atomic_error.cc
@@ -46,13 +34,20 @@ set(CHROMOBIUS_FILES
     src/chromobius/graph/euler_tours.cc)
 
 add_library(libchromobius ${CHROMOBIUS_FILES})
+
+
 set_target_properties(libchromobius PROPERTIES PREFIX "")
+
 target_include_directories(libchromobius PUBLIC src)
+target_include_directories(libchromobius PRIVATE 
+                                        ${CMAKE_SOURCE_DIR}/stim/src
+                                        ${CMAKE_SOURCE_DIR}/pymatching/src)
 target_link_libraries(libchromobius PUBLIC libstim libpym)
+
 if(NOT(MSVC))
-    target_compile_options(libchromobius PUBLIC -O3 -Wall -Wpedantic -fPIC -fno-strict-aliasing)
-    target_link_options(libchromobius PUBLIC -O3)
+    target_compile_options(libchromobius PRIVATE -O3 -Wall -Wpedantic -fPIC -fno-strict-aliasing)
+    target_link_options(libchromobius PRIVATE -O3)
 else()
-    target_compile_options(libchromobius PUBLIC)
+    target_compile_options(libchromobius PRIVATE)
 endif()
 
