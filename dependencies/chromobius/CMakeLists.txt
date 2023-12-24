@@ -17,8 +17,6 @@ project(chromobius)
 include_directories(src)
 set(CMAKE_CXX_STANDARD 20)
 
-#set(SIMD_WIDTH 128)
-
 set(CHROMOBIUS_FILES
     src/chromobius/datatypes/atomic_error.cc
     src/chromobius/datatypes/color_basis.cc
