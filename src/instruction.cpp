@@ -58,7 +58,7 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         if (inject_timing_error) {
             for (uint x = 0; x < n; x++) {
                 if (ftedpe > 0) {
-                    circuit.append_op("DEPOLARIZE1", {x}, ftedpe);
+                    circuit.safe_append_u("DEPOLARIZE1", {x}, {ftedpe});
                 } else {
                     fp_t t1 = timing.t1[x];
                     fp_t t2 = timing.t2[x];
@@ -66,9 +66,9 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                     fp_t e_ad = 0.25*(1 - exp(-time/t1));
                     fp_t e_pd = 0.5*(1 - exp(-time/t2));
 
-                    circuit.append_op("X_ERROR", {x}, e_ad);
-                    circuit.append_op("Y_ERROR", {x}, e_ad);
-                    circuit.append_op("Z_ERROR", {x}, e_pd-e_ad);
+                    circuit.safe_append_u("X_ERROR", {x}, {e_ad});
+                    circuit.safe_append_u("Y_ERROR", {x}, {e_ad});
+                    circuit.safe_append_u("Z_ERROR", {x}, {e_pd-e_ad});
                 }
             }
             time = 0;
@@ -79,27 +79,27 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             if (inject_op_error) {
                 for (uint x : qubits) {
                     fp_t e = 0.5*(errors.m1w0[x] + errors.m0w1[x]);
-                    if (e > 0)  circuit.append_op("X_ERROR", {x}, e);
+                    if (e > 0)  circuit.safe_append_u("X_ERROR", {x}, {e});
                 }
             }
-            circuit.append_op("M", qubits);
+            circuit.safe_append_u("M", qubits);
             n_meas += qubits.size();
         } else if (inst.name == "h") {
-            circuit.append_op("H", qubits);
+            circuit.safe_append_u("H", qubits);
         } else if (inst.name == "x") {
-            circuit.append_op("X", qubits);
+            circuit.safe_append_u("X", qubits);
         } else if (inst.name == "z") {
-            circuit.append_op("Z", qubits);
+            circuit.safe_append_u("Z", qubits);
         } else if (inst.name == "cx") {
-            circuit.append_op("CX", qubits);
+            circuit.safe_append_u("CX", qubits);
         } else if (inst.name == "nop") {
-            circuit.append_op("TICK", {});
+            circuit.safe_append_u("TICK", {});
         } else if (inst.name == "reset") {
-            circuit.append_op("R", qubits);
+            circuit.safe_append_u("R", qubits);
         } else if (inst.name == "s") {
-            circuit.append_op("S", qubits);
+            circuit.safe_append_u("S", qubits);
         } else if (inst.name == "sdg") {
-            circuit.append_op("S_DAG", qubits);
+            circuit.safe_append_u("S_DAG", qubits);
         } else if (inst.name == "clx") {
             std::vector<uint> args;
             // Each gate is a measurement+qubit (in terms of operands).
@@ -107,7 +107,7 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                 args.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
                 args.push_back(qubits[i]);
             }
-            circuit.append_op("CX", args);
+            circuit.safe_append_u("CX", args);
         } else if (inst.name == "clz") {
             std::vector<uint> args;
             // Each gate is a measurement+qubit (in terms of operands).
@@ -115,7 +115,7 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                 args.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
                 args.push_back(qubits[i]);
             }
-            circuit.append_op("CZ", args);
+            circuit.safe_append_u("CZ", args);
         } else if (inst.name == "event") {
             std::vector<uint> offsets;
             for (uint i = 0; i < meas.size(); i++) {
@@ -142,14 +142,14 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                 circuit.flag_edge_table[events[0]] = std::make_tuple(src, thru, dst);
             }
 
-            circuit.append_op("DETECTOR", offsets, color_id);
+            circuit.safe_append_u("DETECTOR", offsets, {0, 0, 0, color_id});
             continue;
         } else if (inst.name == "obs") {
             std::vector<uint> offsets;
             for (uint i = 0; i < meas.size(); i++) {
                 offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
-            circuit.append_op("OBSERVABLE_INCLUDE", offsets, obs[0]);
+            circuit.safe_append_u("OBSERVABLE_INCLUDE", offsets, {obs[0]});
             continue;
         } else { continue; }    // Ignore all other instructions.
         // Update operation latency.
@@ -165,7 +165,7 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                 for (uint i = 0; i < n; i++) {
                     if (std::find(qubits.begin(), qubits.end(), i) != qubits.end()) continue;
                     fp_t e_idle = errors.idling[i];
-                    circuit.append_op("DEPOLARIZE1", {i}, e_idle);
+                    circuit.safe_append_u("DEPOLARIZE1", {i}, {e_idle});
                 }
             } else {
                 for (uint x : qubits) {
@@ -185,18 +185,16 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                     fp_t lt = errors.op2q_leakage_transport[inst.name][x_y];
                     fp_t li = errors.op2q_leakage_injection[inst.name][x_y];
 
-                    if (lt > 0) circuit.append_op("L_TRANSPORT", {x, y}, lt);
-                    if (li > 0) circuit.append_op("L_ERROR", {x, y}, lt);
-                    if (dp > 0) circuit.append_op("DEPOLARIZE2", {x, y}, dp);
+                    if (dp > 0) circuit.safe_append_u("DEPOLARIZE2", {x, y}, {dp});
                 }
             } else {
                 for (uint x : qubits) {
                     fp_t e = errors.op1q[inst.name][x];
                     if (e > 0) {
                         if (inst.name == "reset") {
-                            circuit.append_op("X_ERROR", {x}, e);
+                            circuit.safe_append_u("X_ERROR", {x}, {e});
                         } else {
-                            circuit.append_op("DEPOLARIZE1", {x}, e);
+                            circuit.safe_append_u("DEPOLARIZE1", {x}, {e});
                         }
                     }
                 }

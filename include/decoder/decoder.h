@@ -23,7 +23,7 @@ namespace qontra {
 
 template <class T> std::vector<uint>
 // T = stim::simd_bits or stim::simd_bits_range_ref
-get_nonzero_detectors(const T syndrome, uint number_of_detectors) {
+get_nonzero_detectors(T syndrome, uint number_of_detectors) {
     std::vector<uint> det;
     uint64_t w = 0;
     uint64_t last_bit = 0;
@@ -87,7 +87,7 @@ protected:
     // get_nonzero_detectors: gets nonzero detectors from syndrome.
     template <class T> std::vector<uint>
     // T = stim::simd_bits or stim::simd_bits_range_ref
-    get_nonzero_detectors(T syndrome) {
+    get_nonzero_detectors_(T syndrome) {
         return get_nonzero_detectors(syndrome, circuit.count_detectors());
     }
 

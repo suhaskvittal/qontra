@@ -40,20 +40,19 @@ public:
     Decoder::result_t decode_error(stim::simd_bits_range_ref syndrome) override {
         const uint n_observables = circuit.count_observables();
 
-        std::vector<uint> detectors = get_nonzero_detectors(syndrome);
+        std::vector<uint> detectors = get_nonzero_detectors_(syndrome);
         if (detectors.size() == 0) {
-            stim::simd_bits corr(n_observables);
+            stim::simd_bits<SIMD_WIDTH> corr(n_observables);
             corr.clear();
             return (Decoder::result_t) {
                 0,
-                corr,
-                false
+                corr
             };
         }
         // Convert to uint64_t.
         std::vector<uint64_t> d64;
         for (uint x : detectors) d64.push_back(x);
-        stim::simd_bits corr(n_observables);
+        stim::simd_bits<SIMD_WIDTH> corr(n_observables);
 
         // Get working set into the cache first.
         int64_t w;
@@ -66,8 +65,7 @@ public:
 
         return (Decoder::result_t) {
             t,
-            corr,
-            is_error(corr, syndrome)
+            corr
         };
     }
 

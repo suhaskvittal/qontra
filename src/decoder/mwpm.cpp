@@ -8,12 +8,12 @@
 namespace qontra {
 
 Decoder::result_t
-MWPMDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
+MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     const uint n_detectors = circuit.count_detectors();
     const uint n_observables = circuit.count_observables();
 
     timer.clk_start();
-    std::vector<uint> detectors = get_nonzero_detectors(syndrome);
+    std::vector<uint> detectors = get_nonzero_detectors_(syndrome);
 
     if (detectors.size() & 0x1) {
         // Add boundary to matching graph.
@@ -34,7 +34,7 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
             auto vi_vj = std::make_pair(vi, vj);
             auto error_data = decoding_graph.get_error_chain_data(vi, vj);
 
-            wgt_t edge_weight;
+            uint32_t edge_weight;
             if (error_data.weight > 1000.0) edge_weight = 10000000;
             else                            edge_weight = MWPM_TO_INT(error_data.weight);
             pm.AddEdge(i, j, edge_weight);
@@ -42,7 +42,7 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
     }
     // Solve instance.
     pm.Solve();
-    stim::simd_bits corr(n_observables);
+    stim::simd_bits<SIMD_WIDTH> corr(n_observables);
     corr.clear();
 
     std::vector<Decoder::assign_t>  error_assignments;
@@ -56,7 +56,7 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
         auto vj = decoding_graph.get_vertex(dj);
         auto error_data = decoding_graph.get_error_chain_data(vi, vj);
 
-        stim::simd_bits local_assign(n_observables);
+        stim::simd_bits<SIMD_WIDTH> local_assign(n_observables);
         local_assign.clear();
         for (auto f : error_data.frame_changes) {
             if (f >= 0) local_assign[f] ^= 1;
@@ -68,7 +68,6 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
     Decoder::result_t res = {
         time_taken,
         corr,
-        is_error(corr, syndrome),
         error_assignments
     };
     return res;
