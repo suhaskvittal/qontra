@@ -26,15 +26,8 @@ typedef uint32_t uint;
 typedef uint64_t                addr_t;
 typedef std::vector<uint64_t>   vlw_t;
 
-template <class T>
-using sptr=std::shared_ptr<T>;
-
-template <class T>
-using uptr=std::unique_ptr<T>;
-
-const fp_t KB = 1024.0;
-const fp_t MB = KB*1024.0;
-const fp_t GB = MB*1024.0;
+template <class T> using sptr=std::shared_ptr<T>;
+template <class T> using uptr=std::unique_ptr<T>;
 
 namespace qontra {
 

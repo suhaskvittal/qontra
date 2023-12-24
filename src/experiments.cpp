@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   12 June 2023
  * */
 
@@ -21,6 +20,14 @@ uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
 
 using namespace experiments;
 
+std::string
+get_batch_filename(uint batchno) {
+    std::string batch_file = std::string("/batch_")
+                                + std::to_string(batchno)
+                                + std::string(".dets");
+    return batch_file;
+}
+
 void
 configure_optimal_batch_size() {
     const uint64_t take_up_lines = 1;
@@ -30,9 +37,7 @@ configure_optimal_batch_size() {
 }
 
 void
-generate_syndromes(const stim::Circuit& circuit, 
-                    uint64_t shots, 
-                    callback_t callbacks)
+generate_syndromes(const stim::Circuit& circuit, uint64_t shots, callback_t callbacks)
 {
     uint64_t __shots;
 
@@ -50,61 +55,91 @@ generate_syndromes(const stim::Circuit& circuit,
 
     std::mt19937_64 rng(G_BASE_SEED + world_rank);
 
+    stim::DetectorErrorModel dem = stim::ErrorAnalyzer::circuit_to_detector_error_model(
+                                        circuit,
+                                        true,   // decompose errors
+                                        true,   // fold loops
+                                        true,   // allow gauge detectors
+                                        0.0,
+                                        false,  // ignore decomposition failures
+                                        true    // block decomposition from introducing remnant edges
+                                    );
+    stim::DemSampler<SIMD_WIDTH> sampler(dem, std::move(rng), G_SHOTS_PER_BATCH);
     while (__shots > 0) {
-        const uint64_t shots_this_batch = 
-            __shots < G_SHOTS_PER_BATCH ? __shots : G_SHOTS_PER_BATCH;
-        auto samples = stim::detector_samples(
-                            circuit, shots_this_batch, false, true, rng);
-        samples = samples.transposed();
+        const uint64_t shots_this_batch = __shots < G_SHOTS_PER_BATCH ? __shots : G_SHOTS_PER_BATCH;
+        sampler.resample(false);
+
+        stim::simd_bit_table<SIMD_WIDTH> syndrome_table = sampler.det_buffer.transposed(),
+                                            obs_table = sampler.obs_buffer.transposed();
         for (uint64_t t = 0; t < shots_this_batch; t++) {
-            stim::simd_bits_range_ref row = samples[t];
-            callbacks.prologue(row);
+            stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = syndrome_table[t],
+                                                    obs = obs_table[t];
+            callbacks.prologue({syndrome, obs});
         }
         __shots -= shots_this_batch;
     }
 }
 
 void
-build_syndrome_trace(std::string output_folder,
-        const stim::Circuit& circuit, 
-        uint64_t shots) 
-{
+build_syndrome_trace(std::string output_folder, const stim::Circuit& circuit, uint64_t shots) {
     int world_size = 1, world_rank = 0;
     if (G_USE_MPI) {
         MPI_Comm_size(MPI_COMM_WORLD, &world_size);
         MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     }
 
-    uint width = circuit.count_detectors() + circuit.count_observables();
-    stim::simd_bit_table syndromes(G_SHOTS_PER_BATCH, width);
+    const uint w_det = circuit.count_detectors();
+    const uint w_obs = circuit.count_observables();
+
+    stim::simd_bit_table<SIMD_WIDTH> syndromes(G_SHOTS_PER_BATCH, w_det);
+    stim::simd_bit_table<SIMD_WIDTH> observables(G_SHOTS_PER_BATCH, w_obs);
 
     syndromes.clear();
 
-    stim::simd_bits ref(width);
+    stim::simd_bits<SIMD_WIDTH> ref(w_det+w_obs);
+    ref.clear();
 
     uint64_t ctr = 0;
     uint file_offset = world_rank;
-    cb_t1 t_cb = [&] (stim::simd_bits_range_ref row) {
-        syndromes[++ctr] |= row;
+
+    // Create a local function for writing syndromes and observables to a file.
+    auto write_batch = [&] (void) {
+        ctr = 0;
+        // Merge syndrome and observable tables into one.
+        stim::simd_bit_table<SIMD_WIDTH> output_trace(std::move(syndromes));
+        output_trace = output_trace.transposed();
+        output_trace.resize(w_det+w_obs, G_SHOTS_PER_BATCH);
+
+        stim::simd_bit_table<SIMD_WIDTH> obs_tr(std::move(observables));
+        obs_tr = obs_tr.transposed();
+        for (uint i = 0; i < w_obs; i++) output_trace[w_det + i] |= obs_tr[i];
+
+        std::string filename = output_folder + "/" + get_batch_filename(file_offset);
+
+        FILE* fout = fopen(filename.c_str(), "w");
+        stim::write_table_data(fout,
+                                G_SHOTS_PER_BATCH,
+                                w_det+w_obs,
+                                ref,
+                                output_trace,
+                                stim::SampleFormat::SAMPLE_FORMAT_DETS,
+                                'D',
+                                'L',
+                                w_det);
+        fclose(fout);
+        syndromes.clear();
+        observables.clear();
+        file_offset += world_rank;
+    };
+
+    cb_t1 t_cb = [&] (shot_payload_t payload) {
+        // Record payload to simd_bit_tables.
+        syndromes[ctr] |= payload.syndrome;
+        observables[ctr] |= payload.observables;
+        ctr++;
+
         if (ctr == G_SHOTS_PER_BATCH) {
-            ctr = 0;
-            std::string filename = output_folder + "/batch_"
-                                + std::to_string(file_offset)
-                                + ".dets";
-            auto output_trace = syndromes.transposed();
-            FILE* fout = fopen(filename.c_str(), "w");
-            stim::write_table_data(fout,
-                                    G_SHOTS_PER_BATCH,
-                                    width,
-                                    ref,
-                                    output_trace,
-                                    stim::SampleFormat::SAMPLE_FORMAT_DETS,
-                                    'D',
-                                    'L',
-                                    circuit.count_detectors());
-            fclose(fout);
-            syndromes.clear();
-            file_offset += world_rank;
+            write_batch();
         }
     };
     callback_t srcbs;
@@ -112,31 +147,14 @@ build_syndrome_trace(std::string output_folder,
     generate_syndromes(circuit, shots, srcbs);
     // Write out any remaining syndromes as well.
     if (ctr) {
-        std::string filename = output_folder + "/batch_"
-                            + std::to_string(file_offset)
-                            + ".dets";
-        auto output_trace = syndromes.transposed();
-        FILE* fout = fopen(filename.c_str(), "w");
-        stim::write_table_data(fout,
-                                G_SHOTS_PER_BATCH,
-                                width,
-                                ref,
-                                output_trace,
-                                stim::SampleFormat::SAMPLE_FORMAT_DETS,
-                                'D',
-                                'L',
-                                circuit.count_detectors());
-        fclose(fout);
+        write_batch();
     }
 }
 
 uint64_t
-read_syndrome_trace(std::string folder, 
-                        const stim::Circuit& circuit,
-                        callback_t callbacks) 
-{
-    const uint det = circuit.count_detectors();
-    const uint obs = circuit.count_observables();
+read_syndrome_trace(std::string folder, const stim::Circuit& circuit, callback_t callbacks) {
+    const uint w_det = circuit.count_detectors();
+    const uint w_obs = circuit.count_observables();
 
     int world_rank = 0, world_size = 1;
     if (G_USE_MPI) {
@@ -145,29 +163,42 @@ read_syndrome_trace(std::string folder,
     }
 
     uint file_offset = world_rank;
-    std::string batch_file = folder + "/batch_" 
-                                + std::to_string(file_offset) + ".dets";
     uint64_t local_shots = 0;
+
+    std::string batch_file = folder + "/" + get_batch_filename(file_offset);
     while (access(batch_file.c_str(), F_OK) >= 0) {
-        stim::simd_bit_table samples(G_SHOTS_PER_BATCH, det+obs);
+        // We will temporarily write the data column-wise to input_trace, and then extract
+        // the syndrome and observable tables from there.
+        stim::simd_bit_table<SIMD_WIDTH> input_trace(w_det+w_obs, G_SHOTS_PER_BATCH);
+
         FILE* fin = fopen(batch_file.c_str(), "r");
         uint64_t true_shots = stim::read_file_data_into_shot_table(
                                 fin,
                                 G_SHOTS_PER_BATCH,
-                                det,
+                                w_det+w_obs,
                                 stim::SampleFormat::SAMPLE_FORMAT_DETS,
                                 'D',
-                                samples,
-                                true,
-                                0,
-                                det,
-                                obs);
+                                input_trace,
+                                false);
+        fclose(fin);
+        input_trace.destructive_resize(w_det+w_obs, true_shots);
+        // Split the data into two tables.
+        stim::simd_bit_table<SIMD_WIDTH> syndromes(std::move(input_trace));
+        stim::simd_bit_table<SIMD_WIDTH> observables(w_obs, true_shots);
+        // First populate observables.
+        for (uint i = 0; i < w_obs; i++) observables[i] |= syndromes[w_det+i];
+        observables = observables.transposed();
+        // Now, we will create syndromes by destructive resizing + transposing.
+        syndromes.destructive_resize(w_det, true_shots);
+        syndromes = syndromes.transposed();
+        // Finally, execute the callbacks.
         for (uint64_t s = 0; s < true_shots; s++) {
-            stim::simd_bits_range_ref row = samples[s];
-            callbacks.prologue(row);
+            stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = syndromes[s],
+                                                    obs = observables[s];
+            callbacks.prologue({syndrome, obs});
         }
         file_offset += world_size;
-        batch_file = folder + "/batch_" + std::to_string(file_offset) + ".dets";
+        batch_file = folder + "/" + get_batch_filename(file_offset);
         local_shots += true_shots;
     }
     uint64_t shots;
@@ -183,44 +214,39 @@ read_syndrome_trace(std::string folder,
 memory_result_t
 memory_experiment(Decoder* dec, experiments::memory_params_t params) {
     const stim::Circuit circuit = dec->get_circuit();
-    const uint det = circuit.count_detectors();
-    const uint obs = circuit.count_observables();
-    // Stats that will be placed in memory_result_t
-    uint64_t    logical_errors, __logical_errors = 0;
-    uint64_t    hw_sum, __hw_sum = 0;
-    uint64_t    hw_sqr_sum, __hw_sqr_sum = 0;
-    uint64_t    hw_max, __hw_max = 0;
-    fp_t        t_sum, __t_sum = 0;
-    fp_t        t_sqr_sum, __t_sqr_sum = 0;
-    fp_t        t_max, __t_max = 0;
+    const uint w_det = circuit.count_detectors();
+    const uint w_obs = circuit.count_observables();
 
-    std::vector<uint64_t> logical_errors_by_obs(obs, 0), __logical_errors_by_obs(obs, 0);
+    statistic_t<uint64_t> logical_errors(MPI_SUM, w_obs+1);
+    statistic_t<uint64_t> hw_sum(MPI_SUM), hw_sqr_sum(MPI_SUM), hw_max(MPI_MAX);
+    statistic_t<fp_t> t_sum(MPI_SUM), t_sqr_sum(MPI_SUM), t_max(MPI_MAX);
 
-    const uint sample_width = 
-        circuit.count_detectors() + circuit.count_observables();
-    cb_t1 dec_cb = [&] (stim::simd_bits_range_ref& row)
+    const uint sample_width = w_det + w_obs;
+    cb_t1 dec_cb = [&] (shot_payload_t payload)
     {
-        params.callbacks.prologue(row);
-        uint obs_bits = 0;
-        for (uint i = 0; i < obs; i++) {
-            obs_bits += row[i+det];
-        }
-        const uint hw = row.popcnt() - obs_bits;
-        __hw_sum += hw;
-        __hw_sqr_sum += SQR(hw);
-        __hw_max = hw > __hw_max ? hw : __hw_max;
+        stim::simd_bits<SIMD_WIDTH> syndrome(payload.syndrome),
+                                    obs(payload.observables);
+
+        params.callbacks.prologue({syndrome, obs});
+        const uint hw = syndrome.popcnt();
+        // Update HW statistics and skip the trial if the HW is too small
+        // and filtering is enabled.
+        hw_sum += hw;
+        hw_sqr_sum += SQR(hw);
+        hw_max.scalar_replace_if_better_extrema(hw);
+
         if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
             return;
         }
-        stim::simd_bits syndrome(row);
+        // Decode syndrome
         auto res = dec->decode_error(syndrome); 
-        __logical_errors += res.is_error;
-        __t_sum += res.exec_time;
-        __t_sqr_sum += SQR(res.exec_time);
-        __t_max = res.exec_time > __t_max ? res.exec_time : __t_max;
+        logical_errors[0] += (bool) (payload.observables != res.corr);
+        t_sum += res.exec_time;
+        t_sqr_sum += SQR(res.exec_time);
+        t_max.scalar_replace_if_better_extrema(res.exec_time);
 
-        for (uint i = 0; i < obs; i++) {
-            __logical_errors_by_obs[i] += (bool)(res.corr[i] ^ row[i+det]);
+        for (uint i = 0; i < w_obs; i++) {
+            logical_errors[i+1] += (bool)(res.corr[i] != obs[i]);
         }
 
         params.callbacks.epilogue(res);
@@ -236,55 +262,37 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
         generate_syndromes(circuit, shots, srcbs);
     }
 
-    // Collect results using MPI if enabled.
-    if (G_USE_MPI) {
-        MPI_Reduce(&__logical_errors, &logical_errors, 1, MPI_UNSIGNED_LONG,
-                    MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(&__hw_sum, &hw_sum, 1, MPI_UNSIGNED_LONG, MPI_SUM,
-                    0, MPI_COMM_WORLD);
-        MPI_Reduce(&__hw_sqr_sum, &hw_sqr_sum, 1, MPI_UNSIGNED_LONG, MPI_SUM,
-                    0, MPI_COMM_WORLD);
-        MPI_Reduce(&__hw_max, &hw_max, 1, MPI_UNSIGNED_LONG, MPI_MAX,
-                    0, MPI_COMM_WORLD);
-        MPI_Reduce(&__t_sum, &t_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        MPI_Reduce(&__t_sqr_sum, &t_sqr_sum, 1, MPI_DOUBLE, MPI_SUM, 
-                    0, MPI_COMM_WORLD);
-        MPI_Reduce(&__t_max, &t_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    // Collect results across all processors.
+    logical_errors.reduce();
 
-        MPI_Reduce(&__logical_errors_by_obs[0], &logical_errors_by_obs[0], obs, MPI_UNSIGNED_LONG,
-                    MPI_SUM, 0, MPI_COMM_WORLD);
-    } else {
-        logical_errors = __logical_errors;
-        hw_sum = __hw_sum;
-        hw_sqr_sum = __hw_sqr_sum;
-        hw_max = __hw_max;
-        t_sum = __t_sum;
-        t_sqr_sum = __t_sqr_sum;
-        t_max = __t_max;
+    hw_sum.reduce();
+    hw_sqr_sum.reduce();
+    hw_max.reduce();
 
-        logical_errors_by_obs = __logical_errors_by_obs;
-    }
-    fp_t ler = ((fp_t)logical_errors) / ((fp_t)shots);
-    fp_t hw_mean = MEAN(hw_sum, shots);
-    fp_t hw_std = STD(hw_mean, hw_sqr_sum, shots);
-    fp_t t_mean = MEAN(t_sum, shots);
-    fp_t t_std = STD(t_mean, t_sqr_sum, shots);
+    t_sum.reduce();
+    t_sqr_sum.reduce();
+    t_max.reduce();
+    // Compute means and variances/std. deviations.
+    statistic_t<fp_t> logical_error_rate = logical_errors.get_mean(shots);
+    statistic_t<fp_t> hw_mean = hw_sum.get_mean(shots);
+    statistic_t<fp_t> t_mean = t_sum.get_mean(shots);
 
-    std::vector<fp_t> ler_by_obs(obs);
-    for (uint i = 0; i < obs; i++) {
-        ler_by_obs[i] = ((fp_t)logical_errors_by_obs[i]) / ((fp_t)shots);
-    }
+    statistic_t<fp_t> hw_std = hw_sqr_sum.get_std(hw_mean, shots);
+    statistic_t<fp_t> t_std = t_sqr_sum.get_std(t_mean, shots);
+
+    std::vector<fp_t> logical_error_rate_by_obs(w_obs);
+    for (uint i = 0; i < w_obs; i++) logical_error_rate_by_obs[i] = logical_error_rate(i+1);
 
     memory_result_t res = {
-        ler,
-        hw_mean,
-        hw_std,
-        hw_max,
-        t_mean,
-        t_std,
-        t_max,
+        logical_error_rate(),
+        hw_mean(),
+        hw_std(),
+        hw_max(),
+        t_mean(),
+        t_std(),
+        t_max(),
         // Additional statistics:
-        ler_by_obs
+        logical_error_rate_by_obs
     };
     return res;
 }

@@ -7,6 +7,7 @@
 
 #include "decoder/decoder.h"
 #include "defs.h"
+#include "stats.h"
 
 #include <stim.h>
 
@@ -32,11 +33,16 @@ namespace experiments {
 //
 // Both callbacks are packaged into the callback_t struct.
 
-typedef std::function<void(stim::simd_bits_range_ref&)>         cb_t1;
-typedef std::function<void(const Decoder::result_t&)>  cb_t2;
+struct shot_payload_t {
+    stim::simd_bits_range_ref<SIMD_WIDTH>   syndrome;
+    stim::simd_bits_range_ref<SIMD_WIDTH>   observables;
+};
+
+typedef std::function<void(shot_payload_t)>             cb_t1;
+typedef std::function<void(const Decoder::result_t&)>   cb_t2;
 
 typedef struct {
-    cb_t1   prologue = [] (stim::simd_bits_range_ref x) {};
+    cb_t1   prologue = [] (shot_payload_t) {};
     cb_t2   epilogue = [] (const Decoder::result_t& res) {};
 } callback_t;
 
@@ -97,16 +103,12 @@ void    configure_optimal_batch_size(void);
 // a cb_t1 parameter that can be used in conjunction with the generated cb_t1
 // callback for the decoder.
 //
-void    generate_syndromes(const stim::Circuit&,
-                                uint64_t shots,
-                                experiments::callback_t);
-void    build_syndrome_trace(std::string, const stim::Circuit&, uint64_t shots);
+void    generate_syndromes(const stim::Circuit&, uint64_t shots, experiments::callback_t);
+void    build_syndrome_trace(std::string output_file, const stim::Circuit&, uint64_t shots);
 
-uint64_t
-read_syndrome_trace(std::string, const stim::Circuit&, experiments::callback_t);
+uint64_t    read_syndrome_trace(std::string input_file, const stim::Circuit&, experiments::callback_t);
 
-experiments::memory_result_t
-memory_experiment(Decoder*, experiments::memory_params_t);
+experiments::memory_result_t    memory_experiment(Decoder*, experiments::memory_params_t);
 
 }   // qontra
 

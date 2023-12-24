@@ -49,7 +49,6 @@ set(QONTRA_FILES
     # Top-Level
     src/experiments.cpp
     src/instruction.cpp
-    src/stats.cpp
     # Decoders
     src/decoder/mwpm.cpp
     src/decoder/window.cpp

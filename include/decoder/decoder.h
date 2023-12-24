@@ -64,17 +64,16 @@ public:
 
     virtual ~Decoder() {}
 
-    typedef std::tuple<uint, uint, stim::simd_bits> assign_t;
+    typedef std::tuple<uint, uint, stim::simd_bits<SIMD_WIDTH>> assign_t;
 
     struct result_t {
         fp_t exec_time = 0.0;
-        stim::simd_bits corr = stim::simd_bits(1);
-        bool is_error = false;
-
+        stim::simd_bits<SIMD_WIDTH> corr = stim::simd_bits<>(1);
+        // The below arguments are not guaranteed to be populated.
         std::vector<assign_t>   error_assignments;
     };
 
-    virtual result_t decode_error(stim::simd_bits_range_ref) =0;
+    virtual result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) =0;
                                                     // This function
                                                     // will perform decoding
                                                     // and return a correction.
@@ -84,42 +83,12 @@ public:
 protected:
     // Other helpful functions:
     //
-    // is_error: checks if the provided correction is a logical error.
     // get_error_chain_data: retrieves error chain data, adjusted for flag detections.
     // get_nonzero_detectors: gets nonzero detectors from syndrome.
-
-    bool is_error(
-            const stim::simd_bits& correction, stim::simd_bits_range_ref syndrome)
-    {
-        const uint n_detectors = circuit.count_detectors();
-        const uint n_observables = circuit.count_observables();
-        bool is_error = false;
-        for (uint i = 0; i < n_observables; i++) {
-            is_error |= correction[i] ^ syndrome[n_detectors+i];
-        }
-        return is_error;
-    }
-
     template <class T> std::vector<uint>
     // T = stim::simd_bits or stim::simd_bits_range_ref
     get_nonzero_detectors(T syndrome) {
-        std::vector<uint> det;
-        uint64_t w = 0;
-        uint64_t last_bit = 0;
-        while (det.size() < syndrome.popcnt()) {
-            uint64_t i = ffsll(syndrome.u64[w] & ~((1L << last_bit)-1));
-            if (i == 0) {   // No match found.
-                last_bit = 0;
-                w++;
-                continue;
-            }
-            uint d = (w << 6) | (i-1);
-            if (d >= circuit.count_detectors()) break;
-            det.push_back(d);
-            last_bit = i & 0x3f;
-            w += (i >= 64);
-        }
-        return det;
+        return get_nonzero_detectors(syndrome, circuit.count_detectors());
     }
 
     DetailedStimCircuit     circuit;
