@@ -517,12 +517,11 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
     typedef std::pair<uint64_t, std::string> labeled_det_t;
     std::map<labeled_det_t, uint64_t> sub_detector_map;
 
-    circuit.for_each_operation([&] (stim::Operation op) {
-        std::string gate_name(op.gate->name);
-        if (gate_name == "DETECTOR") {
+    circuit.for_each_operation([&] (stim::CircuitInstruction op) {
+        if (op.gate_type == stim::GateType::DETECTOR) {
             // Check the color of the detector.
             uint64_t detector = detector_ctr;
-            int color_id = (int) op.target_data.args[0];
+            int color_id = (int) op.args[0];
 
             std::string color;
             if (color_id >= 0) {
@@ -534,7 +533,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
                         labeled_det_t sub_detector = std::make_pair(sub_detector_ctr[i]++, r);
                         sub_detector_map[sub_detector] = detector;
                         // Add this operation to the corresponding subcircuit as well.
-                        subcircuits[i].append_operation(op);
+                        subcircuits[i].safe_append(op);
                     }
                 }
             } else {
@@ -548,7 +547,7 @@ to_colored_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode
             graph.add_vertex(v);
             detector_ctr++;
         } else {
-            for (auto& sc : subcircuits) sc.append_operation(op);
+            for (auto& sc : subcircuits) sc.safe_append(op);
         }
     });
 
