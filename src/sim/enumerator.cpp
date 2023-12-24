@@ -11,7 +11,11 @@ namespace enumerator {
 bool G_RECORD_WEIGHT_ONE_ERRORS = false;
 
 void
-execute_gate(const Instruction& inst, stim::simd_bit_table& x_table, stim::simd_bit_table& z_table) {
+execute_gate(
+        const Instruction& inst, 
+        stim::simd_bit_table<SIMD_WIDTH>& x_table,
+        stim::simd_bit_table<SIMD_WIDTH>& z_table) 
+{
     std::vector<uint> qubits(inst.operands.qubits);
     // We really only care about H and CX, and the cmpz and cmpx instructions.
     if (inst.name == "h") {
@@ -43,7 +47,7 @@ execute_gate(const Instruction& inst, stim::simd_bit_table& x_table, stim::simd_
 }
 
 void
-inject_error(uint q, stim::simd_bit_table& x_table, stim::simd_bit_table& z_table) {
+inject_error(uint q, stim::simd_bit_table<SIMD_WIDTH>& x_table, stim::simd_bit_table<SIMD_WIDTH>& z_table) {
     x_table[q][0] = 1;
     x_table[q][1] = 1;
     x_table[q][2] = 0;
@@ -67,8 +71,8 @@ enumerate_errors(const schedule_t& prog) {
     }
 
     const uint n = get_number_of_qubits(prog);
-    stim::simd_bit_table x_table(n, 3);
-    stim::simd_bit_table z_table(n, 3);
+    stim::simd_bit_table<SIMD_WIDTH> x_table(n, 3);
+    stim::simd_bit_table<SIMD_WIDTH> z_table(n, 3);
 
     std::vector<error_record_t> record_list;
 
@@ -96,13 +100,13 @@ enumerate_errors(const schedule_t& prog) {
             auto x_tr = x_table.transposed();
             auto z_tr = z_table.transposed();
             for (uint j = 0; j < 3; j++) {
-                stim::simd_bits_range_ref x_ref = x_tr[j];
-                stim::simd_bits_range_ref z_ref = z_tr[j];
+                stim::simd_bits_range_ref<SIMD_WIDTH> x_ref = x_tr[j];
+                stim::simd_bits_range_ref<SIMD_WIDTH> z_ref = z_tr[j];
                 
                 if (((x_ref.popcnt() + G_RECORD_WEIGHT_ONE_ERRORS) > 1)
                     || (z_ref.popcnt() + G_RECORD_WEIGHT_ONE_ERRORS) > 1)
                 {
-                    stim::simd_bits x_cpy(x_ref), z_cpy(z_ref);
+                    stim::simd_bits<SIMD_WIDTH> x_cpy(x_ref), z_cpy(z_ref);
                     error_record_t rec = std::make_tuple(i, inst, q, error_list[j], x_cpy, z_cpy);
                     record_list.push_back(rec);
                 }
@@ -134,8 +138,8 @@ enumerate_errors(const schedule_t& prog) {
                 MPI_Bcast(&ei, 1, MPI_UNSIGNED_LONG, i, MPI_COMM_WORLD);
                 e = error_list[ei];
 
-                stim::simd_bits x(std::get<4>(rec));
-                stim::simd_bits z(std::get<5>(rec));
+                stim::simd_bits<SIMD_WIDTH> x(std::get<4>(rec));
+                stim::simd_bits<SIMD_WIDTH> z(std::get<5>(rec));
                 MPI_Bcast(x.u64, x.num_u64_padded(), MPI_UNSIGNED_LONG, i, MPI_COMM_WORLD);
                 MPI_Bcast(z.u64, z.num_u64_padded(), MPI_UNSIGNED_LONG, i, MPI_COMM_WORLD);
 
@@ -157,8 +161,8 @@ write_recorded_errors_to(std::ostream& out, const std::vector<error_record_t>& r
         uint64_t q = std::get<2>(rec);
         error e = std::get<3>(rec);
         if (e == error::y)  continue;
-        stim::simd_bits x = std::get<4>(rec);
-        stim::simd_bits z = std::get<5>(rec);
+        stim::simd_bits<SIMD_WIDTH> x = std::get<4>(rec);
+        stim::simd_bits<SIMD_WIDTH> z = std::get<5>(rec);
 
         typedef std::pair<uint, error> qubit_error_t;
         std::vector<qubit_error_t> error_list;
