@@ -3,6 +3,7 @@
  *  date:   2 August 2022
  * */
 
+#include "defs/set_algebra.h"
 #include "graph/decoding_graph.h"
 
 namespace qontra {
@@ -24,18 +25,44 @@ read_detector_error_model(
 
 using namespace decoding;
 
-std::string
-print_v(sptr<colored_vertex_t> v) {
-    std::string s;
-    if (is_colored_boundary(v)) s += "B";
-    else                s += std::to_string(v->id);
-    s += "[" + v->color + "]";
-    return s;
-}
-
 //
 // DecodingGraph Definitions
 //
+
+DecodingGraph::DecodingGraph(Mode m)
+    :Graph(),
+    distance_matrix(),
+    flagged_decoding_graph(nullptr),
+    error_polynomial(),
+    expected_errors(),
+    mode(m)
+{
+    std::array<fp_t, N_COORD> boundary_coords;
+    boundary_coords.fill(-1);
+
+    sptr<decoding::vertex_t> boundary = std::make_shared<decoding::vertex_t>();
+    boundary->id = BOUNDARY_INDEX;
+    boundary->coords = boundary_coords;
+    add_vertex(boundary);
+}
+
+DecodingGraph::DecodingGraph(const DecodingGraph& other)
+    :Graph(other),
+    distance_matrix(other.distance_matrix),
+    flagged_decoding_graph(nullptr), // Do NOT copy.
+    error_polynomial(other.error_polynomial),
+    expected_errors(other.expected_errors),
+    mode(other.mode)
+{}
+
+DecodingGraph::DecodingGraph(DecodingGraph&& other)
+    :Graph(other),
+    distance_matrix(std::move(other.distance_matrix)),
+    flagged_decoding_graph(nullptr),
+    error_polynomial(std::move(other.error_polynomial)),
+    expected_errors(other.expected_errors),
+    mode(other.mode)
+{}
 
 void
 DecodingGraph::setup_flagged_decoding_graph(
@@ -61,30 +88,24 @@ DecodingGraph::setup_flagged_decoding_graph(
     ewf_t<vertex_t> wf = [&] (sptr<vertex_t> v1, sptr<vertex_t> v2) {
         return flagged_decoding_graph->_ewf(v1, v2);
     };
-    for (uint i = 0; i < detectors.size(); i++) {
-        auto v = detectors[i];
+    for (size_t i = 0; i < detectors.size(); i++) {
+        sptr<vertex_t> v = detectors[i];
         std::map<sptr<vertex_t>, fp_t> dist;
         std::map<sptr<vertex_t>, sptr<vertex_t>> pred;
         distance::dijkstra(flagged_decoding_graph.get(), v, dist, pred, wf);
         // Update distance matrix.
-        for (uint j = 0; j < detectors.size(); j++) {
+        for (size_t j = 0; j < detectors.size(); j++) {
             if (i == j) continue;
-            auto w = detectors[j];
-            auto new_entry = flagged_decoding_graph->_dijkstra_cb(v, w, dist, pred);
-            tlm::put(flagged_decoding_graph->distance_matrix, v, w, new_entry);
+            sptr<vertex_t> w = detectors[j];
+            matrix_entry_t new_entry = flagged_decoding_graph->dijkstra_cb(v, w, dist, pred);
+            tlm_put(flagged_decoding_graph->distance_matrix, v, w, new_entry);
         }
     }
     graph_has_changed = false;  // Avoid later updates.
 }
 
-fp_t
-DecodingGraph::_ewf(sptr<vertex_t> v1, sptr<vertex_t> v2) {
-    auto e = get_edge(v1, v2);
-    return e->edge_weight;
-}
-
 DecodingGraph::matrix_entry_t
-DecodingGraph::_dijkstra_cb(sptr<vertex_t> src,
+DecodingGraph::dijkstra_cb(sptr<vertex_t> src,
                             sptr<vertex_t> dst,
                             const std::map<sptr<vertex_t>, fp_t>& dist,
                             const std::map<sptr<vertex_t>, sptr<vertex_t>>& pred)
@@ -106,13 +127,8 @@ DecodingGraph::_dijkstra_cb(sptr<vertex_t> src,
                 goto failed;
             }
             auto e = get_edge(next, curr);
-            std::set<uint> new_frames;
-            std::set_symmetric_difference(
-                    frames.begin(), frames.end(),
-                    e->frames.begin(), e->frames.end(),
-                    std::inserter(new_frames, new_frames.end()));
             // Update data
-            frames = new_frames;
+            frames ^= e->frames;
             length++;
             path.push_back(curr);
             found_boundary |= (is_boundary(curr) || is_colored_boundary(curr)) && (curr != dst);
@@ -126,27 +142,11 @@ failed:
 }
 
 void
-DecodingGraph::build_distance_matrix() {
-    ewf_t<vertex_t> wf = [&] (sptr<vertex_t> v1, sptr<vertex_t> v2) {
-        return this->_ewf(v1, v2);
-    };
-    distance::callback_t<vertex_t, matrix_entry_t> d_cb = 
-    [&] (sptr<vertex_t> v1, 
-            sptr<vertex_t> v2,
-            const std::map<sptr<vertex_t>, fp_t>& dist,
-            const std::map<sptr<vertex_t>, sptr<vertex_t>>& pred)
-    {
-        return this->_dijkstra_cb(v1, v2, dist, pred);
-    };
-    distance_matrix = distance::create_distance_matrix(this, wf, d_cb);
-}
-
-void
 DecodingGraph::build_flagged_decoding_graph() {
     flagged_decoding_graph = std::make_unique<DecodingGraph>();
     // Copy vertices over, but make new edge pointers.
-    for (auto v : get_vertices()) flagged_decoding_graph->add_vertex(v);
-    for (auto e : get_edges()) {
+    for (sptr<vertex_t> v : get_vertices()) flagged_decoding_graph->add_vertex(v);
+    for (sptr<edge_t> e : get_edges()) {
         sptr<edge_t> _e = std::make_shared<edge_t>();
         _e->src = e->src;
         _e->dst = e->dst;
@@ -161,22 +161,22 @@ DecodingGraph::build_flagged_decoding_graph() {
 
 void
 DecodingGraph::build_error_polynomial() {
-    auto e0 = edges[0];
+    sptr<edge_t> e0 = edges[0];
     poly_t pX{1 - e0->error_probability, e0->error_probability};
     // Multiply the polynomials together
     fp_t expectation = 0.0;
-    for (uint i = 1; i < edges.size(); i++) {
-        auto e = edges[i];
+    for (size_t i = 1; i < edges.size(); i++) {
+        sptr<edge_t> e = edges[i];
         poly_t a(pX.size()+1);  // p(X) * (1-e)
         poly_t b(pX.size()+1);  // p(X) * eX
         
         b[0] = 0;
-        for (uint j = 0; j < pX.size(); j++) {
+        for (size_t j = 0; j < pX.size(); j++) {
             a[j] += pX[j] * (1 - e->error_probability);
             b[j+1] += pX[j] * e->error_probability;
         }
         pX.clear(); pX.push_back(0);    // Clear and increment the size of pX
-        for (uint j = 0; j < pX.size(); j++) {
+        for (size_t j = 0; j < pX.size(); j++) {
             pX[j] = a[0] + b[0];
             if (i == edges.size()-1) {
                 expectation += j * pX[j];
@@ -281,13 +281,6 @@ to_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
 //
 // ColoredDecodingGraph Definitions
 //
-
-face_t
-make_face(sptr<colored_vertex_t> v1, sptr<colored_vertex_t> v2, sptr<colored_vertex_t> v3) {
-    std::vector<sptr<colored_vertex_t>> vertices{v1, v2, v3};
-    std::sort(vertices.begin(), vertices.end());
-    return std::make_tuple(vertices[0], vertices[1], vertices[2]);
-}
 
 ColoredDecodingGraph::ColoredDecodingGraph(DecodingGraph::Mode mode)
     :Graph(),
