@@ -51,4 +51,31 @@ struct DetailedStimCircuit : public stim::Circuit {
 
 }   // qontra
 
+// Extension of stim::simd_bits_range_ref for_each_word function.
+template <size_t W, size_t N, class FUNC> inline void
+for_each_word(std::array<stim::simd_bits_range_ref<W>, N> ranges, FUNC body) {
+    std::array<stim::bitword<W>, N> values;
+
+    const size_t n = ranges[0].num_simd_words;
+    for (size_t j = 0; j < n; j++) {
+        for (size_t i = 0; i < N; i++) values[i] = *(ranges[i].ptr_simd + j);
+        body(values);
+    }
+}
+
+// Template and specialization of ANDNOT for general use.
+inline bool
+andnot(bool x, bool y) { return ~x & y; }
+
+template <size_t W> inline stim::bitword<W>
+andnot(stim::bitword<W> x, stim::bitword<W> y) { return x.andnot(y); }
+
+namespace stim {
+    
+template <size_t W> inline bitword<W> operator~(bitword<W> w) {
+    return w ^ bitword<W>::tile64(UINT64_MAX);
+}
+
+}   // stim
+
 #endif  // QONTRA_STIM_EXTENSIONS

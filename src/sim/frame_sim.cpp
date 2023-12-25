@@ -29,7 +29,7 @@ FrameSimulator::H(std::vector<uint> operands, int64_t tr) {
             x_table[i].for_each_word(
                     z_table[i],
                     lock_table[i],
-                    [&] (auto& x, auto& z, auto& lock)
+                    [] (auto& x, auto& z, auto& lock)
                     {
                         __h_gate(x, z, lock);
                     });
@@ -77,7 +77,7 @@ FrameSimulator::CX(std::vector<uint> operands, int64_t tr) {
     for (uint i = 0; i < operands.size(); i += 2) {
         uint j1 = operands[i], j2 = operands[i+1];
     
-        stim::simd_bits lock_both(lock_table[j1]);
+        stim::simd_bits<SIMD_WIDTH> lock_both(lock_table[j1]);
         lock_both |= lock_table[j2];
 
         if (tr >= 0) {
@@ -95,20 +95,37 @@ FrameSimulator::CX(std::vector<uint> operands, int64_t tr) {
                  rz2 = rand_word & 0x8;
             __cx_gate(x1, z1, l1, x2, z2, l2, lock, rx1, rz1, rx2, rz2);
         } else {
-            x_table[j1].for_each_word(
+            const size_t width = x_table[j1].num_bits_padded();
+            stim::simd_bits<SIMD_WIDTH> rand_x_1 = stim::simd_bits<SIMD_WIDTH>::random(width, rng),
+                                        rand_z_1 = stim::simd_bits<SIMD_WIDTH>::random(width, rng),
+                                        rand_x_2 = stim::simd_bits<SIMD_WIDTH>::random(width, rng),
+                                        rand_z_2 = stim::simd_bits<SIMD_WIDTH>::random(width, rng);
+            std::array<stim::simd_bits_range_ref<SIMD_WIDTH>, 11> args{{
+                x_table[j1],
                 z_table[j1],
                 leak_table[j1],
                 x_table[j2],
                 z_table[j2],
                 leak_table[j2],
                 lock_both,
-            [&] (auto& x1, auto& z1, auto& l1, auto& x2, auto& z2, auto& l2, auto& lock)
-            {
-                    stim::simd_word rx1(rng(), rng());
-                    stim::simd_word rz1(rng(), rng());
-                    stim::simd_word rx2(rng(), rng());
-                    stim::simd_word rz2(rng(), rng());
-                    __cx_gate(x1, z1, l1, x2, z2, l2, lock, rx1, rz1, rx2, rz2);
+                rand_x_1,
+                rand_z_1,
+                rand_x_2,
+                rand_z_2
+            }};
+            for_each_word(args, [] (std::array<stim::bitword<SIMD_WIDTH>, 11> word_array) {
+                auto& x1 = word_array[0],
+                    & z1 = word_array[1],
+                    & l1 = word_array[2],
+                    & x2 = word_array[3],
+                    & z2 = word_array[4],
+                    & l2 = word_array[5],
+                    & lock = word_array[6],
+                    & rx1 = word_array[7],
+                    & rz1 = word_array[8],
+                    & rx2 = word_array[9],
+                    & rz2 = word_array[10];
+                __cx_gate(x1, z1, l1, x2, z2, l2, lock, rx1, rz1, rx2, rz2);
             });
         }
     }
@@ -119,7 +136,7 @@ FrameSimulator::LEAKAGE_ISWAP(std::vector<uint> operands, int64_t tr) {
     for (uint i = 0; i < operands.size(); i += 2) {
         uint j1 = operands[i], j2 = operands[i+1];
     
-        stim::simd_bits lock_both(lock_table[j1]);
+        stim::simd_bits<SIMD_WIDTH> lock_both(lock_table[j1]);
         lock_both |= lock_table[j2];
 
         if (tr >= 0) {
@@ -133,7 +150,7 @@ FrameSimulator::LEAKAGE_ISWAP(std::vector<uint> operands, int64_t tr) {
                 x_table[j2],
                 leak_table[j2],
                 lock_both,
-            [&] (auto& x1, auto& x2, auto& l2, auto& lock)
+            [] (auto& x1, auto& x2, auto& l2, auto& lock)
             {
                 __liswap_gate(x1, x2, l2, lock);
             });
@@ -149,7 +166,7 @@ FrameSimulator::M(
         int record,
         int64_t tr) 
 {
-    uint opk = 0;
+    size_t k = 0;
     for (uint i : operands) {
         if (tr >= 0) {
             uint64_t rand = rng();
@@ -161,12 +178,24 @@ FrameSimulator::M(
                  rz = rand & 0x2;
             __measure(x, z, l, lock, rx, rz);
         } else {
-            x_table[i].for_each_word(z_table[i], leak_table[i], lock_table[i],
-            [&] (auto& x, auto& z, auto& l, auto& lock)
-            {
-                stim::simd_word rx(rng(), rng());
-                stim::simd_word rz(rng(), rng());
-
+            const size_t width = z_table[i].num_bits_padded();
+            stim::simd_bits<SIMD_WIDTH> rand_x = stim::simd_bits<SIMD_WIDTH>::random(width, rng),
+                                        rand_z = stim::simd_bits<SIMD_WIDTH>::random(width, rng);
+            std::array<stim::simd_bits_range_ref<SIMD_WIDTH>, 6> args{{
+                x_table[i],
+                z_table[i],
+                leak_table[i],
+                lock_table[i],
+                rand_x,
+                rand_z
+            }};
+            for_each_word(args, [] (std::array<stim::bitword<SIMD_WIDTH>, 6> word_array) {
+                auto &x = word_array[0],
+                     &z = word_array[1],
+                     &l = word_array[2],
+                     &lock = word_array[3],
+                     &rx = word_array[4],
+                     &rz = word_array[5];
                 __measure(x, z, l, lock, rx, rz);
             });
         }
@@ -178,21 +207,21 @@ FrameSimulator::M(
                     record_table[record][tr] = x_table[i][tr];
                     fp_t e = get_probability_sample_from_rng();
                     if (record_table[record][tr] == 0) {
-                        if (e < m1w0[opk]) record_table[record][tr] = 1;
+                        if (e < m1w0[k]) record_table[record][tr] = 1;
                     } else {
-                        if (e < m0w1[opk]) record_table[record][tr] = 0;
+                        if (e < m0w1[k]) record_table[record][tr] = 0;
                     }
                 }
             } else {
                 record_table[record].for_each_word(x_table[i], lock_table[i],
-                        [&] (auto& rec, auto& x, auto& lock)
+                        [] (auto& rec, auto& x, auto& lock)
                         {
-                            rec = (x & ~lock) | (rec & lock);
+                            rec = andnot(lock, x) | (rec & lock);
                         });
-                error_channel_m(record, m1w0[opk], m0w1[opk], lock_table[i]);
+                error_channel_m(record, m1w0[k], m0w1[k], lock_table[i]);
             }
             record++;
-            opk++;
+            k++;
         }
     }
 }
@@ -212,12 +241,11 @@ FrameSimulator::R(std::vector<uint> operands, int64_t tr) {
             x_table[i] &= lock_table[i];
             leak_table[i] &= lock_table[i];
 
-            stim::simd_bits rand = 
-                stim::simd_bits::random(z_table[i].num_bits_padded(), rng);
+            stim::simd_bits rand = stim::simd_bits<SIMD_WIDTH>::random(z_table[i].num_bits_padded(), rng);
             z_table[i].for_each_word(rand, lock_table[i],
             [&] (auto& z, auto& r, auto& lock)
             {
-                z = (r & ~lock) | (z & lock);
+                z = andnot(lock, r) | (z & lock);
             });
         }
     }
@@ -295,13 +323,13 @@ FrameSimulator::eLT(uint q1, uint q2, uint64_t t) {
 void
 FrameSimulator::snapshot() {
     StateSimulator::snapshot();
-    x_table_cpy = stim::simd_bit_table(x_table);
-    z_table_cpy = stim::simd_bit_table(z_table);
-    leak_table_cpy = stim::simd_bit_table(leak_table);
+    x_table_cpy = stim::simd_bit_table<SIMD_WIDTH>(x_table);
+    z_table_cpy = stim::simd_bit_table<SIMD_WIDTH>(z_table);
+    leak_table_cpy = stim::simd_bit_table<SIMD_WIDTH>(leak_table);
 }
 
 void
-FrameSimulator::rollback_where(stim::simd_bits_range_ref pred) {
+FrameSimulator::rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH> pred) {
     StateSimulator::rollback_where(pred);
     for (uint i = 0; i < n_qubits; i++) {
         copy_where(x_table_cpy[i], x_table[i], pred);

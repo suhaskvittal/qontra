@@ -9,12 +9,11 @@
 #define STATE_SIM_h
 
 #include "defs.h"
+#include "stimext.h"
 
 #include <random>
 #include <tuple>
 #include <vector>
-
-#include <stim.h>
 
 namespace qontra {
 
@@ -33,6 +32,18 @@ extern uint64_t G_RECORD_SPACE_SIZE;
 //      changes.
 //  (2) CliffordSimulator, an optimized simulator. Use this when simulating
 //      proper quantum programs.
+
+template <class T, class U> void
+// T and U = stim::simd_bits or stim::simd_bits_range_ref
+// Different templates are used because their backing widths
+// may differ (e.g. 64 bit vs 256 bit).
+copy_where(T from, T to, U pred) {
+    from.for_each_word(to, pred, 
+            [&] (auto& f, auto& t, auto& p)
+            {
+                t = p.andnot(f) | (f & p);
+            });
+}
 
 class StateSimulator {
 public:
@@ -192,9 +203,7 @@ public:
     }
 
     virtual void
-    error_channel_m(uint64_t rec, fp_t m1w0, fp_t m0w1, 
-            stim::simd_bits_range_ref lock) 
-    {
+    error_channel_m(uint64_t rec, fp_t m1w0, fp_t m0w1, stim::simd_bits_range_ref<SIMD_WIDTH> lock) {
         stim::RareErrorIterator::for_samples(m1w0, shots, rng,
                 [&] (size_t t)
                 {
@@ -226,9 +235,8 @@ public:
 
     virtual void    snapshot(void);
                             // Saves the current state of the simulator.
-    virtual void    rollback_where(stim::simd_bits_range_ref);
-                            // Rolls back the state to the snapshot
-
+    virtual void rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH>);
+                            // Rolls back the state to the snapshot.
     typedef struct {
         int         q1 = -1;    // A qubit that is <0 is invalid.
         int         q2 = -1;
@@ -252,12 +260,12 @@ public:
         return dist(rng);
     }
 
-    stim::simd_bit_table    record_table;
-    stim::simd_bit_table    lock_table;
+    stim::simd_bit_table<SIMD_WIDTH>    record_table;
+    stim::simd_bit_table<SIMD_WIDTH>    lock_table;
     uint64_t                shots;
 protected:
-    stim::simd_bit_table    record_table_cpy;
-    stim::simd_bit_table    lock_table_cpy;
+    stim::simd_bit_table<SIMD_WIDTH>    record_table_cpy;
+    stim::simd_bit_table<SIMD_WIDTH>    lock_table_cpy;
 
     std::mt19937_64 rng;
 
@@ -271,10 +279,6 @@ private:
                                         // probability to avoid floating point
                                         // error.
 };
-
-void    copy_where(stim::simd_bits_range_ref from,
-                    stim::simd_bits_range_ref to,
-                    stim::simd_bits_range_ref pred);
 
 }   // qontra
 

@@ -63,15 +63,15 @@ public:
     StateSimulator::label_2q_t  eLT(uint, uint, uint64_t) override;
 
     void    snapshot(void) override;
-    void    rollback_where(stim::simd_bits_range_ref) override;
+    void    rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 private:
-    stim::simd_bit_table    x_table;
-    stim::simd_bit_table    z_table;
-    stim::simd_bit_table    leak_table;
+    stim::simd_bit_table<SIMD_WIDTH>    x_table;
+    stim::simd_bit_table<SIMD_WIDTH>    z_table;
+    stim::simd_bit_table<SIMD_WIDTH>    leak_table;
 
-    stim::simd_bit_table    x_table_cpy;
-    stim::simd_bit_table    z_table_cpy;
-    stim::simd_bit_table    leak_table_cpy;
+    stim::simd_bit_table<SIMD_WIDTH>    x_table_cpy;
+    stim::simd_bit_table<SIMD_WIDTH>    z_table_cpy;
+    stim::simd_bit_table<SIMD_WIDTH>    leak_table_cpy;
 
     friend class MemorySimulator;
 };
