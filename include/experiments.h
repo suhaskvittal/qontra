@@ -7,17 +7,11 @@
 
 #include "decoder/decoder.h"
 #include "defs.h"
-#include "stats.h"
 
 #include <stim.h>
 
 #include <functional>
 #include <string>
-
-#include <mpi.h>
-#include <stdio.h>
-#include <strings.h>
-#include <unistd.h>
 
 namespace qontra {
 

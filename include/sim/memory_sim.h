@@ -27,16 +27,10 @@
 #include <stdio.h>
 
 namespace qontra {
-namespace sim {
-
-graph::LatticeGraph surface_code_lattice_graph(uint distance);
-
-}   // sim
 
 class MemorySimulator {
 public:
     MemorySimulator(graph::LatticeGraph&);
-    ~MemorySimulator() { delete sim; }
 
     void    initialize(void);
     void    reset(void);
@@ -63,7 +57,9 @@ public:
         uint            lrc_stride_size = 1;
     } config;
 
-    StatFile stats;
+    // Statistics:
+    statistic_t<fp_t>   s_lrcs_per_round;
+    statistic_t<fp_t>   s_leakage_population_ratio;
 private:
     typedef fp_t time_t;
 
@@ -101,8 +97,8 @@ private:
 
     std::vector<std::vector<uint>>  obs_list;
 
-    FrameSimulator* sim;
-    stim::simd_bit_table syndromes;
+    uptr<FrameSimulator> sim;
+    stim::simd_bit_table<SIMD_WIDTH> syndromes;
     // Tracking data structures.
     time_t  elapsed_time;
     std::map<uint64_t, time_t> shot_time_delta_map;
@@ -122,8 +118,9 @@ private:
     void    lrc_reset(void);
     void    lrc_execute_lrcs_from_await_queue(void);
 
-    stim::simd_bits lrc_optimal_identify_lrcs(void);
-    void            lrc_optimal_perform_lrcs(void);   // Returns 1 wherever an LRC was used.
+    stim::simd_bits<SIMD_WIDTH> lrc_optimal_identify_lrcs(void);
+                                    // Returns one for shots where an LRC should be used.
+    void                        lrc_optimal_perform_lrcs(void); 
 
     void    lrc_measure_qubits(const std::map<uint, uint>& swap_set, int64_t trial=-1);
 
@@ -141,16 +138,17 @@ private:
     void    eraser_initialize(void);
     void    eraser_reset(void);
 
-    stim::simd_bits eraser_execute_lrcs(void);   // Returns 1 wherever an LRC was used.
-    void            eraser_update_syndrome_buffer(const std::map<uint, uint64_t>& prev_meas_ctr_map);
+    stim::simd_bits<SIMD_WIDTH> eraser_execute_lrcs(void);   
+                                    // Returns 1 wherever an LRC was used.
+    void    eraser_update_syndrome_buffer(const std::map<uint, uint64_t>& prev_meas_ctr_map);
     //
     // ERASER variables:
     //
     std::map<uint, uint> eraser_qubit_to_syndrome_buffer_index_map;
     std::map<uint, std::array<uint, 2>> eraser_swap_lookup_table;
     // The recently_scheduled_qubits_table should be #shots by #qubits for better cache usage.
-    stim::simd_bit_table    eraser_recently_scheduled_qubits_table;
-    stim::simd_bit_table    eraser_syndrome_buffer;
+    stim::simd_bit_table<SIMD_WIDTH>    eraser_recently_scheduled_qubits_table;
+    stim::simd_bit_table<SIMD_WIDTH>    eraser_syndrome_buffer;
 };
 
 }   // qontra

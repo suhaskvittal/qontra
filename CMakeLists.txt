@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.20.2)
 project(QontraSim VERSION 0.1)
 
+set(RELEASE_COMPILE_OPTIONS -Ofast -fno-strict-aliasing -Wno-psabi)
+set(DEBUG_COMPILE_OPTIONS -ggdb3 -fno-strict-aliasing -Wall)
+
+if (CMAKE_BUILD_TYPE MATCHES "Release")
+    set(COMPILE_OPTIONS ${RELEASE_COMPILE_OPTIONS})
+else()
+    set(COMPILE_OPTIONS ${DEBUG_COMPILE_OPTIONS})
+endif()
+
+message("(Build type = ${CMAKE_BUILD_TYPE}, compile options are: ${COMPILE_OPTIONS}")
+
 #
 # QontraSim CMAKE Options:
 #   (1) COMPILE_MEMORY_SIM_EXT : compiles memory simulator extensions (i.e. LRCs).
@@ -107,12 +118,7 @@ endif()
 find_package(MPI REQUIRED)
 
 add_library(qontra ${QONTRA_FILES})
-
-if(CMAKE_BUILD_TYPE MATCHES Release)
-    target_compile_options(qontra PUBLIC -O3 -fno-strict-aliasing)
-else()
-    target_compile_options(qontra PUBLIC -ggdb3 -fno-strict-aliasing)
-endif()
+target_compile_options(qontra PRIVATE ${COMPILE_OPTIONS} -fPIC)
 
 if (COMPILE_MEMORY_SIM_EXT)
     target_compile_definitions(qontra PUBLIC QONTRA_MEMORY_SIM_EXT_ENABLED)
@@ -190,15 +196,17 @@ if (COMPILE_PROTEAN)
         src/protean/scheduler.cpp
         src/protean/utils.cpp)
     add_library(protean ${PROTEAN_FILES})
+    target_compile_options(protean PUBLIC ${COMPILE_OPTIONS})
+
     target_include_directories(protean PUBLIC ${CPLEX_INCLUDE_DIR})
     target_link_libraries(protean PUBLIC 
                             qontra 
                             ${CPLEX_LIB_PREFIX}/libcplex.a
                             ${CPLEX_LIB_PREFIX}/libilocplex.a)
-    target_compile_options(protean PUBLIC -O3 -fno-strict-aliasing)
 
     add_executable(protean_scheduler_test main/protean/tests/scheduler.cpp)
     add_executable(protean_writing_test main/protean/tests/writing.cpp)
+
     target_link_libraries(protean_scheduler_test PRIVATE protean)
     target_link_libraries(protean_writing_test PRIVATE protean)
 endif()
@@ -220,10 +228,11 @@ if (COMPILE_PROBIUS)
     if (COMPILE_PROBIUS_TRACER)
         add_executable(probius_tracer main/probius/tracer.cpp)
         target_link_libraries(probius_tracer PRIVATE qontra)
+        target_compile_options(probius_tracer PRIVATE ${COMPILE_OPTIONS})
     endif()
 
     if (COMPILE_PROBIUS_MEMORY)
         add_executable(probius_memory main/probius/memory.cpp)
-        target_link_libraries(probius_memory PRIVATE qontra)
+        target_link_libraries(probius_memory PRIVATE ${COMPILE_OPTIONS})
     endif()
 endif()

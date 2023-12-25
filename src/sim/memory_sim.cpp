@@ -9,121 +9,11 @@ namespace qontra {
 using namespace graph;
 using namespace lattice;
 
-namespace sim {
-
-graph::LatticeGraph
-surface_code_lattice_graph(uint d) {
-    LatticeGraph gr;
-
-    // Make qubits.
-    const uint n_data = d*d;
-    const uint n_parity = d*d-1;
-    for (uint i = 0; i < n_data; i++) {
-        sptr<vertex_t> v = std::make_shared<vertex_t>();
-        v->id = i;
-        v->qubit_type = vertex_t::type::data;
-        gr.add_vertex(v);
-    }
-
-    typedef std::tuple<int, int>  coord_t;
-    std::map<coord_t, sptr<vertex_t>> loc_to_check_map;
-    // Make boundary checks.
-    uint i = n_data;
-    for (uint r = 1; r < d; r += 2) {
-        auto pv1 = std::make_shared<vertex_t>();
-        pv1->id = (i++);
-        pv1->qubit_type = vertex_t::type::zparity;
-        auto pv2 = std::make_shared<vertex_t>();
-        pv2->id = (i++);
-        pv2->qubit_type = vertex_t::type::zparity;
-
-        gr.add_vertex(pv1);
-        gr.add_vertex(pv2);
-
-        loc_to_check_map[std::make_tuple(r, 0)] = pv1;
-        loc_to_check_map[std::make_tuple(r+1, d)] = pv2;
-    }
-
-    for (uint c = 1; c < d; c += 2) {
-        auto pv1 = std::make_shared<vertex_t>();
-        pv1->id = (i++);
-        pv1->qubit_type = vertex_t::type::xparity;
-        auto pv2 = std::make_shared<vertex_t>();
-        pv2->id = (i++);
-        pv2->qubit_type = vertex_t::type::xparity;
-
-        gr.add_vertex(pv1);
-        gr.add_vertex(pv2);
-
-        loc_to_check_map[std::make_tuple(d, c)] = pv1;
-        loc_to_check_map[std::make_tuple(0, c+1)] = pv2;
-    }
-    // Now do checks in the bulk.
-    for (uint r = 1; r < d; r++) {
-        for (uint c = 1; c < d; c++) {
-            auto pv = std::make_shared<vertex_t>();
-            pv->id = (i++);
-            pv->qubit_type = (r+c) & 0x1 ? vertex_t::type::zparity : vertex_t::type::xparity;
-
-            gr.add_vertex(pv);
-            
-            loc_to_check_map[std::make_tuple(r, c)] = pv;
-        }
-    }
-    // Now create edges between data and parity qubits.
-    const int64_t _d = d;
-    for (auto& pair : loc_to_check_map) {
-        coord_t crd = pair.first;
-        int r = std::get<0>(crd),
-            c = std::get<1>(crd);
-        auto pv = pair.second;
-
-        //  q1      q2
-        //      C
-        //  q3      q4
-
-        // 1, 2 --> 3 4 6 7
-
-        int64_t q1 = _d*(c-1) + r-1,
-                q2 = _d*c + r-1,
-                q3 = _d*(c-1) + r,
-                q4 = _d*c + r;
-        if (r == 0) { q1 = -1; q2 = -1; }
-        if (r == d) { q3 = -1; q4 = -1; }
-        if (c == 0) { q1 = -1; q3 = -1; }
-        if (c == d) { q2 = -1; q4 = -1; }
-
-        int64_t order[] = { q4, q2, q3, q1 };
-        if (pv->qubit_type == vertex_t::type::xparity) std::swap(order[1], order[2]);
-        for (uint j = 0; j < 4; j++) {
-            if (order[j] < 0 || order[j] >= n_data) {
-                continue;
-            }
-            auto dv = gr.get_vertex((uint64_t)order[j]);
-            auto e = std::make_shared<edge_t>();
-            e->src = std::static_pointer_cast<void>(pv);
-            e->dst = std::static_pointer_cast<void>(dv);
-            e->cx_time = j;
-            gr.add_edge(e);
-        }
-    }
-    // Create observables.
-    std::vector<sptr<vertex_t>> x_obs, z_obs;
-    for (uint j = 0; j < d; j++) {
-        x_obs.push_back(gr.get_vertex(j));
-        z_obs.push_back(gr.get_vertex(d*j + d-1));
-    }
-    gr.x_obs_list.push_back(x_obs);
-    gr.z_obs_list.push_back(z_obs);
-    return gr;
-}
-
-}   // sim
-
 MemorySimulator::MemorySimulator(LatticeGraph& gr)
     :
     // Global variables
-    stats(),
+    s_lrcs_per_round(MPI_SUM, 1),
+    s_leakage_population_ratio(MPI_SUM, 32),
     // Private variables
     lattice_graph(gr),
     meas_ctr(0),
@@ -171,12 +61,18 @@ MemorySimulator::MemorySimulator(LatticeGraph& gr)
         }
     }
     n_qubits = all_qubits.size();
-    sim = new FrameSimulator(n_qubits, experiments::G_SHOTS_PER_BATCH);
+    sim = std::make_unique<FrameSimulator>(n_qubits, experiments::G_SHOTS_PER_BATCH);
     reset();
 }
 
 void
 MemorySimulator::initialize() {
+    // Clear out the stats.
+    s_leakage_population_ratio.resize(config.rounds);
+
+    s_lrcs_per_round.fill(0);
+    s_leakage_population_ratio.fill(0);
+
     // We'll just remake the following data in case the config has changed.
     syndrome_parity_qubits = config.is_memory_x ? xp_qubits : zp_qubits;
     auto vertex_obs_list = config.is_memory_x ? lattice_graph.x_obs_list : lattice_graph.z_obs_list;
@@ -221,27 +117,27 @@ MemorySimulator::do_gate(std::string op, std::vector<uint> operands, int64_t tri
     if (op == "h") {
         sim->H(operands, trial);
         if (is_recording_stim_instructions && trial < 0) {
-            sample_circuit.append_op("H", operands);
+            sample_circuit.safe_append_u("H", operands);
         }
     } else if (op == "x") {
         sim->X(operands, trial);
         if (is_recording_stim_instructions && trial < 0) {
-            sample_circuit.append_op("X", operands);
+            sample_circuit.safe_append_u("X", operands);
         }
     } else if (op == "z") {
         sim->Z(operands, trial);
         if (is_recording_stim_instructions && trial < 0) {
-            sample_circuit.append_op("Z", operands);
+            sample_circuit.safe_append_u("Z", operands);
         }
     } else if (op == "cx") {
         sim->CX(operands, trial);
         if (is_recording_stim_instructions && trial < 0) {
-            sample_circuit.append_op("CX", operands);
+            sample_circuit.safe_append_u("CX", operands);
         }
     } else if (op == "reset") {
         sim->R(operands, trial);
         if (is_recording_stim_instructions && trial < 0) {
-            sample_circuit.append_op("R", operands);
+            sample_circuit.safe_append_u("R", operands);
         }
     } else if (op == "liswap") {
         sim->LEAKAGE_ISWAP(operands, trial);
@@ -267,7 +163,7 @@ MemorySimulator::do_gate(std::string op, std::vector<uint> operands, int64_t tri
             li_array.push_back(e_li);
             dp_array.push_back(e_dp);
             if (is_recording_stim_instructions && trial < 0) {
-                if (e_dp > 0) sample_circuit.append_op("DEPOLARIZE2", {q1, q2}, e_dp);
+                if (e_dp > 0) sample_circuit.safe_append_ua("DEPOLARIZE2", {q1, q2}, e_dp);
             }
             // Get instruction latency.
             fp_t t = config.timing.op2q[op][q1_q2];
@@ -297,9 +193,9 @@ MemorySimulator::do_gate(std::string op, std::vector<uint> operands, int64_t tri
             if (is_recording_stim_instructions && trial < 0) {
                 if (e > 0) {
                     if (op == "reset") {
-                        sample_circuit.append_op("X_ERROR", {q}, e);
+                        sample_circuit.safe_append_ua("X_ERROR", {q}, e);
                     } else {
-                        sample_circuit.append_op("DEPOLARIZE1", {q}, e);
+                        sample_circuit.safe_append_ua("DEPOLARIZE1", {q}, e);
                     }
                 }
             }
@@ -344,7 +240,7 @@ MemorySimulator::do_measurement(std::vector<uint> operands, int64_t trial) {
         // So, we just take the mean.
         if (is_recording_stim_instructions && trial < 0) {
             fp_t emean = 0.5 * (config.errors.m1w0[q]+config.errors.m0w1[q]);
-            sample_circuit.append_op("X_ERROR", {q}, emean);
+            sample_circuit.safe_append_ua("X_ERROR", {q}, emean);
         }
         // Update measurement counter (only if trial < 0 -- otherwise we run into issues).
         if (trial < 0)  meas_ctr_map[q] = meas_ctr+i;
@@ -355,7 +251,7 @@ MemorySimulator::do_measurement(std::vector<uint> operands, int64_t trial) {
     // Perform the measurement.
     sim->M(operands, m1w0_array, m0w1_array, meas_ctr, trial);
     if (is_recording_stim_instructions && trial < 0) {
-        sample_circuit.append_op("M", operands);
+        sample_circuit.safe_append_u("M", operands);
     }
     // We will only update the counter if this is a common measurement.
     if (trial < 0)  meas_ctr += operands.size();
@@ -371,7 +267,7 @@ MemorySimulator::inject_idling_error_positive(std::vector<uint> on_qubits, int64
         fp_t e = config.errors.idling[q];
         error_rates.push_back(e);
         if (is_recording_stim_instructions && trial < 0) {
-            sample_circuit.append_op("DEPOLARIZE1", {q}, e);
+            sample_circuit.safe_append_ua("DEPOLARIZE1", {q}, e);
         }
     }
 
@@ -409,9 +305,9 @@ MemorySimulator::create_event_or_obs(std::vector<uint> operands, bool create_eve
 
     if (is_recording_stim_instructions) {
         if (create_event) {
-            sample_circuit.append_op("DETECTOR", offsets);
+            sample_circuit.safe_append_u("DETECTOR", offsets);
         } else {
-            sample_circuit.append_op("OBSERVABLE_INCLUDE", offsets, obs_ctr);
+            sample_circuit.safe_append_u("OBSERVABLE_INCLUDE", offsets, {obs_ctr});
         }
     }
     if (create_event)   event_ctr++;
@@ -433,9 +329,9 @@ MemorySimulator::inject_timing_error(std::vector<uint> qubits) {
         li_array.push_back(0.1*e_ad);
 
         if (is_recording_stim_instructions) {
-            sample_circuit.append_op("X_ERROR", {q}, e_ad);
-            sample_circuit.append_op("Y_ERROR", {q}, e_ad);
-            sample_circuit.append_op("Z_ERROR", {q}, e_pd-e_ad);
+            sample_circuit.safe_append_ua("X_ERROR", {q}, e_ad);
+            sample_circuit.safe_append_ua("Y_ERROR", {q}, e_ad);
+            sample_circuit.safe_append_ua("Z_ERROR", {q}, e_pd-e_ad);
         }
     }
     if (config.enable_leakage) {
@@ -486,14 +382,6 @@ MemorySimulator::run(uint64_t shots) {
 
     initialize();
 
-    // Initialize statistics here.
-    stats.clear();
-
-    stats.decl("lrcs_per_round", MPI_DOUBLE, MPI_SUM);
-    for (uint r = 0; r < config.rounds; r++) {
-        stats.decl("leakage_population_ratio_round_" + std::to_string(r), MPI_DOUBLE, MPI_SUM);
-    }
-
     // Synchronize before starting.
     if (G_USE_MPI)  MPI_Barrier(MPI_COMM_WORLD);
 
@@ -524,13 +412,11 @@ MemorySimulator::run(uint64_t shots) {
     // 
     // Accumulate statistics.
     //
-    StatFile acc = stats.mpi_acc();
-    // If any statistics are means, handle that now.
-    acc["lrcs_per_round"] /= (fp_t) (config.rounds * shots);
-    for (uint r = 0; r < config.rounds; r++) {
-        acc["leakage_population_ratio_round_" + std::to_string(r)] /= (fp_t) (n_qubits * shots);
-    }
-    stats = acc;
+    s_lrcs_per_round.reduce();
+    s_leakage_population_ratio.reduce();
+
+    s_lrcs_per_round /= static_cast<fp_t>(config.rounds * shots);
+    s_leakage_population_ratio /= static_cast<fp_t>(n_qubits * shots);
     // Write statistics to output file.
     if (world_rank == 0) {
         std::filesystem::path data_output_file_path(config.data_output_file);
@@ -569,9 +455,9 @@ MemorySimulator::run(uint64_t shots) {
                 << config.errors.op2q["cx"][std::make_pair(0, 1)] << ","
                 << lrc_policy_name << ","
                 << lrc_circuit_name << ","
-                << stats["lrcs_per_round"].str();
+                << s_lrcs_per_round.at();
         for (uint r = 0; r < config.rounds; r++) {
-            fout << "," << stats["leakage_population_ratio_round_" + std::to_string(r)].str();
+            fout << "," << s_leakage_population_ratio.at(r);
         }
         fout << "\n";
     }
@@ -672,10 +558,10 @@ memory_sim_make_detection_events:
         }
         //
         // Update statistics:
-        //      leakage_population_ratio
+        //      s_leakage_population_ratio
         //
         for (uint q = 0; q < n_qubits; q++) {
-            stats["leakage_population_ratio_round_" + std::to_string(r)] += (fp_t)sim->leak_table[q].popcnt();
+            s_leakage_population_ratio[r] += static_cast<fp_t>(sim->leak_table[q].popcnt());
         }
     }
     //

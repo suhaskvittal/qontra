@@ -58,7 +58,7 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         if (inject_timing_error) {
             for (uint x = 0; x < n; x++) {
                 if (ftedpe > 0) {
-                    circuit.safe_append_u("DEPOLARIZE1", {x}, {ftedpe});
+                    circuit.safe_append_ua("DEPOLARIZE1", {x}, ftedpe);
                 } else {
                     fp_t t1 = timing.t1[x];
                     fp_t t2 = timing.t2[x];
@@ -66,9 +66,9 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                     fp_t e_ad = 0.25*(1 - exp(-time/t1));
                     fp_t e_pd = 0.5*(1 - exp(-time/t2));
 
-                    circuit.safe_append_u("X_ERROR", {x}, {e_ad});
-                    circuit.safe_append_u("Y_ERROR", {x}, {e_ad});
-                    circuit.safe_append_u("Z_ERROR", {x}, {e_pd-e_ad});
+                    circuit.safe_append_ua("X_ERROR", {x}, e_ad);
+                    circuit.safe_append_ua("Y_ERROR", {x}, e_ad);
+                    circuit.safe_append_ua("Z_ERROR", {x}, e_pd-e_ad);
                 }
             }
             time = 0;
@@ -79,7 +79,7 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
             if (inject_op_error) {
                 for (uint x : qubits) {
                     fp_t e = 0.5*(errors.m1w0[x] + errors.m0w1[x]);
-                    if (e > 0)  circuit.safe_append_u("X_ERROR", {x}, {e});
+                    if (e > 0)  circuit.safe_append_ua("X_ERROR", {x}, e);
                 }
             }
             circuit.safe_append_u("M", qubits);
@@ -142,14 +142,14 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                 circuit.flag_edge_table[events[0]] = std::make_tuple(src, thru, dst);
             }
 
-            circuit.safe_append_u("DETECTOR", offsets, {0, 0, 0, color_id});
+            circuit.safe_append_u("DETECTOR", offsets, {0, 0, 0, static_cast<fp_t>(color_id)});
             continue;
         } else if (inst.name == "obs") {
             std::vector<uint> offsets;
             for (uint i = 0; i < meas.size(); i++) {
                 offsets.push_back(stim::TARGET_RECORD_BIT | (n_meas - meas[i]));
             }
-            circuit.safe_append_u("OBSERVABLE_INCLUDE", offsets, {obs[0]});
+            circuit.safe_append_u("OBSERVABLE_INCLUDE", offsets, {static_cast<fp_t>(obs[0])});
             continue;
         } else { continue; }    // Ignore all other instructions.
         // Update operation latency.
@@ -165,7 +165,7 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                 for (uint i = 0; i < n; i++) {
                     if (std::find(qubits.begin(), qubits.end(), i) != qubits.end()) continue;
                     fp_t e_idle = errors.idling[i];
-                    circuit.safe_append_u("DEPOLARIZE1", {i}, {e_idle});
+                    circuit.safe_append_ua("DEPOLARIZE1", {i}, e_idle);
                 }
             } else {
                 for (uint x : qubits) {
@@ -185,16 +185,16 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                     fp_t lt = errors.op2q_leakage_transport[inst.name][x_y];
                     fp_t li = errors.op2q_leakage_injection[inst.name][x_y];
 
-                    if (dp > 0) circuit.safe_append_u("DEPOLARIZE2", {x, y}, {dp});
+                    if (dp > 0) circuit.safe_append_ua("DEPOLARIZE2", {x, y}, dp);
                 }
             } else {
                 for (uint x : qubits) {
                     fp_t e = errors.op1q[inst.name][x];
                     if (e > 0) {
                         if (inst.name == "reset") {
-                            circuit.safe_append_u("X_ERROR", {x}, {e});
+                            circuit.safe_append_ua("X_ERROR", {x}, e);
                         } else {
-                            circuit.safe_append_u("DEPOLARIZE1", {x}, {e});
+                            circuit.safe_append_ua("DEPOLARIZE1", {x}, e);
                         }
                     }
                 }

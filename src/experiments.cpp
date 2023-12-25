@@ -3,6 +3,12 @@
  * */
 
 #include "experiments.h"
+#include "stats.h"
+
+#include <mpi.h>
+#include <stdio.h>
+#include <strings.h>
+#include <unistd.h>
 
 namespace qontra {
 
@@ -20,7 +26,7 @@ uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
 
 using namespace experiments;
 
-std::string
+inline std::string
 get_batch_filename(uint batchno) {
     std::string batch_file = std::string("/batch_")
                                 + std::to_string(batchno)
@@ -28,29 +34,22 @@ get_batch_filename(uint batchno) {
     return batch_file;
 }
 
-void
+inline void
 configure_optimal_batch_size() {
-    const uint64_t take_up_lines = 1;
-
     uint64_t cache_line_size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);  // In bytes.
-    G_SHOTS_PER_BATCH = (cache_line_size << 3) * take_up_lines;   // Need to convert to bits.
+    G_SHOTS_PER_BATCH = cache_line_size << 3;   // Need to convert to bits.
 }
 
 void
-generate_syndromes(const stim::Circuit& circuit, uint64_t shots, callback_t callbacks)
-{
-    uint64_t __shots;
+generate_syndromes(const stim::Circuit& circuit, uint64_t shots, callback_t callbacks) {
+    uint64_t local_shots = shots;
 
-    int world_size, world_rank;
+    int world_size = 1, world_rank = 0;
     if (G_USE_MPI) {
         MPI_Comm_size(MPI_COMM_WORLD, &world_size);
         MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-        __shots = shots / world_size;
-        if (world_rank == 0)    __shots += shots % world_size;
-    } else {
-        world_size = 1;
-        world_rank = 0;
-        __shots = shots;
+        local_shots = shots / world_size;
+        if (world_rank == 0) local_shots += shots % world_size;
     }
 
     std::mt19937_64 rng(G_BASE_SEED + world_rank);
@@ -65,18 +64,18 @@ generate_syndromes(const stim::Circuit& circuit, uint64_t shots, callback_t call
                                         true    // block decomposition from introducing remnant edges
                                     );
     stim::DemSampler<SIMD_WIDTH> sampler(dem, std::move(rng), G_SHOTS_PER_BATCH);
-    while (__shots > 0) {
-        const uint64_t shots_this_batch = __shots < G_SHOTS_PER_BATCH ? __shots : G_SHOTS_PER_BATCH;
+    while (local_shots > 0) {
+        const uint64_t shots_this_batch = local_shots < G_SHOTS_PER_BATCH ? local_shots : G_SHOTS_PER_BATCH;
         sampler.resample(false);
 
         stim::simd_bit_table<SIMD_WIDTH> syndrome_table = sampler.det_buffer.transposed(),
                                             obs_table = sampler.obs_buffer.transposed();
-        for (uint64_t t = 0; t < shots_this_batch; t++) {
+        for (size_t t = 0; t < shots_this_batch; t++) {
             stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = syndrome_table[t],
                                                     obs = obs_table[t];
             callbacks.prologue({syndrome, obs});
         }
-        __shots -= shots_this_batch;
+        local_shots -= shots_this_batch;
     }
 }
 
@@ -280,17 +279,16 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
     statistic_t<fp_t> hw_std = hw_sqr_sum.get_std(hw_mean, shots);
     statistic_t<fp_t> t_std = t_sqr_sum.get_std(t_mean, shots);
 
-    std::vector<fp_t> logical_error_rate_by_obs(w_obs);
-    for (uint i = 0; i < w_obs; i++) logical_error_rate_by_obs[i] = logical_error_rate(i+1);
+    std::vector<fp_t> logical_error_rate_by_obs = logical_error_rate.slice(1, w_obs+1).vec();
 
     memory_result_t res = {
-        logical_error_rate(),
-        hw_mean(),
-        hw_std(),
-        hw_max(),
-        t_mean(),
-        t_std(),
-        t_max(),
+        logical_error_rate.at(),
+        hw_mean.at(),
+        hw_std.at(),
+        hw_max.at(),
+        t_mean.at(),
+        t_std.at(),
+        t_max.at(),
         // Additional statistics:
         logical_error_rate_by_obs
     };
