@@ -46,7 +46,7 @@ MemorySimulator::eraser_initialize() {
     eraser_syndrome_buffer.clear();
 }
 
-void
+inline void
 MemorySimulator::eraser_reset() {
     eraser_recently_scheduled_qubits_table.clear();
     eraser_syndrome_buffer.clear();

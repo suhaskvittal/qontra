@@ -11,7 +11,11 @@
 bool    safe_create_directory(const char*);
 bool    safe_create_directory(std::string);
 
-bool    safe_write_header(std::ofstream& fout, std::string path, std::string header);
+bool    file_exists(const char*);
+bool    file_exists(std::string);
+
+char*       get_parent_directory(const char*);
+std::string get_parent_directory(std::string);
 
 #include "filesystem.inl"
 

@@ -8,8 +8,6 @@
 
 #include "sim/state_sim.h"
 
-#include <vector>
-
 namespace qontra {
 
 class FrameSimulator : public StateSimulator {

@@ -9,12 +9,18 @@ inline bool safe_create_directory(std::string path) {
     return safe_create_directory(path.c_str()); 
 }
 
-inline bool
-safe_write_header(std::ofstream& fout, std::string path, std::string header) {
-    const char* parent_dir = dirname(path.c_str());
-    bool file_exists = !safe_create_directory(parent_dir)
-                            || faccessat(AT_FDCWD, path.c_str()) < 0;
-    if (!file_exists) fout << header << std::endl;
-    return file_exists;
+inline bool file_exists(const char* path) {
+    return faccessat(AT_FDCWD, path) == 0;
 }
 
+inline bool file_exists(std::string path) {
+    return file_exists(path.c_str());
+}
+
+inline char* get_parent_directory(const char* path) {
+    return dirname(path);
+}
+
+inline std::string get_parent_directory(std::string path) {
+    return std::string(get_parent_directory(path.c_str());
+}

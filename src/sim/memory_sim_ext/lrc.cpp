@@ -13,17 +13,16 @@ namespace qontra {
 using namespace graph;
 using namespace lattice;
 
-void
+inline void
 MemorySimulator::lrc_reset() {
     lrc_await_queue.clear();
     // Populate the await queue.
-    for (uint s = 0; s < config.lrc_stride_size; s++) {
+    for (size_t s = 0; s < config.lrc_stride_size; s++) {
         for (uint pq : parity_qubits) {
             lrc_await_queue.push_back(pq);
         }
     }
     for (uint dq : data_qubits) lrc_await_queue.push_back(dq);
-
     lrc_optimal_lrc_map_table.clear();
 }
 

@@ -15,7 +15,7 @@ FrameSimulator::reset_sim() {
 
 inline void
 FrameSimulator::eDP1(uint q, uint64_t t) {
-    auto p = rng() & 3;
+    int p = rng() & 3;
     x_table[q][t] ^= (bool)(p & 1);
     z_table[q][t] ^= (bool)(p & 2);
 }
@@ -43,7 +43,7 @@ FrameSimulator::eL(uint q, uint64_t t) {
 
 inline void
 FrameSimulator::eDP2(uint q1, uint q2, uint64_t t) {
-    auto p = rng() & 15;
+    int p = rng() & 15;
     x_table[q1][t] ^= (bool)(p & 1);
     z_table[q1][t] ^= (bool)(p & 2);
     x_table[q2][t] ^= (bool)(p & 4);
@@ -52,7 +52,7 @@ FrameSimulator::eDP2(uint q1, uint q2, uint64_t t) {
 
 inline void
 FrameSimulator::eLI(uint q1, uint q2, uint64_t t) {
-    auto p = rng() % 3;
+    int p = rng() % 3;
     bool c1 = (p == 0) || (p == 2);
     bool c2 = (p == 1) || (p == 2);
     leak_table[q1][t] ^= c1;

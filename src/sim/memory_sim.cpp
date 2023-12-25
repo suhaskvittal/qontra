@@ -2,7 +2,17 @@
  *  date:   10 December 2023
  * */
 
+#include "defs/filesystem.h"
+#include "experiments.h"
+#include "instruction.h"
 #include "sim/memory_sim.h"
+
+#include <fstream>
+#include <iostream>
+
+#include <math.h>
+#include <mpi.h>
+#include <stdio.h>
 
 namespace qontra {
 
@@ -45,8 +55,8 @@ MemorySimulator::MemorySimulator(LatticeGraph& gr)
     eraser_recently_scheduled_qubits_table(1,1),
     eraser_syndrome_buffer(1,1)
 {
-    auto vertex_list = lattice_graph.get_vertices();
-    for (auto v : vertex_list) {
+    std::vector<sptr<vertex_t>> vertex_list = lattice_graph.get_vertices();
+    for (sptr<vertex_t> v : vertex_list) {
         const uint64_t id = v->id;
         all_qubits.push_back(id);
         if (v->qubit_type == vertex_t::type::data) {
@@ -77,9 +87,9 @@ MemorySimulator::initialize() {
     syndrome_parity_qubits = config.is_memory_x ? xp_qubits : zp_qubits;
     auto vertex_obs_list = config.is_memory_x ? lattice_graph.x_obs_list : lattice_graph.z_obs_list;
     obs_list.clear();
-    for (auto arr : vertex_obs_list) {
+    for (std::vector<sptr<vertex_t>> arr : vertex_obs_list) {
         std::vector<uint> obs;
-        for (auto v : arr)  obs.push_back(v->id);
+        for (sptr<vertex_t> v : arr)  obs.push_back(v->id);
         obs_list.push_back(obs);
     }
 
@@ -263,7 +273,7 @@ void
 MemorySimulator::inject_idling_error_positive(std::vector<uint> on_qubits, int64_t trial) {
     // Do NOT record the error if trial >= 0.
     std::vector<fp_t> error_rates;
-    for (auto q : on_qubits) {
+    for (uint q : on_qubits) {
         fp_t e = config.errors.idling[q];
         error_rates.push_back(e);
         if (is_recording_stim_instructions && trial < 0) {
@@ -273,7 +283,7 @@ MemorySimulator::inject_idling_error_positive(std::vector<uint> on_qubits, int64
 
     if (trial >= 0) {
         // We are only injecting the error on a single trial.
-        for (uint i = 0; i < error_rates.size(); i++) {
+        for (size_t i = 0; i < error_rates.size(); i++) {
             uint q = on_qubits[i];
             if (sim->get_probability_sample_from_rng() < error_rates[i]) sim->eDP1(q, trial);
         }
@@ -285,7 +295,7 @@ MemorySimulator::inject_idling_error_positive(std::vector<uint> on_qubits, int64
 void
 MemorySimulator::inject_idling_error_negative(std::vector<uint> not_on_qubits, int64_t trial) {
     std::vector<uint> on_qubits;
-    for (uint i = 0; i < n_qubits; i++) {
+    for (size_t i = 0; i < n_qubits; i++) {
         if (std::find(not_on_qubits.begin(), not_on_qubits.end(), i) == not_on_qubits.end()) {
             on_qubits.push_back(i);
         }
@@ -419,15 +429,13 @@ MemorySimulator::run(uint64_t shots) {
     s_leakage_population_ratio /= static_cast<fp_t>(n_qubits * shots);
     // Write statistics to output file.
     if (world_rank == 0) {
-        std::filesystem::path data_output_file_path(config.data_output_file);
-        bool write_header = false;
-        if (!std::filesystem::exists(data_output_file_path)) {
-            write_header = true;
-            safe_create_directory(data_output_file_path.root_directory());
-        }
+        bool write_header = file_exists(config.data_output_file);
+        safe_create_directory(config.data_output_file.c_str());
 
-        std::ofstream fout(data_output_file_path, std::ios::app);
+        std::ofstream fout(config.data_output_file, std::ios::app);
         if (write_header) {
+            // The file does not exist.
+
             fout << "Distance,"
                     << "Rounds,"
                     << "CX Error Rate,"

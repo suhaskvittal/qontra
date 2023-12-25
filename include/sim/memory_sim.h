@@ -6,25 +6,14 @@
 #ifndef SIM_SURFACE_CODE_MEMORY_h
 #define SIM_SURFACE_CODE_MEMORY_h
 
-#include "experiments.h"
-#include "instruction.h"
 #include "graph/lattice_graph.h"
 #include "sim/frame_sim.h"
 #include "stats.h"
 #include "tables.h"
 
-#include <filesystem>
-#include <fstream>
-#include <iostream>
 #include <map>
+#include <string>
 #include <vector>
-
-#include <stim.h>
-
-#include <malloc.h>
-#include <math.h>
-#include <mpi.h>
-#include <stdio.h>
 
 namespace qontra {
 
@@ -54,7 +43,7 @@ public:
         
         lrc_policy_t    lrc_policy = lrc_policy_t::none;
         lrc_circuit_t   lrc_circuit = lrc_circuit_t::swap;
-        uint            lrc_stride_size = 1;
+        size_t          lrc_stride_size = 1;
     } config;
 
     // Statistics:
