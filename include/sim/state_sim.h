@@ -74,8 +74,6 @@ public:
     virtual void reset_sim(void) {
         record_table.clear();
         lock_table.clear();
-
-        no_error_nlog_probability = 0.0;
     }
     
     // As operations are expected to be executed on simd_bits, each
@@ -113,28 +111,10 @@ public:
                         std::vector<fp_t> m0w1,
                         int record=-1,
                         int64_t tr=-1) =0;
-
-    enum class ErrorLabel { I, X, Y, Z, L };
     // 
     // Error operations:
     //      The StateSimulator virtual class will handle rare error injection,
     //      so all the subclass has to do is implement the error phenomenon. 
-    //
-    //      Each error function must return an ErrorLabel (or a pair of ErrorLabels)
-    //      to indicate how each qubit was affected. That is,
-    //          I = qubit had no error
-    //          X = qubit had an X error
-    //          Y = qubit had a Y error
-    //          Z = qubit had a Z error
-    //          L = qubit had a leakage error
-    //      Y covers the case where X and Z both occur. L is mutually exclusive
-    //      compared to the other errors (as a leaked qubit does not care about
-    //      other errors). The ErrorLabels are used to build an error log that
-    //      can be used to record exactly what errors have occurred.
-    //
-    //      The types of errors possible can be extended, but we limit the labels
-    //      to Pauli+leakage as these are standard. One possible extension is
-    //      adding errors such as rt(X), rt(Y), rt(Z) and their inverses.
     //
     // To add new errors, all that must be done is:
     //  (1) Declare the virtual function below (i.e. eXYZ)
@@ -143,62 +123,32 @@ public:
     //      FrameSimulator).
     //  + any additional infrastructure you may need.
     //
-    // K-qubit operations can be implemented by adding a new error channel function
-    // along with a new typedef (i.e. label_kq_t). We do not natively provide this
-    // as 2-qubit gates are standard on most platforms.
-    //
-    // Tracking may be useful for experiments (i.e. seeing what types of errors
-    // a decoder is failing on), but note that not all simulators can implement
-    // error label tracking effectively. For example, a full-state simulator may
-    // implement errors as matrix operations, so the error that would occur depends
-    // on the state of the qubit. In such a situation, the label is not useful.
-    //      
-    typedef ErrorLabel                          label_1q_t;
-    typedef std::pair<ErrorLabel, ErrorLabel>   label_2q_t;
-    typedef label_1q_t (StateSimulator::*ErrorChannel1Q)(uint, uint64_t);
-    typedef label_2q_t (StateSimulator::*ErrorChannel2Q)(uint, uint, uint64_t);
+    typedef void (StateSimulator::*ErrorChannel1Q)(uint, uint64_t);
+    typedef void (StateSimulator::*ErrorChannel2Q)(uint, uint, uint64_t);
 
     template <ErrorChannel1Q CH> void
     error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
-        for (uint i = 0; i < operands.size(); i++) {
+        for (size_t i = 0; i < operands.size(); i++) {
             uint j = operands[i];
             stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-                    [&] (size_t t) {
-                        if (lock_table[j][t])   return;
-                        label_1q_t label = (this->*CH)(j, t);
-                        error_log.push_back({
-                                (int)j, 
-                                -1, 
-                                t, 
-                                rates[i], 
-                                label,
-                                ErrorLabel::I
-                        });
-                    });
-            no_error_nlog_probability += -log(1 - rates[i]);
+            [&] (size_t t) {
+                if (lock_table[j][t])   return;
+                (this->*CH)(j, t);
+            });
         }
     }
 
     template <ErrorChannel2Q CH> void
     error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
-        for (uint i = 0; i < operands.size(); i += 2) {
+        for (size_t i = 0; i < operands.size(); i += 2) {
             uint j1 = operands[i];
             uint j2 = operands[i+1];
             stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
-                    [&] (size_t t) 
-                    {
-                        if (lock_table[j1][t] || lock_table[j2][t]) return;
-                        label_2q_t labels = (this->*CH)(j1, j2, t);
-                        error_log.push_back({
-                            (int)j1, 
-                            (int)j2, 
-                            t,
-                            rates[i>>1],
-                            labels.first,
-                            labels.second
-                        });
-                    });
-            no_error_nlog_probability += -log(1 - rates[i>>1]);
+            [&] (size_t t) 
+            {
+                if (lock_table[j1][t] || lock_table[j2][t]) return;
+                (this->*CH)(j1, j2, t);
+            });
         }
     }
 
@@ -218,15 +168,15 @@ public:
                 });
     }
 
-    virtual label_1q_t  eDP1(uint, uint64_t) =0;
-    virtual label_1q_t  eX(uint, uint64_t) =0;
-    virtual label_1q_t  eY(uint, uint64_t) =0;
-    virtual label_1q_t  eZ(uint, uint64_t) =0;
-    virtual label_1q_t  eL(uint, uint64_t) =0;
+    virtual void    eDP1(uint, uint64_t) =0;
+    virtual void    eX(uint, uint64_t) =0;
+    virtual void    eY(uint, uint64_t) =0;
+    virtual void    eZ(uint, uint64_t) =0;
+    virtual void    eL(uint, uint64_t) =0;
 
-    virtual label_2q_t  eDP2(uint, uint, uint64_t) =0;
-    virtual label_2q_t  eLI(uint, uint, uint64_t) =0;
-    virtual label_2q_t  eLT(uint, uint, uint64_t) =0;
+    virtual void    eDP2(uint, uint, uint64_t) =0;
+    virtual void    eLI(uint, uint, uint64_t) =0;
+    virtual void    eLT(uint, uint, uint64_t) =0;
 
     void    shift_record_by(uint64_t);
                             // Record shifting is particularly useful for
@@ -236,24 +186,6 @@ public:
     virtual void    snapshot(void);
                             // Saves the current state of the simulator.
     virtual void rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH>);
-                            // Rolls back the state to the snapshot.
-    typedef struct {
-        int         q1 = -1;    // A qubit that is <0 is invalid.
-        int         q2 = -1;
-        uint64_t    trial;
-
-        fp_t    error_probability;
-
-        ErrorLabel  error_on_q1 = ErrorLabel::I;
-        ErrorLabel  error_on_q2 = ErrorLabel::I;
-    } error_data_t;
-
-    std::vector<error_data_t>   get_error_log(void) { return error_log; }
-    void                        clear_error_log(void) { error_log.clear(); }
-
-    fp_t get_negative_log_probability_of_no_error(void) {
-        return no_error_nlog_probability;
-    }
 
     fp_t get_probability_sample_from_rng(void) {
         static std::uniform_real_distribution<> dist(0.0, 1.0);
@@ -262,7 +194,7 @@ public:
 
     stim::simd_bit_table<SIMD_WIDTH>    record_table;
     stim::simd_bit_table<SIMD_WIDTH>    lock_table;
-    uint64_t                shots;
+    uint64_t    shots;
 protected:
     stim::simd_bit_table<SIMD_WIDTH>    record_table_cpy;
     stim::simd_bit_table<SIMD_WIDTH>    lock_table_cpy;
@@ -271,13 +203,6 @@ protected:
 
     const uint      n_qubits;
     const uint64_t  max_shots;
-private:
-    std::vector<error_data_t>   error_log;
-
-    fp_t    no_error_nlog_probability;  // We track the probability that no
-                                        // error will occur. We use -log
-                                        // probability to avoid floating point
-                                        // error.
 };
 
 }   // qontra

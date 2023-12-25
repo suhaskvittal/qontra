@@ -52,15 +52,15 @@ public:
 
     void    LEAKAGE_ISWAP(std::vector<uint>, int64_t fr=-1) override;
 
-    StateSimulator::label_1q_t  eDP1(uint, uint64_t) override;
-    StateSimulator::label_1q_t  eX(uint, uint64_t) override;
-    StateSimulator::label_1q_t  eY(uint, uint64_t) override;
-    StateSimulator::label_1q_t  eZ(uint, uint64_t) override;
-    StateSimulator::label_1q_t  eL(uint, uint64_t) override;
+    void    eDP1(uint, uint64_t) override;
+    void    eX(uint, uint64_t) override;
+    void    eY(uint, uint64_t) override;
+    void    eZ(uint, uint64_t) override;
+    void    eL(uint, uint64_t) override;
 
-    StateSimulator::label_2q_t  eDP2(uint, uint, uint64_t) override;
-    StateSimulator::label_2q_t  eLI(uint, uint, uint64_t) override;
-    StateSimulator::label_2q_t  eLT(uint, uint, uint64_t) override;
+    void    eDP2(uint, uint, uint64_t) override;
+    void    eLI(uint, uint, uint64_t) override;
+    void    eLT(uint, uint, uint64_t) override;
 
     void    snapshot(void) override;
     void    rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH>) override;

@@ -8,15 +8,6 @@
 
 namespace qontra {
 
-#define L_I     StateSimulator::label_1q_t::I
-#define L_X     StateSimulator::label_1q_t::X
-#define L_Y     StateSimulator::label_1q_t::Y
-#define L_Z     StateSimulator::label_1q_t::Z
-#define L_L     StateSimulator::label_1q_t::L
-
-static const StateSimulator::label_1q_t IXYZ[4] = { L_I, L_X, L_Y, L_Z };
-static const StateSimulator::label_1q_t IL[2] = { L_I, L_L };
-
 void
 FrameSimulator::H(std::vector<uint> operands, int64_t tr) {
     for (uint i : operands) {
@@ -74,7 +65,7 @@ FrameSimulator::S(std::vector<uint> operands, int64_t tr) {} // Do not implement
 
 void
 FrameSimulator::CX(std::vector<uint> operands, int64_t tr) {
-    for (uint i = 0; i < operands.size(); i += 2) {
+    for (size_t i = 0; i < operands.size(); i += 2) {
         uint j1 = operands[i], j2 = operands[i+1];
     
         stim::simd_bits<SIMD_WIDTH> lock_both(lock_table[j1]);
@@ -133,7 +124,7 @@ FrameSimulator::CX(std::vector<uint> operands, int64_t tr) {
 
 void
 FrameSimulator::LEAKAGE_ISWAP(std::vector<uint> operands, int64_t tr) {
-    for (uint i = 0; i < operands.size(); i += 2) {
+    for (size_t i = 0; i < operands.size(); i += 2) {
         uint j1 = operands[i], j2 = operands[i+1];
     
         stim::simd_bits<SIMD_WIDTH> lock_both(lock_table[j1]);
@@ -251,62 +242,55 @@ FrameSimulator::R(std::vector<uint> operands, int64_t tr) {
     }
 }
 
-StateSimulator::label_1q_t
+void
 FrameSimulator::eDP1(uint q, uint64_t t) {
     auto p = rng() & 3;
     x_table[q][t] ^= (bool)(p & 1);
     z_table[q][t] ^= (bool)(p & 2);
-    return IXYZ[p];
 }
 
-StateSimulator::label_1q_t
+void
 FrameSimulator::eX(uint q, uint64_t t) {
     x_table[q][t] ^= 1;
-    return L_X;
 }
 
-StateSimulator::label_1q_t
+void
 FrameSimulator::eY(uint q, uint64_t t) {
     x_table[q][t] ^= 1;
     z_table[q][t] ^= 1;
-    return L_Y;
 }
 
-StateSimulator::label_1q_t
+void
 FrameSimulator::eZ(uint q, uint64_t t) {
     z_table[q][t] ^= 1;
-    return L_Z;
 }
 
-StateSimulator::label_1q_t
+void
 FrameSimulator::eL(uint q, uint64_t t) {
     leak_table[q][t] ^= 1;
-    return L_L;
 }
 
-StateSimulator::label_2q_t 
+void 
 FrameSimulator::eDP2(uint q1, uint q2, uint64_t t) {
     auto p = rng() & 15;
     x_table[q1][t] ^= (bool)(p & 1);
     z_table[q1][t] ^= (bool)(p & 2);
     x_table[q2][t] ^= (bool)(p & 4);
     z_table[q2][t] ^= (bool)(p & 8);
-    return std::make_pair(IXYZ[p & 3], IXYZ[(p >> 2) & 3]);
 }
 
-StateSimulator::label_2q_t 
+void 
 FrameSimulator::eLI(uint q1, uint q2, uint64_t t) {
     auto p = rng() % 3;
     bool c1 = (p == 0) || (p == 2);
     bool c2 = (p == 1) || (p == 2);
     leak_table[q1][t] ^= c1;
     leak_table[q2][t] ^= c2;
-    return std::make_pair(IL[c1], IL[c2]);
 }
 
 #define QONTRA_USE_MESSY_LEAKAGE_TRANSPORT
 
-StateSimulator::label_2q_t 
+void 
 FrameSimulator::eLT(uint q1, uint q2, uint64_t t) {
 #ifdef QONTRA_USE_MESSY_LEAKAGE_TRANSPORT
     bool c1 = leak_table[q2][t] & ~leak_table[q1][t];
@@ -317,7 +301,6 @@ FrameSimulator::eLT(uint q1, uint q2, uint64_t t) {
 #endif
     leak_table[q1][t] ^= c1;
     leak_table[q2][t] ^= c2;
-    return std::make_pair(IL[c1], IL[c2]);
 }
 
 void
@@ -331,7 +314,7 @@ FrameSimulator::snapshot() {
 void
 FrameSimulator::rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH> pred) {
     StateSimulator::rollback_where(pred);
-    for (uint i = 0; i < n_qubits; i++) {
+    for (size_t i = 0; i < n_qubits; i++) {
         copy_where(x_table_cpy[i], x_table[i], pred);
         copy_where(z_table_cpy[i], z_table[i], pred);
         copy_where(leak_table_cpy[i], leak_table[i], pred);
