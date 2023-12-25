@@ -19,19 +19,15 @@ set(CMAKE_CXX_STANDARD 20)
 
 # Convert desired SIMD_WIDTH into machine architecture flags.
 if (ARCH_x86_64)
-    if(NOT(SIMD_WIDTH))
-        set(MACHINE_FLAG "-march=native")
-        set(SIMD_WIDTH 64)
-    elseif(SIMD_WIDTH EQUAL 256)
+    if(SIMD_WIDTH EQUAL 256)
         set(MACHINE_FLAG "-mavx2" "-msse2")
     elseif(SIMD_WIDTH EQUAL 128)
         set(MACHINE_FLAG "-mno-avx2" "-msse2")
     elseif(SIMD_WIDTH EQUAL 64)
-        set(MACHINE_FLAG "-mno-avx2" "-mno-sse2")
+        set(MACHINE_FLAG "-march=native -mno-avx2" "-mno-sse2")
     endif()
 else()
     set(MACHINE_FLAG "")
-    set(SIMD_WIDTH 64)
 endif()
 
 # make changes to file_lists trigger a reconfigure
