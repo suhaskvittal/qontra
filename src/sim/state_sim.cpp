@@ -8,31 +8,29 @@
 namespace qontra {
 
 namespace statesim {
-    uint64_t G_RECORD_SPACE_SIZE = 4096;
+    size_t G_RECORD_SPACE_SIZE = 8192;
 }
 
-void
-StateSimulator::shift_record_by(uint64_t offset) {
-    for (uint64_t i = 0; i < statesim::G_RECORD_SPACE_SIZE; i++) {
-        if (i < offset) record_table[i].clear();
-        else            record_table[i].swap_with(record_table[i-offset]);
-    }
+StateSimulator::StateSimulator(uint n, uint64_t max_shots)
+    :n_qubits(n),
+    max_shots(max_shots),
+    record_table(statesim::G_RECORD_SPACE_SIZE, max_shots),
+    lock_table(n, max_shots),
+    record_table_cpy(statesim::G_RECORD_SPACE_SIZE, max_shots),
+    lock_table_cpy(n, max_shots),
+    rng(0)
+{
+    reset_sim();
 }
 
-void
-StateSimulator::snapshot() {
-    record_table_cpy = stim::simd_bit_table(record_table);
-    lock_table_cpy = stim::simd_bit_table(lock_table);
-}
-
-void
-StateSimulator::rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH> pred) {
-    for (uint i = 0; i < statesim::G_RECORD_SPACE_SIZE; i++) {
-        copy_where(record_table_cpy[i], record_table[i], pred);
-    }
-    for (uint i = 0; i < n_qubits; i++) {
-        copy_where(lock_table_cpy[i], lock_table[i], pred);
-    }
-}
+StateSimulator::StateSimulator(const StateSimulator& other)
+    :n_qubits(other.n_qubits),
+    max_shots(other.max_shots),
+    record_table(other.record_table),
+    lock_table(other.lock_table),
+    record_table_cpy(other.record_table_cpy),
+    lock_table_cpy(other.lock_table_cpy),
+    rng(other.rng)
+{}
 
 }   // qontra

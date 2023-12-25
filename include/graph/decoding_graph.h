@@ -218,4 +218,6 @@ to_colored_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGrap
 }   // graph
 }   // qontra
 
+#include "decoding_graph.inl"
+
 #endif

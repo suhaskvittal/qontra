@@ -142,16 +142,12 @@ const std::set<std::string> IS_DECODE_TYPE4 {
 //  Default properties that are supported:
 //      color: 0 (red), 1 (green), 2 (blue) -- for color codes
 
-#define ANNOT_NO_TICK               "no_tick"
-#define ANNOT_NO_ERROR              "no_error"
-#define ANNOT_INJECT_TIMING_ERROR   "inject_timing_error"
+const std::string ANNOT_NO_TICK = "no_tick";
+const std::string ANNOT_NO_ERROR = "no_error";
+const std::string ANNOT_INJECT_TIMING_ERROR = "inject_timing_error";
 
-#define PROPERTY_COLOR      "color"
-#define PROPERTY_COLOR_RED      0
-#define PROPERTY_COLOR_GREEN    1
-#define PROPERTY_COLOR_BLUE     2
-
-#define PROPERTY_PREDICATE  "predicate"
+const std::string PROPERTY_COLOR = "color";
+const std::string PROPERTY_PREDICATE = "predicate";
 
 struct Instruction {
     std::string name;

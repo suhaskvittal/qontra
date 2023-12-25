@@ -14,33 +14,11 @@ namespace qontra {
 
 class FrameSimulator : public StateSimulator {
 public:
-    FrameSimulator(uint n, uint64_t max_shots)
-        :StateSimulator(n, max_shots),
-        x_table(n, max_shots),
-        z_table(n, max_shots),
-        leak_table(n, max_shots),
-        x_table_cpy(n, max_shots),
-        z_table_cpy(n, max_shots),
-        leak_table_cpy(n, max_shots)
-    {}
+    FrameSimulator(uint n, uint64_t max_shots);
+    FrameSimulator(const FrameSimulator&)
+    FrameSimulator(FrameSimulator&&);
 
-    FrameSimulator(const FrameSimulator& other)
-        :StateSimulator(other),
-        x_table(other.x_table),
-        z_table(other.z_table),
-        leak_table(other.leak_table),
-        x_table_cpy(other.x_table_cpy),
-        z_table_cpy(other.z_table_cpy),
-        leak_table_cpy(other.leak_table_cpy)
-    {}
-
-    void reset_sim(void) override {
-        StateSimulator::reset_sim();
-
-        x_table.clear();
-        z_table.clear();
-        leak_table.clear();
-    }
+    void reset_sim(void) override;
 
     void    H(std::vector<uint>, int64_t fr=-1) override;
     void    X(std::vector<uint>, int64_t fr=-1) override;
@@ -77,5 +55,7 @@ private:
 };
 
 }   // qontra
+
+#include "frame_sim.inl"
 
 #endif  // FRAME_SIM_h

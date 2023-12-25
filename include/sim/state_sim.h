@@ -19,7 +19,7 @@ namespace qontra {
 
 namespace statesim {
 
-extern uint64_t G_RECORD_SPACE_SIZE;
+extern size_t G_RECORD_SPACE_SIZE;
 
 }   //  statesim
 
@@ -33,7 +33,7 @@ extern uint64_t G_RECORD_SPACE_SIZE;
 //  (2) CliffordSimulator, an optimized simulator. Use this when simulating
 //      proper quantum programs.
 
-template <class T, class U> void
+template <class T, class U> inline void
 // T and U = stim::simd_bits or stim::simd_bits_range_ref
 // Different templates are used because their backing widths
 // may differ (e.g. 64 bit vs 256 bit).
@@ -47,34 +47,11 @@ copy_where(T from, T to, U pred) {
 
 class StateSimulator {
 public:
-    StateSimulator(uint n, uint64_t max_shots)
-        :n_qubits(n),
-        max_shots(max_shots),
-        record_table(statesim::G_RECORD_SPACE_SIZE, max_shots),
-        lock_table(n, max_shots),
-        record_table_cpy(statesim::G_RECORD_SPACE_SIZE, max_shots),
-        lock_table_cpy(n, max_shots),
-        rng(0)
-    {
-        reset_sim();
-    }
+    StateSimulator(uint n, uint64_t max_shots);
+    StateSimulator(const StateSimulator&);
 
-    StateSimulator(const StateSimulator& other)
-        :n_qubits(other.n_qubits),
-        max_shots(other.max_shots),
-        record_table(other.record_table),
-        lock_table(other.lock_table),
-        record_table_cpy(other.record_table_cpy),
-        lock_table_cpy(other.lock_table_cpy),
-        rng(other.rng)
-    {}
-
-    void    set_seed(uint64_t x) { rng.seed(x); }
-
-    virtual void reset_sim(void) {
-        record_table.clear();
-        lock_table.clear();
-    }
+    void set_seed(uint64_t);
+    virtual void reset_sim(void);
     
     // As operations are expected to be executed on simd_bits, each
     // simulator will have to implement the basic operations themselves.
@@ -126,47 +103,10 @@ public:
     typedef void (StateSimulator::*ErrorChannel1Q)(uint, uint64_t);
     typedef void (StateSimulator::*ErrorChannel2Q)(uint, uint, uint64_t);
 
-    template <ErrorChannel1Q CH> void
-    error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
-        for (size_t i = 0; i < operands.size(); i++) {
-            uint j = operands[i];
-            stim::RareErrorIterator::for_samples(rates[i], shots, rng,
-            [&] (size_t t) {
-                if (lock_table[j][t])   return;
-                (this->*CH)(j, t);
-            });
-        }
-    }
+    template <ErrorChannel1Q CH> virtual void error_channel(std::vector<uint>, std::vector<fp_t>);
+    template <ErrorChannel2Q CH> virtual void error_channel(std::vector<uint>, std::vector<fp_t>);
 
-    template <ErrorChannel2Q CH> void
-    error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
-        for (size_t i = 0; i < operands.size(); i += 2) {
-            uint j1 = operands[i];
-            uint j2 = operands[i+1];
-            stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
-            [&] (size_t t) 
-            {
-                if (lock_table[j1][t] || lock_table[j2][t]) return;
-                (this->*CH)(j1, j2, t);
-            });
-        }
-    }
-
-    virtual void
-    error_channel_m(uint64_t rec, fp_t m1w0, fp_t m0w1, stim::simd_bits_range_ref<SIMD_WIDTH> lock) {
-        stim::RareErrorIterator::for_samples(m1w0, shots, rng,
-                [&] (size_t t)
-                {
-                    if (lock[t]) return;
-                    if (record_table[rec][t] == 0) record_table[rec][t] = 1;
-                });
-        stim::RareErrorIterator::for_samples(m0w1, shots, rng,
-                [&] (size_t t)
-                {
-                    if (lock[t]) return;
-                    if (record_table[rec][t] == 1) record_table[rec][t] = 0;
-                });
-    }
+    virtual void error_channel_m(uint64_t rec, fp_t, fp_t, stim::simd_bits_range_ref<SIMD_WIDTH>);
 
     virtual void    eDP1(uint, uint64_t) =0;
     virtual void    eX(uint, uint64_t) =0;
@@ -182,7 +122,6 @@ public:
                             // Record shifting is particularly useful for
                             // operating on large programs, where the sliding
                             // window moves over time.
-
     virtual void    snapshot(void);
                             // Saves the current state of the simulator.
     virtual void rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH>);
@@ -206,5 +145,7 @@ protected:
 };
 
 }   // qontra
+
+#include "state_sim.inl"
 
 #endif  // STATE_SIM_h
