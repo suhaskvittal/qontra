@@ -7,8 +7,10 @@
 #define TABLES_h
 
 #include "defs.h"
+#include "defs/two_level_map.h"
 
-#include <limits>
+#include <array>
+#include <map>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -44,6 +46,7 @@ public:
     TwoLevelMap<std::string, std::pair<uint, uint>, fp_t> op2q_crosstalk;
     TwoLevelMap<std::string, std::pair<uint, uint>, std::vector<corr_t>> op2q_correlated;
 };
+
 class TimeTable {  // Units are in nanoseconds.
 public:
     TimeTable()
@@ -87,40 +90,13 @@ struct ErrorAndTiming {
     fp_t t1 = 1000e3;
     fp_t t2 = 500e3;
 
-    ErrorAndTiming operator*(fp_t x) {
-        this->e_g1q *= x;
-        this->e_g2q *= x;
-        this->e_m1w0 *= x;
-        this->e_m0w1 *= x;
-        this->e_idle *= x;
-        this->t1 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
-        this->t2 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
-        return *this;
-    }
+    ErrorAndTiming& operator*=(fp_t x);
 };
 
-void
-populate(uint n_qubits, ErrorTable& errors, TimeTable& timing, const ErrorAndTiming& params) {
-    // Assume z, rz, s, sdg, t, tdg are implemented via a virtual RZ.
-    const std::vector<std::string> g1q{"h", "x", "rx", "ry", "reset"};
-    const std::vector<std::string> g2q{"cx", "liswap"};
+inline ErrorAndTiming operator*(ErrorAndTiming et, fp_t x) { et *= x; return et; }
+inline ErrorAndTiming operator*(fp_t x, ErrorAndTiming et) { return et * x; }
 
-    set_all_1q(n_qubits, params.t1, timing.t1);
-    set_all_1q(n_qubits, params.t2, timing.t2);
-    for (auto g : g1q) {
-        set_all_1q(n_qubits, params.e_g1q, errors.op1q[g]);
-        set_all_1q(n_qubits, params.t_g1q, timing.op1q[g]);
-    }
-    set_all_1q(n_qubits, params.e_idle, errors.idling);
-    // Set measurement characteristics independently.
-    set_all_1q(n_qubits, params.e_m1w0, errors.m1w0);
-    set_all_1q(n_qubits, params.e_m0w1, errors.m0w1);
-    set_all_1q(n_qubits, params.t_ro, timing.op1q["measure"]);
-    for (auto g : g2q) {
-        set_all_2q(n_qubits, params.e_g2q, errors.op2q[g]);
-        set_all_2q(n_qubits, params.t_g2q, timing.op2q[g]);
-    }
-}
+void populate(uint n_qubits, ErrorTable& errors, TimeTable& timing, const ErrorAndTiming& params);
 
 }   // tables
 }   // qontra

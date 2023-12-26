@@ -17,10 +17,14 @@ set(QONTRA_FILES
     # Top-Level
     src/experiments.cpp
     src/instruction.cpp
+    src/tables.cpp
+    # Utility and Definitions
+    src/defs/filesystem.cpp
     # Decoders
     src/decoder/mwpm.cpp
     # Parsing
-    src/parsing/cmd.cpp src/parsing/asm.cpp
+    src/parsing/cmd.cpp 
+    src/parsing/asm.cpp
     ${BISON_ASMParser_OUTPUTS}
     ${FLEX_ASMLexer_OUTPUTS}
     # Graphs

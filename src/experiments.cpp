@@ -6,6 +6,7 @@
 #include "experiments.h"
 #include "stats.h"
 
+#include <fcntl.h>
 #include <mpi.h>
 #include <stdio.h>
 #include <strings.h>
@@ -168,7 +169,7 @@ read_syndrome_trace(std::string folder, const stim::Circuit& circuit, callback_t
     uint64_t local_shots = 0;
 
     std::string batch_file = folder + "/" + get_batch_filename(file_offset);
-    while (access(batch_file.c_str(), F_OK) >= 0) {
+    while (faccessat(AT_FDCWD, batch_file.c_str(), F_OK, 0) >= 0) {
         // We will temporarily write the data column-wise to input_trace, and then extract
         // the syndrome and observable tables from there.
         stim::simd_bit_table<SIMD_WIDTH> input_trace(w_det+w_obs, G_SHOTS_PER_BATCH);
@@ -244,7 +245,7 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
         auto res = dec->decode_error(syndrome); 
         logical_errors[0] += (bool) (payload.observables != res.corr);
         t_sum += res.exec_time;
-        t_sqr_sum += SQR(res.exec_time);
+        t_sqr_sum += sqr(res.exec_time);
         t_max.scalar_replace_if_better_extrema(res.exec_time);
 
         for (uint i = 0; i < w_obs; i++) {

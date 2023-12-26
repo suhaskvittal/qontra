@@ -1,4 +1,5 @@
-/* author: Suhas Vittal
+/* 
+ *  author: Suhas Vittal
  *  date:   28 August 2023
  * */
 
@@ -6,8 +7,13 @@
 //#define DISABLE_MPI
 //#define USE_NEURAL_NET
 
+#include <defs/filesystem.h>
 #include <decoder/mwpm.h>
+
+#ifdef QONTRA_CHROMOBIUS_ENABLED
 #include <decoder/chromobius.h>
+#endif
+
 #include <experiments.h>
 #include <parsing/cmd.h>
 #include <instruction.h>
@@ -22,6 +28,8 @@
 #include <decoder/neural.h>
 #include <armadillo>
 #endif
+
+#include <mpi.h>
 
 using namespace qontra;
 
@@ -109,8 +117,7 @@ int main(int argc, char* argv[]) {
     NeuralDecoder dec(error_model);
     // Check if model file exists. If so, load it in. 
     // If not, then make and train it.
-    std::filesystem::path model_file_path(model_file);
-    if (std::filesystem::exists(model_file_path)) {
+    if (file_exists(model_file)) {
         dec.load_model_from_file(model_file);
     } else {
         dec.model.Add<Linear>(256);
@@ -133,7 +140,7 @@ int main(int argc, char* argv[]) {
 #else
 
 #ifdef QONTRA_CHROMOBIUS_ENABLED
-    Chromobius dec(circuit);
+    Chromobius dec(error_model);
 #else
     std::cerr << "Chromobius not found.\n";
     exit(1);
@@ -146,16 +153,14 @@ int main(int argc, char* argv[]) {
     experiments::memory_result_t res = memory_experiment(&dec, params);
 
     // Write results to file.
-    std::filesystem::path output_path(output_file);
     if (world_rank == 0) {
-        std::filesystem::path output_folder(output_path.parent_path());
-        safe_create_directory(output_folder);
+        safe_create_directory(get_parent_directory(output_file.c_str()));
     }
-    bool write_header = !std::filesystem::exists(output_path);
+    bool write_header = !file_exists(output_file);
 #ifndef DISABLE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
-    std::ofstream out(output_path, std::ios::app);
+    std::ofstream out(output_file, std::ios::app);
     if (world_rank == 0) {
         if (write_header) {
             // Write the header.
@@ -170,7 +175,7 @@ int main(int argc, char* argv[]) {
                     << "Time Std,"
                     << "Time Max\n";
         }
-        out << std::filesystem::path(asm_file).filename() << ","
+        out << get_basename(asm_file) << ","
             << p << ","
             << shots << ","
             << res.logical_error_rate << ","

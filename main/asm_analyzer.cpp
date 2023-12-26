@@ -7,6 +7,8 @@
 #include <instruction.h>
 #include <sim/enumerator.h>
 
+#include <mpi.h>
+
 using namespace qontra;
 
 void f_syntax_analysis(const schedule_t& prog) {
@@ -38,6 +40,8 @@ void f_error_enumeration(const schedule_t& prog) {
     if (world_rank == 0) {
         write_recorded_errors_to(std::cout, record_list);
     }
+
+    MPI_Finalize();
 }
 
 int main(int argc, char* argv[]) {

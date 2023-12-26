@@ -23,10 +23,12 @@ init_chromobius(stim::Circuit circuit) {
 }
 
 inline Decoder::result_t
-Chromobius::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) override {
+Chromobius::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     timer.clk_start();
-    stim::simd_bits<SIMD_WIDTH> corr = 
-        backing_decoder.decode_detection_events({syndrome.u8, syndrome.u8 + syndrome.u8.num_bits_padded()});
+    uint64_t _corr = 
+        backing_decoder.decode_detection_events({syndrome.u8, syndrome.u8 + syndrome.num_bits_padded()});
+    stim::simd_bits<SIMD_WIDTH> corr(1);
+    *corr.u64 = _corr;
     fp_t t = (fp_t) timer.clk_end();
     return (Decoder::result_t) {
         t,

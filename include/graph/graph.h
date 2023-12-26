@@ -64,16 +64,6 @@ public:
         graph_has_changed(other.graph_has_changed)
     {}
 
-    Graph(Graph&& other)
-        :vertices(std::move(other.vertices)),
-        edges(std::move(other.edges)),
-        adjacency_matrix(std::move(other.adjacency_matrix)),
-        adjacency_lists(std::move(other.adjacency_lists)),
-        r_adjacency_lists(std::move(other.r_adjacency_lists)),
-        id_to_vertex(std::move(other.id_to_vertex)),
-        graph_has_changed(graph_has_changed)
-    {}
-
     virtual inline void
     change_id(sptr<V> v, uint64_t to) {
         id_to_vertex.erase(v->id);

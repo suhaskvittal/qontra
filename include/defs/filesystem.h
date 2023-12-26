@@ -17,6 +17,9 @@ bool    file_exists(std::string);
 char*       get_parent_directory(const char*);
 std::string get_parent_directory(std::string);
 
+char*       get_basename(const char*);
+std::string get_basename(std::string);
+
 #include "filesystem.inl"
 
 #endif  // FILESYSTEM_h

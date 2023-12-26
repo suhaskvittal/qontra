@@ -15,7 +15,7 @@
 bool
 safe_create_directory(const char* path) {
     if (faccessat(AT_FDCWD, path, F_OK, 0) < 0) {
-        char* parent_path = dirname(path);
+        char* parent_path = get_parent_directory(path);
         safe_create_directory(parent_path);
         mkdirat(AT_FDCWD, path, S_IRUSR | S_IWUSR);
         return true;

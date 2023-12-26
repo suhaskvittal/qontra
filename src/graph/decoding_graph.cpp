@@ -55,14 +55,15 @@ DecodingGraph::DecodingGraph(const DecodingGraph& other)
     mode(other.mode)
 {}
 
-DecodingGraph::DecodingGraph(DecodingGraph&& other)
-    :Graph(other),
-    distance_matrix(std::move(other.distance_matrix)),
-    flagged_decoding_graph(nullptr),
-    error_polynomial(std::move(other.error_polynomial)),
-    expected_errors(other.expected_errors),
-    mode(other.mode)
-{}
+DecodingGraph&
+DecodingGraph::operator=(const DecodingGraph& other) {
+    Graph::operator=(other);
+    distance_matrix = other.distance_matrix;
+    error_polynomial = other.error_polynomial;
+    expected_errors = other.expected_errors;
+    mode = other.mode;
+    return *this;
+}
 
 void
 DecodingGraph::setup_flagged_decoding_graph(
@@ -85,14 +86,14 @@ DecodingGraph::setup_flagged_decoding_graph(
     }
 
     // Now, redo dijkstras.
-    ewf_t<vertex_t> wf = [&] (sptr<vertex_t> v1, sptr<vertex_t> v2) {
-        return flagged_decoding_graph->_ewf(v1, v2);
-    };
     for (size_t i = 0; i < detectors.size(); i++) {
         sptr<vertex_t> v = detectors[i];
         std::map<sptr<vertex_t>, fp_t> dist;
         std::map<sptr<vertex_t>, sptr<vertex_t>> pred;
-        distance::dijkstra(flagged_decoding_graph.get(), v, dist, pred, wf);
+        dijkstra(flagged_decoding_graph.get(), v, dist, pred, 
+                [] (sptr<edge_t> e) {
+                    return e->edge_weight;
+                });
         // Update distance matrix.
         for (size_t j = 0; j < detectors.size(); j++) {
             if (i == j) continue;

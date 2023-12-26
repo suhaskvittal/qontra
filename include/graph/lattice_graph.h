@@ -8,11 +8,7 @@
 
 #include "graph/algorithms/distance.h"
 #include "graph/graph.h"
-#include "graph/io.h"
 
-#include <algorithm>
-#include <fstream>
-#include <iostream>
 #include <vector>
 
 namespace qontra {
@@ -36,15 +32,8 @@ struct edge_t : base::edge_t {
 
 class LatticeGraph : public __LatticeGraphParent {
 public:
-    LatticeGraph(void)
-        :Graph()
-    {}
-
-    LatticeGraph(const LatticeGraph& other)
-        :Graph(other),
-        x_obs_list(other.x_obs_list),
-        z_obs_list(other.z_obs_list)
-    {}
+    LatticeGraph(void);
+    LatticeGraph(const LatticeGraph&);
 
     typedef struct {    // Each pair of vertices has this entry where
                         //  (1) error_chain corresponds to the data qubits
@@ -56,11 +45,7 @@ public:
         std::vector<sptr<lattice::vertex_t>> physical_path;
     } matrix_entry_t;
 
-    matrix_entry_t
-    get_path_data(sptr<lattice::vertex_t> v1, sptr<lattice::vertex_t> v2) {
-        update_state();
-        return distance_matrix[v1][v2];
-    }
+    matrix_entry_t get_path_data(sptr<lattice::vertex_t>, sptr<lattice::vertex_t>);
 
     std::vector<std::vector<sptr<lattice::vertex_t>>> z_obs_list;
     std::vector<std::vector<sptr<lattice::vertex_t>>> x_obs_list;
@@ -69,10 +54,12 @@ protected:
 private:
     void    build_distance_matrix(void);
 
-    distance::DistanceMatrix<lattice::vertex_t, matrix_entry_t> distance_matrix;
+    DistanceMatrix<lattice::vertex_t, matrix_entry_t> distance_matrix;
 };
 
 }   // graph
 }   // qontra
+
+#include "lattice_graph.inl"
 
 #endif  // LATTICE_GRAPH_h

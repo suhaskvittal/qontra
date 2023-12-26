@@ -3,6 +3,7 @@
  *  date:   11 Octoboer 2023
  * */
 
+#include <defs/filesystem.h>
 #include <experiments.h>
 #include <instruction.h>
 #include <parsing/cmd.h>
@@ -58,24 +59,25 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     // Write results to file.
-    std::filesystem::path output_path(output_file);
     if (world_rank == 0) {
-        std::filesystem::path output_folder(output_path.parent_path());
-        safe_create_directory(output_folder);
+        safe_create_directory(get_parent_directory(output_file.c_str()));
     }
-    std::ofstream out(output_path);
+    std::ofstream out(output_file);
     // Setup experiemnts callback for writing syndromes to file.
     std::deque<std::vector<uint>> syndrome_list;
     callback_t cb;
     fp_t hw_sum, __hw_sum = 0.0;
     fp_t hw_max, __hw_max = 0.0;
-    cb.prologue = [&] (stim::simd_bits_range_ref& row) {
-        auto detectors = get_nonzero_detectors(row, circuit.count_detectors());
-        bool nonzero_obs = row.popcnt() - detectors.size();
+    cb.prologue = [&] (shot_payload_t payload) {
+        stim::simd_bits<SIMD_WIDTH> syndrome = payload.syndrome,
+                                    observable = payload.observables;
+
+        auto detectors = get_nonzero_detectors(syndrome, circuit.count_detectors());
+        bool nonzero_obs = observable.not_zero();
         if (detectors.size() >= G_FILTERING_HAMMING_WEIGHT || nonzero_obs) {
             syndrome_list.push_back(detectors);
         }
-        __hw_sum += detectors.size();
+        __hw_sum += syndrome.popcnt();
         if (detectors.size() > __hw_max) __hw_max = detectors.size();
     };
     // Execute experiment.

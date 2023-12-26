@@ -13,7 +13,7 @@ namespace qontra {
 class FrameSimulator : public StateSimulator {
 public:
     FrameSimulator(uint n, uint64_t max_shots);
-    FrameSimulator(const FrameSimulator&)
+    FrameSimulator(const FrameSimulator&);
     FrameSimulator(FrameSimulator&&);
 
     void reset_sim(void) override;

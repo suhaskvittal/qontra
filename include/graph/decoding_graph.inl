@@ -10,6 +10,7 @@
 #include <assert.h>
 
 namespace qontra {
+namespace graph {
 
 inline bool
 is_boundary(sptr<decoding::vertex_t> v) {
@@ -25,7 +26,9 @@ is_colored_boundary(sptr<decoding::vertex_t> v) {
 
 inline std::string
 int_to_color(int x) {
-    return std::string("rgb"[x]);
+    if (x == 0)         return "r";
+    else if (x == 1)    return "g";
+    else                return "b";
 }
 
 inline int
@@ -42,7 +45,7 @@ DecodingGraph::get_error_chain_data(sptr<decoding::vertex_t> v1, sptr<decoding::
 }
 
 inline DecodingGraph::matrix_entry_t
-get_error_chain_data_from_flagged_graph(sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2) {
+DecodingGraph::get_error_chain_data_from_flagged_graph(sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2) {
     return flagged_decoding_graph->get_error_chain_data(v1, v2);
 }
 
@@ -60,15 +63,17 @@ DecodingGraph::get_expected_errors() {
 
 inline void
 DecodingGraph::build_distance_matrix() {
-    distance_matrix = create_distance_matrix(this, 
+    using namespace decoding;
+    distance_matrix = create_distance_matrix<vertex_t, edge_t, matrix_entry_t>(this, 
             // Weight function:
-            [] (sptr<decoding::edge_t> e) { return e->edge_weight; }m
+            [] (sptr<decoding::edge_t> e) { return e->edge_weight; },
+            // Dijkstra callback:
             [&] (sptr<decoding::vertex_t> src,
                 sptr<decoding::vertex_t> dst,
                 const std::map<sptr<decoding::vertex_t>, fp_t>& dist,
                 const std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& prev)
             { 
-                return _dijkstra_cb(src, dst);
+                return dijkstra_cb(src, dst, dist, prev);
             });
 }
 
@@ -108,4 +113,5 @@ ColoredDecodingGraph::operator[](const char* cc) {
     return (*this)[std::string(cc)];
 }
 
+}   // graph
 }   // qontra

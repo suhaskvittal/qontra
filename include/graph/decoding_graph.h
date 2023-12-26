@@ -74,7 +74,8 @@ public:
 
     DecodingGraph(Mode=Mode::NORMAL);
     DecodingGraph(const DecodingGraph& other);
-    DecodingGraph(DecodingGraph&& other);
+
+    DecodingGraph& operator=(const DecodingGraph& other);
 
     typedef struct {    // Each pair of vertices has this entry, and each entry
                         // corresponds to an error chain.
@@ -199,7 +200,7 @@ public:
     std::set<uint>  get_face_frame_changes(const face_t& fc);
     fp_t            get_face_probability(const face_t& fc);
 
-    DecodingGraph& operator[](const std::string& cc);
+    DecodingGraph& operator[](std::string cc);
     DecodingGraph& operator[](const char* cc);
 private:
     std::map<std::string, int>      restricted_color_map;

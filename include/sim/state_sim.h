@@ -103,8 +103,8 @@ public:
     typedef void (StateSimulator::*ErrorChannel1Q)(uint, uint64_t);
     typedef void (StateSimulator::*ErrorChannel2Q)(uint, uint, uint64_t);
 
-    template <ErrorChannel1Q CH> virtual void error_channel(std::vector<uint>, std::vector<fp_t>);
-    template <ErrorChannel2Q CH> virtual void error_channel(std::vector<uint>, std::vector<fp_t>);
+    template <ErrorChannel1Q CH> void error_channel(std::vector<uint>, std::vector<fp_t>);
+    template <ErrorChannel2Q CH> void error_channel(std::vector<uint>, std::vector<fp_t>);
 
     virtual void error_channel_m(uint64_t rec, fp_t, fp_t, stim::simd_bits_range_ref<SIMD_WIDTH>);
 

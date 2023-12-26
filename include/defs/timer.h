@@ -18,7 +18,7 @@
 class Timer {
 public:
     void clk_start(void);
-    void clk_end(void);
+    uint64_t clk_end(void);
 private:
 #ifdef __APPLE__
     uint64_t t_start;

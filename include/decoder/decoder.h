@@ -91,4 +91,7 @@ protected:
 };
 
 }   // qontra
+
+#include "decoder.inl"
+
 #endif

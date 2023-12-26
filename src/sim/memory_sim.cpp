@@ -20,8 +20,7 @@ using namespace graph;
 using namespace lattice;
 
 MemorySimulator::MemorySimulator(LatticeGraph& gr)
-    :
-    // Global variables
+    :// Global variables
     s_lrcs_per_round(MPI_SUM, 1),
     s_leakage_population_ratio(MPI_SUM, 32),
     // Private variables
@@ -317,7 +316,7 @@ MemorySimulator::create_event_or_obs(std::vector<uint> operands, bool create_eve
         if (create_event) {
             sample_circuit.safe_append_u("DETECTOR", offsets);
         } else {
-            sample_circuit.safe_append_u("OBSERVABLE_INCLUDE", offsets, {obs_ctr});
+            sample_circuit.safe_append_u("OBSERVABLE_INCLUDE", offsets, {static_cast<fp_t>(obs_ctr)});
         }
     }
     if (create_event)   event_ctr++;
