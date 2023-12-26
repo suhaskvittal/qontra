@@ -13,14 +13,9 @@ cd build
 
 make -j${proc}
 
-dpr_m=10
-dpr_i=5
-dpr_f=6
-for d in 9 
+for d in 3
 do
-    dpr=$(( 3*dpr_m ))
-#   dpr=$(( d*dpr_f ))
-    echo "d = ${d} (dpr = ${dpr})"
+    echo "d = ${d}"
     for p in 1e-3
     do
         echo "   p = ${p}"
@@ -30,11 +25,7 @@ do
             --out $output_file \
             --p $p \
             --shots $shots \
-            --dpr $dpr \
             -circuit
     done
-    dpr_m=$(( dpr_m+dpr_i ))
-    dpr_i=$(( dpr_i+1 ))
-    dpr_f=$(( dpr_f+3 ))
 done
 

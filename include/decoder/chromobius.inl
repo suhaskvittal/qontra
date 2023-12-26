@@ -24,6 +24,10 @@ init_chromobius(stim::Circuit circuit) {
 
 inline Decoder::result_t
 Chromobius::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
+    std::vector<uint> detectors = get_nonzero_detectors_(syndrome);
+    std::cout << "Syndrome:";
+    for (uint d : detectors) std::cout << " " << d;
+    std::cout << "\n";
     timer.clk_start();
     uint64_t _corr = 
         backing_decoder.decode_detection_events({syndrome.u8, syndrome.u8 + syndrome.num_bits_padded()});
