@@ -31,7 +31,7 @@ public:
         :Decoder(circ)
     {}
 
-    std::string name(void) override { return "MWPMDecoder"; }
+    inline std::string name(void) override { return "MWPMDecoder"; }
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 };

@@ -16,7 +16,7 @@
 
 namespace qontra {
 
-pm::Mwpm init_solver_from_circuit(stim::Circuit circuit) {
+inline pm::Mwpm init_solver_from_circuit(stim::Circuit circuit) {
     stim::DetectorErrorModel dem = 
         stim::ErrorAnalyzer::circuit_to_detector_error_model(
             circuit,
@@ -37,7 +37,7 @@ public:
         solver(init_solver_from_circuit(circuit))
     {}
 
-    Decoder::result_t decode_error(stim::simd_bits_range_ref syndrome) override {
+    Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) override {
         const uint n_observables = circuit.count_observables();
 
         std::vector<uint> detectors = get_nonzero_detectors_(syndrome);
@@ -69,7 +69,7 @@ public:
         };
     }
 
-    std::string name(void) override { return "PyMatching"; }
+    inline std::string name(void) override { return "PyMatching"; }
 private:
     pm::Mwpm solver;
 };

@@ -5,7 +5,6 @@
 
 #ifndef QONTRA_STATS_h
 #define QONTRA_STATS_h
-
 #include <iostream>
 #include <map>
 #include <set>

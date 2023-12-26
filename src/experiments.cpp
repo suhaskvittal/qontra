@@ -1,4 +1,5 @@
-/* author: Suhas Vittal
+/*
+ *  author: Suhas Vittal
  *  date:   12 June 2023
  * */
 
@@ -25,6 +26,8 @@ uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
 }   // experiments
 
 using namespace experiments;
+
+template <class T> T sqr(T x) { return x*x; }
 
 inline std::string
 get_batch_filename(uint batchno) {
@@ -231,7 +234,7 @@ memory_experiment(Decoder* dec, experiments::memory_params_t params) {
         // Update HW statistics and skip the trial if the HW is too small
         // and filtering is enabled.
         hw_sum += hw;
-        hw_sqr_sum += SQR(hw);
+        hw_sqr_sum += sqr(hw);
         hw_max.scalar_replace_if_better_extrema(hw);
 
         if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {

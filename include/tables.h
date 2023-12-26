@@ -58,20 +58,14 @@ public:
 namespace tables {
 
 inline void
-set_all_1q(uint n_qubits, 
-        fp_t value, 
-        std::map<uint, fp_t>& row)
-{
+set_all_1q(uint n_qubits, fp_t value, std::map<uint, fp_t>& row) {
     for (uint i = 0; i < n_qubits; i++) {
         row[i] = value;
     }
 }
 
 inline void
-set_all_2q(uint n_qubits,
-        fp_t value,
-        std::map<std::pair<uint, uint>, fp_t>& row)
-{
+set_all_2q(uint n_qubits, fp_t value, std::map<std::pair<uint, uint>, fp_t>& row) {
     for (uint i = 0; i < n_qubits; i++) {
         for (uint j = 0; j < n_qubits; j++) {
             if (i == j) continue;
@@ -105,13 +99,8 @@ struct ErrorAndTiming {
     }
 };
 
-inline void
-populate(
-        uint n_qubits, 
-        ErrorTable& errors,
-        TimeTable& timing,
-        const ErrorAndTiming& params)
-{
+void
+populate(uint n_qubits, ErrorTable& errors, TimeTable& timing, const ErrorAndTiming& params) {
     // Assume z, rz, s, sdg, t, tdg are implemented via a virtual RZ.
     const std::vector<std::string> g1q{"h", "x", "rx", "ry", "reset"};
     const std::vector<std::string> g2q{"cx", "liswap"};
@@ -134,7 +123,6 @@ populate(
 }
 
 }   // tables
-
 }   // qontra
 
 #endif // TABLES_h

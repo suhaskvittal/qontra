@@ -76,12 +76,6 @@ extern uint64_t G_FILTERING_HAMMING_WEIGHT;         // Default is 2.
 
 }   // experiments
 
-// Useful defines:
-
-#define SQR(x)              (x)*(x)
-#define MEAN(s, n)          ((fp_t)(s))/((fp_t)(n))
-#define STD(m, ss, n)       sqrt( ((fp_t)(ss))/((fp_t)(n)) - SQR(m) )
-
 void    configure_optimal_batch_size(void);
 
 // Experiments functions:

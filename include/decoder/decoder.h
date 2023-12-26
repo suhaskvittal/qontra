@@ -9,13 +9,12 @@
 #include <stim.h>
 
 #include "defs.h"
+#include "defs/timer.h"
 #include "graph/decoding_graph.h"
 #include "stimext.h"
-#include "timer.h"
 
 #include <string>
 #include <tuple>
-#include <utility>
 
 #include <strings.h>
 
@@ -79,17 +78,9 @@ public:
                                                     // and return a correction.
     virtual std::string name(void) =0;  // Useful for printing out stats.
 
-    DetailedStimCircuit get_circuit(void) { return circuit; }
+    DetailedStimCircuit get_circuit(void);
 protected:
-    // Other helpful functions:
-    //
-    // get_error_chain_data: retrieves error chain data, adjusted for flag detections.
-    // get_nonzero_detectors: gets nonzero detectors from syndrome.
-    template <class T> std::vector<uint>
-    // T = stim::simd_bits or stim::simd_bits_range_ref
-    get_nonzero_detectors_(T syndrome) {
-        return get_nonzero_detectors(syndrome, circuit.count_detectors());
-    }
+    template <class T> std::vector<uint> get_nonzero_detectors_(T syndrome);
 
     DetailedStimCircuit     circuit;
     graph::DecodingGraph    decoding_graph;
