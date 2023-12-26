@@ -12,10 +12,10 @@ init_chromobius(stim::Circuit circuit) {
     stim::DetectorErrorModel dem = 
         stim::ErrorAnalyzer::circuit_to_detector_error_model(
             circuit,
-            true,  // decompose_errors
+            false, // decompose_errors
             true,  // fold loops
             false, // allow gauge detectors
-            1.0,   // approx disjoint errors threshold
+            0.0,   // approx disjoint errors threshold
             false, // ignore decomposition failures
             false
         );
@@ -24,13 +24,9 @@ init_chromobius(stim::Circuit circuit) {
 
 inline Decoder::result_t
 Chromobius::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
-    std::vector<uint> detectors = get_nonzero_detectors_(syndrome);
-    std::cout << "Syndrome:";
-    for (uint d : detectors) std::cout << " " << d;
-    std::cout << "\n";
     timer.clk_start();
     uint64_t _corr = 
-        backing_decoder.decode_detection_events({syndrome.u8, syndrome.u8 + syndrome.num_bits_padded()});
+        backing_decoder.decode_detection_events({syndrome.u8, syndrome.u8 + syndrome.num_u8_padded()});
     stim::simd_bits<SIMD_WIDTH> corr(1);
     *corr.u64 = _corr;
     fp_t t = (fp_t) timer.clk_end();

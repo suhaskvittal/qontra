@@ -11,6 +11,7 @@
 #include <decoder/mwpm.h>
 
 #ifdef QONTRA_CHROMOBIUS_ENABLED
+#include <decoder/pymatching.h>
 #include <decoder/chromobius.h>
 #endif
 
@@ -86,7 +87,15 @@ int main(int argc, char* argv[]) {
     uint64_t epochs = 100;
     std::string model_file = "model.bin";
 
-    if (!pp.get_string("asm", asm_file))    return 1;
+    DetailedStimCircuit error_model;
+    if (pp.get_string("stim", asm_file)) {
+        FILE* fin = fopen(asm_file.c_str(), "r");
+        error_model = stim::Circuit::from_file(fin);
+        fclose(fin);
+    } else if (!pp.get_string("asm", asm_file)) {
+        return 1;
+    }
+
     if (!pp.get_string("out", output_file)) return 1;
     if (!pp.get_float("p", p))  return 1;
     if (!pp.get_uint64("shots", shots)) return 1;
@@ -107,11 +116,11 @@ int main(int argc, char* argv[]) {
 #ifdef DISABLE_MPI
     experiments::G_USE_MPI = false;
 #endif
-
     // Get schedule from file.
-    schedule_t sch = schedule_from_file(asm_file);
-    // Define Decoder.
-    DetailedStimCircuit error_model = get_circuit(sch, p, m);
+    if (!pp.option_set("stim")) {
+        schedule_t sch = schedule_from_file(asm_file);
+        error_model = get_circuit(sch, p, m);
+    }
 #ifdef USE_NEURAL_NET
     using namespace mlpack;
     NeuralDecoder dec(error_model);
@@ -140,6 +149,7 @@ int main(int argc, char* argv[]) {
 #else
 
 #ifdef QONTRA_CHROMOBIUS_ENABLED
+//  PyMatching dec(error_model);
     Chromobius dec(error_model);
 #else
     std::cerr << "Chromobius not found.\n";
@@ -175,7 +185,7 @@ int main(int argc, char* argv[]) {
                     << "Time Std,"
                     << "Time Max\n";
         }
-        out << get_basename(asm_file) << ","
+        out << asm_file << ","
             << p << ","
             << shots << ","
             << res.logical_error_rate << ","

@@ -58,22 +58,12 @@ generate_syndromes(const stim::Circuit& circuit, uint64_t shots, callback_t call
 
     std::mt19937_64 rng(G_BASE_SEED + world_rank);
 
-    stim::DetectorErrorModel dem = stim::ErrorAnalyzer::circuit_to_detector_error_model(
-                                        circuit,
-                                        true,   // decompose errors
-                                        true,   // fold loops
-                                        true,   // allow gauge detectors
-                                        0.0,
-                                        false,  // ignore decomposition failures
-                                        true    // block decomposition from introducing remnant edges
-                                    );
-    stim::DemSampler<SIMD_WIDTH> sampler(dem, std::move(rng), G_SHOTS_PER_BATCH);
     while (local_shots > 0) {
         const uint64_t shots_this_batch = local_shots < G_SHOTS_PER_BATCH ? local_shots : G_SHOTS_PER_BATCH;
-        sampler.resample(false);
+        auto sample = stim::sample_batch_detection_events<SIMD_WIDTH>(circuit, shots_this_batch, rng);
+        stim::simd_bit_table<SIMD_WIDTH> syndrome_table = sample.first.transposed(),
+                                            obs_table = sample.second.transposed();
 
-        stim::simd_bit_table<SIMD_WIDTH> syndrome_table = sampler.det_buffer.transposed(),
-                                            obs_table = sampler.obs_buffer.transposed();
         for (size_t t = 0; t < shots_this_batch; t++) {
             stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = syndrome_table[t],
                                                     obs = obs_table[t];
@@ -217,14 +207,12 @@ read_syndrome_trace(std::string folder, const stim::Circuit& circuit, callback_t
 memory_result_t
 memory_experiment(Decoder* dec, experiments::memory_params_t params) {
     const stim::Circuit circuit = dec->get_circuit();
-    const uint w_det = circuit.count_detectors();
     const uint w_obs = circuit.count_observables();
 
     statistic_t<uint64_t> logical_errors(MPI_SUM, w_obs+1);
     statistic_t<uint64_t> hw_sum(MPI_SUM), hw_sqr_sum(MPI_SUM), hw_max(MPI_MAX);
     statistic_t<fp_t> t_sum(MPI_SUM), t_sqr_sum(MPI_SUM), t_max(MPI_MAX);
 
-    const uint sample_width = w_det + w_obs;
     cb_t1 dec_cb = [&] (shot_payload_t payload)
     {
         stim::simd_bits<SIMD_WIDTH> syndrome(payload.syndrome),

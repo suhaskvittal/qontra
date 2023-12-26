@@ -27,6 +27,8 @@ int yylex();
 extern int  yyparse();
 void        yyerror(char const*);
 
+#define YYMAXDEPTH 100000
+
 }
 
 %union {

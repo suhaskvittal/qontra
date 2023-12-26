@@ -31,7 +31,7 @@ inline std::string get_parent_directory(std::string path) {
 }
 
 inline char* get_basename(const char* path) {
-    char tmp[1024];
+    char tmp[8192];
     strcpy(tmp, path);
     return basename(tmp);
 }

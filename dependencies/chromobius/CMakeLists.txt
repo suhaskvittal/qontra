@@ -15,37 +15,20 @@
 cmake_minimum_required(VERSION 3.13)
 project(chromobius)
 include_directories(src)
-set(CMAKE_CXX_STANDARD 20)
 
-set(CHROMOBIUS_FILES
-    src/chromobius/datatypes/atomic_error.cc
-    src/chromobius/datatypes/color_basis.cc
-    src/chromobius/datatypes/rgb_edge.cc
-    src/chromobius/decode/decoder.cc
-    src/chromobius/decode/pymatcher.cc
-    src/chromobius/graph/charge_graph.cc
-    src/chromobius/graph/choose_rgb_reps.cc
-    src/chromobius/graph/collect_atomic_errors.cc
-    src/chromobius/graph/collect_composite_errors.cc
-    src/chromobius/graph/collect_nodes.cc
-    src/chromobius/graph/drag_graph.cc
-    src/chromobius/graph/euler_tours.cc)
+# Make changes to file_lists trigger a reconfigure.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS file_lists/source_files_no_main)
+file(STRINGS file_lists/source_files_no_main SOURCE_FILES_NO_MAIN)
 
-add_library(libchromobius ${CHROMOBIUS_FILES})
-
-
+add_library(libchromobius ${SOURCE_FILES_NO_MAIN})
 set_target_properties(libchromobius PROPERTIES PREFIX "")
-
-target_include_directories(libchromobius PUBLIC src)
-target_include_directories(libchromobius PRIVATE 
-                                        ${CMAKE_SOURCE_DIR}/dependencies/stim/src
-                                        ${CMAKE_SOURCE_DIR}/dependencies/pymatching/src)
-target_link_libraries(libchromobius PUBLIC libstim libpym)
-
+target_include_directories(libchromobius PUBLIC src 
+                            ${CMAKE_SOURCE_DIR}/dependencies/stim/src
+                            ${CMAKE_SOURCE_DIR}/dependencies/pymatching/src)
+target_link_libraries(libchromobius PRIVATE libstim libpym)
 if(NOT(MSVC))
     target_compile_options(libchromobius PRIVATE -O3 -Wall -Wpedantic -fPIC -fno-strict-aliasing)
     target_link_options(libchromobius PRIVATE -O3)
 else()
     target_compile_options(libchromobius PRIVATE)
 endif()
-

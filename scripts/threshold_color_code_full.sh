@@ -13,10 +13,10 @@ cd build
 
 make -j${proc}
 
-for d in 3
+for d in 3 5 7 9 11 13 15
 do
     echo "d = ${d}"
-    for p in 1e-3
+    for p in 1e-3 5e-4 3e-4
     do
         echo "   p = ${p}"
         # Write memory asm.
