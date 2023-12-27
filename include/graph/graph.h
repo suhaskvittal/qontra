@@ -251,22 +251,23 @@ public:
     inline std::vector<sptr<V>> get_incoming(sptr<V> v) { return r_adjacency_lists[v]; }
     inline std::vector<sptr<V>>  get_outgoing(sptr<V> v) { return adjacency_lists[v]; }
 
-    inline uint get_degree(sptr<V> v) { return get_neighbors(v).size(); }
-    inline uint get_indegree(sptr<V> v) { return get_incoming(v).size(); }
-    inline uint get_outdegree(sptr<V> v) { return get_degree(v); }
-    inline uint get_inoutdegree(sptr<V> v) { return get_indegree(v) + get_outdegree(v); }
+    inline size_t get_degree(sptr<V> v) { return get_neighbors(v).size(); }
+    inline size_t get_indegree(sptr<V> v) { return get_incoming(v).size(); }
+    inline size_t get_outdegree(sptr<V> v) { return get_degree(v); }
+    inline size_t get_inoutdegree(sptr<V> v) { return get_indegree(v) + get_outdegree(v); }
 
     inline fp_t get_mean_connectivity(void) {
         return 2 * ((fp_t)edges.size()) / ((fp_t)vertices.size()); 
     }
 
-    inline uint get_max_connectivity(void) {
+    inline size_t get_max_connectivity(void) {
         update_state();
         return max_degree;
     }
 
     inline void force_update_state(void) {
-        graph_has_changed = true; update_state(); 
+        graph_has_changed = true; 
+        update_state(); 
     }
 protected:
     // Updates graph if graph_has_changed is set.
@@ -297,7 +298,7 @@ protected:
     bool    graph_has_changed;  // Tracks if the graph has changed. May be useful
                                 // for subclasses that need to track state.
 private:
-    uint max_degree;
+    size_t max_degree;
 };
 
 }   // graph

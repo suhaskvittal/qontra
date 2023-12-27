@@ -31,10 +31,8 @@ struct raw_edge_t : graph::base::edge_t {};
 
 struct phys_vertex_t : graph::base::vertex_t {
     std::set<sptr<raw_vertex_t>> role_set;
-    std::map<uint, sptr<raw_vertex_t>> cycle_to_role;
-    std::map<sptr<raw_vertex_t>, uint> role_to_cycle;
-
-    std::set<size_t> tsvs_used_by_vertex;
+    std::map<size_t, sptr<raw_vertex_t>> cycle_to_role;
+    std::map<sptr<raw_vertex_t>, size_t> role_to_cycle;
 
     void push_back_role(sptr<raw_vertex_t>);
 };
@@ -88,7 +86,7 @@ private:
 
 class PhysicalNetwork : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
 public:
-    PhysicalNetwork(graph::TannerGraph&);
+    PhysicalNetwork(graph::TannerGraph&, uint max_connectivity);
     // All of the graph modification functions need to be updated to handle planarity.
     // Note that deletes only free up spots on the processor bulk. Only adding edges
     // requires checking for planarity.
@@ -97,15 +95,24 @@ public:
     void delete_vertex(sptr<net::phys_vertex_t>) override;
     void delete_edge(sptr<net::phys_edge_t>) override;
 
+    // Returns true if the graph remains planar.
+    bool test_and_move_edge_to_bulk(sptr<net::phys_edge_t>, bool is_new_edge=false); 
+
     void make_flags(void);
+protected:
+    bool update_state(void) override;
 private:
     void reallocate_edges(void); // Try and place out-of-plane edges into the processor bulk.
     bool is_planar(void);
     size_t determine_edge_tsv_layer(sptr<net::phys_edge_t>);
 
+    size_t get_max_endpoint_degree(sptr<net::phys_edge_t>);
+    size_t get_bulk_degree(sptr<net::phys_vertex_t>);
+
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
     RawNetwork raw_connection_network;
+    std::map<net::raw_vertex_t, net::phys_vertex_t> role_to_phys;
     // planar_representation will contain all edges on the bulk of the processor (not
     // edges going through a TSV). If an edge can be added to the planar_representation
     // without violating planarity, it goes on the bulk.
@@ -118,6 +125,8 @@ private:
     //
     // Tracks the heights of TSV edges for each vertex.
     std::map<sptr<net::phys_vertex_t>, std::set<size_t>> occupied_tsvs;
+    // Tracks the degree of each vertex in the processor bulk.
+    std::map<sptr<net::phys_vertex_t>, size_t> bulk_degree_map;
 
     const uint max_connectivity;
 };

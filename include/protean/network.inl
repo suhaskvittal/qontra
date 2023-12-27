@@ -3,6 +3,8 @@
  *  date:   27 December 2023
  * */
 
+#include <algorithm>
+
 #include <lemon/planarity.h>
 
 namespace qontra {
@@ -12,7 +14,7 @@ namespace net {
 
 inline void
 phys_vertex_t::push_back_role(sptr<raw_vertex_t> r) {
-    const uint cycle = role_set.size();
+    const size_t cycle = role_set.size();
     role_set.insert(r);
     cycle_to_role[cycle] = r;
     role_to_cycle[r] = cycle;
@@ -57,23 +59,12 @@ PhysicalNetwork::add_vertex(sptr<net::phys_vertex_t> v) {
 inline bool
 PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
     if (graph::Graph::add_edge(e)) {
-        sptr<net::phys_vertex_t> src = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
-                                dst = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
-        auto lemon_src = v_phys_to_lemon[src],
-                lemon_dst = v_phys_to_lemon[dst];
-        auto lemon_edge = planar_repr.addEdge(lemon_src, lemon_dst);
-        if (!is_planar()) {
-            planar_repr.erase(lemon_edge);
+        if (!test_and_move_edge_to_bulk(e, true)) {
             e->is_out_of_plane = true;
-
             const size_t k = determine_edge_tsv_layer(e);
             e->tsv_layer = k;
             occupied_tsvs[src].insert(k);
             occupied_tsvs[dst].insert(k);
-        } else {
-            e_phys_to_lemon[e] = lemon_edge;
-            e_lemon_to_phys[lemon_edge] = e;
-            e->is_out_of_plane = false;
         }
         return true;
     } else {
@@ -113,6 +104,65 @@ PhysicalNetwork::delete_edge(sptr<net::phys_edge_t> e) {
 }
 
 inline bool
+PhysicalNetwork::test_and_move_edge_to_bulk(sptr<net::phys_edge_t> e, bool is_new_edge) {
+    sptr<net::phys_vertex_t> src = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
+                            dst = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
+    auto lemon_src = v_phys_to_lemon[src],
+            lemon_dst = v_phys_to_lemon[dst];
+    auto lemon_edge = planar_repr.addEdge(lemon_src, lemon_dst);
+
+    if (is_planar()) {
+        e_phys_to_lemon[e] = lemon_edge;
+        e_lemon_to_phys[lemon_edge] = e;
+
+        if (!is_new_edge) {
+            occupied_tsvs[src].erase(e->tsv_layer);
+            occupied_tsvs[dst].erase(e->tsv_layer);
+        }
+
+        e->is_out_of_plane = false;
+        return true;
+    } else {
+        planar_repr.erase(lemon_edge);
+        return false;
+    }
+}
+
+inline bool
+PhysicalNetwork::update_state() {
+    if (!graph_has_changed) return false;
+
+    // Update bulk_degree_map.
+    for (sptr<net::phys_vertex_t> v : get_vertices()) {
+        size_t dg = get_degree(v);
+        for (sptr<net::phys_vertex_t> w : get_neighbors(v)) {
+            sptr<net::phys_edge_t> e = get_edge(v, w);
+            if (e->is_out_of_plane) --dg;
+        }
+        bulk_degree_map[v] = dg;
+    }
+}
+
+inline void
+PhysicalNetwork::reallocate_edges() {
+    // Get all out-of-plane edges, and sort them in order of the maximum degrees of their endpoints.
+    // The idea is that if the endpoints have low degree, then an edge is less likely to be out-of-plane.
+    std::vector<sptr<net::phys_edge_t>> out_of_plane_edges;
+    for (sptr<net::phys_edge_t> e : get_edges()) {
+        if (e->is_out_of_plane) out_of_plane_edges.push_back(e);
+    }
+
+    std::sort(out_of_plane_edges.begin(), out_of_plane_edges.end(),
+                [&] (auto e1, auto e2)
+                {
+                    return get_max_endpoint_degree(e1) < get_max_endpoint_degree(e2);
+                });
+    for (sptr<net::phys_edge_t> e : out_of_plane_edges) {
+        test_and_move_edge_to_bulk(e);
+    }
+}
+
+inline bool
 PhysicalNetwork::is_planar() {
     return lemon::checkPlanarity(planar_repr);
 }
@@ -124,6 +174,21 @@ PhysicalNetwork::determine_edge_tsv_layer(sptr<net::phys_edge_t> e) {
     size_t k = 0;
     while (occupied_tsvs[src].count(k) || occupied_tsvs[dst].count(k)) k++;
     return k;
+}
+
+inline size_t
+PhysicalNetwork::get_max_endpoint_degree(sptr<net::phys_edge_t> e) {
+    sptr<net::phys_vertex_t> src = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
+                            dst = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
+    const size_t sdg = get_bulk_degree(src), 
+                    ddg = get_bulk_degree(dst);
+    return sdg > ddg ? sdg : ddg;
+}
+
+inline size_t
+PhysicalNetwork::get_bulk_degree(sptr<net::phys_vertex_t> v) {
+    update_state();
+    return bulk_degree_map[v];
 }
 
 }   // protean

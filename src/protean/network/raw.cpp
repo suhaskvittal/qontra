@@ -15,7 +15,8 @@ using namespace graph;
 using namespace net;
 
 RawNetwork::Network(TannerGraph& tgr) 
-    :tanner_to_raw(),
+    :Graph(),
+    tanner_to_raw(),
     raw_to_tanner(),
     tanner_graph(tgr),
     id_ctr(0)
