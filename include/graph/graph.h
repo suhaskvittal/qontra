@@ -97,7 +97,7 @@ public:
                 && (adjacency_matrix[v1][v2] != nullptr);
     }
 
-    virtual bool
+    virtual inline bool
     add_vertex(sptr<V> v) {            // O(1) operation
         if (contains(v) || id_to_vertex.count(v->id)) return false;
         id_to_vertex[v->id] = v;

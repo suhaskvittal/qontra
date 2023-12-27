@@ -1,134 +1,130 @@
 /*
  *  author: Suhas Vittal
- *  date:   10 November 2023
+ *  date:   27 December 2023
  * */
 
 #ifndef PROTEAN_NETWORK_h
 #define PROTEAN_NETWORK_h
 
-#include "graph/graph.h"
-#include "graph/tanner_graph.h"
+#include <defs/two_level_map.h>
+#include <graph/tanner_graph.h>
 
-#include <algorithm>
-#include <set>
-#include <vector>
+#include <lemon/list_graph.h>
 
 namespace qontra {
 namespace protean {
 
-//
-// Support Graph
-//
-// The SupportGraph encodes relationships between data qubits and "support pools",
-// or sets of qubits. This is an extension of a TannerGraph, where two stabilizers
-// (of the same type) sharing a suppport will have a child X which contains the 
-// intersection of their supports. Any data qubits are connected to this intersection.
-//
+// We will have two types of networks:
+//  (1) A "raw" network, which has the following rules:
+//      (i) a qubit can only be used for "one" role (i.e. parity qubit for a single check, a flag, etc.)
+//  (2) A physical network, which is the actual coupling graph. Here, qubits can have multiple roles
+//      at different points in time.
 
-const int SUPPORT_VERTEX_GEN_BIT = 60;
+namespace net {
 
-struct sup_vertex_t : graph::base::vertex_t {
-    enum class type { any, x, z };
-
-    tanner::vertex_t*                   tgv;
-    std::set<graph::tanner::vertex_t*>  support;
-    type pauli_type;
-};
-
-struct sup_edge_t : graph::base::edge_t {
-};
-
-#define __SupportGraphParent graph::Graph<sup_vertex_t, sup_edge_t>
-class SupportGraph : public __SupportGraphParent {
-public:
-    SupportGraph(TannerGraph&);
-    SupportGraph(const SupportGraph& other)
-        :__SupportGraphParent(other),
-        vmap(other.vmap)
-    {}
-
-    sup_vertex_t* get_vertex(graph::tanner::vertex_t* tv) {
-        if (vmap.count(tv)) return vmap[tv];
-        else                return nullptr;
-    }
-private:
-    std::map<graph::tanner::vertex_t*, sup_vertex_t*> vmap;
-};
-
-//
-// Flag Proxy Network.
-//
-
-const int FLAG_PROXY_VERTEX_GEN_BIT = 48;
-
-struct fp_vertex_t : graph::base::vertex_t {
-    enum class type { data, flag, proxy, parity };
-
-    graph::tanner::vertex_t*    tanner_vertex;
-    sup_vertex_t*               support_vertex;
-
+struct raw_vertex_t : graph::base::vertex_t {
+    enum class type { data, xparity, zparity, flag, proxy };
     type qubit_type;
 };
 
-struct fp_edge_t : graph::base::edge_t {
+struct raw_edge_t : graph::base::edge_t {};
+
+struct phys_vertex_t : graph::base::vertex_t {
+    std::set<sptr<raw_vertex_t>> role_set;
+    std::map<uint, sptr<raw_vertex_t>> cycle_to_role;
+    std::map<sptr<raw_vertex_t>, uint> role_to_cycle;
+
+    std::set<size_t> tsvs_used_by_vertex;
+
+    void push_back_role(sptr<raw_vertex_t>);
 };
 
-#define __FlagProxyNetworkParent    graph::Graph<fp_vertex_t, fp_edge_t>
-class FlagProxyNetwork : public __FlagProxyNetworkParent {
+struct phys_edge_t : graph::base::edge_t {
+    bool is_out_of_plane;
+    size_t tsv_layer;
+};
+
+}   // net
+
+class RawNetwork : public graph::Graph<net::raw_vertex_t, net::raw_edge_t> {
 public:
-    FlagProxyNetwork(TannerGraph&);
-    FlagProxyNetwork(const FlagProxyNetwork& other)
-        :__FlagProxyNetworKParent(other),
-        support_graph(other.support_graph),
-        tanner_graph(other.tanner_graph),
-        vmap(other.vmap),
-        proxyid(other.proxyid)
-    {}
+    RawNetwork(graph::TannerGraph&);
 
-    struct {
-        // Constraints
-        int min_connectivity = 4;
-        // Optimization setting.
-        enum class opt { depth, conn, qubits };
-        opt target = opt::conn;
-    } config;
+    // Input: data qubit, data qubit, parity qubit
+    // Returns: flag qubit.
+    sptr<net::raw_vertex_t> add_flag(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    // Input: xyz qubit, xyz qubit (xyz meaning can be any type).
+    // Returns: proxy qubit. The proxy qubit splits the edge between the two input qubits.
+    sptr<net::raw_vertex_t> add_proxy(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    // This does the same as the above command, but just takes an edge instead of two qubits.
+    sptr<net::raw_vertex_t> add_proxy(sptr<net::raw_edge_t>);
 
-    void optimize(void);
+    // Input: xyz qubit, proxy qubit, a reference to a vector which will be populated with the walk.
+    // Returns: non-proxy qubit obtained by walking through the proxy_indirection_map.
+    sptr<net::raw_vertex_t> proxy_walk(sptr<net::raw_vertex_t>,
+                                            sptr<net::raw_vertex_t>,
+                                            std::vector<sptr<net::raw_vertex_t>>&);
+    
+    // Tanner graph tracking structures:
+    std::map<sptr<graph::tanner::vertex_t>, sptr<net::raw_vertex_t>>    tanner_to_raw;
+    std::map<sptr<net::raw_vertex_t>, sptr<graph::tanner::vertex_t>>    raw_to_tanner;
 
-    fp_vertex_t* get_vertex(graph::tanner::vertex_t* tv) {
-        return get_vertex(support_graph.get_vertex(tv));
-    }
+    // Flag tracking structures:
+    //
+    // parity qubit --> list of flag qubits used in syndrome extraction of check.
+    std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>> 
+        flag_ownership_map;
+    // parity qubit --> data qubit --> flag qubit used in syndrome extraction of check.
+    TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
+        flag_assignment_map;
+    // proxy qubit --> xyz qubit --> qubit xyz was linked to before
+    TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
+        proxy_indirection_map;
 
-    fp_vertex_t* get_vertex(sup_vertex_t* sv) {
-        if (vmap.count(sv)) return vmap[sv];
-        return nullptr;
-    }
+    TannerGraph tanner_graph;
 private:
-    void add_partial_support_to(
+    uint64_t id_ctr = 0;
+};
 
-    void reduce_connectivity(fp_vertex_t*);
+class PhysicalNetwork : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
+public:
+    PhysicalNetwork(graph::TannerGraph&);
+    // All of the graph modification functions need to be updated to handle planarity.
+    // Note that deletes only free up spots on the processor bulk. Only adding edges
+    // requires checking for planarity.
+    bool add_vertex(sptr<net::phys_vertex_t>) override;
+    bool add_edge(sptr<net::phys_edge_t>) override;
+    void delete_vertex(sptr<net::phys_vertex_t>) override;
+    void delete_edge(sptr<net::phys_edge_t>) override;
 
-    void reduce_connectivity_of_data(fp_vertex_t*);
-    void reduce_connectivity_of_parity(fp_vertex_t*);
-    void reduce_connectivity_of_flag(fp_vertex_t*);
+    void make_flags(void);
+private:
+    void reallocate_edges(void); // Try and place out-of-plane edges into the processor bulk.
+    bool is_planar(void);
+    size_t determine_edge_tsv_layer(sptr<net::phys_edge_t>);
 
-    void reduce_connectivity_by_adding_proxies(fp_vertex_t*);
+    // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
+    // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
+    RawNetwork raw_connection_network;
+    // planar_representation will contain all edges on the bulk of the processor (not
+    // edges going through a TSV). If an edge can be added to the planar_representation
+    // without violating planarity, it goes on the bulk.
+    lemon::ListGraph planar_repr;
+    std::map<sptr<net::phys_vertex_t>, lemon::ListGraph::Node>  v_phys_to_lemon;
+    std::map<lemon::ListGraph::Node, sptr<net::phys_vertex_t>>  v_lemon_to_phys;
+    std::map<sptr<net::phys_edge_t>, lemon::ListGraph::Edge>    e_phys_to_lemon;
+    std::map<lemon::ListGraph::Edge, sptr<net::phys_edge_t>>    e_lemon_to_phys;
+    // Other tracking structures:
+    //
+    // Tracks the heights of TSV edges for each vertex.
+    std::map<sptr<net::phys_vertex_t>, std::set<size_t>> occupied_tsvs;
 
-    void add_proxies_to(fp_vertex_t*, bool on_incoming);
-
-    fp_vertex_t* make_proxy(fp_vertex_t*, bool incoming);
-
-    SupportGraph        support_graph;
-    graph::TannerGraph  tanner_graph;
-
-    std::map<sup_vertex_t*, fp_vertex_t*> vmap;
-
-    std::map<tanner::vertex_t*, std::set<tanner::vertex_t*>> is_flagged_map;
-
-    uint64_t genid;
+    const uint max_connectivity;
 };
 
 }   // protean
 }   // qontra
+
+#include "network.inl"
 
 #endif  // PROTEAN_NETWORK_h
