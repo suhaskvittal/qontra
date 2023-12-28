@@ -6,6 +6,7 @@
 #ifndef PROTEAN_NETWORK_h
 #define PROTEAN_NETWORK_h
 
+#include <defs/bijective_map.h>
 #include <defs/two_level_map.h>
 #include <graph/tanner_graph.h>
 
@@ -31,10 +32,13 @@ struct raw_edge_t : graph::base::edge_t {};
 
 struct phys_vertex_t : graph::base::vertex_t {
     std::set<sptr<raw_vertex_t>> role_set;
-    std::map<size_t, sptr<raw_vertex_t>> cycle_to_role;
-    std::map<sptr<raw_vertex_t>, size_t> role_to_cycle;
+    BijectiveMap<size_t, sptr<raw_vertex_t>> cycle_role_map;
 
+    void add_role(sptr<raw_vertex_t>, size_t cycle);
     void push_back_role(sptr<raw_vertex_t>);
+    bool has_role_of_type(raw_vertex_t::type);
+private:
+    std::set<raw_vertex_t::type> role_type_set;
 };
 
 struct phys_edge_t : graph::base::edge_t {
@@ -64,8 +68,7 @@ public:
                                             std::vector<sptr<net::raw_vertex_t>>&);
     
     // Tanner graph tracking structures:
-    std::map<sptr<graph::tanner::vertex_t>, sptr<net::raw_vertex_t>>    tanner_to_raw;
-    std::map<sptr<net::raw_vertex_t>, sptr<graph::tanner::vertex_t>>    raw_to_tanner;
+    BijectiveMap<sptr<graph::tanner::vertex_t>, sptr<net::raw_vertex_t>> v_tanner_raw_map;
 
     // Flag tracking structures:
     //
@@ -98,7 +101,7 @@ public:
     // Returns true if the graph remains planar.
     bool test_and_move_edge_to_bulk(sptr<net::phys_edge_t>, bool is_new_edge=false); 
 
-    void make_flags(void);
+    void make_flags(bool for_x_parity);
 protected:
     bool update_state(void) override;
 private:
@@ -117,10 +120,8 @@ private:
     // edges going through a TSV). If an edge can be added to the planar_representation
     // without violating planarity, it goes on the bulk.
     lemon::ListGraph planar_repr;
-    std::map<sptr<net::phys_vertex_t>, lemon::ListGraph::Node>  v_phys_to_lemon;
-    std::map<lemon::ListGraph::Node, sptr<net::phys_vertex_t>>  v_lemon_to_phys;
-    std::map<sptr<net::phys_edge_t>, lemon::ListGraph::Edge>    e_phys_to_lemon;
-    std::map<lemon::ListGraph::Edge, sptr<net::phys_edge_t>>    e_lemon_to_phys;
+    BijectiveMap<sptr<net::phys_vertex_t>, lemon::ListGraph::Node>  v_phys_lemon_map;
+    BijectiveMap<sptr<net::phys_edge_t>, lemon::ListGraph::Edge>    e_phys_lemon_map;
     // Other tracking structures:
     //
     // Tracks the heights of TSV edges for each vertex.

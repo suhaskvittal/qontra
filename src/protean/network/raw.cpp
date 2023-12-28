@@ -16,8 +16,7 @@ using namespace net;
 
 RawNetwork::Network(TannerGraph& tgr) 
     :Graph(),
-    tanner_to_raw(),
-    raw_to_tanner(),
+    v_tanner_raw_map(),
     tanner_graph(tgr),
     id_ctr(0)
 {
@@ -33,16 +32,15 @@ RawNetwork::Network(TannerGraph& tgr)
         } else {
             rv->qubit_type = raw_vertex_t::type::data;
         }
-        tanner_to_raw[tv] = rv;
-        raw_to_tanner[rv] = tv;
+        v_tanner_raw_map.put(tv, rv);
         add_vertex(tv);
     }
 
     for (sptr<tanner::edge_t> te : tgr.get_edges()) {
         sptr<tanner::vertex_t> tv1 = std::reinterpret_pointer_cast<tanner::vertex_t>(te->src),
                                 tv2 = std::reinterpret_pointer_cast<tanner::vertex_t>(te->dst);
-        auto rv1 = tanner_to_raw[tv1],
-            rv2 = tanner_to_raw[tv2];
+        auto rv1 = v_tanner_raw_map.at(tv1),
+            rv2 = v_tanner_raw_map.at(tv2);
         sptr<raw_edge_t> re = std::make_shared<>();
         re->src = rv1;
         re->dst = rv2;

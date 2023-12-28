@@ -13,11 +13,21 @@ namespace protean {
 namespace net {
 
 inline void
+phys_vertex_t::add_role(sptr<raw_vertex_t> r, size_t cycle) {
+    cycle_role_map.put(r, cycle);
+    role_type_set.insert(r->qubit_type);
+}
+
+inline void
 phys_vertex_t::push_back_role(sptr<raw_vertex_t> r) {
     const size_t cycle = role_set.size();
     role_set.insert(r);
-    cycle_to_role[cycle] = r;
-    role_to_cycle[r] = cycle;
+    add_role(r, cycle);
+}
+
+inline bool
+phys_vertex_t::has_role_of_type(raw_vertex_t::type t) {
+    return role_type_set.count(t);
 }
 
 }   // net
@@ -48,8 +58,7 @@ inline bool
 PhysicalNetwork::add_vertex(sptr<net::phys_vertex_t> v) {
     if (graph::Graph::add_vertex(v)) {
         auto lemon_node = planar_repr.addNode();
-        phys_to_lemon[v] = lemon_node;
-        v_lemon_to_phys[lemon_node] = v;
+        v_phys_lemon_map.put(v, lemon_node);
         return true;
     } else {
         return false;
@@ -74,17 +83,13 @@ PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
 
 inline void
 PhysicalNetwork::delete_vertex(sptr<net::phys_vertex_t> v) {
-    auto lemon_node = v_phys_to_lemon[v];
     // First, erase all traces of v in the tracking structures.
-    v_phys_to_lemon.erase(v);
-    v_lemon_to_phys.erase(lemon_node);
+    auto lemon_node = v_phys_lemon_map.at(v);
+    v_phys_lemon_map.erase(v);
     for (sptr<net::phys_edge_t> e : get_neighbors(v)) {
         if (e->is_out_of_plane) continue;
-        auto lemon_edge = e_phys_to_lemon[e];
-
-        e_phys_to_lemon.erase(e);
-        e_lemon_to_phys.erase(lemon_edge);
-
+        auto lemon_edge = e_phys_lemon_map.at(e);
+        e_phys_lemon_map.erase(e);
         planar_repr.erase(lemon_edge);
     }
     // Then delete lemon_node and v.
@@ -95,9 +100,8 @@ PhysicalNetwork::delete_vertex(sptr<net::phys_vertex_t> v) {
 inline void
 PhysicalNetwork::delete_edge(sptr<net::phys_edge_t> e) {
     if (!e->is_out_of_plane) {
-        auto lemon_edge = e_phys_to_lemon[e];
-        e_phys_to_lemon.erase(e);
-        e_lemon_to_phys.erase(lemon_edge);
+        auto lemon_edge = e_phys_lemon_map.at(e);
+        e_phys_lemon_map.erase(e);
         planar_repr.erase(lemon_edge);
     }
     graph::Graph::delete_edge(e);
@@ -107,13 +111,12 @@ inline bool
 PhysicalNetwork::test_and_move_edge_to_bulk(sptr<net::phys_edge_t> e, bool is_new_edge) {
     sptr<net::phys_vertex_t> src = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
                             dst = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
-    auto lemon_src = v_phys_to_lemon[src],
-            lemon_dst = v_phys_to_lemon[dst];
+    auto lemon_src = v_phys_lemon_map.at(src),
+            lemon_dst = v_phys_lemon_map.at(dst);
     auto lemon_edge = planar_repr.addEdge(lemon_src, lemon_dst);
 
     if (is_planar()) {
-        e_phys_to_lemon[e] = lemon_edge;
-        e_lemon_to_phys[lemon_edge] = e;
+        e_phys_lemon_map.put(e, lemon_edge);
 
         if (!is_new_edge) {
             occupied_tsvs[src].erase(e->tsv_layer);
