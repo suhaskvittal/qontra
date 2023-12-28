@@ -5,6 +5,8 @@
 
 #include "protean/network.h"
 
+#include <lemon/matching.h>
+
 namespace qontra {
 namespace protean {
 
@@ -49,7 +51,10 @@ PhysicalNetwork(TannerGraph& tgr, uint max_conn)
 
 void
 PhysicalNetwork::make_flags() {
-
+    using namespace lemon;
+    ListGraph matching_graph;
+    std::map<phys_vertex_t, ListGraph::Node> data_to_lemon;
+    std::map<ListGraph::Node, phys_vertex_t> lemon_to_data;
 }
 
 }   // protean
