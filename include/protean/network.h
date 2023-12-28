@@ -70,7 +70,7 @@ public:
     // Tanner graph tracking structures:
     BijectiveMap<sptr<graph::tanner::vertex_t>, sptr<net::raw_vertex_t>> v_tanner_raw_map;
 
-    // Flag tracking structures:
+    // Flag and proxy tracking structures:
     //
     // parity qubit --> list of flag qubits used in syndrome extraction of check.
     std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>> 
@@ -81,6 +81,12 @@ public:
     // proxy qubit --> xyz qubit --> qubit xyz was linked to before
     TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
         proxy_indirection_map;
+
+    // Scheduling structures:
+    // 
+    // parity qubit --> list of data qubits (or nullptr) in the order of syndrome extraction CNOTs.
+    std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
+        schedule_order_map;
 
     TannerGraph tanner_graph;
 private:
@@ -101,16 +107,39 @@ public:
     // Returns true if the graph remains planar.
     bool test_and_move_edge_to_bulk(sptr<net::phys_edge_t>, bool is_new_edge=false); 
 
+    // Optimizations:
+    //
+    //  join_qubits_with_identical_support
+    //      -- merges qubits connected to the same data qubits (i.e. as in the color code).
+    //  make_flags
+    //      -- creates flag qubits and fault-tolerant circuits.
+    //      -- PRECONDITION: data qubits are still connected directly to parity qubits.
+    void join_qubits_with_identical_support(void);
     void make_flags(bool for_x_parity);
+    void add_connectivity_reducing_proxies(void);
 protected:
     bool update_state(void) override;
 private:
-    void reallocate_edges(void); // Try and place out-of-plane edges into the processor bulk.
+    // Try and place out-of-plane edges into the processor bulk.
+    void reallocate_edges(void);
+    // Returns true if planar_repr is planar.
     bool is_planar(void);
+    // Returns a valid TSV layer for the proposed edge
     size_t determine_edge_tsv_layer(sptr<net::phys_edge_t>);
 
     size_t get_max_endpoint_degree(sptr<net::phys_edge_t>);
     size_t get_bulk_degree(sptr<net::phys_vertex_t>);
+
+    // Determines if a proposed flag (represented by the two raw vertices -- these are data qubits)
+    // is actually useful -- that it protects against a weight-2 error.
+    //
+    // To do so, we will use an operator tree, which computes logical operators via dynamic programming.
+    // 
+    // As the traversal is at worst exponential time in the size of the code, we will just do all flags
+    // at once.
+    stim::simd_bits<SIMD_WIDTH> flags_protect_weight_two_error(
+            std::set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>>, 
+            bool is_x_error);
 
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
