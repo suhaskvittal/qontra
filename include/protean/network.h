@@ -34,6 +34,8 @@ struct phys_vertex_t : graph::base::vertex_t {
     std::set<sptr<raw_vertex_t>> role_set;
     BijectiveMap<size_t, sptr<raw_vertex_t>> cycle_role_map;
 
+    void consume(sptr<raw_vertex_t>);
+
     void add_role(sptr<raw_vertex_t>, size_t cycle);
     void push_back_role(sptr<raw_vertex_t>);
     bool has_role_of_type(raw_vertex_t::type);
@@ -95,7 +97,7 @@ private:
 
 class PhysicalNetwork : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
 public:
-    PhysicalNetwork(graph::TannerGraph&, uint max_connectivity);
+    PhysicalNetwork(graph::TannerGraph&);
     // All of the graph modification functions need to be updated to handle planarity.
     // Note that deletes only free up spots on the processor bulk. Only adding edges
     // requires checking for planarity.
@@ -117,6 +119,11 @@ public:
     void join_qubits_with_identical_support(void);
     void make_flags(bool for_x_parity);
     void add_connectivity_reducing_proxies(void);
+
+    struct {
+        size_t max_connectivity = 4;
+        size_t max_thickness = 1;   // 0 = means only processor bulk, n = n TSV layers.
+    } config;
 protected:
     bool update_state(void) override;
 private:
@@ -137,7 +144,7 @@ private:
     // 
     // As the traversal is at worst exponential time in the size of the code, we will just do all flags
     // at once.
-    stim::simd_bits<SIMD_WIDTH> flags_protect_weight_two_error(
+    stim::simd_bits<SIMD_WIDTH> do_flags_protect_weight_two_error(
             std::set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>>, 
             bool is_x_error);
 
@@ -157,8 +164,8 @@ private:
     std::map<sptr<net::phys_vertex_t>, std::set<size_t>> occupied_tsvs;
     // Tracks the degree of each vertex in the processor bulk.
     std::map<sptr<net::phys_vertex_t>, size_t> bulk_degree_map;
-
-    const uint max_connectivity;
+    
+    uint64_t id_ctr;
 };
 
 }   // protean
