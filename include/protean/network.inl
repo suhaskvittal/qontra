@@ -145,6 +145,11 @@ PhysicalNetwork::test_and_move_edge_to_bulk(sptr<net::phys_edge_t> e, bool is_ne
     }
 }
 
+RawNetwork
+PhysicalNetwork::get_raw_connection_network() {
+    return raw_connection_network;
+}
+
 inline bool
 PhysicalNetwork::update_state() {
     if (!graph_has_changed) return false;

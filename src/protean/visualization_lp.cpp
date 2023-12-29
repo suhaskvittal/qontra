@@ -3,7 +3,7 @@
  *  date:   29 December 2023
  * */
 
-#include "protean/visualization_impl.h"
+#include "protean/visualization_lp.h"
 
 namespace qontra {
 namespace protean {
@@ -54,6 +54,9 @@ lp_add_crossing_edges_objective(LP& mgr, PhysicalNetwork network, placement_conf
 
             sptr<net::phys_vertex_t> v21 = std::reinterpret_pointer_cast<net::phys_vertex_t>(e2->src),
                                      v22 = std::reinterpret_pointer_cast<net::phys_vertex_t>(e2->dst);
+            // Skip if any endpoints are shared.
+            if (v11 == v21 || v11 == v22 || v12 == v21 || v12 == v22) continue;
+
             lp_var_t x21 = mgr.get_var(get_x(v21)),
                      y21 = mgr.get_var(get_y(v21)),
                      x22 = mgr.get_var(get_x(v22)),

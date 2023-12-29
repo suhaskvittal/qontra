@@ -23,8 +23,13 @@ typedef BijectiveMap<coord_t<2>, net::phys_vertex_t> Plane;
 
 // Main visualization functions:
 //
-// write_to_dot writes the PhysicalNetwork to an output_file in the .dot format.
-void write_to_dot(std::string output_file, PhysicalNetwork&);
+// write_to_dot writes the PhysicalNetwork to an output_file.
+struct render_config_t {
+    Plane       plane;
+    std::string layout_engine = "neato";
+};
+
+void render_network(std::string output_file, PhysicalNetwork&, render_config_t);
 
 // place_network maps each qubit in the PhysicalNetwork on a coordinate plane
 // via linear programming. The program is a quadratic program and attempts
@@ -35,6 +40,10 @@ struct placement_config_t {
     fp_t    edge_length_objective_coef = 1.0;
     fp_t    edge_crossing_objective_coef = 0.1;
 
+    // Note that even though the graph is planar, a drawing may still have
+    // edge crossings in practice (as it may be that a certain drawing requires
+    // a really long edge).
+    //
     // The edge crossing part of the LP formulation may introduce many
     // integer variables and constraints. Here are methods to reduce the impact
     // of the region:
@@ -49,9 +58,9 @@ struct placement_config_t {
 
     // Plane configuration:
     fp_t    x_min = 0.0;
-    fp_t    x_max = 100.0;
+    fp_t    x_max = 32.0;
     fp_t    y_min = 0.0;
-    fp_t    y_max = 100.0;
+    fp_t    y_max = 32.0;
 };
 
 Plane place_network(PhysicalNetwork&, placement_config_t);

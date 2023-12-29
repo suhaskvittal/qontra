@@ -128,6 +128,8 @@ public:
     void add_connectivity_reducing_proxies(void);
     void contract_small_degree_qubits(void);
 
+    RawNetwork get_raw_connection_network(void);
+
     struct {
         size_t max_connectivity = 4;
         size_t max_thickness = 1;   // 0 = means only processor bulk, n = n TSV layers.
