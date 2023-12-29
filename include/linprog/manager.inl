@@ -286,9 +286,9 @@ CPXLPManager::fetch_soln_from_pool(size_t k) {
 
 inline char
 CPXLPManager::get_sense(lp_constr_t con) {
-    if (con.relation == ConstraintDirection::ge) {
+    if (con.relation == lp_constr_t::direction::ge) {
         return 'G';
-    } else if (con.relation == ConstraintDirection::le) {
+    } else if (con.relation == lp_constr_t::direction::le) {
         return 'L';
     } else {
         return 'E';

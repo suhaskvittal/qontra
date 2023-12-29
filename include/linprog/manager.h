@@ -24,6 +24,7 @@ public:
     ~CPXLPManager(void);
 
     void build(lp_expr_t objective, bool is_maximization);
+    // Returns true if the solve fails.
     bool solve(double* objective_p, int* solution_status_p);
 
     void solve_pool(void);

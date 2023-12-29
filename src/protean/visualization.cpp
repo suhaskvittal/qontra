@@ -3,32 +3,47 @@
  *  date:   29 December 2023
  * */
 
-#include "protean/visualization.h"
-
-#include <linprog/manager.h>
+#include "protean/visualization_impl.h"
 
 #include <graphviz/gvc.h>
+
+#include <iostream>
 
 namespace qontra {
 namespace protean {
 
-std::vector<Plane> place_network(PhysicalNetwork& network, placement_config_t config) {
-    CPXLPManager<sptr<net::phys_vertex_t>> mgr;
-    // Create an LP variable for each qubit in the network.
-    std::map<sptr<net::phys_vertex_t>, lp_var_t> vertex_to_x_var;
-    std::map<sptr<net::phys_vertex_t>, lp_var_t> vertex_to_y_var;
+inline fp_t sqr(fp_t x) {
+    return x*x;
+}
 
-    for (sptr<net::phys_vertex_t> v : network.get_vertices()) {
-        vertex_to_x_var[v] = 
-            mgr.add_var(v, config.x_min, config.x_max, lp_var_t::bounds::both, lp_var_t::domain::continuous);
-        vertex_to_y_var[v] = 
-            mgr.add_var(v, config.y_min, config.y_max, lp_var_t::bounds::both, lp_var_t::domain::continuous);
+Plane
+place_network(PhysicalNetwork& network, placement_config_t config) {
+    // Build the LP.
+    LP mgr;
+    lp_add_variables(mgr, network);
+    lp_add_minimum_distance_constraints(mgr, network, config);
+
+    lp_expr_t objective;
+    if (!config.edge_crossing_skip) {
+        objective += 
+            config.edge_crossing_objective_coef * lp_add_crossing_edges_objective(mgr, network, config);
     }
-    // Constraint 1: each vertex should be at least D units away.
-    //
-    // Formally:
-    //      (xi - xj)^2 + (yi - yj)^2 >= D
-    //  --> 
+    objective += config.edge_length_objective_coef * lp_add_edge_distance_objective(mgr, network);
+    mgr.build(objective, false);
+    // Now, we can get the result and build the plane.
+    fp_t obj;
+    int solstat;
+    if (mgr.solve(&obj, &solstat)) {
+        std::cerr << "place_network: program is infeasible" << std::endl;
+        return Plane();
+    }
+    // Form layout from the LP results.
+    Plane layout;
+    for (sptr<net::phys_vertex_t> v : network.get_vertices()) {
+        coord_t<2> p{ mgr.get_value(get_x(v)), mgr.get_value(get_y(v)) };
+        layout.put(v, p);
+    }
+    return layout;
 }
 
 }   // protean

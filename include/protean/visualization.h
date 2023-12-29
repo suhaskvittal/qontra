@@ -30,12 +30,28 @@ void write_to_dot(std::string output_file, PhysicalNetwork&);
 // via linear programming. The program is a quadratic program and attempts
 // to minimize the distance between qubits with links while preventing overlaps.
 struct placement_config_t {
-    double min_distance_between_qubits = 1.0;
+    fp_t    min_distance_between_qubits = 1.0;
 
-    double x_min = 0.0;
-    double x_max = 1000.0;
-    double y_min = 0.0;
-    double y_max = 1000.0;
+    fp_t    edge_length_objective_coef = 1.0;
+    fp_t    edge_crossing_objective_coef = 0.1;
+
+    // The edge crossing part of the LP formulation may introduce many
+    // integer variables and constraints. Here are methods to reduce the impact
+    // of the region:
+    //
+    // edge_crossing_skip: most drastic -- simply skip this part of the LP
+    // edge_crossing_relax_variables: many of the slack variables are made continuous
+    // edge_crossing_max_indicators: constraints and variables are only made until the
+    //                              specified indicators have been made (or exit).
+    bool    edge_crossing_skip = false;
+    bool    edge_crossing_relax_variables = false;
+    size_t  edge_crossing_max_indicators = 1'000'000;
+
+    // Plane configuration:
+    fp_t    x_min = 0.0;
+    fp_t    x_max = 100.0;
+    fp_t    y_min = 0.0;
+    fp_t    y_max = 100.0;
 };
 
 Plane place_network(PhysicalNetwork&, placement_config_t);
