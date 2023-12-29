@@ -27,7 +27,7 @@ typedef BijectiveMap<coord_t<2>, net::phys_vertex_t> Plane;
 void write_to_dot(std::string output_file, PhysicalNetwork&);
 
 // place_network maps each qubit in the PhysicalNetwork on a coordinate plane
-// via linear programming. The program is a proper LP (no integers) and attempts
+// via linear programming. The program is a quadratic program and attempts
 // to minimize the distance between qubits with links while preventing overlaps.
 struct placement_config_t {
     double min_distance_between_qubits = 1.0;

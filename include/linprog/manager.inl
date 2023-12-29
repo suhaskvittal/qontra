@@ -249,6 +249,7 @@ CPXLPManager::add_var(T label, double lwr, double upp, lp_var_t::bounds btype, l
 
 template <class T> inline size_t 
 CPXLPManager::add_constraint(lp_constr_t con) {
+    auto& constraints_array = con.is_quadratic() ? q_constraints : l_constraints;
     if (con.relation == lp_constr_t::direction::neq) {
         const double M = 10'000'000;
         // We will need to expand this constraint into multiple constraints.
@@ -257,11 +258,11 @@ CPXLPManager::add_constraint(lp_constr_t con) {
         // Want to add constraints:
         // lhs - My <= rhs - 1
         // lhs - My >= rhs + 1 - M
-        constraints.emplace_back(con.lhs - M*y, con.rhs - 1, lp_constr_t::direction::le);
-        constraints.emplace_back(con.lhs - M*y, con.rhs + 1 - M, lp_constr_t::direction::ge);
+        constraints_array.emplace_back(con.lhs - M*y, con.rhs - 1, lp_constr_t::direction::le);
+        constraints_array.emplace_back(con.lhs - M*y, con.rhs + 1 - M, lp_constr_t::direction::ge);
         return (rows += 2);
     } else {
-        constraints.push_back(con);
+        constraints_array.push_back(con);
         return (++rows);
     }
 }
