@@ -37,7 +37,8 @@ inline void cpxfreeprog(CPXENVptr env, CPXLPptr prog) {
 template <class T>
 CPXLPManager::CPXLPManager(CPXENVptr _env)
     :variables(),
-    constraints(),
+    l_constraints(),
+    q_constraints(),
     label_to_lp_var(),
     columns(0),
     rows(0),
@@ -78,7 +79,7 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
     char* vtypes = reinterpret_cast<char*>(calloc(columns, sizeof(char)));
 
     // We should also track the problem type when constructing the problem.
-    prog_type = problem_type::lp;
+    prog_type = q_constraints.empty() ? problem_type::lp : problem_type::qp;
     for (size_t i = 0; i < columns; i++) {
         lp_var_t v = variables[i];
         if (objective.coefs.count(v)) {
@@ -116,9 +117,9 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
     if (rows == 0) return;
     //
     // First, we need to count the total number of nonzero coefficients in 
-    // the constraints.
+    // the LINEAR constraints.
     int num_nonzeros = 0;
-    for (auto& con : constraints) {
+    for (auto& con : l_constraints) {
         num_nonzeros += con.lhs.coefs.size();
     }
     // Now, we need to populate the data structures to declare the
@@ -135,18 +136,10 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
 
     size_t offset = 0;
     for (size_t i = 0; i < rows; i++) {
-        lp_constr_t con = constraints[i];
-
+        lp_constr_t con = l_constraints[i];
         rhs[i] = con.rhs;
-        if (con.relation == ConstraintDirection::ge) {
-            sense[i] = 'G';
-        } else if (con.relation == ConstraintDirection::le) {
-            sense[i] = 'L';
-        } else {
-            sense[i] = 'E';
-        }
+        sense[i] = get_sense(con);
         // We will not have anything else.
-
         rmatbeg[i] = offset;
         for (auto kv : con.lhs.coefs) {
             lp_var_t v = kv.first;
@@ -163,6 +156,37 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
     free(rmatbeg);
     free(rmatind);
     free(rmatval);
+    // Now, if there are any quadratic constraints, we handle that now:
+    //
+    // Unlike linear constraints, these are handled one-by-one.
+    for (lp_constr_t& con : q_constraints) {
+        size_t n_nonzero_linear = con.lhs.l_coefs.size(),
+                n_nonzero_quad = con.lhs.q_coefs.size();
+        CPXDIM* linind = reinterpret_cast<CPXDIM*>(malloc(n_nonzero_linear * sizeof(CPXDIM)));
+        double* linval = reinterpret_cast<double*>(malloc(n_nonzero_linear * sizeof(CPXDIM)));
+
+        CPXDIM* quadrow = reinterpret_cast<CPXDIM*>(malloc(n_nonzero_quad * sizeof(CPXDIM)));
+        CPXDIM* quadcol = reinterpret_cast<CPXDIM*>(malloc(n_nonzero_quad * sizeof(CPXDIM)));
+        double* quadval = reinterpret_cast<double*>(malloc(n_nonzero_quad * sizeof(double)));
+
+        size_t k = 0;
+        for (auto& kv : con.lhs.l_coefs)) {
+            linind[k] = kv.first.column;
+            linval[k] = kv.second;
+            k++;
+        }
+        k = 0;
+        for (auto& kv : con.lhs.q_coefs)) {
+            quadrow[k] = kv.first.v1.column;
+            quadrow[k] = kv.first.v2.column;
+            quadval[k] = kv.second;
+            k++;
+        }
+
+        status = CPXXaddqconstr(env, prog, n_nonzero_linear, n_nonzero_quad, con.rhs, get_sense(con),
+                                linind, linval, quadrow, quadcol, quadval, NULL);
+        handle_status(status);
+    }
 }
 
 template <class T> inline bool
@@ -170,6 +194,8 @@ CPXLPManager::solve(double* obj_p, int* solstat_p) {
     int status;
     if (prog_type == problem_type::lp) {
         status = CPXXlpopt(env, prog);
+    } else if (prog_type == problem_type::qp) {
+        status = CPXXqpopt(env, prog);
     } else if (prog_type == problem_type::mip) {
         status = CPXXmipopt(env, prog);
     } else {
@@ -255,5 +281,16 @@ CPXLPManager::fetch_soln_from_pool(size_t k) {
     status = CPXXgetsolnpoolobjval(env, prog, k, &obj);
     status = CPXXgetsolnpoolx(env, prog, k, prog_soln, 0, fincols-1);
     return obj;
+}
+
+inline char
+CPXLPManager::get_sense(lp_constr_t con) {
+    if (con.relation == ConstraintDirection::ge) {
+        return 'G';
+    } else if (con.relation == ConstraintDirection::le) {
+        return 'L';
+    } else {
+        return 'E';
+    }
 }
 

@@ -6,6 +6,8 @@
 #ifndef LINPROG_MANAGER_h
 #define LINPROG_MANAGER_h
 
+#include "linprog/base.h"
+
 #include <cplexx.h>
 
 void handle_status(int);
@@ -38,9 +40,12 @@ public:
     double  fetch_soln_from_pool(size_t);
 
     std::vector<lp_var_t>    variables;
-    std::vector<lp_constr_t> constraints;
+    std::vector<lp_constr_t> l_constraints;
+    std::vector<lp_constr_t> q_constraints;
 private:
-    enum class problem_type { lp, mip };
+    char get_sense(lp_constr_t);
+
+    enum class problem_type { lp, mip, qp };
 
     std::map<T, lp_var_t> label_to_lp_var;
 
