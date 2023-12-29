@@ -13,15 +13,29 @@ namespace protean {
 namespace net {
 
 inline void
+phys_vertex_t::consume(sptr<phys_vertex_t> other) {
+    for (auto& pair : other->cycle_role_map) {
+        size_t cyc = pair.first;
+        sptr<raw_vertex_t> rx = pair.second;
+        if (cycle_role_map.count(rx)) continue;
+        push_back_role(rx, cyc);
+    }
+}
+
+inline void
 phys_vertex_t::add_role(sptr<raw_vertex_t> r, size_t cycle) {
     cycle_role_map.put(r, cycle);
     role_type_set.insert(r->qubit_type);
 }
 
 inline void
-phys_vertex_t::push_back_role(sptr<raw_vertex_t> r) {
-    const size_t cycle = role_set.size();
-    role_set.insert(r);
+phys_vertex_t::push_back_role(sptr<raw_vertex_t> r, size_t min_cycle) {
+    // Find next available cycle.
+    size_t cycle = min_cycle;
+    while (true) {
+        if (!cycle_role_map.count(cycle)) break;
+        cycle++;
+    }
     add_role(r, cycle);
 }
 

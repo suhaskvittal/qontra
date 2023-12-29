@@ -34,10 +34,10 @@ struct phys_vertex_t : graph::base::vertex_t {
     std::set<sptr<raw_vertex_t>> role_set;
     BijectiveMap<size_t, sptr<raw_vertex_t>> cycle_role_map;
 
-    void consume(sptr<raw_vertex_t>);
+    void consume(sptr<phys_vertex_t>);
 
     void add_role(sptr<raw_vertex_t>, size_t cycle);
-    void push_back_role(sptr<raw_vertex_t>);
+    void push_back_role(sptr<raw_vertex_t>, size_t min_cycle=0);
     bool has_role_of_type(raw_vertex_t::type);
 private:
     std::set<raw_vertex_t::type> role_type_set;
