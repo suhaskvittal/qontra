@@ -1,0 +1,259 @@
+/*
+ *  author: Suhas Vittal
+ *  date:   28 December 2023
+ * */
+
+#include <iostream>
+
+#include <stdlib.h>
+
+inline void handle_status(int s) {}
+
+inline CPXENVptr cpxinit() {
+    int status;
+    CPXENVptr env = CPXXopenCPLEX(&status);
+    handle_status(status);
+    return env;
+}
+
+inline void cpxexit(CPXENVptr* env_p) {
+    CPXXcloseCPLEX(env_p);
+}
+
+inline void cpxmakeprog(CPXENVptr env, CPXLPptr prog, const char* name) {
+    int status;
+    prog = CPXXcreateprob(env, &status, name);
+    handle_status(status);
+}
+
+inline void cpxfreeprog(CPXENVptr env, CPXLPptr prog) {
+    if (prog != NULL) {
+        int status = CPXXfreeprob(env, &prog);
+        prog = NULL;
+        handle_status(status);
+    }
+}
+
+template <class T>
+CPXLPManager::CPXLPManager(CPXENVptr _env)
+    :variables(),
+    constraints(),
+    label_to_lp_var(),
+    columns(0),
+    rows(0),
+    env(_env),
+    prog(NULL),
+    prog_soln(NULL),
+    env_is_initialized_by_object(_env == NULL)
+{
+    if (env_is_initialized_by_object) {
+        env = cpxinit();
+
+        CPXXsetdblparam(env, CPXPARAM_MIP_Pool_AbsGap, 0.0);
+        CPXXsetintparam(env, CPXPARAM_MIP_Pool_Intensity, 4);
+        CPXXsetintparam(env, CPXPARAM_MIP_Limits_Populate, 32);
+    }
+}
+
+template <class T>
+CPXLPManager::~CPXLPManager() {
+    cpxfreeprog();
+    if (env_is_initialized_by_object) cpxexit(&env);
+}
+
+template <class T> void
+CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
+    int status;
+
+    cpxfreeprog(env, prog);
+    cpxmakeprog(env, prog, "lp");
+
+    status = CPXXchgobjsen(env, prog, is_maximization ? CPX_MAX, CPX_MIN);
+    handle_status(status);
+
+    // Declare variables column-wise.
+    double* obj = reinterpret_cast<double*>(calloc(columns, sizeof(double)));
+    double* lb = reinterpret_cast<double*>(calloc(columns, sizeof(double)));
+    double* ub = reinterpret_cast<double*>(calloc(columns, sizeof(double)));
+    char* vtypes = reinterpret_cast<char*>(calloc(columns, sizeof(char)));
+
+    // We should also track the problem type when constructing the problem.
+    prog_type = problem_type::lp;
+    for (size_t i = 0; i < columns; i++) {
+        lp_var_t v = variables[i];
+        if (objective.coefs.count(v)) {
+            obj[i] = objective.coefs[v];
+        }
+
+        bool lwr_defined = v.bounds_type == VarBounds::lower
+                            || v.bounds_type == VarBounds::both
+                            || v.bounds_type == VarBounds::fixed;
+        bool upp_defined = v.bounds_type == VarBounds::upper
+                            || v.bounds_type == VarBounds::both
+                            || v.bounds_type == VarBounds::fixed;
+        
+        lb[i] = lwr_defined ? v.lwr : -CPX_INFBOUND;
+        ub[i] = upp_defined ? v.upp : CPX_INFBOUND;
+        if (v.var_type == lp_var_t::domain::continuous) {
+            vtypes[i] = 'C';
+        } else if (v.var_type == lp_var_t::domain::integer) {
+            vtypes[i] = 'I';
+            prog_type = problem_type::mip;
+        } else {
+            vtypes[i] = 'B';
+            prog_type = problem_type::mip;
+        }
+    }
+    status = CPXXnewcols(env, prog, columns, obj, lb, ub, vtypes, NULL);
+    handle_status(status);
+    // Free all allocated memory.
+    free(obj);
+    free(lb);
+    free(ub);
+    free(vtypes);
+
+    // Now, declare the constraints.
+    if (rows == 0) return;
+    //
+    // First, we need to count the total number of nonzero coefficients in 
+    // the constraints.
+    int num_nonzeros = 0;
+    for (auto& con : constraints) {
+        num_nonzeros += con.lhs.coefs.size();
+    }
+    // Now, we need to populate the data structures to declare the
+    // constraints.
+    double* rhs = reinterpret_cast<double*>(malloc(rows * sizeof(double)));
+    // GE ('G'), LE ('L'), or EQ ('E').
+    char* sense = reinterpret_cast<char*>(malloc(rows * sizeof(char)));
+    // Where the coefficients for the i-th row.
+    CPXNNZ* rmatbeg = reinterpret_cast<CPXNNZ*>(malloc(rows * sizeof(CPXNNZ)));
+    // The column of the nonzero coefficient.
+    int* rmatind = reinterpret_cast<int*>(malloc(num_nonzeros * sizeof(int)));
+    // The value of the corresponding nonzero coefficient.
+    double* rmatval = reinterpret_cast<double*>(malloc(num_nonzeros * sizeof(double)));
+
+    size_t offset = 0;
+    for (size_t i = 0; i < rows; i++) {
+        lp_constr_t con = constraints[i];
+
+        rhs[i] = con.rhs;
+        if (con.relation == ConstraintDirection::ge) {
+            sense[i] = 'G';
+        } else if (con.relation == ConstraintDirection::le) {
+            sense[i] = 'L';
+        } else {
+            sense[i] = 'E';
+        }
+        // We will not have anything else.
+
+        rmatbeg[i] = offset;
+        for (auto kv : con.lhs.coefs) {
+            lp_var_t v = kv.first;
+            rmatind[offset] = v.column;
+            rmatval[offset] = kv.second;
+            offset++;
+        }
+    }
+    status = CPXXaddrows(env, prog, 0, rows, num_nonzeros, rhs, sense, rmatbeg, rmatind, rmatval, NULL, NULL);
+    handle_status(status);
+    // Free all variables.
+    free(rhs);
+    free(sense);
+    free(rmatbeg);
+    free(rmatind);
+    free(rmatval);
+}
+
+template <class T> inline bool
+CPXLPManager::solve(double* obj_p, int* solstat_p) {
+    int status;
+    if (prog_type == problem_type::lp) {
+        status = CPXXlpopt(env, prog);
+    } else if (prog_type == problem_type::mip) {
+        status = CPXXmipopt(env, prog);
+    } else {
+        std::cerr << "CPXLPManager: unsupported problem type\n";
+        return false;
+    }
+    handle_status(status);
+
+    int fincols = CPXXgetnumcols(env, prog);
+    if (prog_soln != NULL) free(prog_soln);
+    prog_soln = reinterpret_cast<double*>(malloc(fincols * sizeof(double)));
+
+    status = CPXXsolution(env, prog, solstat_p, obj_p, prog_soln, NULL, NULL, NULL);
+    return status > 0;
+}
+
+template <class T> inline void
+CPXLPManager::solve_pool() {
+    int status = CPXXpopulate(env, prog);
+    handle_status(status);
+}
+
+template <class T> inline lp_var_t
+CPXLPManager::get_var(T label) {
+    return label_to_lp_var[label];
+}
+
+template <class T> inline double
+CPXLPManager::get_value(T label) {
+    return prog_soln[label_to_lp_var[label].column];
+}
+
+template <class T> inline lp_var_t
+CPXLPManager::add_slack_var(double lwr, double upp, lp_var_t::bounds btype, lp_var_t::domain vtype) {
+    lp_var_t v;
+    v.column = columns++;
+    v.lwr = lwr;
+    v.upp = upp;
+    v.bounds_type = btype;
+    v.var_type = vtype;
+    variables.push_back(v);
+    return v;
+}
+
+template <class T> inline lp_var_t
+CPXLPManager::add_var(T label, double lwr, double upp, lp_var_t::bounds btype, lp_var_t::domain vtype) {
+    lp_var_t v = add_slack_var(lwr, upp, btype, vtype);
+    label_to_lp_var[label] = v;
+    return v;
+}
+
+template <class T> inline size_t 
+CPXLPManager::add_constraint(lp_constr_t con) {
+    if (con.relation == lp_constr_t::direction::neq) {
+        const double M = 10'000'000;
+        // We will need to expand this constraint into multiple constraints.
+        // To do so, we will need to introduce a slack variable y.
+        lp_var_t y = add_slack_var(0, 1, lp_var_t::bounds::both, lp_var_t::domain::binary);
+        // Want to add constraints:
+        // lhs - My <= rhs - 1
+        // lhs - My >= rhs + 1 - M
+        constraints.emplace_back(con.lhs - M*y, con.rhs - 1, lp_constr_t::direction::le);
+        constraints.emplace_back(con.lhs - M*y, con.rhs + 1 - M, lp_constr_t::direction::ge);
+        return (rows += 2);
+    } else {
+        constraints.push_back(con);
+        return (++rows);
+    }
+}
+
+template <class T> inline size_t
+CPXLPManager::get_soln_pool_size() {
+    return CPXXgetsolnpoolnumsolns(env, prog);
+}
+
+template <class T> inline double
+CPXLPManager::fetch_soln_from_pool(size_t k) {
+    int fincols = CPXXgetnumcols(env, prog);
+    if (prog_soln != NULL)  free(prog_soln);
+    prog_soln = reinterpret_cast<double>(malloc(fincols * sizeof(double)));
+
+    double obj;
+    status = CPXXgetsolnpoolobjval(env, prog, k, &obj);
+    status = CPXXgetsolnpoolx(env, prog, k, prog_soln, 0, fincols-1);
+    return obj;
+}
+
