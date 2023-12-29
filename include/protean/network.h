@@ -116,9 +116,17 @@ public:
     //  make_flags
     //      -- creates flag qubits and fault-tolerant circuits.
     //      -- PRECONDITION: data qubits are still connected directly to parity qubits.
+    //  add_connectivity_reducing_proxies
+    //      -- creates proxy qubits wherever the connectivity of a qubit is too high.
+    //      -- proxies are not guaranteed to be fault-tolerant when connected to data qubits,
+    //          so only use them after adding flag qubits.
+    //  contract_small_degree_qubits
+    //      -- contracts qubits (that are non-data!!!) that are connected to at most two neighbors,
+    //          as this contraction does not create new connectivity violations.
     void join_qubits_with_identical_support(void);
-    void make_flags(bool for_x_parity);
+    void make_flags(void);
     void add_connectivity_reducing_proxies(void);
+    void contract_small_degree_qubits(void);
 
     struct {
         size_t max_connectivity = 4;

@@ -142,7 +142,6 @@ PhysicalNetwork::make_flags() {
             auto vnode = data_lemon_map.at(rv);
             // We will the physical qubit (specifically its neighbors) each tick of the
             // inner loop.
-            //
             // Note that we only care about neighbors that are parity qubits.
             sptr<phys_vertex_t> pv = role_to_phys[rv];
             std::set<sptr<phys_vertex_t>> p_neighbors;
@@ -339,6 +338,43 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
     }
     // If any proxies were added, we need to check the connectivity of these proxies.
     if (were_any_proxies_added) add_connectivity_reducing_proxies();
+}
+
+void
+PhysicalNetwork::contract_small_degree_qubits() {
+    bool were_any_qubits_contracted = false;
+    for (sptr<phys_vertex_t> pv : get_vertices()) {
+        if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
+        
+        const size_t dg = get_degree(pv);
+        if (dg > 2) continue;
+        
+        were_any_qubits_contracted = true;
+        
+        if (dg == 1) {
+            sptr<phys_vertex_t> px = get_neighbors(pv)[0];
+            // This is simple -- just have px consume pv and delete pv.
+            px->consume(pv);
+            delete_vertex(pv);
+        } else {    // dg == 2
+            sptr<phys_vertex_t> px1 = get_neighbors(pv)[0],
+                                px2 = get_neighbors(pv)[1];
+            // Simple: delete pv, and just add an edge between px1 and px2.
+            //
+            // Move roles of pv to px1.
+            px1->consume(pv);
+            delete_vertex(pv);
+
+            sptr<phys_edge_t> pe = std::make_shared<>();
+            pe->src = px1;
+            pe->dst = px2;
+            pe->is_undirected = true;
+            add_edge(pe);
+        }
+    }
+    // Call this iteratively until we can't progress, as contractions may
+    // reveal new redundancies.
+    if (were_any_qubits_contracted) contract_degree_two_qubits();
 }
 
 stim::simd_bits<SIMD_WIDTH>
