@@ -270,7 +270,7 @@ PhysicalNetwork::make_flags() {
             size_t cycle = std::max(pv1->cycle_role_map.at(rv1),
                                     pv2->cycle_role_map.at(rv2),
                                     ppq->cycle_role_map.at(rpq));
-            pfq->add_role(rfq, cycle);
+            pfq->push_back_role(rfq, cycle);
             parity_qubits_connected_to_pfq.insert(ppq);
             // Delete edge between pv1/pv2 and ppq (if it exists).
             if (contains(pv1, ppq)) {
@@ -319,7 +319,7 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                     sptr<raw_vertex_t> rprx = raw_connection_network.add_proxy(re);
                     // Get cycle of role (which is just the max of the cycles of rv and rx).
                     size_t cycle = std::max(pv->cycle_role_map.at(rv), px->cycle_role_map.at(rx));
-                    pprx.add_role(rprx, cycle);
+                    pprx.push_back_role(rprx, cycle);
                 }
             }
             share_an_edge_with_pprx.insert(px);
@@ -472,6 +472,11 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
         curr_operator_tree_level = std::move(next_level);
     }
     return result;
+}
+
+schedule_t
+PhysicalNetwork::make_schedule() {
+    return schedule_t();
 }
 
 }   // protean

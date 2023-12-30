@@ -98,6 +98,9 @@ private:
 class PhysicalNetwork : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
 public:
     PhysicalNetwork(graph::TannerGraph&);
+    
+    static PhysicalNetwork from_folder(std::string);
+
     // All of the graph modification functions need to be updated to handle planarity.
     // Note that deletes only free up spots on the processor bulk. Only adding edges
     // requires checking for planarity.
@@ -129,6 +132,8 @@ public:
     void contract_small_degree_qubits(void);
 
     RawNetwork get_raw_connection_network(void);
+
+    schedule_t make_schedule(void);
 
     struct {
         size_t max_connectivity = 4;
@@ -177,6 +182,22 @@ private:
     
     uint64_t id_ctr;
 };
+
+// Writes the physical network to a folder.
+// Generated Files:
+//  (1) round.asm: ASM for a round of syndrome extraction
+//  (2) coupling.txt: coupling graph for network
+//  (2) roles.txt: corresponding roles and cycles for each (physical) parity qubit.
+//  (3) tanner_graph.txt: corresponding checks for each (raw) parity qubit
+//                      and logical observables (not directly usable with TannerGraph)
+//  (4) flag_assignment.txt: corresponding flags for each (raw) parity qubit
+void write_network_to_folder(std::string, PhysicalNetwork&);
+
+void write_schedule_file(std::string, PhysicalNetwork&);
+void write_coupling_file(std::string, PhysicalNetwork&);
+void write_role_file(std::string, PhysicalNetwork&);
+void write_tanner_graph_file(std::string, PhysicalNetwork&);
+void write_flag_assignment_file(std::string, PhysicalNetwork&);
 
 }   // protean
 }   // qontra
