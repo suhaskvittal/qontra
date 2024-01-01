@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   14 June 2023
  * */
 
@@ -7,6 +6,8 @@
 #define GRAPH_ALGORITHMS_MIS_h
 
 #include "graph/graph.h"
+
+#include <set>
 
 namespace qontra {
 namespace graph {

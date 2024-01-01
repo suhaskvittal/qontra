@@ -247,9 +247,12 @@ public:
     inline std::vector<sptr<V>> get_vertices(void) { return vertices; }
     inline std::vector<sptr<E>> get_edges(void) { return edges; }
 
+    inline size_t n(void) { return vertices.size(); }
+    inline size_t m(void) { return edges.size(); }
+
     inline std::vector<sptr<V>> get_neighbors(sptr<V> v) { return adjacency_lists[v]; }
     inline std::vector<sptr<V>> get_incoming(sptr<V> v) { return r_adjacency_lists[v]; }
-    inline std::vector<sptr<V>>  get_outgoing(sptr<V> v) { return adjacency_lists[v]; }
+    inline std::vector<sptr<V>> get_outgoing(sptr<V> v) { return adjacency_lists[v]; }
 
     inline size_t get_degree(sptr<V> v) { return get_neighbors(v).size(); }
     inline size_t get_indegree(sptr<V> v) { return get_incoming(v).size(); }

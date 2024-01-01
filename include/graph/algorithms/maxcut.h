@@ -7,6 +7,9 @@
 
 #include "graph/graph.h"
 
+#include <array>
+#include <set>
+
 namespace qontra {
 namespace graph {
 

@@ -3,9 +3,6 @@
  *  date:   31 December 2023
  * */
 
-#include <array>
-#include <set>
-
 namespace qontra {
 namespace graph {
 

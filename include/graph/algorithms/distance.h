@@ -6,7 +6,10 @@
 #ifndef GRAPH_ALGORITHMS_DISTANCE_h
 #define GRAPH_ALGORITHMS_DISTANCE_h
 
+#include "defs/two_level_map.h"
 #include "graph/graph.h"
+
+#include <map>
 
 namespace qontra {
 namespace graph {

@@ -4,7 +4,6 @@
  * */
 
 #include <algorithm>
-#include <set>
 
 namespace qontra {
 namespace graph {
