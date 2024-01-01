@@ -70,8 +70,6 @@ DecodingGraph::setup_flagged_decoding_graph(
         const std::vector<sptr<vertex_t>>& detectors,
         const std::vector<flag_edge_t>& flag_edges)
 {
-    const fp_t EPS = 1e-8;
-
     build_flagged_decoding_graph();
     // Update edge weights in the graph.
     for (flag_edge_t fe : flag_edges) {

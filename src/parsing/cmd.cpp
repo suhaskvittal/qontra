@@ -5,7 +5,7 @@
 
 #include "parsing/cmd.h"
 
-namespace qontra {
+#include <regex>
 
 const std::regex no_arg_opt("-([1-9A-Za-z_-]+)");
 const std::regex w_arg_opt("--([1-9A-Za-z_-]+)");
@@ -27,5 +27,3 @@ CmdParser::CmdParser(int argc, char* argv[])
         ptr++;
     }
 }
-
-}   // qontra

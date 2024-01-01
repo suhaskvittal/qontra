@@ -4,19 +4,20 @@
 include(${CMAKE_SOURCE_DIR}/cmake/FindCPLEX.cmake)
 
 set(PROTEAN_FILES
-    src/protean/scheduler.cpp
-    src/protean/utils.cpp)
-add_library(protean ${PROTEAN_FILES})
-target_compile_options(protean PUBLIC ${COMPILE_OPTIONS})
+    src/protean/network/io.cpp
+    src/protean/network/physical.cpp
+    src/protean/network/raw.cpp
+    src/protean/visualization.cpp
+    src/protean/visualization_attr.cpp
+    src/protean/visualization_lp.cpp)
+add_library(libprotean ${PROTEAN_FILES})
+target_compile_options(libprotean PUBLIC ${COMPILE_OPTIONS})
 
-target_include_directories(protean PUBLIC ${CPLEX_INCLUDE_DIR})
-target_link_libraries(protean PUBLIC 
+target_include_directories(libprotean PUBLIC ${CPLEX_INCLUDE_DIR})
+target_link_libraries(libprotean PUBLIC 
                         qontra 
                         ${CPLEX_LIB_PREFIX}/libcplex.a
                         ${CPLEX_LIB_PREFIX}/libilocplex.a)
 
-add_executable(protean_scheduler_test main/protean/tests/scheduler.cpp)
-add_executable(protean_writing_test main/protean/tests/writing.cpp)
-
-target_link_libraries(protean_scheduler_test PRIVATE protean)
-target_link_libraries(protean_writing_test PRIVATE protean)
+add_executable(protean main/protean/main.cpp)
+target_link_libraries(protean PRIVATE libprotean)

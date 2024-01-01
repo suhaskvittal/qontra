@@ -152,11 +152,11 @@ int main(int argc, char* argv[]) {
 //  PyMatching dec(error_model);
     Chromobius dec(error_model);
 #else
-    std::cerr << "Chromobius not found.\n";
-    exit(1);
+    MWPMDecoder dec(error_model);
 #endif
 
 #endif
+
     experiments::memory_params_t params;
     params.shots = shots;
     // Run experiment.

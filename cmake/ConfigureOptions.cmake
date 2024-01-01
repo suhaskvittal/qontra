@@ -23,14 +23,9 @@ if (NOT COMPILE_OPTIONS)
     endif()
 endif()
 
-message(STATUS "(Build type = ${CMAKE_BUILD_TYPE}, compile options are: ${COMPILE_OPTIONS}")
+message(STATUS "(Build type = ${CMAKE_BUILD_TYPE}, compile options are: ${COMPILE_OPTIONS})")
 
-# Set CXX standard. Default is C++17, but certain dependencies (if enabled) require C++20.
-set(CMAKE_CXX_STANDARD 17)
-
-if (COMPILE_PYMATCHING)
-    set(CMAKE_CXX_STANDARD 20)
-endif()
+set(CMAKE_CXX_STANDARD 20)
 
 if (COMPILE_CHROMOBIUS)
     set(CMAKE_CXX_STANDARD 20)

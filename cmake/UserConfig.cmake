@@ -3,4 +3,9 @@
 #
 # The user should set any options they frequently use here.
 
-set(LEMON_INSTALL_DIR "/home/svittal/Documents/qec/pkgs")
+set(COMPILE_PROTEAN ON)
+set(LINK_LEMON ON)
+
+set(LEMON_INSTALL_DIR "/Users/svittal/Documents/research/quantum/qon/pkgs")
+
+set(L1D_CACHE_LINE_SIZE 128)

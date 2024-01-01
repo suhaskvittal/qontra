@@ -28,7 +28,7 @@ uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
 
 using namespace experiments;
 
-template <class T> T sqr(T x) { return x*x; }
+template <class T> inline T sqr(T x) { return x*x; }
 
 inline std::string
 get_batch_filename(uint batchno) {
@@ -40,7 +40,15 @@ get_batch_filename(uint batchno) {
 
 inline void
 configure_optimal_batch_size() {
+#ifndef L1D_CACHE_LINE_SIZE
+#if defined(linux)
     uint64_t cache_line_size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);  // In bytes.
+#else
+    uint64_t cache_line_size = 64;
+#endif
+#else
+    uint64_t cache_line_size = L1D_CACHE_LINE_SIZE;
+#endif
     G_SHOTS_PER_BATCH = cache_line_size << 3;   // Need to convert to bits.
 }
 

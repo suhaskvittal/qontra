@@ -15,18 +15,11 @@
 namespace qontra {
 namespace graph {
 
-namespace io {
-    template <class G_t>
-    using callback_t = void (*)(G_t&, std::string); // This call back takes in a line
-                                                    // (say from a file) and updates
-                                                    // the referenced graph.
-}   // io
-
-template <class G_t> G_t
-create_graph_from_file(std::string file, io::callback_t<G_t> cb) {
+template <class GRAPH, class FUNC> inline GRAPH
+create_graph_from_file(std::string file, FUNC cb) {
     std::ifstream fin(file);
 
-    G_t graph;
+    GRAPH graph;
     std::string ln;
     while (std::getline(fin, ln)) {
         cb(graph, ln);
@@ -34,9 +27,9 @@ create_graph_from_file(std::string file, io::callback_t<G_t> cb) {
     return graph;
 }
 
-template <class G_t> G_t
-create_graph_from_string(std::string desc, io::callback_t<G_t> cb) {
-    G_t graph;
+template <class GRAPH, class FUNC> inline GRAPH
+create_graph_from_string(std::string desc, FUNC cb) {
+    GRAPH graph;
     
     std::string ln;
     uint prev_index = 0;

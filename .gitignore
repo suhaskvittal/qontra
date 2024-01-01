@@ -7,6 +7,10 @@ scripts/__pycache__/*
 python/
 build/*
 build
+Release/*
+Release
+Debug/*
+Debug/
 scripts/asm/*
 data/*
 

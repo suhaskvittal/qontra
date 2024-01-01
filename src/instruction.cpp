@@ -50,8 +50,6 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
         bool inject_timing_error = inst.annotations.count(ANNOT_INJECT_TIMING_ERROR);
         bool operation_takes_time = !inst.annotations.count(ANNOT_NO_TICK);
 
-        bool has_predicate = inst.properties.count(PROPERTY_PREDICATE);
-
         bool is_2q_op = IS_2Q_OPERATOR.count(inst.name);
         
         // Inject timing errors if requested.
@@ -182,8 +180,6 @@ schedule_to_stim(const schedule_t& sch, ErrorTable& errors, TimeTable& timing, f
                     uint x = qubits[i], y = qubits[i+1];
                     auto x_y = std::make_pair(x, y);
                     fp_t dp = errors.op2q[inst.name][x_y];
-                    fp_t lt = errors.op2q_leakage_transport[inst.name][x_y];
-                    fp_t li = errors.op2q_leakage_injection[inst.name][x_y];
 
                     if (dp > 0) circuit.safe_append_ua("DEPOLARIZE2", {x, y}, dp);
                 }

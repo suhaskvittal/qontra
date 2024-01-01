@@ -55,7 +55,7 @@ for_each_word(std::array<stim::simd_bits_range_ref<W>, N> ranges, FUNC body) {
 
 // Template and specialization of ANDNOT for general use.
 inline bool
-andnot(bool x, bool y) { return ~x & y; }
+andnot(bool x, bool y) { return !x & y; }
 
 template <size_t W> inline stim::bitword<W>
 andnot(stim::bitword<W> x, stim::bitword<W> y) { return x.andnot(y); }
