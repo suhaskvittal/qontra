@@ -10,6 +10,7 @@
 
 #include <limits>
 #include <tuple>
+#include <set>
 #include <vector>
 
 namespace qontra {
@@ -31,10 +32,23 @@ private:
             high(y)
         {}
 
-        sptr_t<E> low;
-        sptr_t<E> high;
+        interval_t(const interval_t& other)
+            :low(other.low),
+            high(other.high)
+        {}
+
+        sptr<E> low;
+        sptr<E> high;
 
         inline bool is_null() { return low == nullptr && high == nullptr; }
+
+        inline bool operator==(const interval_t& other) const {
+            return low == other.low && high == other.high;
+        }
+
+        inline bool operator!=(const interval_t& other) const {
+            return !(*this == other);
+        }
     };
 
     struct cpair_t {
@@ -43,8 +57,23 @@ private:
             right(r)
         {}
 
+        cpair_t(const interval_t& other)
+            :left(other.left),
+            right(other.right)
+        {}
+
         interval_t left;
         interval_t right;
+
+        inline bool is_null() { return left.is_null() && right.is_null(); }
+
+        inline bool operator==(const cpair_t& other) const {
+            return left == other.left && right == other.right;
+        }
+
+        inline bool operator!=(const cpair_t& other) const {
+            return !(*this == other);
+        }
     };
 
     void    r_dfs_1(sptr<V>);
@@ -75,15 +104,16 @@ private:
     // Phase-2 Variables:
     //
     //
-    std::map<sptr<E>, std::vector<sptr<E>>> ref;
-    std::set<sptr<E>>                       neg_side;
-    std::vector<cpair_t>                    conflict_pair_stack;
-    std::map<sptr<E>, cpair_t>              stack_bottom;
-    std::map<sptr<E>, sptr<E>>              lowpt_edge;
+    std::map<sptr<E>, sptr<E>>  ref;
+    std::set<sptr<E>>           neg_side;
+    std::vector<cpair_t>        conflict_pair_stack;
+    std::map<sptr<E>, cpair_t>  stack_bottom;
+    std::map<sptr<E>, sptr<E>>  lowpt_edge;
 
     template <class NUMBER> inline NUMBER inf() { return std::numeric_limits<NUMBER>::max(); }
 
     const interval_t NULL_INTERVAL;
+    const cpair_t NULL_CONFLICT_PAIR;
 };
 
 template <class V, class E>
@@ -91,5 +121,7 @@ bool lr_planarity(Graph<V, E>*);
 
 }   // graph
 }   // qontra
+
+#include "planarity.inl"
 
 #endif  // GRAPH_ALGORITHMS_PLANARITY_h

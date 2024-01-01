@@ -36,3 +36,7 @@ endif()
 if (COMPILE_PROBIUS)
     include(${CMAKE_SOURCE_DIR}/cmake/executables/Probius.cmake)
 endif()
+
+if (COMPILE_TESTS)
+    include(${CMAKE_SOURCE_DIR}/cmake/executables/Test.cmake)
+endif()

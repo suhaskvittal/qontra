@@ -11,7 +11,7 @@ namespace qontra {
 namespace graph {
 
 template <class V, class E>
-LRPlanarity::LRPlanarity(Graph<V, E>* graph)
+LRPlanarity<V, E>::LRPlanarity(Graph<V, E>* graph)
     :input_graph(graph),
     roots(),
     parent_edge_map(),
@@ -29,7 +29,8 @@ LRPlanarity::LRPlanarity(Graph<V, E>* graph)
     stack_bottom(),
     lowpt_edge(),
     // Other variables.
-    NULL_INTERVAL(nullptr, nullptr)
+    NULL_INTERVAL(nullptr, nullptr),
+    NULL_CONFLICT_PAIR(NULL_INTERVAL, NULL_INTERVAL)
 {
     // Initialize variables.
     for (sptr<V> v : input_graph->get_vertices()) {
@@ -48,7 +49,7 @@ LRPlanarity::LRPlanarity(Graph<V, E>* graph)
 }
 
 template <class V, class E> bool
-LRPlanarity::run() {
+LRPlanarity<V, E>::run() {
     // Orient input graph
     for (sptr<V> v : input_graph->get_vertices()) {
         if (height[v] < inf<size_t>()) {
@@ -58,7 +59,7 @@ LRPlanarity::run() {
         roots.push_back(v);
         parent_edge_map[v] = nullptr;
 
-        r_dfs_1(v, nullptr);
+        r_dfs_1(v);
     }
 
     for (sptr<V> r : roots) {
@@ -68,7 +69,7 @@ LRPlanarity::run() {
 }
 
 template <class V, class E> void
-LRPlanarity::r_dfs_1(sptr<V> v) {
+LRPlanarity<V, E>::r_dfs_1(sptr<V> v) {
     sptr<E> parent_edge = parent_edge_map[v];
     for (sptr<V> w : input_graph->get_neighbors(v)) {
         sptr<E> e_vw = input_graph->get_edge(v, w);
@@ -84,7 +85,7 @@ LRPlanarity::r_dfs_1(sptr<V> v) {
             // This vertex has NOT been visited, implying e_vw is a tree edge.
             parent_edge_map[w] = e_vw;
             height[w] = height[v]+1;
-            r_dfs_1(w, e_vw);
+            r_dfs_1(w);
         } else {
             // This is a back edge.
             lowpt[e_vw] = height[w]; // w is closer to the root than v.
@@ -104,9 +105,11 @@ LRPlanarity::r_dfs_1(sptr<V> v) {
     }
 }
 
-template <class V, class E> void
-LRPlanarity::r_dfs_2(sptr<V> v) {
+template <class V, class E> bool
+LRPlanarity<V, E>::r_dfs_2(sptr<V> v) {
     sptr<E> parent_edge = parent_edge_map[v];
+
+    if (outgoing_edge_map[v].empty()) return true;
     // Sort outgoing edges by nesting depth.
     std::sort(outgoing_edge_map[v].begin(), outgoing_edge_map[v].end(),
             [&] (auto e, auto f) {
@@ -115,7 +118,11 @@ LRPlanarity::r_dfs_2(sptr<V> v) {
 
     sptr<E> first_outgoing_edge = outgoing_edge_map[v][0];
     for (sptr<E> e : outgoing_edge_map[v]) {
-        stack_bottom[e] = conflict_pair_stack.back();
+        if (conflict_pair_stack.empty()) {
+            stack_bottom[e] = NULL_CONFLICT_PAIR;
+        } else {
+            stack_bottom[e] = conflict_pair_stack.back();
+        }
 
         sptr<V> dst = get_dst(e);
         if (e == parent_edge_map[dst]) {
@@ -157,7 +164,7 @@ LRPlanarity::r_dfs_2(sptr<V> v) {
         while (P.left.high != nullptr && get_dst(P.left.high) == u) {
             P.left.high = ref[P.left.high];
         }
-        if (P.left.high == nullptr && P.left.low !+ nullptr) {
+        if (P.left.high == nullptr && P.left.low != nullptr) {
             ref[P.left.low] = P.right.low;
             neg_side += P.left.low;
             P.left.low = nullptr;
@@ -166,7 +173,7 @@ LRPlanarity::r_dfs_2(sptr<V> v) {
         conflict_pair_stack.push_back(P);
     }
     // Side of e is side of a highest return edge.
-    if (lowpt[e] < height[u]) {
+    if (lowpt[parent_edge] < height[u]) {
         // e has a return edge.
         cpair_t& cpx = conflict_pair_stack.back();
         sptr<E> h_left = cpx.left.high,
@@ -180,29 +187,29 @@ LRPlanarity::r_dfs_2(sptr<V> v) {
     return true;
 }
 
-inline sptr<V> 
-LRPlanarity::get_src(sptr<E> e) const {
-    ordered_edge_t oe = orientation_map.at(e);
+template <class V, class E> inline sptr<V> 
+LRPlanarity<V, E>::get_src(sptr<E> e) const {
+    auto oe = orientation_map.at(e);
     return std::get<0>(oe);
 }
 
-inline sptr<V>
-LRPlanarity::get_dst(sptr<E> e) const {
-    ordered_edge_t oe = orientation_map.at(e);
+template <class V, class E> inline sptr<V>
+LRPlanarity<V, E>::get_dst(sptr<E> e) const {
+    auto oe = orientation_map.at(e);
     return std::get<1>(oe);
 }
 
-bool
-LRPlanarity::add_edge_constraints(sptr<E> e, sptr<E> parent_edge) {
+template <class V, class E> bool
+LRPlanarity<V, E>::add_edge_constraints(sptr<E> e, sptr<E> parent_edge) {
     cpair_t P;
     // Merge return edges of e into P.R.
     while (conflict_pair_stack.back() != stack_bottom[e]) {
         cpair_t Q = conflict_pair_stack.back();
         conflict_pair_stack.pop_back();
 
-        if (Q.left != nullptr) std::swap(Q.left, Q.right);
+        if (!Q.left.is_null()) std::swap(Q.left, Q.right);
         // Regardless the graph is nonplanar if both L and R are not null.
-        if (Q.left != nullptr) return false;
+        if (!Q.left.is_null()) return false;
         // Merge intervals.
         if (lowpt[Q.right.low] > lowpt[parent_edge]) {
             if (P.right.is_null()) {
@@ -229,7 +236,7 @@ LRPlanarity::add_edge_constraints(sptr<E> e, sptr<E> parent_edge) {
         if (Q.right.low != nullptr) {
             P.right.low = Q.right.low;
         }
-        if (P.left == nullptr) {
+        if (P.left.is_null()) {
             // This is the topmost interval.
             P.left.high = Q.left.high;
         } else {
@@ -242,13 +249,13 @@ LRPlanarity::add_edge_constraints(sptr<E> e, sptr<E> parent_edge) {
     return true;
 }
 
-inline bool
-LRPlanarity::is_conflicting(interval_t i, sptr<E> e) {
+template <class V, class E> inline bool
+LRPlanarity<V, E>::is_conflicting(LRPlanarity<V, E>::interval_t i, sptr<E> e) {
     return !i.is_null() && lowpt[i.high] > lowpt[e];
 }
 
-inline size_t
-LRPlanarity::get_lowest(cpair_t P) {
+template <class V, class E> inline size_t
+LRPlanarity<V, E>::get_lowest(LRPlanarity<V, E>::cpair_t P) {
     if (P.left.is_null()) {
         return lowpt[P.right.low];
     } else if (P.right.is_null()) {
@@ -261,11 +268,11 @@ LRPlanarity::get_lowest(cpair_t P) {
 template <class V, class E> bool
 lr_planarity(Graph<V, E>* graph) {
     // First, do simple Euler check.
-    size_t n = graph.n(),
-           m = graph.m();
+    size_t n = graph->n(),
+           m = graph->m();
     if (n > 2 && m > 3*n - 6) return false;
 
-    LRPlanarity lrp(graph);
+    LRPlanarity<V, E> lrp(graph);
     return lrp.run();
 }
 
