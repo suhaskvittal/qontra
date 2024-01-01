@@ -27,7 +27,7 @@ write_coupling_file(std::string output_file, PhysicalNetwork& network) {
     for (sptr<phys_edge_t> pe : network.get_edges()) {
         sptr<phys_vertex_t> pv = std::reinterpret_pointer_cast<phys_vertex_t>(pe->src),
                             pw = std::reinterpret_pointer_cast<phys_vertex_t>(pe->dst);
-        const size_t layer = pe->is_out_of_plane ? pe->tsv_layer+1 : 0;
+        const size_t layer = pe->tsv_layer;
         fout << pv->id << "," << pw->id << "," << layer << "\n";
     }
 }

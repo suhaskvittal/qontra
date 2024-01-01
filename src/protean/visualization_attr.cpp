@@ -79,7 +79,7 @@ get_attributes(sptr<phys_edge_t> pe) {
                         pw = std::reinterpret_pointer_cast<phys_vertex_t>(pe->dst);
     attributes.name = "e" + std::to_string(pv->id) + ":" + std::to_string(pw->id);
     // Now set the attributes.
-    if (e->is_out_of_plane) {
+    if (e->is_out_of_plane()) {
         attributes.style = "dotted";
         attributes.fontname = "serif";
         attributes.fontsize = "8";

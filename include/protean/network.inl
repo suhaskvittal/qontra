@@ -46,6 +46,11 @@ phys_vertex_t::has_role_of_type(raw_vertex_t::type t) {
     return role_type_set.count(t);
 }
 
+inline bool
+phys_edge_t::is_out_of_plane() {
+    return tsv_layer > 0;
+}
+
 }   // net
 
 inline sptr<net::raw_vertex_t>
@@ -82,6 +87,13 @@ ProcessorLayer::add_edge(sptr<net::phys_edge_t> e) {
     return true;
 }
 
+inline size_t
+ProcessorLayer::get_max_endpoint_degree(sptr<net::phys_edge_t> e) {
+    sptr<net::phys_vertex_t> v = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
+                             w = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
+    return std::max(get_degree(v), get_degree(w));
+}
+
 inline bool
 ProcessorLayer::is_planar() {
     update_state();
@@ -113,55 +125,68 @@ inline bool
 PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
     if (!Graph::add_edge(e)) return false;
     // Here, we will attempt to find a processor layer that will house e.
-    for (size_t k = 0; k < processor_layers.size(); k++) {
-        if (processor_layers[k].add_edge(e)) return true;
+    for (size_t k = 0; k < get_thickness(); k++) {
+        auto& layer = processor_layers[k];
+        if (layer.add_edge(e)) {
+            e->tsv_layer = k;
+            return true;
+        }
     }
     // If none can be found, then make a new layer.
     ProcessorLayer& new_layer = push_back_new_processor_layer();
     new_layer.add_edge(e);
+    e->tsv_layer = get_thickness()-1;
     return true;
 }
 
 inline void
-PhysicalNetwork::reallocate_edges() {
-    // Get all out-of-plane edges, and sort them in order of the maximum degrees of their endpoints.
-    // The idea is that if the endpoints have low degree, then an edge is less likely to be out-of-plane.
-    std::vector<sptr<net::phys_edge_t>> out_of_plane_edges;
-    for (sptr<net::phys_edge_t> e : get_edges()) {
-        if (e->is_out_of_plane) out_of_plane_edges.push_back(e);
-    }
+PhysicalNetwork::delete_vertex(sptr<net::phys_vertex_t> v) {
+    Graph::delete_vertex(v);
+    for (auto& layer : processor_layers) {
+        layer.delete_vertex(v);
+    } 
+}
 
-    std::sort(out_of_plane_edges.begin(), out_of_plane_edges.end(),
-                [&] (auto e1, auto e2)
-                {
-                    return get_max_endpoint_degree(e1) < get_max_endpoint_degree(e2);
-                });
-    for (sptr<net::phys_edge_t> e : out_of_plane_edges) {
-        test_and_move_edge_to_bulk(e);
+inline void
+PhysicalNetwork::delete_edge(sptr<net::phys_edge_t> e) {
+    Graph::delete_edge(e);
+    processor_layers[e->tsv_layer].delete_edge(e);
+}
+
+inline bool
+PhysicalNetwork::test_and_move_edge_down(sptr<net::phys_edge_t e>) {
+    if (!e->is_out_of_plane()) return false;
+    auto& curr_layer = processor_layers[e->tsv_layer];
+    auto& next_layer = processor_layers[e->tsv_layer-1];
+
+    if (next_layer.add_edge(e)) {
+        // Move was successful.
+        curr_layer.delete_edge(e);
+        e->tsv_layer--;
+        return true;
+    } else {
+        return false;
     }
 }
 
 inline size_t
-PhysicalNetwork::determine_edge_tsv_layer(sptr<net::phys_edge_t> e) {
-    sptr<net::phys_vertex_t> src = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
-                            dst = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
-    size_t k = 0;
-    while (occupied_tsvs[src].count(k) || occupied_tsvs[dst].count(k)) k++;
-    return k;
-}
-
-inline size_t
-PhysicalNetwork::get_max_endpoint_degree(sptr<net::phys_edge_t> e) {
-    sptr<net::phys_vertex_t> src = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
-                            dst = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
-    const size_t sdg = get_bulk_degree(src), 
-                    ddg = get_bulk_degree(dst);
-    return sdg > ddg ? sdg : ddg;
+PhysicalNetwork::get_thickness() {
+    return processor_layers.size();
 }
 
 inline size_t
 PhysicalNetwork::get_bulk_degree(sptr<net::phys_vertex_t> v) {
     return processor_layers[0].get_degree(v);
+}
+
+inline ProcessorLayer&
+PhysicalNetwork::push_back_new_processor_layer() {
+    ProcessorLayer new_layer;
+    for (sptr<net::phys_vertex_t> v : get_vertices()) {
+        new_layer.add_vertex(v);
+    }
+    processor_layers.push_back(new_layer);
+    return new_layer;
 }
 
 inline void

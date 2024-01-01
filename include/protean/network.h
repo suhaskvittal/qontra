@@ -42,8 +42,9 @@ private:
 };
 
 struct phys_edge_t : graph::base::edge_t {
-    bool is_out_of_plane;
     size_t tsv_layer;
+
+    bool is_out_of_plane(void);
 };
 
 }   // net
@@ -101,6 +102,8 @@ class ProcessorLayer : public graph::Graph<net::phys_vertex_t, net::phys_edge_t>
 public:
     bool add_edge(sptr<net::phys_edge_t>) override;
 
+    size_t get_max_endpoint_degree(sptr<net::phys_edge_t>);
+
     bool is_planar(void);
 protected:
     bool update_state(void) override;
@@ -123,8 +126,12 @@ public:
     void delete_vertex(sptr<net::phys_vertex_t>) override;
     void delete_edge(sptr<net::phys_edge_t>) override;
 
-    // Returns true if the graph remains planar.
-    bool test_and_move_edge_to_bulk(sptr<net::phys_edge_t>, bool is_new_edge=false); 
+    // If the edge can be moved to the immediately lower processor layer, it is done and the
+    // function returns true. Otherwise, it returns false.
+    bool test_and_move_edge_down(sptr<net::phys_edge_t>); 
+
+    size_t  get_thickness(void);
+    size_t  get_bulk_degree(sptr<net::phys_vertex_t>);
 
     // Optimizations:
     //
@@ -157,11 +164,9 @@ private:
     // Try and place out-of-plane edges into the processor bulk, and deletes any
     // empty processor layers.
     void reallocate_edges(void);
+
     // Allocates a new processor layer.
     ProcessorLayer& push_back_new_processor_layer(void);
-
-    size_t get_max_endpoint_degree(sptr<net::phys_edge_t>);
-    size_t get_bulk_degree(sptr<net::phys_vertex_t>);
 
     // Determines if a proposed flag (represented by the two raw vertices -- these are data qubits)
     // is actually useful -- that it protects against a weight-2 error.

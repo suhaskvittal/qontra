@@ -7,8 +7,6 @@
 
 #include <defs/set_algebra.h>
 
-#include <lemon/matching.h>
-
 #include <algorithm>
 
 namespace qontra {
@@ -33,12 +31,9 @@ PhysicalNetwork(TannerGraph& tgr)
     raw_connection_network(tgr),
     role_to_phys(),
     // Planarity tracking:
-    planar_repr(),
-    v_phys_lemon_map(),
-    e_phys_lemon_map(),
+    processor_layers(),
     // Other tracking:
     occupied_tsvs(),
-    bulk_degree_map(),
     // Other variables:
     id_ctr(0),
 {
@@ -93,7 +88,6 @@ PhysicalNetwork::join_qubits_with_identical_support() {
 
 void
 PhysicalNetwork::make_flags() {
-    using namespace lemon;
     // Algorithm:
     //  High-level: saturate each check with the maximum number of flags, and then remove
     //              any unnecessary flags via error propagation analysis.
@@ -477,6 +471,33 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 schedule_t
 PhysicalNetwork::make_schedule() {
     return schedule_t();
+}
+
+void
+PhysicalNetwork::reallocate_edges() {
+    // Top-down: trickle down the edges as much as possible.
+    for (size_t k = get_thickness()-1; k > 0; k++) {
+        ProcessorLayer& curr = processor_layers[k];
+        ProcessorLayer& next = processor_layers[k+1];
+        // Get a sorted list of edges in curr, sorted from least to greatest
+        // by their max_endpoint_degree in next.
+        auto edge_list = curr.get_edges();
+        std::sort(edge_list.begin(), edge_list.end(),
+                [&] (auto e, auto f)
+                {
+                    return next.get_max_endpoint_degree(e) < next.get_max_endpoint_degree(f);
+                });
+        // Now, try to put as many edges into next.
+        for (sptr<phys_edge_t> e : edge_list) {
+            test_and_move_edge_down(e);
+        }
+    }
+    // Now, everything will have changed. Remove any layers with no edges.
+    // A property of this function is that only the last layers should have no edges. So,
+    // removing layers is rather straightforward:
+    while (processor_layers.back().m() == 0 && processor_layers.size() > 1) {
+        processor_layers.pop_back();
+    }
 }
 
 }   // protean

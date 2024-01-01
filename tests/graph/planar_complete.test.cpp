@@ -8,8 +8,6 @@
 #include <graph/graph.h>
 #include <graph/algorithms/planarity.h>
 
-#include <iostream>
-
 #include <stdlib.h>
 
 int main(int argc, char* argv[]) {
@@ -23,9 +21,6 @@ int main(int argc, char* argv[]) {
             n2 = atoi(argv[2]);
         gr = make_bipartite_complete_graph(n1, n2);
     }
-    if (lr_planarity(&gr)) {
-        return 0;
-    }
-    return 1;
+    return static_cast<int>(!lr_planarity(&gr));
 }
 
