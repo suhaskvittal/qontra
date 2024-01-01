@@ -4,10 +4,10 @@
  * */
 
 #include <defs/filesystem.h>
+#include <graph/algorithms/planarity.h>
 
 #include <algorithm>
 
-#include <lemon/planarity.h>
 
 namespace qontra {
 namespace protean {
@@ -71,100 +71,55 @@ RawNetwork::proxy_walk(sptr<net::raw_vertex_t> from,
 }
 
 inline bool
-PhysicalNetwork::add_vertex(sptr<net::phys_vertex_t> v) {
-    if (graph::Graph::add_vertex(v)) {
-        auto lemon_node = planar_repr.addNode();
-        v_phys_lemon_map.put(v, lemon_node);
-        return true;
-    } else {
-        return false;
+ProcessorLayer::add_edge(sptr<net::phys_edge_t> e) {
+    if (!Graph::add_edge(e)) return false;
+    // Otherwise, the edge has been added. Check planarity.
+    if (!is_planar()) {
+        // Delete the edge.
+        delete_edge(e);
+        return e;
     }
+    return true;
 }
 
 inline bool
-PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
-    if (graph::Graph::add_edge(e)) {
-        if (!test_and_move_edge_to_bulk(e, true)) {
-            e->is_out_of_plane = true;
-            const size_t k = determine_edge_tsv_layer(e);
-            e->tsv_layer = k;
-            occupied_tsvs[src].insert(k);
-            occupied_tsvs[dst].insert(k);
-        }
-        return true;
-    } else {
-        return false;
-    }
-}
-
-inline void
-PhysicalNetwork::delete_vertex(sptr<net::phys_vertex_t> v) {
-    // First, erase all traces of v in the tracking structures.
-    auto lemon_node = v_phys_lemon_map.at(v);
-    v_phys_lemon_map.erase(v);
-    for (sptr<net::phys_edge_t> e : get_neighbors(v)) {
-        if (e->is_out_of_plane) continue;
-        auto lemon_edge = e_phys_lemon_map.at(e);
-        e_phys_lemon_map.erase(e);
-        planar_repr.erase(lemon_edge);
-    }
-    // Then delete lemon_node and v.
-    planar_repr.erase(lemon_node);
-    graph::Graph::delete_vertex(v);
-}
-
-inline void
-PhysicalNetwork::delete_edge(sptr<net::phys_edge_t> e) {
-    if (!e->is_out_of_plane) {
-        auto lemon_edge = e_phys_lemon_map.at(e);
-        e_phys_lemon_map.erase(e);
-        planar_repr.erase(lemon_edge);
-    }
-    graph::Graph::delete_edge(e);
+ProcessorLayer::is_planar() {
+    update_state();
+    return _is_planar;
 }
 
 inline bool
-PhysicalNetwork::test_and_move_edge_to_bulk(sptr<net::phys_edge_t> e, bool is_new_edge) {
-    sptr<net::phys_vertex_t> src = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
-                            dst = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
-    auto lemon_src = v_phys_lemon_map.at(src),
-            lemon_dst = v_phys_lemon_map.at(dst);
-    auto lemon_edge = planar_repr.addEdge(lemon_src, lemon_dst);
-
-    if (is_planar()) {
-        e_phys_lemon_map.put(e, lemon_edge);
-
-        if (!is_new_edge) {
-            occupied_tsvs[src].erase(e->tsv_layer);
-            occupied_tsvs[dst].erase(e->tsv_layer);
-        }
-
-        e->is_out_of_plane = false;
-        return true;
-    } else {
-        planar_repr.erase(lemon_edge);
-        return false;
-    }
+ProcessorLayer::update_state() {
+    if (!Graph::update_state()) return false;
+    // Update planarity.
+    _is_planar = lr_planarity(this);
+    return true;
 }
 
-RawNetwork
+inline RawNetwork
 PhysicalNetwork::get_raw_connection_network() {
     return raw_connection_network;
 }
 
 inline bool
-PhysicalNetwork::update_state() {
-    if (!graph_has_changed) return false;
+PhysicalNetwork::add_vertex(sptr<net::phys_vertex_t> v) {
+    if (!Graph::add_vertex(v)) return false;
+    // Add v to each processor layer.
+    for (ProcessorLayer& pl : processor_layers) pl.add_vertex(v);
+    return true;
+}
 
-    // Update bulk_degree_map.
-    for (sptr<net::phys_vertex_t> v : get_vertices()) {
-        size_t dg = get_degree(v);
-        for (sptr<net::phys_vertex_t> w : get_neighbors(v)) {
-            sptr<net::phys_edge_t> e = get_edge(v, w);
-            if (e->is_out_of_plane) --dg;
-        }
-        bulk_degree_map[v] = dg;
+inline bool
+PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
+    if (!Graph::add_edge(e)) return false;
+    // Here, we will attempt to find a processor layer that will house e.
+    for (size_t k = 0; k < processor_layers.size(); k++) {
+        if (processor_layers[k].add_edge(e)) return true;
     }
+    // If none can be found, then make a new layer.
+    ProcessorLayer& new_layer = push_back_new_processor_layer();
+    new_layer.add_edge(e);
+    return true;
 }
 
 inline void
@@ -184,11 +139,6 @@ PhysicalNetwork::reallocate_edges() {
     for (sptr<net::phys_edge_t> e : out_of_plane_edges) {
         test_and_move_edge_to_bulk(e);
     }
-}
-
-inline bool
-PhysicalNetwork::is_planar() {
-    return lemon::checkPlanarity(planar_repr);
 }
 
 inline size_t
@@ -211,8 +161,7 @@ PhysicalNetwork::get_max_endpoint_degree(sptr<net::phys_edge_t> e) {
 
 inline size_t
 PhysicalNetwork::get_bulk_degree(sptr<net::phys_vertex_t> v) {
-    update_state();
-    return bulk_degree_map[v];
+    return processor_layers[0].get_degree(v);
 }
 
 inline void

@@ -18,6 +18,19 @@ make_complete_graph(size_t n) {
 }
 
 inline GRAPH
+make_bipartite_complete_graph(size_t n1, size_t n2) {
+    GRAPH gr = fast_make_graph_with_k_vertices(n1+n2);
+    for (size_t i = 0; i < n1; i++) {
+        sptr<VERTEX> v = gr.get_vertex(i);
+        for (size_t j = n1; j < n1+n2; j++) {
+            sptr<VERTEX> w = gr.get_vertex(j);
+            gr.add_edge(fast_make_edge(v, w));
+        }
+    }
+    return gr;
+}
+
+inline GRAPH
 fast_make_graph_with_k_vertices(size_t k) {
     GRAPH gr;
     for (size_t i = 0; i < k; i++) {

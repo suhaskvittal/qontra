@@ -81,7 +81,7 @@ LRPlanarity<V, E>::r_dfs_1(sptr<V> v) {
 
         outgoing_edge_map[v].push_back(e_vw);
 
-        if (height[v] == inf<size_t>()) {
+        if (height[w] == inf<size_t>()) {
             // This vertex has NOT been visited, implying e_vw is a tree edge.
             parent_edge_map[w] = e_vw;
             height[w] = height[v]+1;

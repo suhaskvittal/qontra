@@ -17,6 +17,7 @@ typedef edge_t                  EDGE;
 typedef Graph<VERTEX, EDGE>     GRAPH;
 
 GRAPH make_complete_graph(size_t);
+GRAPH make_bipartite_complete_graph(size_t, size_t);
 
 GRAPH       fast_make_graph_with_k_vertices(size_t k);
 sptr<EDGE>  fast_make_edge(sptr<VERTEX>, sptr<VERTEX>);

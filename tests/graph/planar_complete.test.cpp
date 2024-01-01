@@ -13,10 +13,17 @@
 #include <stdlib.h>
 
 int main(int argc, char* argv[]) {
-    int n = atoi(argv[1]);
-
-    GRAPH kgr = make_complete_graph(n);
-    if (lr_planarity(&kgr)) {
+    GRAPH gr;
+    std::cout << "ARGC; " << argc << std::endl;
+    if (argc == 2) {
+        int n = atoi(argv[1]);
+        gr = make_complete_graph(n);
+    } else {
+        int n1 = atoi(argv[1]),
+            n2 = atoi(argv[2]);
+        gr = make_bipartite_complete_graph(n1, n2);
+    }
+    if (lr_planarity(&gr)) {
         return 0;
     }
     return 1;

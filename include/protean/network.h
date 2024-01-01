@@ -10,8 +10,6 @@
 #include <defs/two_level_map.h>
 #include <graph/tanner_graph.h>
 
-#include <lemon/list_graph.h>
-
 namespace qontra {
 namespace protean {
 
@@ -50,6 +48,8 @@ struct phys_edge_t : graph::base::edge_t {
 
 }   // net
 
+// The RawNetwork keeps track of the "roles", or all the qubit interactions that need to
+// happen to implement syndrome extraction.
 class RawNetwork : public graph::Graph<net::raw_vertex_t, net::raw_edge_t> {
 public:
     RawNetwork(graph::TannerGraph&);
@@ -95,6 +95,20 @@ private:
     uint64_t id_ctr = 0;
 };
 
+// The ProcessorLayer class encapsulates a layer of the processor that is planar.
+// An array of these layers builds a full processor.
+class ProcessorLayer : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
+public:
+    bool add_edge(sptr<net::phys_edge_t>) override;
+
+    bool is_planar(void);
+protected:
+    bool update_state(void) override;
+private:
+    bool _is_planar; // Never access this variable directly!!!
+};
+
+// A PhysicalNetwork is the realization of the processor.
 class PhysicalNetwork : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
 public:
     PhysicalNetwork(graph::TannerGraph&);
@@ -139,15 +153,12 @@ public:
         size_t max_connectivity = 4;
         size_t max_thickness = 1;   // 0 = means only processor bulk, n = n TSV layers.
     } config;
-protected:
-    bool update_state(void) override;
 private:
-    // Try and place out-of-plane edges into the processor bulk.
+    // Try and place out-of-plane edges into the processor bulk, and deletes any
+    // empty processor layers.
     void reallocate_edges(void);
-    // Returns true if planar_repr is planar.
-    bool is_planar(void);
-    // Returns a valid TSV layer for the proposed edge
-    size_t determine_edge_tsv_layer(sptr<net::phys_edge_t>);
+    // Allocates a new processor layer.
+    ProcessorLayer& push_back_new_processor_layer(void);
 
     size_t get_max_endpoint_degree(sptr<net::phys_edge_t>);
     size_t get_bulk_degree(sptr<net::phys_vertex_t>);
@@ -167,18 +178,13 @@ private:
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
     RawNetwork raw_connection_network;
     std::map<net::raw_vertex_t, net::phys_vertex_t> role_to_phys;
-    // planar_representation will contain all edges on the bulk of the processor (not
-    // edges going through a TSV). If an edge can be added to the planar_representation
-    // without violating planarity, it goes on the bulk.
-    lemon::ListGraph planar_repr;
-    BijectiveMap<sptr<net::phys_vertex_t>, lemon::ListGraph::Node>  v_phys_lemon_map;
-    BijectiveMap<sptr<net::phys_edge_t>, lemon::ListGraph::Edge>    e_phys_lemon_map;
+    // processor_layers contains the physical placement of edges in the processor. processor_layers[0]
+    // always corresponds to the processor bulk (lowest layer), and other layers are the TSV layers.
+    std::vector<ProcessorLayer> processor_layers;
     // Other tracking structures:
     //
     // Tracks the heights of TSV edges for each vertex.
     std::map<sptr<net::phys_vertex_t>, std::set<size_t>> occupied_tsvs;
-    // Tracks the degree of each vertex in the processor bulk.
-    std::map<sptr<net::phys_vertex_t>, size_t> bulk_degree_map;
     
     uint64_t id_ctr;
 };
