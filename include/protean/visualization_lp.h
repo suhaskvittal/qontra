@@ -51,6 +51,6 @@ lp_expr_t   lp_add_edge_distance_objective(LP&, PhysicalNetwork&);
 }   // protean
 }   // qontra
 
-#include "visualization_impl.inl"
+#include "visualization_lp.inl"
 
 #endif  // PROTEAN_VISUALIZATION_IMPL_h

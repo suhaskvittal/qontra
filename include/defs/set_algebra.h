@@ -20,6 +20,7 @@ operator+(set<T> s1, set<T> s2) {
                     s2.begin(),
                     s2.end(),
                     std::inserter(s3, s3.begin()));
+    return s3;
 }
 
 template <class T> inline set<T>

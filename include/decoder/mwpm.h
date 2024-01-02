@@ -9,17 +9,6 @@
 #include "decoder/decoder.h"
 #include "graph/decoding_graph.h"
 
-#include <PerfectMatching.h>
-
-#include <algorithm>
-#include <chrono>
-#include <map>
-#include <set>
-#include <utility>
-#include <vector>
-
-#include <time.h>
-
 namespace qontra {
 
 const fp_t MWPM_INTEGER_SCALE = 1000.0;

@@ -13,20 +13,20 @@ namespace protean {
 
 using namespace net;
 
-inline void
+void
 write_schedule_file(std::string output_file, PhysicalNetwork& network) {
     std::ofstream fout(output_file);
-    schedule_t sch = network.get_schedule();
-    fout << sch << "\n";
+    schedule_t sch = network.make_schedule();
+    fout << schedule_to_text(sch) << "\n";
 }
 
-inline void
+void
 write_coupling_file(std::string output_file, PhysicalNetwork& network) {
     std::ofstream fout(output_file);
     fout << "Qubit 1,Qubit 2,Processor Layer\n";
     for (sptr<phys_edge_t> pe : network.get_edges()) {
-        sptr<phys_vertex_t> pv = std::reinterpret_pointer_cast<phys_vertex_t>(pe->src),
-                            pw = std::reinterpret_pointer_cast<phys_vertex_t>(pe->dst);
+        sptr<phys_vertex_t> pv = network.get_source(pe),
+                            pw = network.get_target(pe);
         const size_t layer = pe->tsv_layer;
         fout << pv->id << "," << pw->id << "," << layer << "\n";
     }
@@ -72,7 +72,7 @@ write_tanner_graph_file(std::string output_file, PhysicalNetwork& network) {
     // First write checks.
     fout << "Parity Role/Logical Observable,Role Operator String,Physical Operator String\n";
     for (sptr<tanner::vertex_t> tpq : tanner_graph.get_checks()) {
-        sptr<raw_vertex_t> rpq = raw_net.v_tanner_to_raw.at(tpq);
+        sptr<raw_vertex_t> rpq = raw_net.v_tanner_raw_map.at(tpq);
         if (rpq->qubit_type == raw_vertex_t::type::xparity) {
             fout << "x";
         } else {
@@ -82,7 +82,7 @@ write_tanner_graph_file(std::string output_file, PhysicalNetwork& network) {
         std::string role_check_string, phys_check_string;
         bool first = true;
         for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
-            sptr<raw_vertex_t> rdq = raw_net.v_tanner_to_raw.at(tdq);
+            sptr<raw_vertex_t> rdq = raw_net.v_tanner_raw_map.at(tdq);
             sptr<phys_vertex_t> pdq = network.role_to_phys[rdq];
             
             if (!first) {
@@ -110,7 +110,7 @@ write_tanner_graph_file(std::string output_file, PhysicalNetwork& network) {
                     phys_obs_string += ",";
                 }
                 first = false;
-                sptr<raw_vertex_t> rv = raw_net.v_tanner_to_raw.at(tv);
+                sptr<raw_vertex_t> rv = raw_net.v_tanner_raw_map.at(tv);
                 sptr<phys_vertex_t> pv = network.role_to_phys[rv];
                 role_obs_string += "d" + std::to_string(rv->id);
                 phys_obs_string += std::to_string(pv->id);
@@ -147,13 +147,13 @@ write_flag_assignment_file(std::string output_file, PhysicalNetwork& network) {
                 flag_to_first_data[rfq] = rdq1;
             } else {
                 // The pair should be complete: write it.
-                if (!first) flag_string << ",";
+                if (!first) flag_string += ",";
                 first = false;
 
                 sptr<raw_vertex_t> rdq2 = flag_to_first_data[rfq];
                 flag_string += "d" + std::to_string(rdq1->id) + ":"
-                            + "d" + std::to_string(rdq2->id) + ":"
-                            + "f" + std::to_string(rfq->id);
+                                + "d" + std::to_string(rdq2->id) + ":"
+                                + "f" + std::to_string(rfq->id);
             }
         }
         fout << "\"" + flag_string + "\"\n";

@@ -7,12 +7,15 @@
 #define DEFS_BIJECTIVE_MAP_h
 
 #include <map>
+#include <string>
 
 template <class T, class U> 
 std::map<U, T> get_reverse_map(const std::map<T, U>&);
 
 // This is for the common situation where you just need to label something
 // with another thing. This class enforces bijectivity.
+
+#define TYPE_ASSERT(fn) static_assert(!std::is_same<T, U>::value, "function #fn is undefined if T = U.")
 
 template <class T, class U>
 class BijectiveMap {
@@ -42,21 +45,22 @@ public:
     BijectiveMap reverse(void);
 
     // Pretty much all the functions below are wrappers for std::map.
+    
+    // Returns false if change is not bijective.
+    inline bool put(T key, U value) { TYPE_ASSERT("put"); return f_put(key, value); }
+    inline bool put(U key, T value) { TYPE_ASSERT("put"); return r_put(key, value); }
 
-    inline bool put(T key, U value) { return f_put(key, value); }   // Returns false if change is not bijective.
-    inline bool put(U key, T value) { return r_put(key, value); }   // Returns false if change is not bijective.
+    inline U at(T key) const { TYPE_ASSERT("at"); return f_at(key); }
+    inline T at(U key) const { TYPE_ASSERT("at"); return r_at(key); }
 
-    inline U at(T key) const { return f_at(key); }
-    inline T at(U key) const { return r_at(key); }
+    inline void erase(T key) { TYPE_ASSERT("erase"); f_erase(key); }
+    inline void erase(U key) { TYPE_ASSERT("erase"); r_erase(key); }
 
-    inline void erase(T key) { f_erase(key); }
-    inline void erase(U key) { r_erase(key); }
+    inline size_t count(T key) const { TYPE_ASSERT("count"); return f_count(key); }
+    inline size_t count(U key) const { TYPE_ASSERT("count"); return r_count(key); }
 
-    inline size_t count(T key) { f_count(key); }
-    inline size_t count(U key) { r_count(key); }
-
-    inline void swap(T x, T y) { f_swap(x, y); }
-    inline void swap(U x, U y) { r_swap(x, y); }
+    inline void swap(T x, T y) { TYPE_ASSERT("swap"); f_swap(x, y); }
+    inline void swap(U x, U y) { TYPE_ASSERT("swap"); r_swap(x, y); }
 
     // Specific functions for interacting with the forward and reverse maps:
     // 
@@ -68,11 +72,11 @@ public:
     void f_erase(T);
     void r_erase(U);
 
-    inline U f_at(T key) const { return forward_map[key]; }
-    inline T r_at(U key) const { return reverse_map[key]; }
+    inline U f_at(T key) const { return forward_map.at(key); }
+    inline T r_at(U key) const { return reverse_map.at(key); }
 
-    inline size_t f_count(T key) { return forward_map.count(key); }
-    inline size_t r_count(U key) { return reverse_map.count(key); }
+    inline size_t f_count(T key) const { return forward_map.count(key); }
+    inline size_t r_count(U key) const { return reverse_map.count(key); }
 
     void f_swap(T, T);  // Swaps the values for the two keys.
     void r_swap(U, U);
@@ -90,7 +94,7 @@ private:
     static BijectiveMap from_maps(const std::map<T, U>& fwd, const std::map<U, T>& rev) {
         BijectiveMap bmap;
         bmap.forward_map = fwd;
-        rmap.reverse_map = rev;
+        bmap.reverse_map = rev;
         return bmap;
     }
 

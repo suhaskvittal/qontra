@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   27 December 2023
  * */
 
@@ -9,6 +8,8 @@
 #include <defs/bijective_map.h>
 #include <defs/two_level_map.h>
 #include <graph/tanner_graph.h>
+#include <instruction.h>
+#include <stimext.h>
 
 namespace qontra {
 namespace protean {
@@ -55,6 +56,8 @@ class RawNetwork : public graph::Graph<net::raw_vertex_t, net::raw_edge_t> {
 public:
     RawNetwork(graph::TannerGraph&);
 
+    sptr<net::raw_vertex_t> make_vertex(void) override;
+
     // Input: data qubit, data qubit, parity qubit
     // Returns: flag qubit.
     sptr<net::raw_vertex_t> add_flag(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
@@ -91,7 +94,7 @@ public:
     std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
         schedule_order_map;
 
-    TannerGraph tanner_graph;
+    graph::TannerGraph tanner_graph;
 private:
     uint64_t id_ctr = 0;
 };
@@ -125,6 +128,8 @@ public:
     bool add_edge(sptr<net::phys_edge_t>) override;
     void delete_vertex(sptr<net::phys_vertex_t>) override;
     void delete_edge(sptr<net::phys_edge_t>) override;
+
+    sptr<net::phys_vertex_t> make_vertex(void) override;
 
     // If the edge can be moved to the immediately lower processor layer, it is done and the
     // function returns true. Otherwise, it returns false.
@@ -182,7 +187,7 @@ private:
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
     RawNetwork raw_connection_network;
-    std::map<net::raw_vertex_t, net::phys_vertex_t> role_to_phys;
+    std::map<sptr<net::raw_vertex_t>, sptr<net::phys_vertex_t>> role_to_phys;
     // processor_layers contains the physical placement of edges in the processor. processor_layers[0]
     // always corresponds to the processor bulk (lowest layer), and other layers are the TSV layers.
     std::vector<ProcessorLayer> processor_layers;
@@ -192,6 +197,12 @@ private:
     std::map<sptr<net::phys_vertex_t>, std::set<size_t>> occupied_tsvs;
     
     uint64_t id_ctr;
+
+    friend void write_schedule_file(std::string, PhysicalNetwork&);
+    friend void write_coupling_file(std::string, PhysicalNetwork&);
+    friend void write_role_file(std::string, PhysicalNetwork&);
+    friend void write_tanner_graph_file(std::string, PhysicalNetwork&);
+    friend void write_flag_assignment_file(std::string, PhysicalNetwork&);
 };
 
 // Writes the physical network to a folder.

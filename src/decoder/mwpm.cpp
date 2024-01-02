@@ -5,6 +5,14 @@
 
 #include "decoder/mwpm.h"
 
+#include <PerfectMatching.h>
+
+#include <algorithm>
+#include <map>
+#include <set>
+#include <utility>
+#include <vector>
+
 namespace qontra {
 
 Decoder::result_t

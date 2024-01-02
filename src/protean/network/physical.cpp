@@ -7,6 +7,8 @@
 
 #include <defs/set_algebra.h>
 
+#include <PerfectMatching.h>
+
 #include <algorithm>
 
 namespace qontra {
@@ -15,18 +17,15 @@ namespace protean {
 using namespace graph;
 using namespace net;
 
+template <class V> using v_pair_t=std::pair<sptr<V>, sptr<V>>;
+
 template <class T> inline std::pair<T, T>
 make_ordered_pair(T x, T y) {
     if (x < y)  return std::make_pair(x, y);
     else        return std::make_pair(y, x);
 }
 
-template <class CONTAINER, class T> inline std::set<T>
-make_set(CONTAINER<T> x) {
-    return std::set<T>(x.begin(), x.end());
-}
-
-PhysicalNetwork(TannerGraph& tgr)
+PhysicalNetwork::PhysicalNetwork(TannerGraph& tgr)
     :Graph(),
     raw_connection_network(tgr),
     role_to_phys(),
@@ -35,24 +34,20 @@ PhysicalNetwork(TannerGraph& tgr)
     // Other tracking:
     occupied_tsvs(),
     // Other variables:
-    id_ctr(0),
+    id_ctr(0)
 {
     // Create a corresponding physical qubit for every vertex in raw_connection_network.
     for (sptr<raw_vertex_t> rv : raw_connection_network.get_vertices()) {
-        sptr<phys_vertex_t> pv = std::make_shared<>();
-        pv->id = id_ctr++;
+        sptr<phys_vertex_t> pv = make_vertex();
         pv->push_back_role(rv);
         role_to_phys[rv] = pv;
         add_vertex(pv);
     }
     // And the corresponding edges as well.
     for (sptr<raw_edge_t> re : raw_connection_network.get_edges()) {
-        sptr<raw_vertex_t> rsrc = std::reinterpret_pointer_cast<raw_vertex_t>(re->src),
-                            rdst = std::reinterpret_pointer_cast<raw_vertex_t>(re->dst);
-        sptr<phys_edge_t> pe = std::make_shared<>();
-        pe->src = role_to_phys[rsrc];
-        pe->dst = role_to_phys[rdst];
-        pe->is_undirected = true;
+        sptr<raw_vertex_t> rsrc = raw_connection_network.get_source(re),
+                            rdst = raw_connection_network.get_target(re);
+        sptr<phys_edge_t> pe = make_edge(role_to_phys[rsrc], role_to_phys[rdst]);
         add_edge(pe);
     }
 }
@@ -65,8 +60,9 @@ PhysicalNetwork::join_qubits_with_identical_support() {
     for (size_t i = 0; i < vertices.size(); i++) {
         sptr<phys_vertex_t> pv = vertices[i];
         if (deleted_vertices.count(pv)) continue;
-
-        std::set<sptr<phys_vertex_t>> pv_adj = make_set(get_neighbors(pv));
+    
+        auto tmp = get_neighbors(pv);
+        std::set<sptr<phys_vertex_t>> pv_adj(tmp.begin(), tmp.end());
         for (size_t j = i+1; j < vertices.size(); j++) {
             sptr<phys_vertex_t> pw = vertices[j];
             if (deleted_vertices.count(pw)) continue;
@@ -101,12 +97,10 @@ PhysicalNetwork::make_flags() {
     //      vertices and update the connectivity.
     TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
 
-    template <class V> using v_pair_t=std::pair<sptr<V>, sptr<V>>;
-
     // The entries should be ordered pairs to avoid double counting.
     typedef std::set<v_pair_t<raw_vertex_t>>    flag_pair_set_t;
 
-    std::map<raw_vertex_t, flag_pair_set_t> proposed_flag_pair_map;
+    std::map<sptr<raw_vertex_t>, flag_pair_set_t> proposed_flag_pair_map;
     flag_pair_set_t all_proposed_flag_pairs;
 
     for (sptr<tanner::vertex_t> check : tanner_graph.get_checks()) {
@@ -118,22 +112,21 @@ PhysicalNetwork::make_flags() {
             sptr<raw_vertex_t> rx = raw_connection_network.v_tanner_raw_map.at(tx);
             support.push_back(rx);
         }
-        // Now, compute the flag setup.
-        ListGraph gr;   // This is for max-weight matching.
-        ListGraph::EdgeMap<int> w_map;
 
-        BijectiveMap<sptr<raw_vertex_t>, ListGraph::Node> data_lemon_map;
-        // First, create a node for each vertex in the support.
-        for (sptr<raw_vertex_t> rv : support) data_lemon_map.put(rv, gr.addNode());
-
+        // Perform the perfect matching:
+        typedef std::tuple<sptr<raw_vertex_t>, sptr<raw_vertex_t>, size_t>  weighted_edge_t;
+        std::vector<weighted_edge_t> edge_list;
+        size_t max_edge_weight = 0;
+        // In case anything is already matched, we will just forego including them in the matching
+        // problem and pre-assign them.
         flag_pair_set_t flag_pairs;
 
-        std::set<raw_vertex_t> visited;
-        for (size_t i = 0; i < support.size(); i++) {
-            sptr<raw_vertex_t> rv = support[i];
+        std::set<sptr<raw_vertex_t>> visited;
+        std::set<sptr<raw_vertex_t>> already_matched;
+        for (auto ita = support.begin(); ita != support.end(); ) {
+edge_build_outer_loop_start:
+            sptr<raw_vertex_t> rv = *ita;
             if (visited.count(rv)) continue;
-
-            auto vnode = data_lemon_map.at(rv);
             // We will the physical qubit (specifically its neighbors) each tick of the
             // inner loop.
             // Note that we only care about neighbors that are parity qubits.
@@ -141,29 +134,28 @@ PhysicalNetwork::make_flags() {
             std::set<sptr<phys_vertex_t>> p_neighbors;
             for (sptr<phys_vertex_t> x : get_neighbors(pv)) {
                 if (x->has_role_of_type(raw_vertex_t::type::xparity)
-                    || x->has_role_of_type(raw_vertex_t::type::zparity)
+                    || x->has_role_of_type(raw_vertex_t::type::zparity))
                 {
                     p_neighbors.insert(x);
                 }
             }
-            for (size_t j = i+1; j < support.size(); j++) {
-                sptr<raw_vertex_t> rw = support[j];
+            for (auto itb = ita+1; itb != support.end(); ) {
+                sptr<raw_vertex_t> rw = *itb;
                 if (visited.count(rw)) continue;
             
-                if (proposed_flag_pair_map.count(make_ordered_pair(rv, rw))) {
+                if (all_proposed_flag_pairs.count(make_ordered_pair(rv, rw))) {
                     // Then, rv and rw are already assigned. Move on.
                     visited.insert(rv);
                     visited.insert(rw);
-                    // Erase the lemon vertices so no vertex can match to rv or rw.
-                    gr.erase(data_lemon_map.at(rv));
-                    gr.erase(data_lemon_map.at(rw));
+                    // Erase the vertices from the support.
+                    ita = support.erase(ita);
+                    itb = support.erase(itb);
                     // Add this pair to the flag pairs.
                     flag_pairs.insert(make_ordered_pair(rv, rw));
-                    continue;
+                    already_matched.insert(rv);
+                    already_matched.insert(rw);
+                    goto edge_build_outer_loop_start;
                 }
-
-                auto wnode = data_lemon_map.at(rw);
-                auto edge = gr.addEdge(vnode, wnode);
                 // Get corresponding physical vertices, get number of common neighbors,
                 // and set the weight of edge to that.
                 sptr<phys_vertex_t> pw = role_to_phys[rw];
@@ -171,18 +163,37 @@ PhysicalNetwork::make_flags() {
                 for (sptr<phys_vertex_t> x : p_neighbors) {
                     common_neighbors += contains(pw, x);
                 }
-                w_map[edge] = static_cast<int>(common_neighbors);
+                edge_list.emplace_back(rv, rw, common_neighbors);
+                max_edge_weight = std::max(max_edge_weight, common_neighbors);
+                itb++;
             }
+            ita++;
         }
-        // Now, perform Max Weight Matching.
-        MaxWeightPerfectMatching maxwpm(gr, w_map);
-        maxwpm.run();
+        // Now, create the MWPM object.
+        PerfectMatching pm(support.size(), edge_list.size());
+        pm.options.verbose = false;
+        // Assign each node in the support to some node id.
+        BijectiveMap<sptr<raw_vertex_t>, size_t> data_node_map;
+        for (size_t i = 0; i < support.size(); i++) data_node_map.put(i, support[i]);
+        // Get the edges from the edge_list. Note that some of these edges are bad (i.e.
+        // containing a pre-matched vertex).
+        //
+        // We also need to reweight the edge by max_edge_weight - W -- this is a MWPM solver.
+        for (weighted_edge_t we : edge_list) {
+            sptr<raw_vertex_t> v = std::get<0>(we),
+                               w = std::get<1>(we);
+            size_t weight = max_edge_weight - std::get<2>(we);
+            if (already_matched.count(v) || already_matched.count(w)) continue;
+            pm.AddEdge(data_node_map.at(v), data_node_map.at(w), weight);
+        }
+        pm.Solve();
+        // Get the PM result.
         for (sptr<raw_vertex_t> rv : support) {
             if (visited.count(rv)) continue;
 
-            auto vnode = data_lemon_map.at(rv);
-            auto wnode = maxwpm.mate(vnode);
-            sptr<raw_vertex_t> rw = data_lemon_map.at(wnode);
+            size_t i = data_node_map.at(rv);
+            size_t j = pm.GetMatch(i);
+            sptr<raw_vertex_t> rw = data_node_map.at(j);
             
             flag_pairs.insert(make_ordered_pair(rv, rw));
             visited.insert(rv);
@@ -251,8 +262,7 @@ PhysicalNetwork::make_flags() {
         sptr<phys_vertex_t> pv1 = role_to_phys[rv1],
                             pv2 = role_to_phys[rv2];
 
-        sptr<phys_vertex_t> pfq = std::make_shared<>();
-        pfq->id = id_ctr++;
+        sptr<phys_vertex_t> pfq = make_vertex();
 
         std::set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv1, pv2};
         for (auto& p2 : role_set) {
@@ -261,11 +271,11 @@ PhysicalNetwork::make_flags() {
             sptr<phys_vertex_t> ppq = role_to_phys[rpq];
 
             // Compute cycle for role. This is the maximum of the cycles of rv1, rv2, and rfq.
-            size_t cycle = std::max(pv1->cycle_role_map.at(rv1),
+            size_t cycle = std::max({pv1->cycle_role_map.at(rv1),
                                     pv2->cycle_role_map.at(rv2),
-                                    ppq->cycle_role_map.at(rpq));
+                                    ppq->cycle_role_map.at(rpq)});
             pfq->push_back_role(rfq, cycle);
-            parity_qubits_connected_to_pfq.insert(ppq);
+            qubits_connected_to_pfq.insert(ppq);
             // Delete edge between pv1/pv2 and ppq (if it exists).
             if (contains(pv1, ppq)) {
                 delete_edge(get_edge(pv1, ppq));
@@ -276,10 +286,7 @@ PhysicalNetwork::make_flags() {
         }
         // Add edges for pfq.
         for (sptr<phys_vertex_t> x : qubits_connected_to_pfq) {
-            sptr<phys_edge_t> pe = std::make_shared<>();
-            pe->src = pfq;
-            pe->dst = x;
-            pe->is_undirected = true;
+            sptr<phys_edge_t> pe = make_edge(pfq, x);
             add_edge(pe);
         }
     }
@@ -297,8 +304,7 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         size_t slack_violation = dg - config.max_connectivity;
         std::vector<sptr<phys_vertex_t>> adj = get_neighbors(pv);
 
-        sptr<phys_vertex_t> pprx = std::make_shared<>();
-        pprx->id = id_ctr++;
+        sptr<phys_vertex_t> pprx = make_vertex();
         // Let k = slack_violation. Then the top k neighbors will
         // be serviced by the proxy.
         std::set<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
@@ -313,20 +319,17 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                     sptr<raw_vertex_t> rprx = raw_connection_network.add_proxy(re);
                     // Get cycle of role (which is just the max of the cycles of rv and rx).
                     size_t cycle = std::max(pv->cycle_role_map.at(rv), px->cycle_role_map.at(rx));
-                    pprx.push_back_role(rprx, cycle);
+                    pprx->push_back_role(rprx, cycle);
                 }
             }
             share_an_edge_with_pprx.insert(px);
             // Delete px's edge with pv.
             sptr<phys_edge_t> pe = get_edge(pv, px);
-            delete_edge(pv, px);
+            delete_edge(pe);
         }
         // Update the physical connectivity on our side.
         for (sptr<phys_vertex_t> x : share_an_edge_with_pprx) {
-            sptr<phys_edge_t> e = std::make_shared<>();
-            e->src = pprx;
-            e->dst = x;
-            e->is_undirected = true;
+            sptr<phys_edge_t> e = make_edge(pprx, x);
             add_edge(e);
         }
     }
@@ -359,16 +362,13 @@ PhysicalNetwork::contract_small_degree_qubits() {
             px1->consume(pv);
             delete_vertex(pv);
 
-            sptr<phys_edge_t> pe = std::make_shared<>();
-            pe->src = px1;
-            pe->dst = px2;
-            pe->is_undirected = true;
+            sptr<phys_edge_t> pe = make_edge(px1, px2);
             add_edge(pe);
         }
     }
     // Call this iteratively until we can't progress, as contractions may
     // reveal new redundancies.
-    if (were_any_qubits_contracted) contract_degree_two_qubits();
+    if (were_any_qubits_contracted) contract_small_degree_qubits();
 }
 
 stim::simd_bits<SIMD_WIDTH>
@@ -391,7 +391,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 
     // The first entry are the qubits in the operator.
     // THe second entry is a simple hash that allows us to check if two operators are equivalent.
-    typedef std::tuple<<std::set<sptr<raw_vertex_t>>, stim::simd_bits<SIMD_WIDTH>> quop_t;
+    typedef std::tuple<std::set<sptr<raw_vertex_t>>, stim::simd_bits<SIMD_WIDTH>> quop_t;
     std::vector<quop_t> curr_operator_tree_level;
 
     const size_t HASH_SIZE = obs_list.size() + tanner_graph.get_checks().size()/2;
@@ -400,7 +400,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     for (size_t i = 0; i < obs_list.size(); i++) {
         std::set<sptr<raw_vertex_t>> obs;
         for (sptr<tanner::vertex_t> x : obs_list[i]) {
-            obs.push_back(raw_connection_network.v_tanner_raw_map.at(x));
+            obs.insert(raw_connection_network.v_tanner_raw_map.at(x));
         }
         stim::simd_bits<SIMD_WIDTH> h(HASH_SIZE);
         h[i] = 1;
@@ -416,7 +416,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
         // Get the support of the check.
         std::set<sptr<raw_vertex_t>> stabilizer;
         for (sptr<tanner::vertex_t> tx : tanner_graph.get_neighbors(tpq)) {
-            stabilizer.push_back(raw_connection_network.v_tanner_raw_map.at(tx));
+            stabilizer.insert(raw_connection_network.v_tanner_raw_map.at(tx));
         }
         stim::simd_bits<SIMD_WIDTH> h(HASH_SIZE);
         h[HASH_STABILIZER_OFFSET + i] = 1;
@@ -424,7 +424,10 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
         checks.push_back(std::make_tuple(stabilizer, h));
     }
     // Perform a BFS via the operator tree.
-    while (curr_operator_tree_level.size() && result.not_zero()) {
+    while (curr_operator_tree_level.size() > 0
+        && curr_operator_tree_level.size() < OPERATOR_TREE_SIZE_LIMIT 
+        && result.not_zero()) 
+    {
         // Check if any flags are a weight >2 error on any existing operators.
         std::vector<quop_t> next_level;
         for (quop_t op : curr_operator_tree_level) {
@@ -454,11 +457,11 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
                 stim::simd_bits<SIMD_WIDTH> common_hash_bits = op_hash & stab_hash;
                 if (common_hash_bits.not_zero()) continue;
 
-                std::set<raw_vertex_t> common_qubits = op_qubits * stab_qubits;
+                std::set<sptr<raw_vertex_t>> common_qubits = op_qubits * stab_qubits;
                 if (common_qubits.empty()) continue;
 
                 // Otherwise, everything is fine.
-                std::set<raw_vertex_t> new_qubits = op_qubits + stab_qubits;
+                std::set<sptr<raw_vertex_t>> new_qubits = op_qubits + stab_qubits;
                 stim::simd_bits<SIMD_WIDTH> new_hash = op_hash | stab_hash;
                 next_level.push_back(std::make_tuple(new_qubits, new_hash));
             }

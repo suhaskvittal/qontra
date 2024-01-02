@@ -54,8 +54,15 @@ phys_edge_t::is_out_of_plane() {
 }   // net
 
 inline sptr<net::raw_vertex_t>
+RawNetwork::make_vertex() {
+    sptr<net::raw_vertex_t> v = std::make_shared<net::raw_vertex_t>();
+    v->id = id_ctr++;
+    return v;
+}
+
+inline sptr<net::raw_vertex_t>
 RawNetwork::add_proxy(sptr<net::raw_vertex_t> q1, sptr<net::raw_vertex_t> q2) {
-    sptr<raw_edge_t> e = get_edge(q1, q2);
+    sptr<net::raw_edge_t> e = get_edge(q1, q2);
     return add_proxy(e);
 }
 
@@ -82,15 +89,15 @@ ProcessorLayer::add_edge(sptr<net::phys_edge_t> e) {
     if (!is_planar()) {
         // Delete the edge.
         delete_edge(e);
-        return e;
+        return false;
     }
     return true;
 }
 
 inline size_t
 ProcessorLayer::get_max_endpoint_degree(sptr<net::phys_edge_t> e) {
-    sptr<net::phys_vertex_t> v = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
-                             w = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
+    sptr<net::phys_vertex_t> v = get_source(e),
+                             w = get_target(e);
     return std::max(get_degree(v), get_degree(w));
 }
 
@@ -153,8 +160,15 @@ PhysicalNetwork::delete_edge(sptr<net::phys_edge_t> e) {
     processor_layers[e->tsv_layer].delete_edge(e);
 }
 
+inline sptr<net::phys_vertex_t>
+PhysicalNetwork::make_vertex() {
+    sptr<net::phys_vertex_t> v = std::make_shared<net::phys_vertex_t>();
+    v->id = id_ctr++;
+    return v;
+}
+
 inline bool
-PhysicalNetwork::test_and_move_edge_down(sptr<net::phys_edge_t e>) {
+PhysicalNetwork::test_and_move_edge_down(sptr<net::phys_edge_t> e) {
     if (!e->is_out_of_plane()) return false;
     auto& curr_layer = processor_layers[e->tsv_layer];
     auto& next_layer = processor_layers[e->tsv_layer-1];
@@ -186,7 +200,7 @@ PhysicalNetwork::push_back_new_processor_layer() {
         new_layer.add_vertex(v);
     }
     processor_layers.push_back(new_layer);
-    return new_layer;
+    return processor_layers.back();
 }
 
 inline void

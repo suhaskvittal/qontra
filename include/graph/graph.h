@@ -272,6 +272,25 @@ public:
         graph_has_changed = true; 
         update_state(); 
     }
+
+    virtual inline sptr<V> make_vertex(void) {
+        return std::make_shared<V>();
+    }
+
+    virtual inline sptr<E> make_edge(sptr<V> src, sptr<V> dst) {
+        sptr<E> e = std::make_shared<E>();
+        e->src = src;
+        e->dst = dst;
+        return e;
+    }
+
+    virtual inline sptr<V> get_source(sptr<E> e) {
+        return std::reinterpret_pointer_cast<V>(e->src);
+    }
+
+    virtual inline sptr<V> get_target(sptr<E> e) {
+        return std::reinterpret_pointer_cast<V>(e->dst);
+    }
 protected:
     // Updates graph if graph_has_changed is set.
     // Subclasses should override this method if they track state in any way.
