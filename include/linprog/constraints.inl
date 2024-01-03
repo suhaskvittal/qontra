@@ -10,10 +10,8 @@ lp_constr_t::lp_constr_t(lp_expr_t _lhs, lp_expr_t _rhs, lp_constr_t::direction 
 {
     // Move rhs to the lhs.
     _lhs -= _rhs;
-
-    _rhs = static_cast<lp_expr_t>(-_lhs.constant);
     lhs = _lhs;
-    rhs = -_lhs.constant - _rhs.constant;
+    rhs = -_lhs.constant;
     lhs.constant = 0;
 }
 

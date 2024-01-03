@@ -3,7 +3,7 @@
  *  date:   28 December 2023
  * */
 
-lp_expr_t::lp_expr_t(double c=0.0)
+lp_expr_t::lp_expr_t(double c)
     :l_coefs(),
     q_coefs(),
     constant(c)

@@ -32,7 +32,7 @@ struct lp_quad_var_t {
 };
 
 struct lp_expr_t {
-    lp_expr_t(double);
+    lp_expr_t(double=0.0);
     lp_expr_t(lp_var_t);
     lp_expr_t(lp_quad_var_t);
     lp_expr_t(const lp_expr_t&);
@@ -98,4 +98,4 @@ struct lp_constr_t {
 #include "constraints.inl"
 #include "operations.inl"
 
-#endif
+#endif  // LINPROG_BASE_h

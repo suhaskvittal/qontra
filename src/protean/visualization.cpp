@@ -3,7 +3,6 @@
  *  date:   29 December 2023
  * */
 
-#include "protean/visualization.h"
 #include "protean/visualization_attr.h"
 #include "protean/visualization_lp.h"
 
@@ -15,7 +14,7 @@ namespace qontra {
 namespace protean {
 
 void
-write_to_dot(std::string output_file, PhysicalNetwork& network, render_config_t config) {
+render_network(std::string output_file, PhysicalNetwork& network, render_config_t config) {
     GVC_t* gvc = gvContext();
 
     Agraph_t* gr = cxx_agopen("processor", Agundirected, NULL);

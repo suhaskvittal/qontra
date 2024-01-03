@@ -3,6 +3,9 @@
  *  date:   28 December 2023
  * */
 
+#ifndef PROTEAN_VISUALIZATION_ATTRIBUTES_h
+#define PROTEAN_VISUALIZATION_ATTRIBUTES_h
+
 #include "protean/network.h"
 
 #include <string>
@@ -32,3 +35,5 @@ attr_list_t get_attributes(sptr<net::phys_edge_t>);
 
 }   // protean
 }   // qontra
+
+#endif  // PROTEAN_VISUALIZATION_ATTRIBUTES_h

@@ -13,7 +13,7 @@ inline fp_t sqr(fp_t x) {
 }
 
 void
-lp_add_minimum_distance_constraints(LP& mgr, PhysicalNetwork network, placement_config_t config) {
+lp_add_minimum_distance_constraints(LP& mgr, PhysicalNetwork& network, placement_config_t config) {
     auto vertices = network.get_vertices();
     for (size_t i = 0; i < vertices.size(); i++) {
         sptr<net::phys_vertex_t> v = vertices[i];
@@ -33,7 +33,7 @@ lp_add_minimum_distance_constraints(LP& mgr, PhysicalNetwork network, placement_
 }
 
 lp_expr_t
-lp_add_crossing_edges_objective(LP& mgr, PhysicalNetwork network, placement_config_t config) {
+lp_add_crossing_edges_objective(LP& mgr, PhysicalNetwork& network, placement_config_t config) {
     const fp_t M = config.x_max - config.x_min;
     const lp_var_t::domain svardom = config.edge_crossing_relax_variables ? 
                                         lp_var_t::domain::continuous : lp_var_t::domain::integer;
