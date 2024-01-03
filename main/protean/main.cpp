@@ -10,6 +10,7 @@
 #include <protean/visualization.h>
 
 using namespace qontra;
+using namespace graph;
 using namespace protean;
 
 int main(int argc, char* argv[]) {
@@ -24,7 +25,7 @@ int main(int argc, char* argv[]) {
 
     pp.get_string("render", render_output_file);
 
-    TannerGraph tanner_graph = create_graph_from_file(tanner_graph_file, update_tanner_graph);
+    TannerGraph tanner_graph = create_graph_from_file<TannerGraph>(tanner_graph_file, io::update_tanner_graph);
 
     // Make network:
     PhysicalNetwork network(tanner_graph);

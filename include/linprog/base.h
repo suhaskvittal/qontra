@@ -38,6 +38,8 @@ struct lp_expr_t {
     lp_expr_t(const lp_expr_t&);
     lp_expr_t(lp_expr_t&&);
 
+    bool is_quadratic(void);
+
     lp_expr_t& operator=(const lp_expr_t&);
     
     // Arithmetic operator overloads:
@@ -86,9 +88,9 @@ struct lp_constr_t {
 
     bool is_quadratic(void);
 
-    lp_expr_t<T> lhs;
-    double rhs;
-    ConstraintDirection relation;
+    lp_expr_t   lhs;
+    double      rhs;
+    direction   relation;
 };
 
 #include "variables.inl"

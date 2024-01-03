@@ -8,6 +8,10 @@
 namespace qontra {
 namespace protean {
 
+inline fp_t sqr(fp_t x) {
+    return x*x;
+}
+
 void
 lp_add_minimum_distance_constraints(LP& mgr, PhysicalNetwork network, placement_config_t config) {
     auto vertices = network.get_vertices();
@@ -32,7 +36,7 @@ lp_expr_t
 lp_add_crossing_edges_objective(LP& mgr, PhysicalNetwork network, placement_config_t config) {
     const fp_t M = config.x_max - config.x_min;
     const lp_var_t::domain svardom = config.edge_crossing_relax_variables ? 
-                                        lp_var_t::continuous : lp_var_t::integer;
+                                        lp_var_t::domain::continuous : lp_var_t::domain::integer;
 
     lp_expr_t crossing_edge_sum;
     auto edges = network.get_edges();
@@ -40,7 +44,7 @@ lp_add_crossing_edges_objective(LP& mgr, PhysicalNetwork network, placement_conf
     size_t indicator_count = 0;
     for (size_t i = 0; i < edges.size(); i++) {
         sptr<net::phys_edge_t> e1 = edges[i];
-        if (e1->is_out_of_plane) continue;
+        if (e1->is_out_of_plane()) continue;
 
         sptr<net::phys_vertex_t> v11 = std::reinterpret_pointer_cast<net::phys_vertex_t>(e1->src),
                                  v12 = std::reinterpret_pointer_cast<net::phys_vertex_t>(e1->dst);
@@ -50,7 +54,7 @@ lp_add_crossing_edges_objective(LP& mgr, PhysicalNetwork network, placement_conf
                  y12 = mgr.get_var(get_y(v12));
         for (size_t j = i+1; j < edges.size(); j++) {
             sptr<net::phys_edge_t> e2 = edges[j];
-            if (e2->is_out_of_plane) continue;
+            if (e2->is_out_of_plane()) continue;
 
             sptr<net::phys_vertex_t> v21 = std::reinterpret_pointer_cast<net::phys_vertex_t>(e2->src),
                                      v22 = std::reinterpret_pointer_cast<net::phys_vertex_t>(e2->dst);
@@ -101,7 +105,7 @@ lp_add_crossing_edges_objective(LP& mgr, PhysicalNetwork network, placement_conf
             mgr.add_constraint(byyc);
             // Finally, make the constraint for the indicator variable.
             lp_var_t ind = mgr.add_slack_var(0.0, 1.0, lp_var_t::bounds::both, svardom);
-            lp_constr_t indc(2*ind + 1 - bxx - byy, 0, lp_var_t::bounds::geq);
+            lp_constr_t indc(2*ind + 1 - bxx - byy, 0, lp_constr_t::direction::ge);
             mgr.add_constraint(indc);
 
             crossing_edge_sum += ind;
@@ -116,14 +120,14 @@ crossing_edge_exit:
 lp_expr_t
 lp_add_edge_distance_objective(LP& mgr, PhysicalNetwork& network) {
     lp_expr_t edge_length_sum;
-    for (sptr<net::phys_vertex_t> v : vertices) {
+    for (sptr<net::phys_vertex_t> v : network.get_vertices()) {
         lp_var_t xi = mgr.get_var(get_x(v)),
                  yi = mgr.get_var(get_y(v));
         auto neighbors = network.get_neighbors(v);
         for (size_t i = 0; i < neighbors.size(); i++) {
             sptr<net::phys_vertex_t> w = neighbors[i];
             sptr<net::phys_edge_t> e = network.get_edge(v, w);
-            if (e->is_out_of_plane) continue;
+            if (e->is_out_of_plane()) continue;
             // Otherwise, we can continue.
             lp_var_t xj = mgr.get_var(get_x(w)),
                      yj = mgr.get_var(get_y(w));

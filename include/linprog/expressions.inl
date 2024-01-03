@@ -37,6 +37,11 @@ lp_expr_t::lp_expr_t(lp_expr_t&& other)
     constant(other.constant)
 {}
 
+inline bool
+lp_expr_t::is_quadratic() {
+    return !q_coefs.empty();
+}
+
 inline lp_expr_t&
 lp_expr_t::operator=(const lp_expr_t& other) {
     l_coefs = other.l_coefs;

@@ -35,7 +35,7 @@ inline void cpxfreeprog(CPXENVptr env, CPXLPptr prog) {
 }
 
 template <class T>
-CPXLPManager::CPXLPManager(CPXENVptr _env)
+CPXLPManager<T>::CPXLPManager(CPXENVptr _env)
     :variables(),
     l_constraints(),
     q_constraints(),
@@ -57,19 +57,19 @@ CPXLPManager::CPXLPManager(CPXENVptr _env)
 }
 
 template <class T>
-CPXLPManager::~CPXLPManager() {
-    cpxfreeprog();
+CPXLPManager<T>::~CPXLPManager() {
+    cpxfreeprog(env, prog);
     if (env_is_initialized_by_object) cpxexit(&env);
 }
 
 template <class T> void
-CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
+CPXLPManager<T>::build(lp_expr_t objective, bool is_maximization) {
     int status;
 
     cpxfreeprog(env, prog);
     cpxmakeprog(env, prog, "lp");
 
-    status = CPXXchgobjsen(env, prog, is_maximization ? CPX_MAX, CPX_MIN);
+    status = CPXXchgobjsen(env, prog, is_maximization ? CPX_MAX : CPX_MIN);
     handle_status(status);
 
     // Declare variables column-wise.
@@ -82,16 +82,16 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
     prog_type = q_constraints.empty() ? problem_type::lp : problem_type::qp;
     for (size_t i = 0; i < columns; i++) {
         lp_var_t v = variables[i];
-        if (objective.coefs.count(v)) {
-            obj[i] = objective.coefs[v];
+        if (objective.l_coefs.count(v)) {
+            obj[i] = objective.l_coefs[v];
         }
 
-        bool lwr_defined = v.bounds_type == VarBounds::lower
-                            || v.bounds_type == VarBounds::both
-                            || v.bounds_type == VarBounds::fixed;
-        bool upp_defined = v.bounds_type == VarBounds::upper
-                            || v.bounds_type == VarBounds::both
-                            || v.bounds_type == VarBounds::fixed;
+        bool lwr_defined = v.bounds_type == lp_var_t::bounds::lower
+                            || v.bounds_type == lp_var_t::bounds::both
+                            || v.bounds_type == lp_var_t::bounds::fixed;
+        bool upp_defined = v.bounds_type == lp_var_t::bounds::upper
+                            || v.bounds_type == lp_var_t::bounds::both
+                            || v.bounds_type == lp_var_t::bounds::fixed;
         
         lb[i] = lwr_defined ? v.lwr : -CPX_INFBOUND;
         ub[i] = upp_defined ? v.upp : CPX_INFBOUND;
@@ -112,6 +112,14 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
     free(lb);
     free(ub);
     free(vtypes);
+    // Set any quadratic coefficients if necessary.
+    if (objective.is_quadratic()) {
+        for (auto& pair : objective.q_coefs) {
+            lp_quad_var_t qvar = pair.first;
+            double x = pair.second;
+            CPXXchgqpcoef(env, prog, qvar.v1.column, qvar.v2.column, x);
+        }
+    }
 
     // Now, declare the constraints.
     if (rows == 0) return;
@@ -120,7 +128,7 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
     // the LINEAR constraints.
     int num_nonzeros = 0;
     for (auto& con : l_constraints) {
-        num_nonzeros += con.lhs.coefs.size();
+        num_nonzeros += con.lhs.l_coefs.size();
     }
     // Now, we need to populate the data structures to declare the
     // constraints.
@@ -141,7 +149,7 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
         sense[i] = get_sense(con);
         // We will not have anything else.
         rmatbeg[i] = offset;
-        for (auto kv : con.lhs.coefs) {
+        for (auto kv : con.lhs.l_coefs) {
             lp_var_t v = kv.first;
             rmatind[offset] = v.column;
             rmatval[offset] = kv.second;
@@ -170,13 +178,13 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
         double* quadval = reinterpret_cast<double*>(malloc(n_nonzero_quad * sizeof(double)));
 
         size_t k = 0;
-        for (auto& kv : con.lhs.l_coefs)) {
+        for (auto& kv : con.lhs.l_coefs) {
             linind[k] = kv.first.column;
             linval[k] = kv.second;
             k++;
         }
         k = 0;
-        for (auto& kv : con.lhs.q_coefs)) {
+        for (auto& kv : con.lhs.q_coefs) {
             quadrow[k] = kv.first.v1.column;
             quadrow[k] = kv.first.v2.column;
             quadval[k] = kv.second;
@@ -190,7 +198,7 @@ CPXLPManager::build(lp_expr_t objective, bool is_maximization) {
 }
 
 template <class T> inline bool
-CPXLPManager::solve(double* obj_p, int* solstat_p) {
+CPXLPManager<T>::solve(double* obj_p, int* solstat_p) {
     int status;
     if (prog_type == problem_type::lp) {
         status = CPXXlpopt(env, prog);
@@ -199,7 +207,7 @@ CPXLPManager::solve(double* obj_p, int* solstat_p) {
     } else if (prog_type == problem_type::mip) {
         status = CPXXmipopt(env, prog);
     } else {
-        std::cerr << "CPXLPManager: unsupported problem type\n";
+        std::cerr << "CPXLPManager<T>: unsupported problem type\n";
         return false;
     }
     handle_status(status);
@@ -213,23 +221,23 @@ CPXLPManager::solve(double* obj_p, int* solstat_p) {
 }
 
 template <class T> inline void
-CPXLPManager::solve_pool() {
+CPXLPManager<T>::solve_pool() {
     int status = CPXXpopulate(env, prog);
     handle_status(status);
 }
 
 template <class T> inline lp_var_t
-CPXLPManager::get_var(T label) {
+CPXLPManager<T>::get_var(T label) {
     return label_to_lp_var[label];
 }
 
 template <class T> inline double
-CPXLPManager::get_value(T label) {
+CPXLPManager<T>::get_value(T label) {
     return prog_soln[label_to_lp_var[label].column];
 }
 
 template <class T> inline lp_var_t
-CPXLPManager::add_slack_var(double lwr, double upp, lp_var_t::bounds btype, lp_var_t::domain vtype) {
+CPXLPManager<T>::add_slack_var(double lwr, double upp, lp_var_t::bounds btype, lp_var_t::domain vtype) {
     lp_var_t v;
     v.column = columns++;
     v.lwr = lwr;
@@ -241,14 +249,14 @@ CPXLPManager::add_slack_var(double lwr, double upp, lp_var_t::bounds btype, lp_v
 }
 
 template <class T> inline lp_var_t
-CPXLPManager::add_var(T label, double lwr, double upp, lp_var_t::bounds btype, lp_var_t::domain vtype) {
+CPXLPManager<T>::add_var(T label, double lwr, double upp, lp_var_t::bounds btype, lp_var_t::domain vtype) {
     lp_var_t v = add_slack_var(lwr, upp, btype, vtype);
     label_to_lp_var[label] = v;
     return v;
 }
 
 template <class T> inline size_t 
-CPXLPManager::add_constraint(lp_constr_t con) {
+CPXLPManager<T>::add_constraint(lp_constr_t con) {
     auto& constraints_array = con.is_quadratic() ? q_constraints : l_constraints;
     if (con.relation == lp_constr_t::direction::neq) {
         const double M = 10'000'000;
@@ -268,24 +276,24 @@ CPXLPManager::add_constraint(lp_constr_t con) {
 }
 
 template <class T> inline size_t
-CPXLPManager::get_soln_pool_size() {
+CPXLPManager<T>::get_soln_pool_size() {
     return CPXXgetsolnpoolnumsolns(env, prog);
 }
 
 template <class T> inline double
-CPXLPManager::fetch_soln_from_pool(size_t k) {
+CPXLPManager<T>::fetch_soln_from_pool(size_t k) {
     int fincols = CPXXgetnumcols(env, prog);
     if (prog_soln != NULL)  free(prog_soln);
     prog_soln = reinterpret_cast<double>(malloc(fincols * sizeof(double)));
 
     double obj;
-    status = CPXXgetsolnpoolobjval(env, prog, k, &obj);
-    status = CPXXgetsolnpoolx(env, prog, k, prog_soln, 0, fincols-1);
+    handle_status(CPXXgetsolnpoolobjval(env, prog, k, &obj));
+    handle_status(CPXXgetsolnpoolx(env, prog, k, prog_soln, 0, fincols-1));
     return obj;
 }
 
-inline char
-CPXLPManager::get_sense(lp_constr_t con) {
+template <class T> inline char
+CPXLPManager<T>::get_sense(lp_constr_t con) {
     if (con.relation == lp_constr_t::direction::ge) {
         return 'G';
     } else if (con.relation == lp_constr_t::direction::le) {

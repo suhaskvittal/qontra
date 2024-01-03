@@ -19,7 +19,7 @@ namespace protean {
 
 // Useful typdefs:
 template <size_t N> using coord_t=std::array<fp_t, N>;
-typedef BijectiveMap<coord_t<2>, net::phys_vertex_t> Plane;
+typedef BijectiveMap<coord_t<2>, sptr<net::phys_vertex_t>> Plane;
 
 // Main visualization functions:
 //

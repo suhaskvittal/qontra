@@ -5,8 +5,8 @@
 
 inline lp_quad_var_t operator*(lp_var_t v, lp_var_t w) {
     lp_quad_var_t q;
-    q->v1 = v;
-    q->v2 = w;
+    q.v1 = v;
+    q.v2 = w;
     return q;
 } 
 
