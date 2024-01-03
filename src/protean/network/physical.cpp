@@ -1,5 +1,4 @@
-/* author: Suhas Vittal
- *  date:   27 December 2023
+/* author: Suhas Vittal date:   27 December 2023
  * */
 
 
@@ -36,6 +35,7 @@ PhysicalNetwork::PhysicalNetwork(TannerGraph& tgr)
     // Other variables:
     id_ctr(0)
 {
+    push_back_new_processor_layer(); // The first ever processor layer.
     // Create a corresponding physical qubit for every vertex in raw_connection_network.
     for (sptr<raw_vertex_t> rv : raw_connection_network.get_vertices()) {
         sptr<phys_vertex_t> pv = make_vertex();
@@ -60,19 +60,21 @@ PhysicalNetwork::join_qubits_with_identical_support() {
     for (size_t i = 0; i < vertices.size(); i++) {
         sptr<phys_vertex_t> pv = vertices[i];
         if (deleted_vertices.count(pv)) continue;
+        if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
     
         auto tmp = get_neighbors(pv);
         std::set<sptr<phys_vertex_t>> pv_adj(tmp.begin(), tmp.end());
         for (size_t j = i+1; j < vertices.size(); j++) {
             sptr<phys_vertex_t> pw = vertices[j];
             if (deleted_vertices.count(pw)) continue;
+            if (pw->has_role_of_type(raw_vertex_t::type::data)) continue;
 
             size_t common_neighbors = 0;
             for (sptr<phys_vertex_t> x : pv_adj) {
                 common_neighbors += contains(pw, x);
             }
             if (common_neighbors == pv_adj.size()) {
-                pv->consume(pw);    // Now, pv contains all the roles of pw.
+                consume(pv, pw); // Now, pv contains all the roles of pw.
                 deleted_vertices.insert(pw);
             }
         }
@@ -125,8 +127,8 @@ PhysicalNetwork::make_flags() {
         std::set<sptr<raw_vertex_t>> already_matched;
         for (auto ita = support.begin(); ita != support.end(); ) {
 edge_build_outer_loop_start:
+            if (ita == support.end()) break;
             sptr<raw_vertex_t> rv = *ita;
-            if (visited.count(rv)) continue;
             // We will the physical qubit (specifically its neighbors) each tick of the
             // inner loop.
             // Note that we only care about neighbors that are parity qubits.
@@ -141,15 +143,17 @@ edge_build_outer_loop_start:
             }
             for (auto itb = ita+1; itb != support.end(); ) {
                 sptr<raw_vertex_t> rw = *itb;
-                if (visited.count(rw)) continue;
             
                 if (all_proposed_flag_pairs.count(make_ordered_pair(rv, rw))) {
                     // Then, rv and rw are already assigned. Move on.
-                    visited.insert(rv);
-                    visited.insert(rw);
                     // Erase the vertices from the support.
-                    ita = support.erase(ita);
+                    // 
+                    // Unsafe implementation hack: we need to delete two iterators,
+                    // but erase does not guarantee that ita/itb will be valid after
+                    // the erase of one. But, logically deleting an element later
+                    // in the array (itb) should not affect an earlier element (ita).
                     itb = support.erase(itb);
+                    ita = support.erase(ita);
                     // Add this pair to the flag pairs.
                     flag_pairs.insert(make_ordered_pair(rv, rw));
                     already_matched.insert(rv);
@@ -182,7 +186,7 @@ edge_build_outer_loop_start:
         for (weighted_edge_t we : edge_list) {
             sptr<raw_vertex_t> v = std::get<0>(we),
                                w = std::get<1>(we);
-            size_t weight = max_edge_weight - std::get<2>(we);
+            size_t weight = max_edge_weight - std::get<2>(we) + 1;
             if (already_matched.count(v) || already_matched.count(w)) continue;
             pm.AddEdge(data_node_map.at(v), data_node_map.at(w), weight);
         }
@@ -217,6 +221,8 @@ edge_build_outer_loop_start:
         }
     }
     std::array<flag_pair_set_t, 2> flag_pair_sets{x_flags, z_flags};
+
+    std::cout << "[ debug ] flags before error-propagation analysis: " << all_proposed_flag_pairs.size() << "\n";
     for (size_t i = 0; i < 2; i++) {
         flag_pair_set_t& flags = flag_pair_sets[i];
         stim::simd_bits<SIMD_WIDTH> indicator_bits = do_flags_protect_weight_two_error(flags, i==0);
@@ -231,6 +237,7 @@ edge_build_outer_loop_start:
             }
         }
     }
+    std::cout << "[ debug ] flags after error-propagation analysis: " << all_proposed_flag_pairs.size() << "\n";
 
     // First, we will create flags for each parity qubit. This ignores the case where (q1, q2)
     // is a flag in two different parity qubits. However, note we are only interested in establishing
@@ -263,7 +270,6 @@ edge_build_outer_loop_start:
                             pv2 = role_to_phys[rv2];
 
         sptr<phys_vertex_t> pfq = make_vertex();
-
         std::set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv1, pv2};
         for (auto& p2 : role_set) {
             sptr<raw_vertex_t> rpq = p2.first,
@@ -281,15 +287,17 @@ edge_build_outer_loop_start:
                 delete_edge(get_edge(pv1, ppq));
             } 
             if (contains(pv2, ppq)) {
-                delete_edge(get_edge(pv1, ppq));
+                delete_edge(get_edge(pv2, ppq));
             }
         }
         // Add edges for pfq.
+        add_vertex(pfq);
         for (sptr<phys_vertex_t> x : qubits_connected_to_pfq) {
             sptr<phys_edge_t> pe = make_edge(pfq, x);
             add_edge(pe);
         }
     }
+    reallocate_edges();
 }
 
 void
@@ -339,36 +347,49 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
 
 void
 PhysicalNetwork::contract_small_degree_qubits() {
-    bool were_any_qubits_contracted = false;
+    std::vector<sptr<phys_edge_t>> new_edges;
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
         
         const size_t dg = get_degree(pv);
         if (dg > 2) continue;
         
-        were_any_qubits_contracted = true;
-        
         if (dg == 1) {
             sptr<phys_vertex_t> px = get_neighbors(pv)[0];
+            if (px->has_role_of_type(raw_vertex_t::type::data)) continue;
+
+            std::cout << "[ debug ] contracting " << print_v(pv) << " into " << print_v(px) << "\n";
+
             // This is simple -- just have px consume pv and delete pv.
-            px->consume(pv);
+            consume(px, pv);
             delete_vertex(pv);
         } else {    // dg == 2
             sptr<phys_vertex_t> px1 = get_neighbors(pv)[0],
                                 px2 = get_neighbors(pv)[1];
             // Simple: delete pv, and just add an edge between px1 and px2.
             //
-            // Move roles of pv to px1.
-            px1->consume(pv);
-            delete_vertex(pv);
+            // Move roles of pv to px1 or px2.
+            if (!px1->has_role_of_type(raw_vertex_t::type::data)) {
+                consume(px1, pv);
+            } else if (!px2->has_role_of_type(raw_vertex_t::type::data)) {
+                consume(px2, pv); 
+            } else {
+                continue;
+            }
+            std::cout << "[ debug ] contracting " << print_v(pv) << " into u(" 
+                    << print_v(px1) << "," << print_v(px2) << ")\n";
 
-            sptr<phys_edge_t> pe = make_edge(px1, px2);
-            add_edge(pe);
+            delete_vertex(pv);
+            if (!contains(px1, px2)) {
+                new_edges.push_back(make_edge(px1, px2));
+            }
         }
     }
-    // Call this iteratively until we can't progress, as contractions may
-    // reveal new redundancies.
-    if (were_any_qubits_contracted) contract_small_degree_qubits();
+    for (auto e : new_edges) {
+        add_edge(e);
+        std::cout << "[ debug ] adding edge " << print_e<phys_vertex_t>(e) << " to L" << e->tsv_layer << "\n";
+    }
+    reallocate_edges();
 }
 
 stim::simd_bits<SIMD_WIDTH>
@@ -468,6 +489,9 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
         }
         curr_operator_tree_level = std::move(next_level);
     }
+    if (curr_operator_tree_level.size() > OPERATOR_TREE_SIZE_LIMIT) {
+        std::cerr << "[ status ] operator tree limit reached. exiting error propagation analysis.\n";
+    }
     return result;
 }
 
@@ -478,10 +502,12 @@ PhysicalNetwork::make_schedule() {
 
 void
 PhysicalNetwork::reallocate_edges() {
+    std::cout << "[ debug ] reallocating edges | # of layers = " << get_thickness() << "\n";
     // Top-down: trickle down the edges as much as possible.
-    for (size_t k = get_thickness()-1; k > 0; k++) {
+    bool any_edges_were_reallocated = false;
+    for (size_t k = get_thickness()-1; k > 0; k--) {
         ProcessorLayer& curr = processor_layers[k];
-        ProcessorLayer& next = processor_layers[k+1];
+        ProcessorLayer& next = processor_layers[k-1];
         // Get a sorted list of edges in curr, sorted from least to greatest
         // by their max_endpoint_degree in next.
         auto edge_list = curr.get_edges();
@@ -492,7 +518,7 @@ PhysicalNetwork::reallocate_edges() {
                 });
         // Now, try to put as many edges into next.
         for (sptr<phys_edge_t> e : edge_list) {
-            test_and_move_edge_down(e);
+            any_edges_were_reallocated |= test_and_move_edge_down(e);
         }
     }
     // Now, everything will have changed. Remove any layers with no edges.
@@ -501,6 +527,7 @@ PhysicalNetwork::reallocate_edges() {
     while (processor_layers.back().m() == 0 && processor_layers.size() > 1) {
         processor_layers.pop_back();
     }
+    if (any_edges_were_reallocated) reallocate_edges();
 }
 
 }   // protean

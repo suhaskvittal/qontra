@@ -35,12 +35,12 @@ write_coupling_file(std::string output_file, PhysicalNetwork& network) {
 void
 write_role_file(std::string output_file, PhysicalNetwork& network) {
     std::ofstream fout(output_file);
-    fout << "Physical Qubit,Roles\n";
+    fout << "Physical Qubit,Degree,Roles\n";
     for (sptr<phys_vertex_t> pv : network.get_vertices()) {
-        fout << pv->id << ",\"";
+        fout << pv->id << "," << network.get_degree(pv) << ",\"";
         bool first = true;
         for (sptr<raw_vertex_t> rv : pv->role_set) {
-            if (!first) fout << " ";
+            if (!first) fout << ",";
             first = false;
 
             std::string role;

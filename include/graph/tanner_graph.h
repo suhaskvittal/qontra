@@ -156,6 +156,20 @@ private:
     friend void io::update_tanner_graph(TannerGraph&, std::string);
 };
 
+// Specialization of print_v to tanner::vertex_t
+template <> inline std::string
+print_v(sptr<tanner::vertex_t> v) {
+    std::string type_prefix;
+    if (v->qubit_type == tanner::vertex_t::type::data) {
+        type_prefix = "d";
+    } else if (v->qubit_type == tanner::vertex_t::type::xparity) {
+        type_prefix = "x";
+    } else {
+        type_prefix = "z";
+    }
+    return type_prefix + std::to_string(v->id & tanner::VERTEX_ID_NUMBER_MASK);
+}
+
 }   // graph
 }   // qontra
 

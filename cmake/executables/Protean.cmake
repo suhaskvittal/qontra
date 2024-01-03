@@ -23,4 +23,4 @@ target_link_libraries(libprotean PUBLIC qontra
 add_executable(protean main/protean/main.cpp)
 target_link_libraries(protean PRIVATE libprotean)
 
-target_compile_definitions(protean PRIVATE GRAPHVIZ_ENABLED)
+#target_compile_definitions(protean PRIVATE GRAPHVIZ_ENABLED)

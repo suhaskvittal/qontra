@@ -29,7 +29,17 @@ int main(int argc, char* argv[]) {
 
     // Make network:
     PhysicalNetwork network(tanner_graph);
+    network.config.max_connectivity = 4;
+
     network.join_qubits_with_identical_support();
+    network.make_flags();
+    network.add_connectivity_reducing_proxies();
+    network.contract_small_degree_qubits();
+
+    std::cout << "Qubits = " << network.n() << "\n"
+            << "Couplings = " << network.m() << "\n"
+            << "Mean Degree = " << network.get_mean_connectivity() << "\n"
+            << "Thickness = " << network.get_thickness() << "\n";
     // Write data to output folder:
     write_network_to_folder(data_output_folder, network);
 #ifdef GRAPHVIZ_ENABLED

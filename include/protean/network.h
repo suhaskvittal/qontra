@@ -174,6 +174,8 @@ private:
     // Allocates a new processor layer.
     ProcessorLayer& push_back_new_processor_layer(void);
 
+    void consume(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
+
     // Determines if a proposed flag (represented by the two raw vertices -- these are data qubits)
     // is actually useful -- that it protects against a weight-2 error.
     //

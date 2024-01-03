@@ -41,6 +41,19 @@ print_v(sptr<V> v) {
     return std::to_string(v->id);
 }
 
+template <> inline std::string
+print_v(sptr<void> v) {
+    return print_v(std::reinterpret_pointer_cast<base::vertex_t>(v));
+}
+
+template <class V, class E> inline std::string
+print_e(sptr<E> e) {
+    sptr<V> src = std::reinterpret_pointer_cast<V>(e->src),
+            dst = std::reinterpret_pointer_cast<V>(e->dst);
+    std::string dir_prefix = e->is_undirected ? "u" : "d";
+    return dir_prefix + "(" + print_v<V>(src) + "," + print_v<V>(dst) + ")";
+}
+
 template <class V, class E>
 class Graph {
 public:
@@ -99,6 +112,7 @@ public:
 
     virtual inline bool
     add_vertex(sptr<V> v) {            // O(1) operation
+        if (v == nullptr) return false;
         if (contains(v) || id_to_vertex.count(v->id)) return false;
         id_to_vertex[v->id] = v;
         vertices.push_back(v);
@@ -108,6 +122,7 @@ public:
 
     virtual inline bool
     add_edge(sptr<E> e) {              // O(1) operation
+        if (e == nullptr) return false;
         auto src = std::reinterpret_pointer_cast<V>(e->src);
         auto dst = std::reinterpret_pointer_cast<V>(e->dst);
         if (src == dst)                         return false;
@@ -145,6 +160,7 @@ public:
 
     virtual void
     delete_vertex(sptr<V> v) {         // O(n) operation
+        if (v == nullptr)   return;
         if (!contains(v))   return;
         for (auto it = vertices.begin(); it != vertices.end();) {
             if (*it == v)   it = vertices.erase(it);
@@ -161,15 +177,15 @@ public:
                 if (u1 == v)    other = u2;
 
                 auto& adj = adjacency_lists[other];
-                for (auto it = adj.begin(); it != adj.end();) {
-                    if (*it == v)   it = adj.erase(it);
-                    else            it++;
+                for (auto iit = adj.begin(); iit != adj.end();) {
+                    if (*iit == v)   iit = adj.erase(iit);
+                    else            iit++;
                 }
 
                 auto& r_adj = r_adjacency_lists[other];
-                for (auto it = r_adj.begin(); it != r_adj.end();) {
-                    if (*it == v)   it = adj.erase(it);
-                    else            it++;
+                for (auto iit = r_adj.begin(); iit != r_adj.end();) {
+                    if (*iit == v)   iit = r_adj.erase(iit);
+                    else            iit++;
                 }
 
                 adjacency_matrix[u1][u2] = nullptr;
@@ -189,6 +205,7 @@ public:
 
     virtual void
     delete_edge(sptr<E> e) {  // O(m) operation
+        if (e == nullptr)   return;
         if (!contains(e))   return;
         auto src = std::reinterpret_pointer_cast<V>(e->src);
         auto dst = std::reinterpret_pointer_cast<V>(e->dst);

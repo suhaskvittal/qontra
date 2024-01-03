@@ -27,6 +27,7 @@ phys_vertex_t::consume(sptr<phys_vertex_t> other) {
 inline void
 phys_vertex_t::add_role(sptr<raw_vertex_t> r, size_t cycle) {
     cycle_role_map.put(r, cycle);
+    role_set.insert(r);
     role_type_set.insert(r->qubit_type);
 }
 
@@ -140,10 +141,22 @@ PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
         }
     }
     // If none can be found, then make a new layer.
+    std::cout << "[ debug ] creating new processor layer\n";
     ProcessorLayer& new_layer = push_back_new_processor_layer();
-    new_layer.add_edge(e);
-    e->tsv_layer = get_thickness()-1;
-    return true;
+    if (new_layer.add_edge(e)) {
+        e->tsv_layer = get_thickness()-1;
+        return true;
+    } else {
+        sptr<net::phys_vertex_t> src = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
+                                 dst = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
+        std::cout << "[ debug ] failed to add edge " << graph::print_e<net::phys_vertex_t>(e)
+                        << ", reasons:\n"
+                        << "\tlayer does not contain endpoints: "
+                        << graph::print_v(src) << "(" << new_layer.contains(src)
+                        << "), " << graph::print_v(dst) << "(" << new_layer.contains(dst) << ")\n";
+        Graph::delete_edge(e);
+        return false;
+    }
 }
 
 inline void
@@ -176,6 +189,8 @@ PhysicalNetwork::test_and_move_edge_down(sptr<net::phys_edge_t> e) {
     if (next_layer.add_edge(e)) {
         // Move was successful.
         curr_layer.delete_edge(e);
+        std::cout << "[ debug ] moved edge " << graph::print_e<net::phys_vertex_t>(e) 
+                << " from L" << e->tsv_layer << " to L" << (e->tsv_layer-1) << "\n";
         e->tsv_layer--;
         return true;
     } else {
@@ -201,6 +216,12 @@ PhysicalNetwork::push_back_new_processor_layer() {
     }
     processor_layers.push_back(new_layer);
     return processor_layers.back();
+}
+
+inline void
+PhysicalNetwork::consume(sptr<net::phys_vertex_t> v, sptr<net::phys_vertex_t> w) {
+    for (auto r : w->role_set) role_to_phys[r] = v;
+    v->consume(w);
 }
 
 inline void
