@@ -154,9 +154,16 @@ public:
     //      -- contracts qubits (that are non-data!!!) that are connected to at most two neighbors,
     //          as this contraction does not create new connectivity violations.
     void join_qubits_with_identical_support(void);
+    void join_qubits_with_partial_support(void);
     void make_flags(void);
     void add_connectivity_reducing_proxies(void);
     void contract_small_degree_qubits(void);
+
+    // Try and place out-of-plane edges into the processor bulk, and deletes any
+    // empty processor layers.
+    void reallocate_edges(void);
+    // Relabel qubits so that the ids are not sporadic.
+    void relabel_qubits(void);
 
     RawNetwork get_raw_connection_network(void);
 
@@ -167,9 +174,6 @@ public:
         size_t max_thickness = 1;   // 0 = means only processor bulk, n = n TSV layers.
     } config;
 private:
-    // Try and place out-of-plane edges into the processor bulk, and deletes any
-    // empty processor layers.
-    void reallocate_edges(void);
 
     // Allocates a new processor layer.
     ProcessorLayer& push_back_new_processor_layer(void);

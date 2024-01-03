@@ -84,6 +84,14 @@ public:
         id_to_vertex[to] = v;
     }
 
+    virtual inline void
+    manual_update_id(sptr<V> v, uint64_t old_id, uint64_t new_id) {
+        // Use change_id for most cases. This function is only useful
+        // if the same vertex is shared across multiple graphs.
+        id_to_vertex.erase(old_id);
+        id_to_vertex[new_id] = v;
+    }
+
     virtual inline bool
     contains(uint64_t id) {
         return id_to_vertex.count(id);

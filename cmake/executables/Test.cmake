@@ -20,12 +20,12 @@ endmacro()
 make_test(TARGET test_PLANARITY_complete SOURCE_FILES tests/graph/planar_complete.test.cpp)
 make_test(TARGET test_PLANARITY_petersen SOURCE_FILES tests/graph/planar_petersen.test.cpp)
 
-add_test(NAME PLANARITY_k4 COMMAND test_PLANARITY 4)
-add_test(NAME PLANARITY_k5 COMMAND test_PLANARITY 5)
-add_test(NAME PLANARITY_k12 COMMAND test_PLANARITY 12)
-add_test(NAME PLANARITY_k2_3 COMMAND test_PLANARITY 2 3)
-add_test(NAME PLANARITY_k3_3 COMMAND test_PLANARITY 3 3)
-add_test(NAME PLANARITY_k15_30 COMMAND test_PLANARITY 15 30)
+add_test(NAME PLANARITY_k4 COMMAND test_PLANARITY_complete 4)
+add_test(NAME PLANARITY_k5 COMMAND test_PLANARITY_complete 5)
+add_test(NAME PLANARITY_k12 COMMAND test_PLANARITY_complete 12)
+add_test(NAME PLANARITY_k2_3 COMMAND test_PLANARITY_complete 2 3)
+add_test(NAME PLANARITY_k3_3 COMMAND test_PLANARITY_complete 3 3)
+add_test(NAME PLANARITY_k15_30 COMMAND test_PLANARITY_complete 15 30)
 
 add_test(NAME PLANARITY_petersen COMMAND test_PLANARITY_petersen)
 

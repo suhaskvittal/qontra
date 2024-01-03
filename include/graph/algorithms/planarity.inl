@@ -72,35 +72,35 @@ template <class V, class E> void
 LRPlanarity<V, E>::r_dfs_1(sptr<V> v) {
     sptr<E> parent_edge = parent_edge_map[v];
     for (sptr<V> w : input_graph->get_neighbors(v)) {
-        sptr<E> e_vw = input_graph->get_edge(v, w);
-        if (orientation_map.count(e_vw)) continue;
-        // Orient e_vw.
-        orientation_map[e_vw] = std::make_tuple(v, w);
-        lowpt[e_vw] = height[v];
-        lowpt2[e_vw] = height[v];
+        sptr<E> e = input_graph->get_edge(v, w);
+        if (orientation_map.count(e)) continue;
+        // Orient e.
+        orientation_map[e] = std::make_tuple(v, w);
+        lowpt[e] = height[v];
+        lowpt2[e] = height[v];
 
-        outgoing_edge_map[v].push_back(e_vw);
+        outgoing_edge_map[v].push_back(e);
 
         if (height[w] == inf<size_t>()) {
-            // This vertex has NOT been visited, implying e_vw is a tree edge.
-            parent_edge_map[w] = e_vw;
+            // This vertex has NOT been visited, implying e is a tree edge.
+            parent_edge_map[w] = e;
             height[w] = height[v]+1;
             r_dfs_1(w);
         } else {
             // This is a back edge.
-            lowpt[e_vw] = height[w]; // w is closer to the root than v.
+            lowpt[e] = height[w]; // w is closer to the root than v.
         }
         // Determine nesting depth.
-        nesting_depth[e_vw] = 2 * lowpt[e_vw] + (lowpt2[e_vw] < height[v]);
+        nesting_depth[e] = 2 * lowpt[e] + (lowpt2[e] < height[v]);
         // Update lowpoints of parent edge.
         if (parent_edge == nullptr) continue;
-        if (lowpt[e_vw] < lowpt[parent_edge]) {
-            lowpt2[parent_edge] = std::min(lowpt[parent_edge], lowpt2[e_vw]);
-            lowpt[parent_edge] = lowpt[e_vw];
-        } else if (lowpt[e_vw] > lowpt[parent_edge]) {
-            lowpt2[parent_edge] = std::min(lowpt2[parent_edge], lowpt[e_vw]);
+        if (lowpt[e] < lowpt[parent_edge]) {
+            lowpt2[parent_edge] = std::min(lowpt[parent_edge], lowpt2[e]);
+            lowpt[parent_edge] = lowpt[e];
+        } else if (lowpt[e] > lowpt[parent_edge]) {
+            lowpt2[parent_edge] = std::min(lowpt2[parent_edge], lowpt[e]);
         } else {
-            lowpt2[parent_edge] = std::min(lowpt2[parent_edge], lowpt2[e_vw]);
+            lowpt2[parent_edge] = std::min(lowpt2[parent_edge], lowpt2[e]);
         }
     }
 }
@@ -170,11 +170,19 @@ LRPlanarity<V, E>::r_dfs_2(sptr<V> v) {
             P.left.low = nullptr;
         }
         // Trim right interval.
+        while (P.right.high != nullptr && get_dst(P.right.high) == u) {
+            P.right.high = ref[P.right.high];
+        }
+        if (P.right.high == nullptr && P.right.low != nullptr) {
+            ref[P.right.low] = P.left.low;
+            neg_side += P.right.low;
+            P.right.low = nullptr;
+        }
         conflict_pair_stack.push_back(P);
     }
-    // Side of e is side of a highest return edge.
+    // Side of parent_edge is side of a highest return edge.
     if (lowpt[parent_edge] < height[u]) {
-        // e has a return edge.
+        // parent_edge has a return edge.
         cpair_t& cpx = conflict_pair_stack.back();
         sptr<E> h_left = cpx.left.high,
                 h_right = cpx.right.high;
@@ -217,7 +225,7 @@ LRPlanarity<V, E>::add_edge_constraints(sptr<E> e, sptr<E> parent_edge) {
             } else {
                 ref[P.right.low] = Q.right.high;
             }
-            Q.right.low = Q.right.low;
+            P.right.low = Q.right.low;
         } else {
             ref[Q.right.low] = lowpt_edge[parent_edge];
         }

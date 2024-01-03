@@ -42,21 +42,7 @@ write_role_file(std::string output_file, PhysicalNetwork& network) {
         for (sptr<raw_vertex_t> rv : pv->role_set) {
             if (!first) fout << ",";
             first = false;
-
-            std::string role;
-            if (rv->qubit_type == raw_vertex_t::type::data) {
-                role += "d";
-            } else if (rv->qubit_type == raw_vertex_t::type::xparity) {
-                role += "x";
-            } else if (rv->qubit_type == raw_vertex_t::type::zparity) {
-                role += "z";
-            } else if (rv->qubit_type == raw_vertex_t::type::flag) {
-                role += "f";
-            } else {
-                role += "pr";
-            }
-            role += std::to_string(rv->id);
-            fout << role;
+            fout << graph::print_v(rv);
         }
         fout << "\"\n";
     }

@@ -10,6 +10,31 @@
 
 
 namespace qontra {
+
+namespace graph {
+
+template <> inline std::string
+print_v<protean::net::raw_vertex_t>(sptr<protean::net::raw_vertex_t> v) {
+    using namespace protean;
+    using namespace net;
+    std::string s;
+    if (v->qubit_type == raw_vertex_t::type::data) {
+        s += "d";
+    } else if (v->qubit_type == raw_vertex_t::type::xparity) {
+        s += "x";
+    } else if (v->qubit_type == raw_vertex_t::type::zparity) {
+        s += "z";
+    } else if (v->qubit_type == raw_vertex_t::type::flag) {
+        s += "f";
+    } else {
+        s += "pr";
+    }
+    s += std::to_string(v->id);
+    return s;
+}
+
+} // graph
+
 namespace protean {
 
 namespace net {
@@ -135,7 +160,7 @@ PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
     // Here, we will attempt to find a processor layer that will house e.
     for (size_t k = 0; k < get_thickness(); k++) {
         auto& layer = processor_layers[k];
-        if (layer.add_edge(e)) {
+        if (layer.is_planar() && layer.add_edge(e)) {
             e->tsv_layer = k;
             return true;
         }
@@ -189,8 +214,6 @@ PhysicalNetwork::test_and_move_edge_down(sptr<net::phys_edge_t> e) {
     if (next_layer.add_edge(e)) {
         // Move was successful.
         curr_layer.delete_edge(e);
-        std::cout << "[ debug ] moved edge " << graph::print_e<net::phys_vertex_t>(e) 
-                << " from L" << e->tsv_layer << " to L" << (e->tsv_layer-1) << "\n";
         e->tsv_layer--;
         return true;
     } else {
@@ -206,6 +229,21 @@ PhysicalNetwork::get_thickness() {
 inline size_t
 PhysicalNetwork::get_bulk_degree(sptr<net::phys_vertex_t> v) {
     return processor_layers[0].get_degree(v);
+}
+
+inline void
+PhysicalNetwork::relabel_qubits() {
+    for (size_t i = 0; i < vertices.size(); i++) {
+        sptr<net::phys_vertex_t> pv = vertices[i];
+        if (pv->id == i) continue;
+        // Otherwise, relabel the vertex.
+        manual_update_id(pv, pv->id, i);
+        for (auto& layer : processor_layers) {
+            layer.manual_update_id(pv, pv->id, i);
+        }
+        pv->id = i;
+    }
+    id_ctr = vertices.size();
 }
 
 inline ProcessorLayer&

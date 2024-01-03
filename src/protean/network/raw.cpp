@@ -52,6 +52,7 @@ RawNetwork::add_flag(sptr<raw_vertex_t> dq1, sptr<raw_vertex_t> dq2, sptr<raw_ve
     // Create flag and corresponding edges.
     sptr<raw_vertex_t> fq = make_vertex();
     fq->qubit_type = raw_vertex_t::type::flag;
+    add_vertex(fq);
 
     sptr<raw_edge_t> rfe1 = make_edge(dq1, fq),
                        rfe2 = make_edge(dq2, fq),
@@ -75,6 +76,7 @@ RawNetwork::add_proxy(sptr<raw_edge_t> e) {
     // Create proxy and corresponding edges.
     sptr<raw_vertex_t> prxq = make_vertex();
     prxq->qubit_type = raw_vertex_t::type::proxy;
+    add_vertex(prxq);
 
     sptr<raw_edge_t> e1 = make_edge(q1, prxq),
                         e2 = make_edge(prxq, q2);

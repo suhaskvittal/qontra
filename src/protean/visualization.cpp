@@ -18,12 +18,29 @@ render_network(std::string output_file, PhysicalNetwork& network, render_config_
     GVC_t* gvc = gvContext();
 
     Agraph_t* gr = cxx_agopen("processor", Agundirected, NULL);
+    // Setup default attributes.
+    agattr(gr, AGNODE, "fillcolor", "black");
+    agattr(gr, AGNODE, "fontcolor", "black");
+    agattr(gr, AGNODE, "fontname", "serif");
+    agattr(gr, AGNODE, "fontsize", "10");
+    agattr(gr, AGNODE, "label", "N/A");
+    agattr(gr, AGNODE, "shape", "circle");
+    agattr(gr, AGNODE, "style", "filled");
+
+    agattr(gr, AGEDGE, "dir", "none");
+    agattr(gr, AGEDGE, "labelfontname", "serif");
+    agattr(gr, AGEDGE, "labelfontsize", "8");
+    agattr(gr, AGEDGE, "headlabel", "");
+    agattr(gr, AGEDGE, "penwidth", "1.0");
+    agattr(gr, AGEDGE, "style", "solid");
+    agattr(gr, AGEDGE, "taillabel", "");
+    agattr(gr, AGEDGE, "weight", "");
 
     std::map<sptr<net::phys_vertex_t>, Agnode_t*> phys_to_gvc;
     // Create a node for each vertex in network.
     for (sptr<net::phys_vertex_t> pv : network.get_vertices()) {
         attr_list_t attr = get_attributes(pv);
-        Agnode_t* av = cxx_agnode(gr, attr.name, 1);
+        Agnode_t* av = cxx_agnode(gr, "PQ" + graph::print_v(pv), 1);
         phys_to_gvc[pv] = av;
         // Update the vertex attributes.
         cxx_agset(av, "fillcolor", attr.fillcolor);
@@ -45,10 +62,10 @@ render_network(std::string output_file, PhysicalNetwork& network, render_config_
     for (sptr<net::phys_edge_t> pe : network.get_edges()) {
         attr_list_t attr = get_attributes(pe);
 
-        sptr<net::phys_vertex_t> pv = std::reinterpret_pointer_cast<net::phys_vertex_t>(pe->src),
-                                 pw = std::reinterpret_pointer_cast<net::phys_vertex_t>(pe->dst);
-        Agnode_t* av = phys_to_gvc[pv];
-        Agnode_t* aw = phys_to_gvc[pw];
+        sptr<net::phys_vertex_t> pv = network.get_source(pe),
+                                 pw = network.get_target(pe);
+        Agnode_t* av = cxx_agnode(gr, "PQ" + graph::print_v(pv), 0);
+        Agnode_t* aw = cxx_agnode(gr, "PQ" + graph::print_v(pw), 0);
         Agedge_t* ae = cxx_agedge(gr, av, aw, attr.name, 1);
 
         cxx_agset(ae, "dir", "none");

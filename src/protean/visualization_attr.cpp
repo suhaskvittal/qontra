@@ -15,6 +15,8 @@ get_attributes(sptr<phys_vertex_t> pv) {
     attr_list_t attributes;
 
     bool first = true;
+    attributes.name = graph::print_v(pv);
+    /*
     for (sptr<raw_vertex_t> rv : pv->role_set) {
         if (!first) attributes.name += ":";
         first = false;
@@ -32,6 +34,7 @@ get_attributes(sptr<phys_vertex_t> pv) {
         }
         attributes.name += std::to_string(rv->id);
     }
+    */
     // Set remaining attributes.
     if (pv->has_role_of_type(raw_vertex_t::type::data)) {
         attributes.fillcolor = "#36454f";
@@ -77,7 +80,7 @@ get_attributes(sptr<phys_edge_t> pe) {
     // Get endpoints:
     sptr<phys_vertex_t> pv = std::reinterpret_pointer_cast<phys_vertex_t>(pe->src),
                         pw = std::reinterpret_pointer_cast<phys_vertex_t>(pe->dst);
-    attributes.name = "e" + std::to_string(pv->id) + ":" + std::to_string(pw->id);
+    attributes.name = "e" + graph::print_v(pv) + ":" + graph::print_v(pw);
     // Now set the attributes.
     if (pe->is_out_of_plane()) {
         attributes.style = "dotted";

@@ -54,6 +54,7 @@ PhysicalNetwork::PhysicalNetwork(TannerGraph& tgr)
 
 void
 PhysicalNetwork::join_qubits_with_identical_support() {
+    std::cout << "[ debug ] joining qubits (identical) | # of qubits = " << n() << "\n";
     // These are vertices that are consumed by another.
     std::set<sptr<phys_vertex_t>> deleted_vertices;
 
@@ -62,8 +63,7 @@ PhysicalNetwork::join_qubits_with_identical_support() {
         if (deleted_vertices.count(pv)) continue;
         if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
     
-        auto tmp = get_neighbors(pv);
-        std::set<sptr<phys_vertex_t>> pv_adj(tmp.begin(), tmp.end());
+        auto pv_adj = get_neighbors(pv);
         for (size_t j = i+1; j < vertices.size(); j++) {
             sptr<phys_vertex_t> pw = vertices[j];
             if (deleted_vertices.count(pw)) continue;
@@ -82,6 +82,56 @@ PhysicalNetwork::join_qubits_with_identical_support() {
     // Delete the consumed vertices
     for (sptr<phys_vertex_t> x : deleted_vertices) delete_vertex(x);
     reallocate_edges();
+}
+
+void
+PhysicalNetwork::join_qubits_with_partial_support() {
+    std::cout << "[ debug ] joining qubits (partial) | # of qubits = " << n() << "\n";
+    bool qubits_were_joined = false;
+    // These are vertices that are consumed by another.
+    std::set<sptr<phys_vertex_t>> deleted_vertices;
+
+    std::vector<sptr<phys_vertex_t>> _vertices(vertices);
+    // Sort these vertices by degree.
+    std::sort(_vertices.begin(), _vertices.end(),
+            [&] (auto v, auto w) {
+                return get_degree(v) > get_degree(w);
+            });
+
+    for (size_t i = 0; i < _vertices.size(); i++) {
+        sptr<phys_vertex_t> pv = _vertices[i];
+        if (deleted_vertices.count(pv)) continue;
+        if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
+    
+        auto pv_adj = get_neighbors(pv);
+        // Now, unlike identical_support, we will rank all qubits (that are non-data!!!)
+        // by the amount of common neighbors. We will merge the best such qubit.
+        sptr<phys_vertex_t> best_candidate = nullptr;
+        size_t max_common_neighbors = 0;
+        for (size_t j = i+1; j < vertices.size(); j++) {
+            sptr<phys_vertex_t> pw = vertices[i];
+            if (deleted_vertices.count(pw)) continue;
+            if (pw->has_role_of_type(raw_vertex_t::type::data)) continue;
+
+            size_t common_neighbors = 0;
+            for (sptr<phys_vertex_t> x : pv_adj) {
+                common_neighbors += contains(pw, x);
+            }
+            if (common_neighbors > max_common_neighbors) {
+                best_candidate = pw;
+                max_common_neighbors = common_neighbors;
+            }
+        }
+        if (best_candidate == nullptr) continue;
+        consume(pv, best_candidate);
+        deleted_vertices.insert(best_candidate);
+        qubits_were_joined = true;
+    }
+    // Delete the consumed vertices
+    for (sptr<phys_vertex_t> x : deleted_vertices) delete_vertex(x);
+    reallocate_edges();
+    // It's possible that more opportunities still exist.
+    if (qubits_were_joined) join_qubits_with_partial_support();
 }
 
 void
@@ -174,6 +224,10 @@ edge_build_outer_loop_start:
             ita++;
         }
         // Now, create the MWPM object.
+        if (support.size() % 2 == 1) {
+            already_matched.insert(support.back()); // It really hasn't, but whatever :)
+            support.pop_back();
+        }
         PerfectMatching pm(support.size(), edge_list.size());
         pm.options.verbose = false;
         // Assign each node in the support to some node id.
@@ -302,21 +356,41 @@ edge_build_outer_loop_start:
 
 void
 PhysicalNetwork::add_connectivity_reducing_proxies() {
-    bool were_any_proxies_added = false;
-    for (sptr<phys_vertex_t> pv : get_vertices()) {
-        const size_t dg = get_degree(pv);
-        if (dg <= config.max_connectivity) continue;
+    std::cout << "[ debug ] adding proxies | # of qubits = " << n() 
+                << ", mean connectivity = " << get_mean_connectivity() << "\n";
 
-        were_any_proxies_added = true;
+    std::map<sptr<phys_vertex_t>, int> degree_update_map;
+
+    bool were_any_proxies_added = false;
+    std::vector<sptr<phys_edge_t>> new_edges;
+    for (sptr<phys_vertex_t> pv : get_vertices()) {
+        // Proxies can only be attached to non-data qubits.
+//      if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
+
+        const size_t dg = get_degree(pv) + degree_update_map[pv];
+        if (dg <= config.max_connectivity) continue;
 
         size_t slack_violation = dg - config.max_connectivity;
         std::vector<sptr<phys_vertex_t>> adj = get_neighbors(pv);
+        // Remove any data neighbors.
+        /*
+        for (auto it = adj.begin(); it != adj.end(); ) {
+            if ((*it)->has_role_of_type(raw_vertex_t::type::data)) it = adj.erase(it);
+            else it++;
+        }
+        */
+        // Also sort neighbors by degree.
+        std::sort(adj.begin(), adj.end(),
+                [&] (auto a, auto b)
+                {
+                    return get_degree(a) > get_degree(b);
+                });
 
         sptr<phys_vertex_t> pprx = make_vertex();
-        // Let k = slack_violation. Then the top k neighbors will
+        // Let k = slack_violation. Then the top k+1 neighbors will
         // be serviced by the proxy.
-        std::set<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
-        for (size_t i = 0; i < slack_violation; i++) {
+        std::vector<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
+        for (size_t i = 0; i < std::min(slack_violation+1, adj.size()); i++) {
             sptr<phys_vertex_t> px = adj[i];
             // Now, for each role in pv and px, add a proxy in the raw_connection_network.
             // Each added proxy will be a role for pprx.
@@ -330,35 +404,51 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                     pprx->push_back_role(rprx, cycle);
                 }
             }
-            share_an_edge_with_pprx.insert(px);
+            share_an_edge_with_pprx.push_back(px);
             // Delete px's edge with pv.
             sptr<phys_edge_t> pe = get_edge(pv, px);
             delete_edge(pe);
         }
+        add_vertex(pprx);
         // Update the physical connectivity on our side.
         for (sptr<phys_vertex_t> x : share_an_edge_with_pprx) {
-            sptr<phys_edge_t> e = make_edge(pprx, x);
-            add_edge(e);
+            new_edges.push_back(make_edge(pprx, x));
         }
+        were_any_proxies_added = true;
     }
     // If any proxies were added, we need to check the connectivity of these proxies.
+    for (auto e : new_edges) add_edge(e);
+    contract_small_degree_qubits();
     if (were_any_proxies_added) add_connectivity_reducing_proxies();
 }
 
 void
 PhysicalNetwork::contract_small_degree_qubits() {
+    std::cout << "[ debug ] contracting qubits | # of qubits = " << n() << "\n";
+
+    bool any_contractions = false;
+
+    // Edges aren't added until after the loop ends. So, we need to track any updates.
+    std::map<sptr<phys_vertex_t>, int> degree_update_map;
+
     std::vector<sptr<phys_edge_t>> new_edges;
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
         
-        const size_t dg = get_degree(pv);
+        const size_t dg = get_degree(pv) + degree_update_map[pv];
         if (dg > 2) continue;
         
-        if (dg == 1) {
+        if (dg == 0) {
+            // God forbid, I can't think of a case like this, so I'm printing out the
+            // qubit.
+            std::cerr << "[ warning ] found qubit with zero degree: " << print_v(pv) << "\n";
+            std::cerr << "\troles =";
+            for (auto r : pv->role_set) std::cerr << " " << print_v(r);
+            std::cerr << "\n";
+            delete_vertex(pv);
+        } else if (dg == 1) {
             sptr<phys_vertex_t> px = get_neighbors(pv)[0];
             if (px->has_role_of_type(raw_vertex_t::type::data)) continue;
-
-            std::cout << "[ debug ] contracting " << print_v(pv) << " into " << print_v(px) << "\n";
 
             // This is simple -- just have px consume pv and delete pv.
             consume(px, pv);
@@ -376,20 +466,18 @@ PhysicalNetwork::contract_small_degree_qubits() {
             } else {
                 continue;
             }
-            std::cout << "[ debug ] contracting " << print_v(pv) << " into u(" 
-                    << print_v(px1) << "," << print_v(px2) << ")\n";
 
             delete_vertex(pv);
             if (!contains(px1, px2)) {
                 new_edges.push_back(make_edge(px1, px2));
+                degree_update_map[px1]++;
+                degree_update_map[px2]++;
             }
         }
+        any_contractions = true;
     }
-    for (auto e : new_edges) {
-        add_edge(e);
-        std::cout << "[ debug ] adding edge " << print_e<phys_vertex_t>(e) << " to L" << e->tsv_layer << "\n";
-    }
-    reallocate_edges();
+    for (auto e : new_edges) add_edge(e);
+    if (any_contractions) contract_small_degree_qubits();
 }
 
 stim::simd_bits<SIMD_WIDTH>
@@ -408,7 +496,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 
     // We will only examine a single level of the tree at any time to avoid high memory overheads of
     // loading the entire tree.
-    const size_t OPERATOR_TREE_SIZE_LIMIT = 1024L*1024L;
+    const size_t OPERATOR_TREE_SIZE_LIMIT = 16*1024L;
 
     // The first entry are the qubits in the operator.
     // THe second entry is a simple hash that allows us to check if two operators are equivalent.
