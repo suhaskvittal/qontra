@@ -6,6 +6,10 @@
 #ifndef LINPROG_BASE_h
 #define LINPROG_BASE_h
 
+#include <map>
+
+#include <stddef.h>
+
 struct lp_var_t {
     // Variable id:
     size_t  column;

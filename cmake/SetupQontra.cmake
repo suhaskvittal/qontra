@@ -18,6 +18,8 @@ set(QONTRA_FILES
     src/experiments.cpp
     src/instruction.cpp
     src/tables.cpp
+    # Linear programming
+    src/linprog/base.cpp
     # Utility and Definitions
     src/defs/filesystem.cpp
     # Decoders

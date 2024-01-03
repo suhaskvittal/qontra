@@ -3,40 +3,6 @@
  *  date:   28 December 2023
  * */
 
-lp_expr_t::lp_expr_t(double c)
-    :l_coefs(),
-    q_coefs(),
-    constant(c)
-{}
-
-lp_expr_t::lp_expr_t(lp_var_t v)
-    :l_coefs(),
-    q_coefs(),
-    constant(0)
-{
-    l_coefs[v] = 1.0;
-}
-
-lp_expr_t::lp_expr_t(lp_quad_var_t v)
-    :l_coefs(),
-    q_coefs(),
-    constant(0)
-{
-    q_coefs[v] = 1.0;
-}
-
-lp_expr_t::lp_expr_t(const lp_expr_t& other)
-    :l_coefs(other.l_coefs),
-    q_coefs(other.q_coefs),
-    constant(other.constant)
-{}
-
-lp_expr_t::lp_expr_t(lp_expr_t&& other)
-    :l_coefs(std::move(other.l_coefs)),
-    q_coefs(std::move(other.q_coefs)),
-    constant(other.constant)
-{}
-
 inline bool
 lp_expr_t::is_quadratic() {
     return !q_coefs.empty();
