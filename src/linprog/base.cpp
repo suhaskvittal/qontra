@@ -41,7 +41,6 @@ lp_expr_t::lp_expr_t(lp_expr_t&& other)
     constant(other.constant)
 {}
 
-
 lp_constr_t::lp_constr_t(lp_expr_t _lhs, lp_expr_t _rhs, lp_constr_t::direction r)
     :lhs(),
     rhs(),
@@ -63,3 +62,14 @@ lp_constr_t::lp_constr_t(lp_expr_t _lhs, double _rhs, lp_constr_t::direction r)
     lhs.constant = 0;
 }
 
+lp_constr_t::lp_constr_t(const lp_constr_t& other)
+    :lhs(other.lhs),
+    rhs(other.rhs),
+    relation(other.relation)
+{}
+
+lp_constr_t::lp_constr_t(lp_constr_t&& other)
+    :lhs(std::move(other.lhs)),
+    rhs(std::move(other.rhs)),
+    relation(other.relation)
+{}

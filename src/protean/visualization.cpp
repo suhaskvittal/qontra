@@ -26,6 +26,7 @@ render_network(std::string output_file, PhysicalNetwork& network, render_config_
     agattr(gr, AGNODE, "label", "N/A");
     agattr(gr, AGNODE, "shape", "circle");
     agattr(gr, AGNODE, "style", "filled");
+    agattr(gr, AGNODE, "pos", "0,0");
 
     agattr(gr, AGEDGE, "dir", "none");
     agattr(gr, AGEDGE, "labelfontname", "serif");
@@ -54,6 +55,8 @@ render_network(std::string output_file, PhysicalNetwork& network, render_config_
         if (config.plane.count(pv)) {
             coord_t<2> p = config.plane.at(pv);
             std::string ps = std::to_string(p[0]) + "," + std::to_string(p[1]) + "!";
+
+            std::cout << "[ vis ] placing qubit " << graph::print_v(pv) << " at (" << p[0] << ", " << p[1] << ")\n";
             cxx_agset(av, "pos", ps);
         }
     }
@@ -104,8 +107,10 @@ place_network(PhysicalNetwork& network, placement_config_t config) {
     // Now, we can get the result and build the plane.
     fp_t obj;
     int solstat;
-    if (mgr.solve(&obj, &solstat)) {
-        std::cerr << "place_network: program is infeasible" << std::endl;
+    int status;
+    if (status=mgr.solve(&obj, &solstat)) {
+        std::cerr << "place_network: program is infeasible, solstat = " << solstat
+                << ", status = " << status << std::endl;
         return Plane();
     }
     // Form layout from the LP results.

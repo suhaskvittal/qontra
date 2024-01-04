@@ -24,8 +24,8 @@ public:
     ~CPXLPManager(void);
 
     void build(lp_expr_t objective, bool is_maximization);
-    // Returns true if the solve fails.
-    bool solve(double* objective_p, int* solution_status_p);
+    // Returns nonzero if solve fails.
+    int solve(double* objective_p, int* solution_status_p);
 
     void solve_pool(void);
 
@@ -35,7 +35,7 @@ public:
     lp_var_t    add_slack_var(double lower_bound, double upper_bound, lp_var_t::bounds, lp_var_t::domain);
     lp_var_t    add_var(T label, double lower_bound, double upper_bound, lp_var_t::bounds, lp_var_t::domain);
 
-    size_t  add_constraint(lp_constr_t);
+    void    add_constraint(lp_constr_t);
 
     size_t  get_soln_pool_size(void);
     double  fetch_soln_from_pool(size_t);
@@ -46,12 +46,9 @@ public:
 private:
     char get_sense(lp_constr_t);
 
-    enum class problem_type { lp, mip, qp };
+    enum class problem_type { lp, mip, qp, qcp};
 
     std::map<T, lp_var_t> label_to_lp_var;
-
-    size_t columns;
-    size_t rows;
 
     CPXENVptr env;
     CPXLPptr prog;

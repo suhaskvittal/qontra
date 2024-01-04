@@ -20,16 +20,16 @@ inline void cpxexit(CPXENVptr* env_p) {
     CPXXcloseCPLEX(env_p);
 }
 
-inline void cpxmakeprog(CPXENVptr env, CPXLPptr prog, const char* name) {
+inline void cpxmakeprog(CPXENVptr env, CPXLPptr* prog_p, const char* name) {
     int status;
-    prog = CPXXcreateprob(env, &status, name);
+    *prog_p = CPXXcreateprob(env, &status, name);
     handle_status(status);
 }
 
-inline void cpxfreeprog(CPXENVptr env, CPXLPptr prog) {
-    if (prog != NULL) {
-        int status = CPXXfreeprob(env, &prog);
-        prog = NULL;
+inline void cpxfreeprog(CPXENVptr env, CPXLPptr* prog_p) {
+    if (*prog_p != NULL) {
+        int status = CPXXfreeprob(env, prog_p);
+        *prog_p = NULL;
         handle_status(status);
     }
 }
@@ -40,8 +40,6 @@ CPXLPManager<T>::CPXLPManager(CPXENVptr _env)
     l_constraints(),
     q_constraints(),
     label_to_lp_var(),
-    columns(0),
-    rows(0),
     env(_env),
     prog(NULL),
     prog_soln(NULL),
@@ -58,7 +56,7 @@ CPXLPManager<T>::CPXLPManager(CPXENVptr _env)
 
 template <class T>
 CPXLPManager<T>::~CPXLPManager() {
-    cpxfreeprog(env, prog);
+    cpxfreeprog(env, &prog);
     if (env_is_initialized_by_object) cpxexit(&env);
 }
 
@@ -66,20 +64,22 @@ template <class T> void
 CPXLPManager<T>::build(lp_expr_t objective, bool is_maximization) {
     int status;
 
-    cpxfreeprog(env, prog);
-    cpxmakeprog(env, prog, "lp");
+    cpxfreeprog(env, &prog);
+    cpxmakeprog(env, &prog, "lp");
 
     status = CPXXchgobjsen(env, prog, is_maximization ? CPX_MAX : CPX_MIN);
     handle_status(status);
 
     // Declare variables column-wise.
+    const size_t columns = variables.size();
     double* obj = reinterpret_cast<double*>(calloc(columns, sizeof(double)));
     double* lb = reinterpret_cast<double*>(calloc(columns, sizeof(double)));
     double* ub = reinterpret_cast<double*>(calloc(columns, sizeof(double)));
     char* vtypes = reinterpret_cast<char*>(calloc(columns, sizeof(char)));
 
     // We should also track the problem type when constructing the problem.
-    prog_type = q_constraints.empty() ? problem_type::lp : problem_type::qp;
+    prog_type = objective.is_quadratic() ? problem_type::qp : problem_type::lp;
+    if (q_constraints.size()) prog_type = problem_type::qcp;
     for (size_t i = 0; i < columns; i++) {
         lp_var_t v = variables[i];
         if (objective.l_coefs.count(v)) {
@@ -122,7 +122,6 @@ CPXLPManager<T>::build(lp_expr_t objective, bool is_maximization) {
     }
 
     // Now, declare the constraints.
-    if (rows == 0) return;
     //
     // First, we need to count the total number of nonzero coefficients in 
     // the LINEAR constraints.
@@ -130,20 +129,21 @@ CPXLPManager<T>::build(lp_expr_t objective, bool is_maximization) {
     for (auto& con : l_constraints) {
         num_nonzeros += con.lhs.l_coefs.size();
     }
+    const size_t l_rows = l_constraints.size();
     // Now, we need to populate the data structures to declare the
     // constraints.
-    double* rhs = reinterpret_cast<double*>(malloc(rows * sizeof(double)));
+    double* rhs = reinterpret_cast<double*>(malloc(l_rows * sizeof(double)));
     // GE ('G'), LE ('L'), or EQ ('E').
-    char* sense = reinterpret_cast<char*>(malloc(rows * sizeof(char)));
+    char* sense = reinterpret_cast<char*>(malloc(l_rows * sizeof(char)));
     // Where the coefficients for the i-th row.
-    CPXNNZ* rmatbeg = reinterpret_cast<CPXNNZ*>(malloc(rows * sizeof(CPXNNZ)));
+    CPXNNZ* rmatbeg = reinterpret_cast<CPXNNZ*>(malloc(l_rows * sizeof(CPXNNZ)));
     // The column of the nonzero coefficient.
     int* rmatind = reinterpret_cast<int*>(malloc(num_nonzeros * sizeof(int)));
     // The value of the corresponding nonzero coefficient.
     double* rmatval = reinterpret_cast<double*>(malloc(num_nonzeros * sizeof(double)));
 
     size_t offset = 0;
-    for (size_t i = 0; i < rows; i++) {
+    for (size_t i = 0; i < l_rows; i++) {
         lp_constr_t con = l_constraints[i];
         rhs[i] = con.rhs;
         sense[i] = get_sense(con);
@@ -156,7 +156,7 @@ CPXLPManager<T>::build(lp_expr_t objective, bool is_maximization) {
             offset++;
         }
     }
-    status = CPXXaddrows(env, prog, 0, rows, num_nonzeros, rhs, sense, rmatbeg, rmatind, rmatval, NULL, NULL);
+    status = CPXXaddrows(env, prog, 0, l_rows, num_nonzeros, rhs, sense, rmatbeg, rmatind, rmatval, NULL, NULL);
     handle_status(status);
     // Free all variables.
     free(rhs);
@@ -197,19 +197,21 @@ CPXLPManager<T>::build(lp_expr_t objective, bool is_maximization) {
     }
 }
 
-template <class T> inline bool
+template <class T> inline int
 CPXLPManager<T>::solve(double* obj_p, int* solstat_p) {
     int status;
     if (prog_type == problem_type::lp) {
-        status = CPXXlpopt(env, prog);
-    } else if (prog_type == problem_type::qp) {
-        status = CPXXqpopt(env, prog);
+        status = CPXXmipopt(env, prog);
+    } else if (prog_type == problem_type::qp || prog_type == problem_type::qcp ) {
+//      status = CPXXqpopt(env, prog);
+        status = CPXXmipopt(env, prog);
     } else if (prog_type == problem_type::mip) {
         status = CPXXmipopt(env, prog);
     } else {
-        std::cerr << "CPXLPManager<T>: unsupported problem type\n";
-        return false;
+        std::cerr << "CPXLPManager: unsupported problem type\n";
+        return -1;
     }
+    std::cout << "opt status: " << status << "\n";
     handle_status(status);
 
     int fincols = CPXXgetnumcols(env, prog);
@@ -217,7 +219,7 @@ CPXLPManager<T>::solve(double* obj_p, int* solstat_p) {
     prog_soln = reinterpret_cast<double*>(malloc(fincols * sizeof(double)));
 
     status = CPXXsolution(env, prog, solstat_p, obj_p, prog_soln, NULL, NULL, NULL);
-    return status > 0;
+    return status;
 }
 
 template <class T> inline void
@@ -239,7 +241,7 @@ CPXLPManager<T>::get_value(T label) {
 template <class T> inline lp_var_t
 CPXLPManager<T>::add_slack_var(double lwr, double upp, lp_var_t::bounds btype, lp_var_t::domain vtype) {
     lp_var_t v;
-    v.column = columns++;
+    v.column = variables.size();
     v.lwr = lwr;
     v.upp = upp;
     v.bounds_type = btype;
@@ -255,7 +257,7 @@ CPXLPManager<T>::add_var(T label, double lwr, double upp, lp_var_t::bounds btype
     return v;
 }
 
-template <class T> inline size_t 
+template <class T> inline void
 CPXLPManager<T>::add_constraint(lp_constr_t con) {
     auto& constraints_array = con.is_quadratic() ? q_constraints : l_constraints;
     if (con.relation == lp_constr_t::direction::neq) {
@@ -268,10 +270,8 @@ CPXLPManager<T>::add_constraint(lp_constr_t con) {
         // lhs - My >= rhs + 1 - M
         constraints_array.emplace_back(con.lhs - M*y, con.rhs - 1, lp_constr_t::direction::le);
         constraints_array.emplace_back(con.lhs - M*y, con.rhs + 1 - M, lp_constr_t::direction::ge);
-        return (rows += 2);
     } else {
         constraints_array.push_back(con);
-        return (++rows);
     }
 }
 

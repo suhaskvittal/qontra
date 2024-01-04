@@ -53,9 +53,9 @@ int main(int argc, char* argv[]) {
 #ifdef GRAPHVIZ_ENABLED
     if (render_output_file.size() > 0) {
         // Render the network and save it to a file.
-        render_config_t config;
-        config.layout_engine = "neato";
-        render_network(render_output_file, network, config);
+        render_config_t rconfig;
+        rconfig.layout_engine = "neato";
+        render_network(render_output_file, network, rconfig);
     }
 #endif
     return 0;

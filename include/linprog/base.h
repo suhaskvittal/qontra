@@ -90,6 +90,11 @@ struct lp_constr_t {
     lp_constr_t(lp_expr_t, lp_expr_t, direction);
     lp_constr_t(lp_expr_t, double, direction);
 
+    lp_constr_t(const lp_constr_t&);
+    lp_constr_t(lp_constr_t&&);
+
+    lp_constr_t& operator=(const lp_constr_t&);
+
     bool is_quadratic(void);
 
     lp_expr_t   lhs;

@@ -80,6 +80,8 @@ RawNetwork::add_proxy(sptr<raw_edge_t> e) {
 
     sptr<raw_edge_t> e1 = make_edge(q1, prxq),
                         e2 = make_edge(prxq, q2);
+    add_edge(e1);
+    add_edge(e2);
     // Update tracking structures and return.
     tlm_put(proxy_indirection_map, prxq, q1, q2);
     tlm_put(proxy_indirection_map, prxq, q2, q1);

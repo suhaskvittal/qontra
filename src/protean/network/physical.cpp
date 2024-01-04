@@ -364,26 +364,16 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
     bool were_any_proxies_added = false;
     std::vector<sptr<phys_edge_t>> new_edges;
     for (sptr<phys_vertex_t> pv : get_vertices()) {
-        // Proxies can only be attached to non-data qubits.
-//      if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
-
         const size_t dg = get_degree(pv) + degree_update_map[pv];
         if (dg <= config.max_connectivity) continue;
 
         size_t slack_violation = dg - config.max_connectivity;
         std::vector<sptr<phys_vertex_t>> adj = get_neighbors(pv);
-        // Remove any data neighbors.
-        /*
-        for (auto it = adj.begin(); it != adj.end(); ) {
-            if ((*it)->has_role_of_type(raw_vertex_t::type::data)) it = adj.erase(it);
-            else it++;
-        }
-        */
         // Also sort neighbors by degree.
         std::sort(adj.begin(), adj.end(),
                 [&] (auto a, auto b)
                 {
-                    return get_degree(a) > get_degree(b);
+                    return get_degree(a)+degree_update_map[a] > get_degree(b)+degree_update_map[b];
                 });
 
         sptr<phys_vertex_t> pprx = make_vertex();
@@ -409,10 +399,14 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
             sptr<phys_edge_t> pe = get_edge(pv, px);
             delete_edge(pe);
         }
+        if (pprx->role_set.empty()) {
+            std::cerr << "[ warning ] adding proxy " << print_v(pprx) << " with no roles\n";
+        }
         add_vertex(pprx);
         // Update the physical connectivity on our side.
         for (sptr<phys_vertex_t> x : share_an_edge_with_pprx) {
             new_edges.push_back(make_edge(pprx, x));
+            degree_update_map[x]++;
         }
         were_any_proxies_added = true;
     }
