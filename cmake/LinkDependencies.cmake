@@ -5,6 +5,7 @@
 
 add_subdirectory(dependencies/stim)
 add_subdirectory(dependencies/blossom5)
+add_subdirectory(dependencies/re2)
 
 if (COMPILE_PYMATCHING)
     message(STATUS "Will compile and link PyMatching.")
