@@ -612,7 +612,31 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 
 schedule_t
 PhysicalNetwork::make_schedule() {
-    return schedule_t();
+    schedule_t total_schedule;
+
+    TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
+    // Compute the cycle time for each check.
+    // 
+    // For each cycle, we will maintain a map of parity qubits to
+    // their syndrome extraction schedules.
+    TwoLevelMap<size_t, sptr<tanner::vertex_t>, schedule_t> syndrome_extraction_map;
+    for (sptr<tanner::vertex_t> tpq : tanner_graph.get_checks()) {
+        sptr<raw_vertex_t> rpq = raw_connection_network.v_tanner_raw_map.at(tpq);
+        sptr<phys_vertex_t> ppq = role_to_phys[rpq];
+
+        std::vector<size_t> role_cycles{ppq->cycle_role_map.at(rpq)};
+                                            // A list of all role cycles for all qubits involved in
+                                            // syndrome extraction of this check. The cycle of the
+                                            // entire check measurement is the max of these.
+        schedule_t sub_schedule;
+        // First things first: initialize the parity qubit in the correct basis.
+        if (rpq->qubit_type == raw_vertex_t::type::xparity) {
+            sub_schedule.push_back(Instruction("h")); 
+        }
+        for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
+            
+        }
+    }
 }
 
 

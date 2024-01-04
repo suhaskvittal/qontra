@@ -173,22 +173,20 @@ public:
     bool reallocate_edges(void);
     // Relabel qubits so that the ids are not sporadic.
     bool relabel_qubits(void);
+    // Computes the syndrome extraction schedule for the existing layout.
+    schedule_t make_schedule(void);
 
     RawNetwork get_raw_connection_network(void);
-
-    schedule_t make_schedule(void);
 
     struct {
         size_t max_connectivity = 4;
         size_t max_thickness = 1;   // 0 = means only processor bulk, n = n TSV layers.
     } config;
 private:
-
     // Allocates a new processor layer.
     ProcessorLayer& push_back_new_processor_layer(void);
-
+    // Consumes a physical qubit safely.
     void consume(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
-
     // Determines if a proposed flag (represented by the two raw vertices -- these are data qubits)
     // is actually useful -- that it protects against a weight-2 error.
     //

@@ -6,18 +6,9 @@
 #ifndef INSTRUCTION_h
 #define INSTRUCTION_h
 
-#include "defs.h"
-#include "graph/decoding_graph.h"
-#include "tables.h"
 #include "stimext.h"
 
-#include <stim.h>
-
-#include <deque>
 #include <string>
-
-#include <stdio.h>
-#include <math.h>
 
 namespace qontra {
 
@@ -186,15 +177,8 @@ struct Instruction {
         }
     } operands;
 
-    struct property_value_t {
-        int64_t         ival;
-        fp_t            fval;
-    };
-
     std::set<std::string> annotations;
-    std::map<std::string, property_value_t> properties;
-
-    std::vector<uint>   get_qubit_operands(void) const;
+    std::map<std::string, double> properties;
 
     std::string inst_str(void) const {
         std::string out;
@@ -253,14 +237,14 @@ struct Instruction {
     // Static functions for common instructions:
     //
 
-    static Instruction gate(std::string name, std::vector<uint> qubits) {
+    static inline Instruction gate(std::string name, std::vector<uint> qubits) {
         Instruction inst;
         inst.name = name;
         inst.operands.qubits = qubits;
         return inst;
     }
     
-    static Instruction event(uint e, std::vector<uint> meas) {
+    static inline Instruction event(uint e, std::vector<uint> meas) {
         Instruction inst;
         inst.name = "event";
         inst.operands.events = std::vector<uint>{e};
@@ -268,7 +252,7 @@ struct Instruction {
         return inst;
     }
 
-    static Instruction obs(uint o, std::vector<uint> meas) {
+    static inline Instruction obs(uint o, std::vector<uint> meas) {
         Instruction inst;
         inst.name = "obs";
         inst.operands.observables = std::vector<uint>{o};
@@ -290,18 +274,6 @@ private:
 };
 
 typedef std::vector<Instruction>    schedule_t;
-
-// Utility functions:
-// 
-// schedule_to_text converts a schedule to a string (as the name suggests). The
-//  string is valid ASM used by the control processor (and thus can be saved to
-//  a file).
-// schedule_from_stim translates a stim circuit to a schedule. This removes any
-//  error signatures (set these in the simulator) and other operations such
-//  as coordinate declarations. The output is the max number of qubits in the
-//  circuit.
-
-uint    get_number_of_qubits(const schedule_t&);
 
 std::string         schedule_to_text(const schedule_t&);
 DetailedStimCircuit schedule_to_stim(const schedule_t&, ErrorTable&, TimeTable&, 
