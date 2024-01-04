@@ -26,13 +26,13 @@ render_network(std::string output_file, PhysicalNetwork& network, render_config_
     agattr(gr, AGNODE, "label", "N/A");
     agattr(gr, AGNODE, "shape", "circle");
     agattr(gr, AGNODE, "style", "filled");
-    agattr(gr, AGNODE, "pos", "0,0");
+    agattr(gr, AGNODE, "pos", "");
 
     agattr(gr, AGEDGE, "dir", "none");
-    agattr(gr, AGEDGE, "labelfontname", "serif");
-    agattr(gr, AGEDGE, "labelfontsize", "8");
+    agattr(gr, AGEDGE, "labelfontname", "");
+    agattr(gr, AGEDGE, "labelfontsize", "");
     agattr(gr, AGEDGE, "headlabel", "");
-    agattr(gr, AGEDGE, "penwidth", "1.0");
+    agattr(gr, AGEDGE, "penwidth", "");
     agattr(gr, AGEDGE, "style", "solid");
     agattr(gr, AGEDGE, "taillabel", "");
     agattr(gr, AGEDGE, "weight", "");

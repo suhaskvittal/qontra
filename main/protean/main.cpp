@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
     network.config.max_connectivity = 4;
 
     network.join_qubits_with_identical_support();
-//  network.make_flags();
+    network.make_flags();
     network.join_qubits_with_partial_support();
     network.add_connectivity_reducing_proxies();
     network.contract_small_degree_qubits();

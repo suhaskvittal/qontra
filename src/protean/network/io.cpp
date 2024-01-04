@@ -42,7 +42,7 @@ write_role_file(std::string output_file, PhysicalNetwork& network) {
         for (sptr<raw_vertex_t> rv : pv->role_set) {
             if (!first) fout << ",";
             first = false;
-            fout << graph::print_v(rv);
+            fout << graph::print_v(rv) << "(" << pv->cycle_role_map.at(rv) << ")";
         }
         fout << "\"\n";
     }

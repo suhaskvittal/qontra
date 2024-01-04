@@ -9,6 +9,7 @@
 #include <PerfectMatching.h>
 
 #include <algorithm>
+#include <limits>
 
 namespace qontra {
 namespace protean {
@@ -108,8 +109,8 @@ PhysicalNetwork::join_qubits_with_partial_support() {
         // by the amount of common neighbors. We will merge the best such qubit.
         sptr<phys_vertex_t> best_candidate = nullptr;
         size_t max_common_neighbors = 0;
-        for (size_t j = i+1; j < vertices.size(); j++) {
-            sptr<phys_vertex_t> pw = vertices[i];
+        for (size_t j = i+1; j < _vertices.size(); j++) {
+            sptr<phys_vertex_t> pw = _vertices[j];
             if (deleted_vertices.count(pw)) continue;
             if (pw->has_role_of_type(raw_vertex_t::type::data)) continue;
 
@@ -117,7 +118,9 @@ PhysicalNetwork::join_qubits_with_partial_support() {
             for (sptr<phys_vertex_t> x : pv_adj) {
                 common_neighbors += contains(pw, x);
             }
-            if (common_neighbors > max_common_neighbors) {
+            if (common_neighbors == get_degree(pw) && 
+                    common_neighbors > max_common_neighbors) 
+            {
                 best_candidate = pw;
                 max_common_neighbors = common_neighbors;
             }
@@ -384,6 +387,7 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
             sptr<phys_vertex_t> px = adj[i];
             // Now, for each role in pv and px, add a proxy in the raw_connection_network.
             // Each added proxy will be a role for pprx.
+            bool any_roles_added = false;
             for (sptr<raw_vertex_t> rv : pv->role_set) {
                 for (sptr<raw_vertex_t> rx : px->role_set) {
                     sptr<raw_edge_t> re = raw_connection_network.get_edge(rv, rx);
@@ -392,15 +396,19 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                     // Get cycle of role (which is just the max of the cycles of rv and rx).
                     size_t cycle = std::max(pv->cycle_role_map.at(rv), px->cycle_role_map.at(rx));
                     pprx->push_back_role(rprx, cycle);
+                    any_roles_added = true;
                 }
             }
-            share_an_edge_with_pprx.push_back(px);
-            // Delete px's edge with pv.
-            sptr<phys_edge_t> pe = get_edge(pv, px);
-            delete_edge(pe);
+            if (any_roles_added) {
+                share_an_edge_with_pprx.push_back(px);
+                // Delete px's edge with pv.
+                sptr<phys_edge_t> pe = get_edge(pv, px);
+                delete_edge(pe);
+            }
         }
         if (pprx->role_set.empty()) {
-            std::cerr << "[ warning ] adding proxy " << print_v(pprx) << " with no roles\n";
+            std::cerr << "[ warning ] found proxy " << print_v(pprx) << " with no roles\n";
+            continue;
         }
         add_vertex(pprx);
         // Update the physical connectivity on our side.
@@ -479,6 +487,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
         std::set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>> flag_pairs,
         bool is_x_error) 
 {
+    // For the purposes of this algorithm, have result be active-low.
     stim::simd_bits<SIMD_WIDTH> result(flag_pairs.size());
     result.invert_bits();   // All should be set to 1 to start with.
     // Algorithm: we need to check against any logical operator. This can be rather exhaustive.
@@ -490,7 +499,8 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 
     // We will only examine a single level of the tree at any time to avoid high memory overheads of
     // loading the entire tree.
-    const size_t OPERATOR_TREE_SIZE_LIMIT = 16*1024L;
+    const size_t OPERATOR_TREE_SIZE_LIMIT = 256L*1024L;
+    const fp_t OPERATOR_WEIGHT_MULT = 2.0;
 
     // The first entry are the qubits in the operator.
     // THe second entry is a simple hash that allows us to check if two operators are equivalent.
@@ -500,11 +510,14 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     const size_t HASH_SIZE = obs_list.size() + tanner_graph.get_checks().size()/2;
     const size_t HASH_STABILIZER_OFFSET = obs_list.size();
     // Populate the lowest level with the observables.
+    size_t min_observable_size = std::numeric_limits<size_t>::max();
     for (size_t i = 0; i < obs_list.size(); i++) {
         std::set<sptr<raw_vertex_t>> obs;
         for (sptr<tanner::vertex_t> x : obs_list[i]) {
             obs.insert(raw_connection_network.v_tanner_raw_map.at(x));
         }
+        min_observable_size = std::min(min_observable_size, obs.size());
+
         stim::simd_bits<SIMD_WIDTH> h(HASH_SIZE);
         h[i] = 1;
 
@@ -538,13 +551,15 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
             auto op_hash = std::get<1>(op);
 
             size_t k = 0;
-            for (auto pair : flag_pairs) {
-                sptr<raw_vertex_t> v1 = pair.first,
-                                    v2 = pair.second;
-                if (!result[k]) continue;   // This has already failed.
-                if (op_qubits.count(v1) && op_qubits.count(v2)) {
-                    // This is a weight-2 error.
-                    result[k] = 0;
+            if (op_qubits.size() == min_observable_size) {
+                for (auto pair : flag_pairs) {
+                    sptr<raw_vertex_t> v1 = pair.first,
+                                        v2 = pair.second;
+                    if (result[k] && op_qubits.count(v1) && op_qubits.count(v2)) {
+                        // This is a weight-2 error.
+                        result[k] = 0;
+                    }
+                    k++;
                 }
             }
             // Now, expand the operator by multiplying it by each stabilizer.
@@ -564,9 +579,12 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
                 if (common_qubits.empty()) continue;
 
                 // Otherwise, everything is fine.
-                std::set<sptr<raw_vertex_t>> new_qubits = op_qubits + stab_qubits;
+                std::set<sptr<raw_vertex_t>> new_qubits = op_qubits ^ stab_qubits;
                 stim::simd_bits<SIMD_WIDTH> new_hash = op_hash | stab_hash;
-                next_level.push_back(std::make_tuple(new_qubits, new_hash));
+
+                if (new_qubits.size() < OPERATOR_WEIGHT_MULT*min_observable_size) {
+                    next_level.push_back(std::make_tuple(new_qubits, new_hash));
+                }
             }
         }
         curr_operator_tree_level = std::move(next_level);
@@ -574,6 +592,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     if (curr_operator_tree_level.size() > OPERATOR_TREE_SIZE_LIMIT) {
         std::cerr << "[ status ] operator tree limit reached. exiting error propagation analysis.\n";
     }
+    result.invert_bits();
     return result;
 }
 
