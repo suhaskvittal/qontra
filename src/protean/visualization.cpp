@@ -63,6 +63,7 @@ render_network(std::string output_file, PhysicalNetwork& network, render_config_
     // Create edges. Here, we will label the edges by the roles that have 
     // the edge.
     for (sptr<net::phys_edge_t> pe : network.get_edges()) {
+        if (config.do_not_render_out_of_plane_edges && pe->is_out_of_plane()) continue;
         attr_list_t attr = get_attributes(pe);
 
         sptr<net::phys_vertex_t> pv = network.get_source(pe),

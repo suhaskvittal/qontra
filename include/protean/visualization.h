@@ -27,6 +27,8 @@ typedef BijectiveMap<coord_t<2>, sptr<net::phys_vertex_t>> Plane;
 struct render_config_t {
     Plane       plane;
     std::string layout_engine = "neato";
+
+    bool do_not_render_out_of_plane_edges=false;
 };
 
 void render_network(std::string output_file, PhysicalNetwork&, render_config_t);

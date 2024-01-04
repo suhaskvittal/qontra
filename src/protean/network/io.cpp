@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   29 December 2023
  * */
 
@@ -9,9 +8,89 @@
 #include <iostream>
 
 namespace qontra {
+
+using namespace graph;
+
 namespace protean {
 
 using namespace net;
+
+bool
+update_network(std::string pass_string, PhysicalNetwork& network, bool verbose) {
+    bool network_was_changed = false;
+    if (verbose) {
+        std::cout << "[ update_network ] running on pass_string = " << pass_string << std::endl;
+    }
+
+    size_t nesting_depth = 0;
+    bool capture_string_is_pass_group = false;
+    bool capture_string_changed_network = false;
+    std::string capture_string;
+
+    // This is some jank syntax, but it typedefs pass_t as a function of
+    // PhysicalNetwork that takes in void and returns bool.
+    typedef bool (PhysicalNetwork::*pass_t)(void);
+
+#define PAIR(x, y) std::make_pair<std::string, pass_t>(x, &y)
+    
+    const std::map<std::string, pass_t> PASSES{
+        PAIR("jid", PhysicalNetwork::join_qubits_with_identical_support),
+        PAIR("jpa", PhysicalNetwork::join_qubits_with_partial_support),
+        PAIR("fla", PhysicalNetwork::make_flags),
+        PAIR("prx", PhysicalNetwork::add_connectivity_reducing_proxies),
+        PAIR("con", PhysicalNetwork::contract_small_degree_qubits),
+        PAIR("ral", PhysicalNetwork::reallocate_edges),
+        PAIR("rlb", PhysicalNetwork::relabel_qubits)
+    };
+
+    auto call_pass = [&] (std::string p)
+    {
+        if (verbose) {
+            std::cout << "[ update_network ] calling pass " << p << std::endl;
+        }
+        pass_t pass = PASSES.at(p);
+        return (network.*pass)();
+    };
+
+    for (size_t i = 0; i <= pass_string.size(); i++) {
+        char c = i == pass_string.size() ? '.' : pass_string[i];
+        // Execute contents of capture string.
+        if (nesting_depth == 0 && capture_string.size() >= 3) {
+            capture_string_changed_network = false;
+            do {
+                if (capture_string_is_pass_group) {
+                    capture_string_changed_network = update_network(capture_string, network, verbose);
+                } else if (PASSES.count(capture_string)) {
+                    capture_string_changed_network = call_pass(capture_string);
+                }
+                network_was_changed |= capture_string_changed_network;
+            } while (c == '+' && capture_string_changed_network);
+            capture_string.clear();
+            capture_string_is_pass_group = false;
+        }
+        // Now, update capture_string.
+        if (c == ')') { nesting_depth--; capture_string_is_pass_group = true; }
+        if (nesting_depth > 0) {
+            // All characters are appended without regard.
+            capture_string.push_back(c);
+        } else {
+            if (c == '.' || c == ',' || c == ';' || c == ':' || c == '|'
+                || c == '(' || c == ')' || c == '+') 
+            {
+               // Do nothing.
+            } else if (c >= 'A' && c <= 'Z') {
+                c += 'a' - 'A';
+                capture_string.push_back(c);
+            } else if (c >= 'a' && c <= 'z') {
+                capture_string.push_back(c);
+            } else {
+                std::cerr << "[ update_network ] unrecognized character \'" << c << "\'" << std::endl;
+            }
+        }
+        if (c == '(') nesting_depth++;
+    }
+    return network_was_changed;
+}
 
 void
 write_schedule_file(std::string output_file, PhysicalNetwork& network) {
@@ -42,7 +121,7 @@ write_role_file(std::string output_file, PhysicalNetwork& network) {
         for (sptr<raw_vertex_t> rv : pv->role_set) {
             if (!first) fout << ",";
             first = false;
-            fout << graph::print_v(rv) << "(" << pv->cycle_role_map.at(rv) << ")";
+            fout << print_v(rv) << "(" << pv->cycle_role_map.at(rv) << ")";
         }
         fout << "\"\n";
     }

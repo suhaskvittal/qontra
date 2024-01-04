@@ -92,8 +92,8 @@ get_attributes(sptr<phys_edge_t> pe) {
         attributes.weight = "0";
     } else {
         attributes.style = "solid";
-        attributes.penwidth = "1.0";
-        attributes.weight = "1";
+        attributes.penwidth = "2.0";
+        attributes.weight = "10";
     }
     return attributes;
 }

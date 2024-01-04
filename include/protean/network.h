@@ -143,6 +143,8 @@ public:
     //
     //  join_qubits_with_identical_support
     //      -- merges qubits connected to the same data qubits (i.e. as in the color code).
+    //  join_qubits_with_partial_support
+    //      -- similar to above, but requires that the adjacency list is a strict subset.
     //  make_flags
     //      -- creates flag qubits and fault-tolerant circuits.
     //      -- PRECONDITION: data qubits are still connected directly to parity qubits.
@@ -153,17 +155,24 @@ public:
     //  contract_small_degree_qubits
     //      -- contracts qubits (that are non-data!!!) that are connected to at most two neighbors,
     //          as this contraction does not create new connectivity violations.
-    void join_qubits_with_identical_support(void);
-    void join_qubits_with_partial_support(void);
-    void make_flags(void);
-    void add_connectivity_reducing_proxies(void);
-    void contract_small_degree_qubits(void);
-
+    //  reallocate_edges
+    //      -- attempts to move edges down processor layers, and deletes any empty layers
+    //  relabel_qubits
+    //      -- this is more of a convenience pass
+    //      -- It may be that we can have missing ids during execution due to modifications. This
+    //          pass fixes that. Recommended to run at the END of compilation.
+    //
+    //  All passes return true if some modification was made,
+    bool join_qubits_with_identical_support(void);
+    bool join_qubits_with_partial_support(void);
+    bool make_flags(void);
+    bool add_connectivity_reducing_proxies(void);
+    bool contract_small_degree_qubits(void);
     // Try and place out-of-plane edges into the processor bulk, and deletes any
     // empty processor layers.
-    void reallocate_edges(void);
+    bool reallocate_edges(void);
     // Relabel qubits so that the ids are not sporadic.
-    void relabel_qubits(void);
+    bool relabel_qubits(void);
 
     RawNetwork get_raw_connection_network(void);
 
@@ -211,6 +220,33 @@ private:
     friend void write_tanner_graph_file(std::string, PhysicalNetwork&);
     friend void write_flag_assignment_file(std::string, PhysicalNetwork&);
 };
+
+// Takes in a string of characters corresponding to pass execution and updates the PhysicalNetwork
+// reference accordingly.
+//
+// Each pass is a three letter character:
+//      Jid -- join_qubits_with_identical_support
+//      Jpa -- join_qubits_with_partial_support
+//      Fla -- make_flags
+//      Prx -- add_connectivity_reducing_proxies
+//      Con -- contract_small_degree_qubits
+//      Ral -- reallocate_qubits
+//      Rlb -- relabel_qubits
+// The above is not case sensitive.
+//
+// Special characters:
+//      .,;:| -- separates passes out for readability (ignored)
+//      (...) -- the passes in the parenthesis are a single group of passes
+//      PASS+, (...)+ -- executes the PASS or pass group until no modifications are made
+//  Example string:
+//      Jid.Ral.Fla.Ral.Jpa.Ral.(Prx.Con.Jpa.Ral)+.Rlb.
+//
+//      Equivalents (examples):
+//          JidRalFlaRalJpaRal(PrxConJpaRal)+Rlb
+//          jidralflaraljparal(prxconjparal)+rlb
+//          jid|ral|fla|ral|jpa|ral(prx.con.jpa.ral)+rlb
+//      Use whichever is most readable.
+bool update_network(std::string pass_string, PhysicalNetwork&, bool verbose=false);
 
 // Writes the physical network to a folder.
 // Generated Files:

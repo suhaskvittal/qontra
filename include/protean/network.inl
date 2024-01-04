@@ -231,7 +231,7 @@ PhysicalNetwork::get_bulk_degree(sptr<net::phys_vertex_t> v) {
     return processor_layers[0].get_degree(v);
 }
 
-inline void
+inline bool
 PhysicalNetwork::relabel_qubits() {
     for (size_t i = 0; i < vertices.size(); i++) {
         sptr<net::phys_vertex_t> pv = vertices[i];
@@ -244,6 +244,7 @@ PhysicalNetwork::relabel_qubits() {
         pv->id = i;
     }
     id_ctr = vertices.size();
+    return true;
 }
 
 inline ProcessorLayer&
