@@ -6,9 +6,9 @@
 
 namespace qontra {
 
-uint64_t
+inline uint64_t
 get_instruction_code(std::string instr) {
-
+    
 }
 
 

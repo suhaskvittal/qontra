@@ -1,3 +1,6 @@
 [submodule "stim"]
 	path = stim
 	url = https://github.com/quantumlib/Stim.git
+[submodule "dependencies/qes"]
+	path = dependencies/qes
+	url = git@github.com:suhaskvittal/qes.git
