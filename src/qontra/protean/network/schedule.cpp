@@ -220,6 +220,9 @@ PhysicalNetwork::make_schedule(size_t rounds) {
             }
         }
         // CX Body
+        {
+
+        }
     }
 }
 
