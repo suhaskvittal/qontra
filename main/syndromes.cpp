@@ -3,10 +3,12 @@
  *  date:   11 Octoboer 2023
  * */
 
-#include <defs/filesystem.h>
-#include <experiments.h>
-#include <instruction.h>
-#include <parsing/cmd.h>
+#include <qontra/experiments.h>
+#include <qontra/ext/qes.h>
+#include <qontra/ext/stim.h>
+
+#include <vtils/cmd_parse.h>
+#include <vtils/filesystem.h>
 
 #include <deque>
 #include <fstream>
@@ -18,30 +20,29 @@
 using namespace qontra;
 using namespace experiments;
 
-stim::Circuit
-get_circuit(const schedule_t& sch, fp_t p) {
-    const uint n = get_number_of_qubits(sch);
+DetailedStimCircuit
+get_circuit(const qes::Program<>& program, fp_t p) {
+    const size_t n = get_number_of_qubits(program);
 
     tables::ErrorAndTiming et;
     et = et * (1000 * p);
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
-    stim::Circuit circ = schedule_to_stim(sch, errors, timing);
-    return circ;
+    return DetailedStimCircuit::from_qes(program, errors, timing);
 }
 
 int main(int argc, char* argv[]) {
-    CmdParser pp(argc, argv);
+    vtils::CmdParser pp(argc, argv);
 
-    std::string asm_file;
+    std::string qes_file;
     std::string output_file;
     uint64_t shots;
 
     fp_t p = 1e-3;
     uint64_t hw_min = 1;
 
-    if (!pp.get_string("asm", asm_file)) return 1;
+    if (!pp.get_string("qes", qes_file)) return 1;
     if (!pp.get_string("out", output_file)) return 1;
     if (!pp.get_uint64("shots", shots)) return 1;
 
@@ -51,8 +52,8 @@ int main(int argc, char* argv[]) {
     G_FILTERING_HAMMING_WEIGHT = hw_min;
 
     // Get stim circuit.
-    schedule_t sch = schedule_from_file(asm_file);
-    stim::Circuit circuit = get_circuit(sch, p);
+    qes::Program<> program = qes::from_file(qes_file);
+    DetailedStimCircuit circuit = get_circuit(program, p);
 
     MPI_Init(NULL, NULL);
     int world_rank, world_size;
@@ -60,7 +61,7 @@ int main(int argc, char* argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     // Write results to file.
     if (world_rank == 0) {
-        safe_create_directory(get_parent_directory(output_file.c_str()));
+        vtils::safe_create_directory(vtils::get_parent_directory(output_file.c_str()));
     }
     std::ofstream out(output_file);
     // Setup experiemnts callback for writing syndromes to file.
@@ -72,7 +73,7 @@ int main(int argc, char* argv[]) {
         stim::simd_bits<SIMD_WIDTH> syndrome = payload.syndrome,
                                     observable = payload.observables;
 
-        auto detectors = get_nonzero_detectors(syndrome, circuit.count_detectors());
+        auto detectors = get_nonzero_detectors_(syndrome, circuit.count_detectors());
         bool nonzero_obs = observable.not_zero();
         if (detectors.size() >= G_FILTERING_HAMMING_WEIGHT || nonzero_obs) {
             syndrome_list.push_back(detectors);

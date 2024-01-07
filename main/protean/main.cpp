@@ -3,18 +3,19 @@
  *  date:   29 December 2023
  * */
 
-#include <graph/io.h>
-#include <graph/tanner_graph.h>
-#include <parsing/cmd.h>
-#include <protean/network.h>
-#include <protean/visualization.h>
+#include <qontra/graph/io.h>
+#include <qontra/graph/tanner_graph.h>
+#include <qontra/protean/network.h>
+#include <qontra/protean/visualization.h>
+
+#include <vtils/cmd_parse.h>
 
 using namespace qontra;
 using namespace graph;
 using namespace protean;
 
 int main(int argc, char* argv[]) {
-    CmdParser pp(argc, argv);
+    vtils::CmdParser pp(argc, argv);
 
     std::string tanner_graph_file;
     std::string render_output_file;

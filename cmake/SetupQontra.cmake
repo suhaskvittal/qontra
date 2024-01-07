@@ -6,38 +6,24 @@ find_package(BISON REQUIRED)
 
 # Setup Bison and Flex files.
 
-BISON_TARGET(ASMParser ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.y 
-    ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.tab.c
-    DEFINES_FILE ${CMAKE_SOURCE_DIR}/include/parsing/asm/parser.tab.h)
-FLEX_TARGET(ASMLexer ${CMAKE_SOURCE_DIR}/include/parsing/asm/lexer.lex 
-    ${CMAKE_SOURCE_DIR}/include/parsing/asm/lex.yy.c)
-ADD_FLEX_BISON_DEPENDENCY(ASMLexer ASMParser)
-
 set(QONTRA_FILES
     # Top-Level
-    src/experiments.cpp
-    src/instruction.cpp
-    src/tables.cpp
-    # Linear programming
-    src/linprog/base.cpp
-    # Utility and Definitions
-    src/defs/filesystem.cpp
+    src/qontra/experiments.cpp
+    src/qontra/tables.cpp
+    # Extensions
+    src/qontra/ext/qes.cpp
+    src/qontra/ext/stim.cpp
     # Decoders
-    src/decoder/mwpm.cpp
-    # Parsing
-    src/parsing/cmd.cpp 
-    src/parsing/asm.cpp
-    ${BISON_ASMParser_OUTPUTS}
-    ${FLEX_ASMLexer_OUTPUTS}
+    src/qontra/decoder/mwpm.cpp
     # Graphs
-    src/graph/decoding_graph.cpp 
-    src/graph/lattice_graph.cpp
-    src/graph/tanner_graph.cpp
+    src/qontra/graph/decoding_graph.cpp 
+    src/qontra/graph/lattice_graph.cpp
+    src/qontra/graph/tanner_graph.cpp
     # Simulators
-    src/sim/enumerator.cpp
-    src/sim/frame_sim.cpp
-    src/sim/state_sim.cpp
-    src/sim/memory_sim.cpp
+#   src/qontra/sim/enumerator.cpp
+    src/qontra/sim/frame_sim.cpp
+    src/qontra/sim/state_sim.cpp
+    src/qontra/sim/memory_sim.cpp
     )
 
 # Each extension may have its own source files. So, we will need to update

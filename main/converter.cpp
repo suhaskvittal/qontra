@@ -3,8 +3,9 @@
  * date:    27 August 2023
  * */
 
-#include <instruction.h>
-#include <parsing/cmd.h>
+#include <qontra/ext/stim.h>
+#include <qontra/ext/qes.h>
+#include <vtils/cmd_parse.h>
 
 #include <fstream>
 #include <iostream>
@@ -12,12 +13,9 @@
 
 using namespace qontra;
 
-#define T_ASM   0
-#define T_STIM  1
-
 int get_file_type(std::string filename) {
     const std::vector<std::string> ext{
-        ".asm",
+        ".qes",
         ".stim"
     };
     for (uint i = 0; i < ext.size(); i++) {
@@ -29,13 +27,18 @@ int get_file_type(std::string filename) {
 }
 
 int main(int argc, char* argv[]) {
-    CmdParser pp(argc, argv);
+    vtils::CmdParser pp(argc, argv);
 
-    std::string help = "usage: ./converter --input <F> --output <G>\n"
+    std::string help = "usage: ./converter --in <F> --out <G>\n"
                         "The following conversions are supported:\n"
-                        "\t(1) asm to stim\n";
+                        "\t(1) qes to stim\n"
+                        "\n"
+                        "Optional arguments:\n"
+                        "\t--p (physical error rate, default 0.001)";
     std::string input_file;
     std::string output_file;
+
+    fp_t p = 1e-3;
 
     if (pp.option_set("h")) {
 help_exit:
@@ -43,24 +46,27 @@ help_exit:
         return 1;
     }
 
-    if (!pp.get_string("input", input_file))    goto help_exit;
-    if (!pp.get_string("output", output_file))  goto help_exit;
+    if (!pp.get_string("in", input_file))    goto help_exit;
+    if (!pp.get_string("out", output_file))  goto help_exit;
+
+    pp.get_float("p", p);
 
     int type1 = get_file_type(input_file), type2 = get_file_type(output_file);
 
     if (type1 == 0) {
-        schedule_t sch = schedule_from_file(input_file);
-        uint n = get_number_of_qubits(sch);
+        qes::Program<> program = qes::from_file(input_file);
+        size_t n = get_number_of_qubits(program);
 
         // Get error model.
         tables::ErrorAndTiming et;
         ErrorTable errors;
         TimeTable timing;
         tables::populate(n, errors, timing, et);
+        et *= 1000*p;
 
-        stim::Circuit circ = schedule_to_stim(sch, errors, timing);
+        DetailedStimCircuit circuit = DetailedStimCircuit::from_qes(program, errors, timing);
         std::ofstream out(output_file);
-        out << circ.str();
+        out << circuit.str();
     }
     
     return 0;

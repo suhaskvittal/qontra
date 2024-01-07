@@ -7,21 +7,24 @@
 //#define DISABLE_MPI
 //#define USE_NEURAL_NET
 
-#include <defs/filesystem.h>
-#include <decoder/mwpm.h>
+#include <qontra/decoder/mwpm.h>
 
-#ifdef QONTRA_CHROMOBIUS_ENABLED
-#include <decoder/pymatching.h>
-#include <decoder/chromobius.h>
+#ifdef QONTRA_PYMATCHING_ENABLED
+#include <qontra/decoder/pymatching.h>
 #endif
 
-#include <experiments.h>
-#include <parsing/cmd.h>
-#include <instruction.h>
-#include <stimext.h>
-#include <tables.h>
+#ifdef QONTRA_CHROMOBIUS_ENABLED
+#include <qontra/decoder/chromobius.h>
+#endif
 
-#include <filesystem>
+#include <qontra/experiments.h>
+#include <qontra/ext/stim.h>
+#include <qontra/ext/qes.h>
+#include <qontra/tables.h>
+
+#include <vtils/cmd_parse.h>
+#include <vtils/filesystem.h>
+
 #include <fstream>
 #include <iostream>
 
@@ -37,8 +40,8 @@ using namespace qontra;
 enum class model_style { cc, pheno, circuit };
 
 DetailedStimCircuit
-get_circuit(const schedule_t& sch, fp_t p, model_style m=model_style::circuit) {
-    const uint n = get_number_of_qubits(sch);
+get_circuit(const qes::Program<>& program, fp_t p, model_style m=model_style::circuit) {
+    const size_t n = get_number_of_qubits(program);
 
     tables::ErrorAndTiming et;
     et.e_g1q *= 0.1;
@@ -62,8 +65,7 @@ get_circuit(const schedule_t& sch, fp_t p, model_style m=model_style::circuit) {
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
-    DetailedStimCircuit circ = schedule_to_stim(sch, errors, timing, p);
-    return circ;
+    return DetailedStimCircuit::from_qes(program, errors, timing);
 }
 
 int main(int argc, char* argv[]) {
@@ -73,9 +75,9 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 #endif
-    CmdParser pp(argc, argv);
+    vtils::CmdParser pp(argc, argv);
 
-    std::string asm_file;
+    std::string qes_file;
     std::string output_file;
     fp_t p;
     uint64_t shots;
@@ -88,11 +90,11 @@ int main(int argc, char* argv[]) {
     std::string model_file = "model.bin";
 
     DetailedStimCircuit error_model;
-    if (pp.get_string("stim", asm_file)) {
-        FILE* fin = fopen(asm_file.c_str(), "r");
+    if (pp.get_string("stim", qes_file)) {
+        FILE* fin = fopen(qes_file.c_str(), "r");
         error_model = stim::Circuit::from_file(fin);
         fclose(fin);
-    } else if (!pp.get_string("asm", asm_file)) {
+    } else if (!pp.get_string("qes", qes_file)) {
         return 1;
     }
 
@@ -118,8 +120,8 @@ int main(int argc, char* argv[]) {
 #endif
     // Get schedule from file.
     if (!pp.option_set("stim")) {
-        schedule_t sch = schedule_from_file(asm_file);
-        error_model = get_circuit(sch, p, m);
+        qes::Program<> program = qes::from_file(qes_file);
+        error_model = get_circuit(program, p, m);
     }
 #ifdef USE_NEURAL_NET
     using namespace mlpack;
@@ -164,9 +166,9 @@ int main(int argc, char* argv[]) {
 
     // Write results to file.
     if (world_rank == 0) {
-        safe_create_directory(get_parent_directory(output_file.c_str()));
+        vtils::safe_create_directory(vtils::get_parent_directory(output_file.c_str()));
     }
-    bool write_header = !file_exists(output_file);
+    bool write_header = !vtils::file_exists(output_file);
 #ifndef DISABLE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -185,7 +187,7 @@ int main(int argc, char* argv[]) {
                     << "Time Std,"
                     << "Time Max\n";
         }
-        out << asm_file << ","
+        out << qes_file << ","
             << p << ","
             << shots << ","
             << res.logical_error_rate << ","
