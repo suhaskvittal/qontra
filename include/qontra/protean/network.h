@@ -175,7 +175,7 @@ public:
     // Relabel qubits so that the ids are not sporadic.
     bool relabel_qubits(void);
     // Computes the syndrome extraction schedule for the existing layout.
-    qes::Program<> make_schedule(void);
+    qes::Program<> make_schedule(size_t rounds);
 
     RawNetwork get_raw_connection_network(void);
 
@@ -184,6 +184,10 @@ public:
         size_t max_thickness = 1;   // 0 = means only processor bulk, n = n TSV layers.
     } config;
 private:
+    // Recomputes the cycle_role_map of each phys_vertex_t. During the optimizations, the cycle_role_map
+    // is a partial ordering of roles. However, to get the total order, we must consider edges between
+    // roles as well. This function refreshes the maps to reflect this ordering.
+    void recompute_cycle_role_maps(void);
     // Allocates a new processor layer.
     ProcessorLayer& push_back_new_processor_layer(void);
     // Consumes a physical qubit safely.

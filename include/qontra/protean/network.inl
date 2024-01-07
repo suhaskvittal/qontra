@@ -98,6 +98,7 @@ RawNetwork::proxy_walk(sptr<net::raw_vertex_t> from,
                         std::vector<sptr<net::raw_vertex_t>>& walk_res_ref) 
 {
     sptr<net::raw_vertex_t> prev = from, curr = thru;
+    walk_res_ref.push_back(prev);
     while (curr->qubit_type == net::raw_vertex_t::type::proxy) {
         walk_res_ref.push_back(curr);
 
@@ -105,6 +106,7 @@ RawNetwork::proxy_walk(sptr<net::raw_vertex_t> from,
         prev = curr;
         curr = next;
     }
+    walk_res_ref.push_back(curr);
     return curr;
 }
 

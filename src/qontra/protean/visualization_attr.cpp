@@ -14,27 +14,7 @@ attr_list_t
 get_attributes(sptr<phys_vertex_t> pv) {
     attr_list_t attributes;
 
-    bool first = true;
     attributes.name = graph::print_v(pv);
-    /*
-    for (sptr<raw_vertex_t> rv : pv->role_set) {
-        if (!first) attributes.name += ":";
-        first = false;
-
-        if (rv->qubit_type == raw_vertex_t::type::data) {
-            attributes.name += "d";
-        } else if (rv->qubit_type == raw_vertex_t::type::zparity) {
-            attributes.name += "z";
-        } else if (rv->qubit_type == raw_vertex_t::type::xparity) {
-            attributes.name += "x";
-        } else if (rv->qubit_type == raw_vertex_t::type::flag) {
-            attributes.name += "f";
-        } else {
-            attributes.name += "pr";
-        }
-        attributes.name += std::to_string(rv->id);
-    }
-    */
     // Set remaining attributes.
     if (pv->has_role_of_type(raw_vertex_t::type::data)) {
         attributes.fillcolor = "#36454f";

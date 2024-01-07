@@ -24,7 +24,7 @@ is_2q(const qes::Instruction<>& inst) {
 inline bool
 is_instantaneous(const qes::Instruction<>& inst) {
     const std::string name = inst.get_name();
-    return name == "event" || name == "obs";
+    return name == "event" || name == "obs" || name == "mshift";
 }
 
 inline bool

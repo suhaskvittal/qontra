@@ -125,6 +125,8 @@ DetailedStimCircuit::from_qes(
                 offsets.push_back(stim::TARGET_RECORD_BIT | off);
             }
             circuit.safe_append_ua("OBSERVABLE_INCLUDE", offsets, static_cast<double>(obs));
+        } else if (name == "mshift") {
+            meas_ctr -= inst.get<uint64_t>(0);
         }
         // Apply any errors.
         // First do gate errors.
