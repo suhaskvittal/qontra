@@ -222,6 +222,83 @@ private:
     friend void write_role_file(std::string, PhysicalNetwork&);
     friend void write_tanner_graph_file(std::string, PhysicalNetwork&);
     friend void write_flag_assignment_file(std::string, PhysicalNetwork&);
+
+    friend class Scheduler;
+};
+
+// Both the orient functions orient two qubits for a CNOT (first output is control, second is target).
+//
+// orient does so assuming one of the qubits is a parity qubit.
+//
+// orient_relative instead takes a third argument that is the parity qubit, and returns (first, second)
+// if it is X parity (i.e., this can be used if the first argument is a data qubit and the second is a flag).
+std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>> 
+    orient(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+
+std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>> 
+    orient_relative(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+
+// The Scheduler class is dedicated to building the syndrome extraction
+// schedule.
+class Scheduler {
+public:
+    Scheduler(PhysicalNetwork*);
+
+    qes::Program<>  run(void);
+
+    qes::Program<>  build_preparation();
+    qes::Program<>  build_body();
+    qes::Program<>  build_measurement();
+private:
+    struct parity_support_t {
+        std::set<sptr<net::raw_vertex_t>>   data;
+        std::set<sptr<net::raw_vertex_t>>   flags;
+    };
+
+    typedef int stage_t;
+
+    bool is_good_for_current_cycle(sptr<raw_vertex_t>);
+
+    // Retrieves the subset of checks whose stage_map is set to the input.
+    std::set<sptr<net::raw_vertex_t>>       get_checks_at_stage(stage_t);
+    // Retrieves the proxy_walk_path between two roles. This is memoized.
+    std::vector<sptr<net::raw_vertex_t>>    get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+
+    // For the given endpoint, this function (1) traverses the path, stopping early if any edge has not been
+    // completed, (2) upon arriving at an edge with the endpoint, returns the other endpoint if the edge
+    // is not done, (3) returns nullptr if stopped early or no edge satisfying (2) is found.
+    sptr<net::raw_vertex_t> test_and_get_other_endpoint_if_ready(
+                                    sptr<net::raw_vertex_t> endpoint, std::vector<sptr<net::raw_vertex_t>> path);
+
+    // Gets the H operands (which are X-parity or Z-flags) for a check operator.
+    std::vector<uint64_t>   preparation_get_h_operands(sptr<net::raw_vertex_t>);
+    // Gets the CX operands to prepare flags for a check operator.
+    std::vector<uint64_t>   preparation_get_cx_operands(sptr<net::raw_vertex_t>, size_t& k);
+
+    // Gets all data qubits that have a CNOT for this check operator.
+    std::set<sptr<net::raw_vertex_t>>   body_get_partial_data_support(sptr<net::raw_vertex_t>);
+    // Gets the CX operands according to the data_cnot_schedules.
+    std::vector<uint64_t> body_get_cx_operands(
+                                sptr<net::raw_vertex_t>, 
+                                const std::vector<sptr<net::raw_vertex_t>>&,
+                                size_t& k);
+
+    // Basic data structures: just holds read-only information.
+    std::set<sptr<net::raw_vertex_t>>                   all_checks;
+    std::map<sptr<net::raw_vertex_t>, parity_support_t> parity_support_map;
+    // Tracking structures: used to track where each check is when constructing the schedule.
+    std::map<sptr<net::raw_vertex_t>, stage_t>  stage_map;
+    std::map<sptr<net::raw_edge_t>, stage_t>    visited_edge_map;
+    std::map<sptr<net::raw_vertex_t>, stage_t>  h_gate_stage_map;
+
+    size_t cycle;
+
+    PhysicalNetwork* net_p;
+
+    const stage_t PREP_STAGE = 0;
+    const stage_t BODY_STAGE = 1;
+    const stage_t TEAR_STAGE = 2;
+    const stage_t MEAS_STAGE = 3;
 };
 
 // Takes in a string of characters corresponding to pass execution and updates the PhysicalNetwork

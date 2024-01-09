@@ -265,6 +265,40 @@ PhysicalNetwork::consume(sptr<net::phys_vertex_t> v, sptr<net::phys_vertex_t> w)
     v->consume(w);
 }
 
+inline std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
+orient(sptr<net::raw_vertex_t> v, sptr<net::raw_vertex_t> w) {
+    if (v->qubit_type == raw_vertex_t::type::xparity) {
+        return std::make_pair(v, w);
+    } else {
+        return std::make_pair(w, v);
+    }
+}
+
+inline std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
+orient_relative(sptr<net::raw_vertex_t> v, sptr<net::raw_vertex_t> w, sptr<net::raw_vertex_t> to) {
+    if (to->qubit_type == raw_vertex_t::type::xparity) {
+        return std::make_pair(v, w);
+    } else {
+        return std::make_pair(w, v);
+    }
+}
+
+inline bool
+Scheduler::is_good_for_current_cycle(sptr<raw_vertex_t> rv) {
+    sptr<phys_vertex_t> pv = net_p->role_to_phys[rv];
+    return pv->cycle_role_map[rv] > cycle;
+}
+
+inline std::set<raw_vertex_t>
+Scheduler::get_checks_at_stage(stage_t s) {
+    std::set<sptr<raw_vertex_t>> stage_checks(all_checks);
+    for (auto it = stage_checks.begin(); it != stage_checks.end(); ) {
+        if (stage_map[*it] != s)    it = stage_checks.erase(it);
+        else                        it++;
+    }
+    return stage_checks;
+}
+
 inline void
 write_network_to_folder(std::string output_folder, PhysicalNetwork& network) {
     // Make folder if it does not exist.
