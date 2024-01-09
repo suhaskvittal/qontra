@@ -332,6 +332,7 @@ edge_build_outer_loop_start:
                                     pv2->cycle_role_map.at(rv2),
                                     ppq->cycle_role_map.at(rpq)});
             pfq->push_back_role(rfq, cycle);
+            role_to_phys[rfq] = pfq;
             qubits_connected_to_pfq.insert(ppq);
             // Delete edge between pv1/pv2 and ppq (if it exists).
             if (contains(pv1, ppq)) {
@@ -387,6 +388,7 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                     // Get cycle of role (which is just the max of the cycles of rv and rx).
                     size_t cycle = std::max(pv->cycle_role_map.at(rv), px->cycle_role_map.at(rx));
                     pprx->push_back_role(rprx, cycle);
+                    role_to_phys[rprx] = pprx;
                     any_roles_added = true;
                 }
             }
@@ -629,11 +631,18 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                 // cycle and end of the prior role.
                 role_min_cycle = std::max(role_min_cycle, cyc);
                 // if cyc != role_min_cycle --> there is a change.
-                if (role_min_cycle > cyc) any_change = true;
-                new_cycle_role_map.put(role_min_cycle);
+                if (role_min_cycle > cyc) {
+                    std::cout << "[recompute_cycle_role_maps] change (" << print_v(pv) << "): "
+                        << print_v(rv) << ", " << cyc << " --> " << role_min_cycle << "\n";
+                    any_change = true;
+                }
+                new_cycle_role_map.put(role_min_cycle, rv);
                 // Now, compute the maximum cycle of this role.
                 for (auto rw : raw_connection_network.get_neighbors(rv)) {
                     sptr<phys_vertex_t> pw = role_to_phys[rw];
+                    if (pw == nullptr) {
+                        std::cerr << "[ protean ] role " << print_v(rw) << " has no qubit!" << std::endl;
+                    }
                     size_t c = pw->cycle_role_map.at(rw);
                     role_min_cycle = std::max(role_min_cycle, c);
                 }
@@ -645,91 +654,5 @@ PhysicalNetwork::recompute_cycle_role_maps() {
     } while (any_change);
 }
 
-/*
-    TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
-    // Compute the cycle time for each check.
-    vtils::TwoLevelMap<phys_vertex_t, phys_vertex_t, std::vector<phys_vertex_t>>
-        parity_data_cnot_path_map;
-    std::map<phys_vertex_t, std::set<phys_vertex_t>> effective_support_map;
-    std::map<size_t, std::vector<sptr<raw_vertex_t>>> check_cycle_time_map;
-    size_t overall_max_cycle_time = 0;
-    for (sptr<tanner::vertex_t> tpq : tanner_graph.get_checks()) {
-        sptr<raw_vertex_t> rpq = raw_connection_network.v_tanner_raw_map.at(tpq);
-        sptr<phys_vertex_t> ppq = role_to_phys[rpq];
-        // We need to get three things from here:
-        //  (1) the cycle time of the check operator (max of all qubits involved)
-        //  (2) the effective support (all physical qubits involved)
-        //  (3) how to entangle each data qubit with each parity qubit.
-        size_t max_cycle_time = ppq->cycle_role_map.at(ppq);
-        std::set<phys_vertex_t> eff_support;
-        // For each data qubit, we need to figure out how to entangle its state with
-        // the parity qubit. We will use Dijkstra's to compute a path from the parity
-        // qubit to the data qubits such that.
-        //      Edge weight between XYZ and proxy = 1
-        //      Edge weight between data and flag = 1 if data works with the flag, inf otherwise
-        //      Edge weight between data and parity = 1 if parity = rpq, inf otherwise.
-        //      Edge weight = 1 otherwise.
-        constexpr fp_t inf = std::numeric_limits<fp_t>::max();
-        auto w_func = [&] (auto e)
-        {
-            auto v = raw_connection_network.get_source(e),
-                 w = raw_connection_network.get_destination(e);
-            bool either_is_proxy = v->qubit_type == raw_vertex_t::type::proxy
-                                    || w->qubit_type == raw_vertex_t::type::proxy;
-            bool either_is_flag = v->qubit_type == raw_vertex_t::type::flag
-                                    || w->qubit_type == raw_vertex_t::type::flag;
-            bool either_is_parity = v->qubit_type == raw_vertex_t::type::parity
-                                    || w->qubit_type == raw_vertex_t::type::parity;
-            bool v_is_data = v->qubit_type == raw_vertex_t::type::data;
-            bool w_is_data = w->qubit_type == raw_vertex_t::type::data;
-            if (either_is_proxy) {
-                return 1.0;
-            } else if (either_is_proxy) {
-                if (v_is_data) {
-                    return (flag_assignment_map[rpq][v] == w ? 1.0 : inf;
-                } else if (w_is_data) {
-                    return (flag_assignment_map[rpq][v] == w ? 1.0 : inf;
-                } else {
-                    return 1.0;
-                }
-            } else if (either_is_parity) {
-                return (v == rpq || w == rpq) ? 1.0 : inf;
-            } else {
-                return 1.0;
-            }
-        };
-        std::map<sptr<raw_vertex_t>, fp_t> dist;
-        std::map<sptr<raw_vertex_t>, sptr<raw_vertex_t>> prev;
-        dijkstra(&raw_connection_network, rpq, dist, prev, w_func);
-        for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
-            sptr<raw_vertex_t> rdq = raw_connection_network.v_tanner_raw_map.at(tdq);
-            sptr<phys_vertex_t> pdq = role_to_phys[rdq];
-            // Now, get path from rdq to rpq. Convert all qubits to physical qubits.
-            std::vector<sptr<phys_vertex_t>> cnot_path;
-            auto curr = rdq;
-            while (prev[curr] != curr) {
-                sptr<phys_vertex_t> x = role_to_phys[curr];
-                if (x != cnot_path.back()) {
-                    cnot_path.push_back(x);
-                    max_cycle_time = std::max(max_cycle_time, x->cycle_role_map.at(cur));
-                }
-                curr = prev[curr];
-            }
-            if (cnot_path.back() != ppq) cnot_path.push_back(ppq);
-            eff_support.insert(cnot_path.begin(), cnot_path.end());
-            parity_data_cnot_path_map[ppq][pdq] = cnot_path;
-        }
-        effective_support_map[ppq] = eff_support;
-        check_cycle_time_map[max_cycle_time].push_back(rpq);
-        overall_max_cycle_time = std::max(overall_max_cycle_time, max_cycle_time);
-    }
-    // Now, we must schedule all checks at the same cycle time.
-    for (size_t c = 0; c < overall_max_cycle_time; c++) {
-        if (!check_cycle_time_map.count(c)) continue;
-        auto checks = check_cycle_time_map[c];
-        auto check_schedules = compute_cnot_schedules_for_checks(checks);
-    }
-    return total_schedule;
-*/
 }   // protean
 }   // qontra

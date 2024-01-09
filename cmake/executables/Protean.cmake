@@ -8,6 +8,8 @@ set(PROTEAN_FILES
     src/qontra/protean/network/io.cpp
     src/qontra/protean/network/physical.cpp
     src/qontra/protean/network/raw.cpp
+    src/qontra/protean/network/schedule.cpp
+    src/qontra/protean/network/schedule/utils.cpp
     src/qontra/protean/visualization.cpp
     src/qontra/protean/visualization_attr.cpp
     src/qontra/protean/visualization_lp.cpp)

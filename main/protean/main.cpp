@@ -24,12 +24,17 @@ int main(int argc, char* argv[]) {
     std::string pass_string = "Jid.Ral.Fla.Ral.Jpa.Ral.(Prx.Con.Jpa.Ral)+.Rlb.";
     std::string layout_engine = "neato";
 
+    uint64_t schedule_rounds = 3;
+
     if (!pp.get_string("tanner", tanner_graph_file)) return 1;
     if (!pp.get_string("out", data_output_folder)) return 1;
 
     pp.get_string("render", render_output_file);
     pp.get_string("passes", pass_string);
     pp.get_string("layout", layout_engine);
+    
+    pp.get_uint64("s-rounds", schedule_rounds);
+    bool schedule_is_mx = pp.option_set("mx");
 
     bool verbose = pp.option_set("verbose") || pp.option_set("v");
 
@@ -40,6 +45,8 @@ int main(int argc, char* argv[]) {
     // Make network:
     PhysicalNetwork network(tanner_graph);
     network.config.max_connectivity = 4;
+    network.config.rounds = static_cast<size_t>(schedule_rounds);
+    network.config.is_memory_x = schedule_is_mx;
 
     update_network(pass_string, network, verbose);
 

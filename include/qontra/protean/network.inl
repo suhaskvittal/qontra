@@ -265,33 +265,65 @@ PhysicalNetwork::consume(sptr<net::phys_vertex_t> v, sptr<net::phys_vertex_t> w)
     v->consume(w);
 }
 
-inline std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
-orient(sptr<net::raw_vertex_t> v, sptr<net::raw_vertex_t> w) {
-    if (v->qubit_type == raw_vertex_t::type::xparity) {
-        return std::make_pair(v, w);
-    } else {
-        return std::make_pair(w, v);
-    }
+inline size_t
+Scheduler::get_measurement_ctr() {
+    return meas_ctr;
 }
 
-inline std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
-orient_relative(sptr<net::raw_vertex_t> v, sptr<net::raw_vertex_t> w, sptr<net::raw_vertex_t> to) {
-    if (to->qubit_type == raw_vertex_t::type::xparity) {
-        return std::make_pair(v, w);
-    } else {
-        return std::make_pair(w, v);
-    }
+inline size_t
+Scheduler::get_measurement_time(sptr<net::raw_vertex_t> rv) {
+    return meas_ctr_map.at(rv);
+}
+
+inline std::map<sptr<net::raw_vertex_t>, size_t>
+Scheduler::get_meas_ctr_map() {
+    return meas_ctr_map;
 }
 
 inline bool
-Scheduler::is_good_for_current_cycle(sptr<raw_vertex_t> rv) {
-    sptr<phys_vertex_t> pv = net_p->role_to_phys[rv];
-    return pv->cycle_role_map[rv] > cycle;
+Scheduler::is_good_for_current_cycle(sptr<net::raw_vertex_t> rv) {
+    sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
+    return pv->cycle_role_map.at(rv) <= cycle;
 }
 
-inline std::set<raw_vertex_t>
+inline bool
+Scheduler::has_contention(sptr<net::raw_vertex_t> rv) {
+    sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
+    return cx_in_use_set.count(pv);
+}
+
+inline Scheduler::cx_t
+Scheduler::ret_null_and_set_status(int s) {
+    cx_return_status = s;
+    return std::make_tuple(nullptr, nullptr, nullptr);
+}
+
+inline void
+Scheduler::push_back_cx(std::vector<uint64_t>& qes_operands, cx_t cx, stage_t s) {
+    sptr<net::raw_vertex_t> rx = std::get<0>(cx),
+                        ry = std::get<1>(cx);
+    sptr<net::raw_edge_t> re = std::get<2>(cx);
+    sptr<net::phys_vertex_t> px = net_p->role_to_phys[rx];
+    sptr<net::phys_vertex_t> py = net_p->role_to_phys[ry];
+
+    visited_edge_map[re] = s;
+    qes_operands.push_back(px->id);
+    qes_operands.push_back(py->id);
+
+    cx_in_use_set.insert(px);
+    cx_in_use_set.insert(py);
+}
+
+inline void
+Scheduler::push_back_measurement(std::vector<uint64_t>& qes_operands, sptr<net::raw_vertex_t> rv) {
+    sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
+    qes_operands.push_back(pv->id);
+    meas_ctr_map[rv] = meas_ctr++;
+}
+
+inline std::set<sptr<net::raw_vertex_t>>
 Scheduler::get_checks_at_stage(stage_t s) {
-    std::set<sptr<raw_vertex_t>> stage_checks(all_checks);
+    std::set<sptr<net::raw_vertex_t>> stage_checks(all_checks);
     for (auto it = stage_checks.begin(); it != stage_checks.end(); ) {
         if (stage_map[*it] != s)    it = stage_checks.erase(it);
         else                        it++;
