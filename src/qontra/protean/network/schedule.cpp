@@ -189,6 +189,7 @@ Scheduler::build_body(qes::Program<>& program) {
         }
         // Add stabilizer constraints.
         std::map<sptr<raw_vertex_t>, lp_expr_t> ind_sum_map;
+        std::cout << "conflicts @ cycle " << cycle << " (" << print_v(rpq) << "):";
         for (sptr<raw_vertex_t> rdq : partial_support) {
             lp_var_t x = LP.get_var(rdq);
             for (auto& p : existing_data_cnot_times[rdq]) {
@@ -201,6 +202,8 @@ Scheduler::build_body(qes::Program<>& program) {
                 // if is_from_x != is_x_check, then add commutativity constraints.
                 if (is_from_x == is_x_check) continue;
                 lp_expr_t& ind_sum = ind_sum_map[rx];
+
+                std::cout << " " << print_v(rdq) << "(" << print_v(rx) << ")";
                 
                 const double M = 100000;
                 lp_var_t y = LP.add_slack_var(0, 1, lp_var_t::bounds::both, lp_var_t::domain::binary);
@@ -214,9 +217,11 @@ Scheduler::build_body(qes::Program<>& program) {
                 running_ind_ctr_map[rx][rpq]++;
             }
         }
+        std::cout << "\n";
         for (auto p : ind_sum_map) {
             // Check if the total number of crossing qubits is even. If so, add this constraint.
             if (running_ind_ctr_map[rpq][p.first] % 2 == 1) continue;
+            std::cout << "\tmaking crossing con.\n";
 
             lp_expr_t ind_sum = p.second + running_ind_sum_map[rpq][p.first];
             lp_var_t y = LP.add_slack_var(0, 0, lp_var_t::bounds::lower, lp_var_t::domain::integer);
