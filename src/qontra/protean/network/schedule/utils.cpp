@@ -37,18 +37,12 @@ Scheduler::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) {
     return proxy_memo_map[src][dst];
 }
 
-std::vector<uint64_t>
-Scheduler::get_all_proxy_ids_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) {
+std::vector<sptr<raw_vertex_t>>
+Scheduler::get_all_proxies_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) {
     if (net_p->raw_connection_network.contains(src, dst)) return {};
     auto path = get_proxy_walk_path(src, dst);
     if (path.empty()) return {};
-
-    std::vector<uint64_t> ids;
-    for (size_t i = 1; i < path.size()-1; i++) {
-        sptr<phys_vertex_t> pv = net_p->role_to_phys[path[i]];
-        ids.push_back(pv->id);
-    }
-    return ids;
+    return path;
 }
 
 sptr<raw_vertex_t>

@@ -257,6 +257,9 @@ private:
 
     bool    is_good_for_current_cycle(sptr<net::raw_vertex_t>);
     bool    has_contention(sptr<net::raw_vertex_t>);
+    bool    test_and_set_physical_qubit(sptr<net::raw_vertex_t>);
+    void    release_physical_qubit(sptr<net::raw_vertex_t>);
+
     cx_t    ret_null_and_set_status(int);
 
     void    push_back_cx(std::vector<uint64_t>&, cx_t, stage_t);
@@ -267,7 +270,8 @@ private:
     // Retrieves the proxy_walk_path between two roles. This is memoized.
     std::vector<sptr<net::raw_vertex_t>>    get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
     // Gets any proxies between two qubits. Returns an empty vector if there is a direct edge.
-    std::vector<uint64_t>   get_all_proxy_ids_between(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    std::vector<sptr<net::raw_vertex_t>>   
+        get_all_proxies_between(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 
     cx_t get_next_edge_between(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, bool for_x_check, stage_t);
 
@@ -300,6 +304,9 @@ private:
     std::map<sptr<net::raw_edge_t>, stage_t>    visited_edge_map;
     std::map<sptr<net::raw_vertex_t>, stage_t>  h_gate_stage_map;
     std::map<sptr<net::raw_vertex_t>, stage_t>  flag_stage_map;
+
+    std::map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>>
+        active_role_map;
 
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, stage_t>
         data_stage_map;

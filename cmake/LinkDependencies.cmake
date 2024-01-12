@@ -34,8 +34,7 @@ if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
 endif()
 
 if (COMPILE_NEURAL_DECODER)
-    target_include_directories(qontra PUBLIC ${ARMADILLO_INCLUDE_DIRS})
-    target_include_directories(qontra PUBLIC ${ARMADILLO_INCLUDE_DIRS})
+    target_include_directories(qontra PUBLIC ${ARMADILLO_INCLUDE_DIRS} ${MLPACK_INCLUDE_DIRS})
     target_link_libraries(qontra PUBLIC ${ARMADILLO_LIBRARIES})
 
     if (OpenMP_CXX_FOUND)

@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
     if (pp.option_set("h")) {
 help_exit:
-        std::cout << help;
+        std::cerr << help << std::endl;
         return 1;
     }
 

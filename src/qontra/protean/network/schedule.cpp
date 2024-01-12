@@ -99,7 +99,9 @@ Scheduler::run() {
             done &= (stage_map[rpq] == DONE_STAGE);
         }
         // Add timing_error annotation
-        program[first_inst_of_cycle].put("timing_error");
+        if (first_inst_of_cycle < program.size()) {
+            program[first_inst_of_cycle].put("timing_error");
+        }
     } while (!done);
     return program;
 }
@@ -358,15 +360,28 @@ Scheduler::build_measurement(qes::Program<>& program) {
     }
     safe_emplace_back(program, "measure", m_operands);
     // Now, we need to reset all parity, flags, and proxies.
+    // We also need to clear out the corresponding active_role_map entries.
     std::vector<uint64_t> r_operands(m_operands);
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
         auto& support = parity_support_map[rpq];
         for (sptr<raw_vertex_t> rdq : support.data) {
-            push_back_range(r_operands, get_all_proxy_ids_between(rdq, rpq));
+            auto proxies = get_all_proxies_between(rdq, rpq);
+            for (sptr<raw_vertex_t> rprx : proxies) {
+                release_physical_qubit(rprx);
+                sptr<phys_vertex_t> pprx = net_p->role_to_phys[rprx];
+                r_operands.push_back(pprx->id);
+            }
         }
         for (sptr<raw_vertex_t> rfq : support.flags) {
-            push_back_range(r_operands, get_all_proxy_ids_between(rfq, rpq));
+            auto proxies = get_all_proxies_between(rfq, rpq);
+            for (sptr<raw_vertex_t> rprx : proxies) {
+                release_physical_qubit(rprx);
+                sptr<phys_vertex_t> pprx = net_p->role_to_phys[rprx];
+                r_operands.push_back(pprx->id);
+            }
+            release_physical_qubit(rfq);
         }
+        release_physical_qubit(rpq);
     }
     safe_emplace_back(program, "reset", r_operands);
 
@@ -585,12 +600,14 @@ PhysicalNetwork::make_schedule() {
                 std::vector<uint64_t> operands{event_ctr, mt};
                 if (r > 0) operands.push_back(mt - n_mt);
                 safe_emplace_back(program, "event", operands);
+//              program.back().put("qubit", print_v(rv));
                 event_ctr++;
             } else {
                 // Make detection events for the flag qubits.
                 for (sptr<raw_vertex_t> rfq : raw_connection_network.flag_ownership_map[rv]) {
                     const size_t mt = scheduler.get_measurement_time(rfq) + meas_ctr_offset;
                     safe_emplace_back(program, "event", {event_ctr, mt});
+//                  program.back().put("qubit", print_v(rfq));
                     event_ctr++;
                 }
             }

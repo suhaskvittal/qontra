@@ -283,13 +283,28 @@ Scheduler::get_meas_ctr_map() {
 inline bool
 Scheduler::is_good_for_current_cycle(sptr<net::raw_vertex_t> rv) {
     sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
-    return pv->cycle_role_map.at(rv) <= cycle;
+    return pv->cycle_role_map.at(rv) <= cycle
+            && test_and_set_physical_qubit(rv);
 }
 
 inline bool
 Scheduler::has_contention(sptr<net::raw_vertex_t> rv) {
     sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
     return cx_in_use_set.count(pv);
+}
+
+inline bool
+Scheduler::test_and_set_physical_qubit(sptr<net::raw_vertex_t> rv) {
+    sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
+    if (active_role_map[pv] == rv)       { return true; }
+    if (active_role_map[pv] == nullptr)  { active_role_map[pv] = rv; return true; }
+    return false;
+}
+
+inline void
+Scheduler::release_physical_qubit(sptr<net::raw_vertex_t> rv) {
+    sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
+    active_role_map[pv] = nullptr;
 }
 
 inline Scheduler::cx_t
@@ -336,7 +351,7 @@ write_network_to_folder(std::string output_folder, PhysicalNetwork& network) {
     // Make folder if it does not exist.
     vtils::safe_create_directory(output_folder);
 
-    std::string schedule_file = output_folder + "/round.asm";
+    std::string schedule_file = output_folder + "/ext.qes";
     std::string coupling_file = output_folder + "/coupling_graph.txt";
     std::string role_file = output_folder + "/roles.txt";
     std::string tanner_graph_file = output_folder + "/tanner_graph.txt";

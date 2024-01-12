@@ -8,8 +8,7 @@
 
 #define MLPACK_ENABLE_ANN_SERIALIZATION
 
-#include "decoder/decoder.h"
-#include "experiments.h"
+#include "qontra/decoder/decoder.h"
 
 #include <mlpack/methods/ann/ffn.hpp>
 
@@ -23,7 +22,7 @@ public:
     {}
 
     void                train(uint64_t shots, bool verbose=true);
-    Decoder::result_t   decode_error(stim::simd_bits_range_ref) override;
+    Decoder::result_t   decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
     void                load_model_from_file(std::string);
     void                save_model_to_file(std::string);
 

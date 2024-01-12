@@ -38,10 +38,12 @@ if (COMPILE_MEMORY_SIM_EXT)
 endif()
 
 if (COMPILE_NEURAL_DECODER)
-    message(STATUS "Will compile neural network decoder. Note that Armadillo and OpenMP must be available.")
+    message(STATUS "Will compile neural network decoder. "
+                    "Note that Armadillo and OpenMP must be available, "
+                    "and MLPACK_INCLUDE_DIRS must be set.")
     find_package(Armadillo REQUIRED)
     find_package(OpenMP REQUIRED)
-    set(QONTRA_FILES ${QONTRA_FILES} src/decoder/neural.cpp)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/neural.cpp)
 endif()
 
 find_package(MPI REQUIRED)
