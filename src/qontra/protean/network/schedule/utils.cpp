@@ -16,35 +16,6 @@ using namespace net;
 using namespace graph;
 using namespace vtils;
 
-std::vector<sptr<raw_vertex_t>>
-Scheduler::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) {
-    static TwoLevelMap<sptr<raw_vertex_t>, sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>
-        proxy_memo_map;
-
-    if (!proxy_memo_map.count(src) || !proxy_memo_map[src].count(dst)) {
-        // We must search.
-        for (sptr<raw_vertex_t> rprx : net_p->raw_connection_network.get_neighbors(src)) {
-            if (rprx->qubit_type != raw_vertex_t::type::proxy) continue;
-            std::vector<sptr<raw_vertex_t>> walk_path;
-            if (dst == net_p->raw_connection_network.proxy_walk(src, dst, walk_path)) {
-                // We found the proxy qubit.
-                vtils::tlm_put(proxy_memo_map, src, dst, walk_path);
-                std::reverse(walk_path.begin(), walk_path.end());
-                vtils::tlm_put(proxy_memo_map, dst, src, walk_path);
-            }
-        }
-    }
-    return proxy_memo_map[src][dst];
-}
-
-std::vector<sptr<raw_vertex_t>>
-Scheduler::get_all_proxies_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) {
-    if (net_p->raw_connection_network.contains(src, dst)) return {};
-    auto path = get_proxy_walk_path(src, dst);
-    if (path.empty()) return {};
-    return path;
-}
-
 sptr<raw_vertex_t>
 Scheduler::test_and_get_other_endpoint_if_ready(
         sptr<raw_vertex_t> endpoint,
@@ -89,7 +60,7 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
         }
     } else {
         // Otherwise, they are connected via proxy.
-        std::vector<sptr<raw_vertex_t>> path = get_proxy_walk_path(src, dst);
+        std::vector<sptr<raw_vertex_t>> path = net_p->get_proxy_walk_path(src, dst);
         for (size_t i = 0; i < path.size(); i++) {
             sptr<raw_edge_t> re = raw_net.get_edge(path[i-1], path[i]);
             if (visited_edge_map[re] < s) {

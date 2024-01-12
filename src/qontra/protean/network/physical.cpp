@@ -17,12 +17,19 @@ namespace protean {
 using namespace graph;
 using namespace net;
 
+using namespace vtils;
+
 template <class V> using v_pair_t=std::pair<sptr<V>, sptr<V>>;
 
 template <class T> inline std::pair<T, T>
 make_ordered_pair(T x, T y) {
     if (x < y)  return std::make_pair(x, y);
     else        return std::make_pair(y, x);
+}
+
+template <class T> inline void
+push_back_range(std::vector<T>& arr1, std::vector<T> arr2) {
+    arr1.insert(arr1.end(), arr2.begin(), arr2.end());
 }
 
 PhysicalNetwork::PhysicalNetwork(TannerGraph& tgr)
@@ -232,7 +239,7 @@ edge_build_outer_loop_start:
         PerfectMatching pm(support.size(), edge_list.size());
         pm.options.verbose = false;
         // Assign each node in the support to some node id.
-        vtils::BijectiveMap<sptr<raw_vertex_t>, size_t> data_node_map;
+        BijectiveMap<sptr<raw_vertex_t>, size_t> data_node_map;
         for (size_t i = 0; i < support.size(); i++) data_node_map.put(i, support[i]);
         // Get the edges from the edge_list. Note that some of these edges are bad (i.e.
         // containing a pre-matched vertex).
@@ -612,46 +619,139 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     return result;
 }
 
+std::vector<sptr<raw_vertex_t>>
+PhysicalNetwork::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) {
+    if (raw_connection_network.contains(src, dst)) return {};
+
+    static TwoLevelMap<sptr<raw_vertex_t>, sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>
+        proxy_memo_map;
+
+    if (!proxy_memo_map.count(src) || !proxy_memo_map[src].count(dst)) {
+        // We must search.
+        for (sptr<raw_vertex_t> rprx : raw_connection_network.get_neighbors(src)) {
+            if (rprx->qubit_type != raw_vertex_t::type::proxy) continue;
+            std::vector<sptr<raw_vertex_t>> walk_path;
+            if (dst == raw_connection_network.proxy_walk(src, dst, walk_path)) {
+                // We found the proxy qubit.
+                tlm_put(proxy_memo_map, src, dst, walk_path);
+                std::reverse(walk_path.begin(), walk_path.end());
+                tlm_put(proxy_memo_map, dst, src, walk_path);
+            }
+        }
+    }
+    return proxy_memo_map[src][dst];
+}
+
+void
+PhysicalNetwork::get_support(sptr<raw_vertex_t> rpq,
+        std::vector<sptr<raw_vertex_t>>& data,
+        std::vector<sptr<raw_vertex_t>>& flags,
+        std::vector<sptr<raw_vertex_t>>& proxies)
+{
+    TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
+
+    sptr<tanner::vertex_t> tpq = raw_connection_network.v_tanner_raw_map.at(rpq);
+
+    for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
+        sptr<raw_vertex_t> rdq = raw_connection_network.v_tanner_raw_map.at(tdq);
+        if (raw_connection_network.flag_assignment_map[rpq].count(rdq)) {
+            sptr<raw_vertex_t> rfq = raw_connection_network.flag_assignment_map[rpq][rdq];
+            if (!raw_connection_network.contains(rfq, rdq)) {
+                push_back_range(proxies, get_proxy_walk_path(rfq, rdq));
+            }
+            if (!raw_connection_network.contains(rfq, rpq)) {
+                push_back_range(proxies, get_proxy_walk_path(rfq, rpq));
+            }
+            flags.push_back(rfq);
+        } else if (!raw_connection_network.contains(rdq, rpq)) {
+            push_back_range(proxies, get_proxy_walk_path(rdq, rpq));
+        }
+        data.push_back(rdq);
+    }
+}
 
 void
 PhysicalNetwork::recompute_cycle_role_maps() {
-    bool any_change;
-    do {
-        any_change = false;
-        for (sptr<phys_vertex_t> pv : vertices) {
-            // We will traverse each cycle. As earlier roles affect the
-            // cycles of later roles (they cannot coexist), we track the
-            // end of the prior role.
-            vtils::BijectiveMap<size_t, sptr<raw_vertex_t>> new_cycle_role_map;
-            size_t role_min_cycle = 0;
-            for (auto p : pv->cycle_role_map) {
-                size_t cyc = p.first;
-                sptr<raw_vertex_t> rv = p.second;
-                // role_min_cycle is really the max of the existing marked
-                // cycle and end of the prior role.
-                role_min_cycle = std::max(role_min_cycle, cyc);
-                // if cyc != role_min_cycle --> there is a change.
-                if (role_min_cycle > cyc) {
-                    std::cout << "[recompute_cycle_role_maps] change (" << print_v(pv) << "): "
-                        << print_v(rv) << ", " << cyc << " --> " << role_min_cycle << "\n";
-                    any_change = true;
+    // Basic idea: pack the roles together by parity check.
+    //
+    // We track an interaction graph, such that two checks share
+    // an edge if any of their roles share a physical qubit. We
+    // also track these conflicts.
+    typedef std::tuple<sptr<raw_vertex_t>, sptr<raw_vertex_t>, sptr<phys_vertex_t>>
+        conflict_t;
+
+    struct int_v_t : public base::vertex_t {
+        sptr<raw_vertex_t>              check;
+        std::vector<sptr<raw_vertex_t>> support;
+    };
+
+    struct int_e_t : public base::edge_t {
+        std::vector<conflict_t> conflicts;
+    };
+
+    TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
+
+    Graph<int_v_t, int_e_t> interaction_graph;
+    size_t _id = 0;
+    for (sptr<tanner::vertex_t> tpq : tanner_graph.get_checks()) {
+        sptr<raw_vertex_t> rpq = raw_connection_network.v_tanner_raw_map.at(tpq);
+        // Make interaction graph vertex.
+        sptr<int_v_t> iv = interaction_graph.make_vertex();
+        iv->id = _id++;
+        iv->check = rpq;
+        // Get all qubits involved in check.
+        iv->support.push_back(rpq);
+        get_support(rpq, iv->support, iv->support, iv->support);
+    }
+    // Now, compute interaction graph edges.
+    for (size_t i = 0; i < _id; i++) {
+        sptr<int_v_t> iv = interaction_graph.get_vertex(i);
+        for (size_t j = i+1; j < _id; j++) {
+            sptr<int_v_t> iw = interaction_graph.get_vertex(j);
+
+            sptr<int_e_t> ie = interaction_graph.make_edge(iv, iw);
+            ie->is_undirected = true;
+            for (sptr<raw_vertex_t> rx : iv->support) {
+                sptr<phys_vertex_t> px = role_to_phys[rx];
+                for (sptr<raw_vertex_t> ry : iw->support) {
+                    sptr<phys_vertex_t> py = role_to_phys[ry];
+                    if (px == py) ie->conflicts.emplace_back(rx, ry, px);
                 }
-                new_cycle_role_map.put(role_min_cycle, rv);
-                // Now, compute the maximum cycle of this role.
-                for (auto rw : raw_connection_network.get_neighbors(rv)) {
-                    sptr<phys_vertex_t> pw = role_to_phys[rw];
-                    if (pw == nullptr) {
-                        std::cerr << "[ protean ] role " << print_v(rw) << " has no qubit!" << std::endl;
-                    }
-                    size_t c = pw->cycle_role_map.at(rw);
-                    role_min_cycle = std::max(role_min_cycle, c);
-                }
-                // Increment by 1 for the next role.
-                role_min_cycle++;
             }
-            pv->cycle_role_map = std::move(new_cycle_role_map);
         }
-    } while (any_change);
+    }
+    // Clear all the cycle role maps for each physical qubit.
+    for (sptr<phys_vertex_t> pv : get_vertices()) pv->cycle_role_map.clear();
+    // Now, pack the roles. The idea here is for each iteration, schedule checks
+    // that have no conflicts with each other.
+    auto remaining_checks = interaction_graph.get_vertices();
+    size_t cycle = 0;
+    while (remaining_checks.size()) {
+        std::vector<sptr<int_v_t>> checks_this_cycle;
+        for (auto it = remaining_checks.begin(); it != remaining_checks.end(); ) {
+            bool any_conflict = false;
+            sptr<int_v_t> iv = *it;
+            for (sptr<int_v_t> iw : checks_this_cycle) {
+                if (interaction_graph.contains(iv, iw)) {
+                    any_conflict = true;
+                    break;
+                }
+            }
+            if (any_conflict) {
+                it++;
+            } else {
+                checks_this_cycle.push_back(iv);
+                it = remaining_checks.erase(it);
+            }
+        }
+        for (sptr<int_v_t> iv : checks_this_cycle) {
+            for (sptr<raw_vertex_t> rv : iv->support) {
+                sptr<phys_vertex_t> pv = role_to_phys[rv];
+                pv->cycle_role_map.put(rv, cycle);
+            }
+        }
+        cycle++;
+    }
 }
 
 }   // protean

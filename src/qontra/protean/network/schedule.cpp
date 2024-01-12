@@ -365,16 +365,14 @@ Scheduler::build_measurement(qes::Program<>& program) {
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
         auto& support = parity_support_map[rpq];
         for (sptr<raw_vertex_t> rdq : support.data) {
-            auto proxies = get_all_proxies_between(rdq, rpq);
-            for (sptr<raw_vertex_t> rprx : proxies) {
+            for (sptr<raw_vertex_t> rprx : net_p->get_proxy_walk_path(rdq, rpq)) {
                 release_physical_qubit(rprx);
                 sptr<phys_vertex_t> pprx = net_p->role_to_phys[rprx];
                 r_operands.push_back(pprx->id);
             }
         }
         for (sptr<raw_vertex_t> rfq : support.flags) {
-            auto proxies = get_all_proxies_between(rfq, rpq);
-            for (sptr<raw_vertex_t> rprx : proxies) {
+            for (sptr<raw_vertex_t> rprx : net_p->get_proxy_walk_path(rfq, rpq)) {
                 release_physical_qubit(rprx);
                 sptr<phys_vertex_t> pprx = net_p->role_to_phys[rprx];
                 r_operands.push_back(pprx->id);
@@ -463,12 +461,16 @@ Scheduler::body_get_partial_data_support(sptr<raw_vertex_t> rpq) {
                 other = rfq;
             } else {
                 // Situation 4.
-                auto proxy_walk_path = is_x_check ? get_proxy_walk_path(rfq, rdq) : get_proxy_walk_path(rdq, rfq);
+                auto proxy_walk_path = is_x_check 
+                                        ? net_p->get_proxy_walk_path(rfq, rdq)
+                                        : net_p->get_proxy_walk_path(rdq, rfq);
                 other = test_and_get_other_endpoint_if_ready(rdq, proxy_walk_path);
             }
         } else {
             // Situation 2.
-            auto proxy_walk_path = is_x_check ? get_proxy_walk_path(rpq, rdq) : get_proxy_walk_path(rdq, rpq);
+            auto proxy_walk_path = is_x_check
+                                    ? net_p->get_proxy_walk_path(rpq, rdq) 
+                                    : net_p->get_proxy_walk_path(rdq, rpq);
             other = test_and_get_other_endpoint_if_ready(rdq, proxy_walk_path);
         }
         // If other == nullptr, this means that we are not ready to do the edge in the proxy walk.

@@ -206,6 +206,15 @@ private:
             std::set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>>, 
             bool is_x_error);
 
+    // Retrieves the proxy_walk_path between two roles. This is memoized.
+    std::vector<sptr<net::raw_vertex_t>>
+        get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    // Gets the data, flag, and proxy qubits associated with a check qubit.
+    void    get_support(sptr<net::raw_vertex_t>,
+                        std::vector<sptr<net::raw_vertex_t>>&,
+                        std::vector<sptr<net::raw_vertex_t>>&,
+                        std::vector<sptr<net::raw_vertex_t>>&);
+
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
     RawNetwork raw_connection_network;
@@ -267,11 +276,6 @@ private:
 
     // Retrieves the subset of checks whose stage_map is set to the input.
     std::set<sptr<net::raw_vertex_t>>       get_checks_at_stage(stage_t);
-    // Retrieves the proxy_walk_path between two roles. This is memoized.
-    std::vector<sptr<net::raw_vertex_t>>    get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
-    // Gets any proxies between two qubits. Returns an empty vector if there is a direct edge.
-    std::vector<sptr<net::raw_vertex_t>>   
-        get_all_proxies_between(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 
     cx_t get_next_edge_between(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, bool for_x_check, stage_t);
 
