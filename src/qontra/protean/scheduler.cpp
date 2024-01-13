@@ -678,7 +678,7 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
     } else {
         // Otherwise, they are connected via proxy.
         std::vector<sptr<raw_vertex_t>>& path = get_proxy_walk_path(src, dst);
-        for (size_t i = 0; i < path.size(); i++) {
+        for (size_t i = 1; i < path.size(); i++) {
             sptr<raw_edge_t> re = raw_net.get_edge(path[i-1], path[i]);
             if (visited_edge_map[re] < s) {
                 if (!is_good_for_current_cycle(path[i-1]) || !is_good_for_current_cycle(path[i])) {

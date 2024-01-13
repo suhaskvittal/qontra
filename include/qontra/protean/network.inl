@@ -51,7 +51,14 @@ inline void
 phys_vertex_t::add_role(sptr<raw_vertex_t> r, size_t cycle) {
     cycle_role_map.put(r, cycle);
     role_set.insert(r);
-    role_type_set.insert(r->qubit_type);
+    role_type_map[r->qubit_type]++;
+}
+
+inline void
+phys_vertex_t::delete_role(sptr<raw_vertex_t> r) {
+    role_set.erase(r);
+    cycle_role_map.erase(r);
+    if ((--role_type_map[r->qubit_type]) == 0) role_type_map.erase(r->qubit_type);
 }
 
 inline void
@@ -73,7 +80,7 @@ phys_vertex_t::clear_roles() {
 
 inline bool
 phys_vertex_t::has_role_of_type(raw_vertex_t::type t) {
-    return role_type_set.count(t);
+    return role_type_map.count(t);
 }
 
 inline bool
@@ -101,6 +108,9 @@ RawNetwork::proxy_walk(sptr<net::raw_vertex_t> from,
                         sptr<net::raw_vertex_t> thru,
                         std::vector<sptr<net::raw_vertex_t>>& walk_res_ref) 
 {
+    if (!proxy_indirection_map.count(thru) || !proxy_indirection_map[thru].count(from)) {
+        return nullptr;
+    }
     sptr<net::raw_vertex_t> prev = from, curr = thru;
     walk_res_ref.push_back(prev);
     while (curr->qubit_type == net::raw_vertex_t::type::proxy) {
@@ -114,6 +124,18 @@ RawNetwork::proxy_walk(sptr<net::raw_vertex_t> from,
     return curr;
 }
 
+inline sptr<net::raw_vertex_t>
+RawNetwork::are_in_same_support(sptr<net::raw_vertex_t> rx, sptr<net::raw_vertex_t> ry) {
+    if (!enable_memoization ||
+            (!same_support_memo_map.count(rx) || !same_support_memo_map[rx].count(ry)))
+    {
+        auto rpq = are_in_same_support({rx, ry});
+        same_support_memo_map[rx][ry] = rpq;
+        same_support_memo_map[ry][rx] = rpq;
+    }
+    return same_support_memo_map[rx][ry];
+}
+
 inline void
 RawNetwork::reset_memoization() {
     proxy_memo_map.clear();
@@ -125,6 +147,26 @@ inline void
 RawNetwork::disable_memoization() {
     reset_memoization();
     enable_memoization = false;
+}
+
+inline void
+RawNetwork::flag_proxy_merge(sptr<net::raw_vertex_t> rfq, sptr<net::raw_vertex_t> rprx) {
+    // Get the endpoints of rprx from the proxy_indirection_map.
+    for (auto& p : proxy_indirection_map[rprx]) {
+        sptr<net::raw_vertex_t> rx = p.first,
+                            ry = p.second;
+        // Place rx and ry in the flag_assignment_map. We also need the parity check, which
+        // can be easily retrieved.
+        sptr<net::raw_vertex_t> rpq = are_in_same_support({rfq, rx, ry});
+        if (rpq == nullptr) {
+            // This should not happen.
+            std::cerr << "[ flag_proxy_merge ] invalid merge attempted" << std::endl;
+            exit(1);
+        }
+        flag_assignment_map[rpq][rx] = rfq;
+        flag_assignment_map[rpq][ry] = rfq;
+    }
+    proxy_indirection_map.erase(rprx);
 }
 
 inline bool

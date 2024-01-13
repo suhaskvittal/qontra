@@ -628,6 +628,28 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 
 void
 PhysicalNetwork::recompute_cycle_role_maps() {
+    raw_connection_network.disable_memoization();
+    // Here, we want to enforce that for each check, each physical qubit has at most one role for that
+    // check.
+    for (sptr<phys_vertex_t> pv : get_vertices()) {
+        std::set<sptr<raw_vertex_t>> deleted_vertices;
+        for (sptr<raw_vertex_t> r1 : pv->role_set) {
+            for (sptr<raw_vertex_t> r2 : pv->role_set) {
+                if (r1 <= r2) continue;
+                // If r1 is deleted during a test_and_merge, break.
+                if (deleted_vertices.count(r1)) break;
+                if (deleted_vertices.count(r2)) continue;
+                if (raw_connection_network.are_in_same_support(r1, r2) == nullptr) continue;
+
+                auto deleted = raw_connection_network.merge(r1, r2);
+                if (deleted != nullptr) deleted_vertices.insert(deleted);
+            }
+        }
+        for (sptr<raw_vertex_t> r : deleted_vertices) {
+            pv->delete_role(r);
+            role_to_phys.erase(r);
+        }
+    }
     // Enable memoization.
     raw_connection_network.enable_memoization = true;
     // Basic idea: pack the roles together by parity check.

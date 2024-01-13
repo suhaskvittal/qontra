@@ -38,12 +38,13 @@ struct phys_vertex_t : graph::base::vertex_t {
     void consume(sptr<phys_vertex_t>);
 
     void add_role(sptr<raw_vertex_t>, size_t cycle);
+    void delete_role(sptr<raw_vertex_t>);
     void push_back_role(sptr<raw_vertex_t>, size_t min_cycle=0);
     bool has_role_of_type(raw_vertex_t::type);
     
     void clear_roles(void);
 private:
-    std::set<raw_vertex_t::type> role_type_set;
+    std::map<raw_vertex_t::type, size_t> role_type_map;
 };
 
 struct phys_edge_t : graph::base::edge_t {
@@ -70,6 +71,8 @@ public:
 
     RawNetwork(graph::TannerGraph&);
 
+    void delete_vertex(sptr<net::raw_vertex_t>) override;
+
     sptr<net::raw_vertex_t> make_vertex(void) override;
 
     // Input: data qubit, data qubit, parity qubit
@@ -80,6 +83,15 @@ public:
     sptr<net::raw_vertex_t> add_proxy(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
     // This does the same as the above command, but just takes an edge instead of two qubits.
     sptr<net::raw_vertex_t> add_proxy(sptr<net::raw_edge_t>);
+
+    // This function merges the two roles and deletes one of the operands.
+    // The merge operation moves the neighbors of the less-important role into 
+    // the more-important role. The role hierarchy is as follows:
+    //  proxy < flag < parity   (if one of the operands is a data qubit, there is undefined behavior).
+    // If both roles are equally important, the second is merged into the first.
+    //
+    // Returns: the deleted vertex, or nullptr if nothing was deleted.
+    sptr<net::raw_vertex_t> merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 
     // Input: xyz qubit, proxy qubit, a reference to a vector which will be populated with the walk.
     // Returns: non-proxy qubit obtained by walking through the proxy_indirection_map.
@@ -95,6 +107,9 @@ public:
     // Input: two qubits (any type)
     // Output: returns the check they belong to, or returns nullptr if no check exists. This is memoized.
     sptr<net::raw_vertex_t> are_in_same_support(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    // This function is the same as above but extended for multiple qubits.
+    // This is NOT memoized as this is a more niche use case.
+    sptr<net::raw_vertex_t> are_in_same_support(std::initializer_list<sptr<net::raw_vertex_t>>);
 
     void    reset_memoization(void);
     void    disable_memoization(void);
@@ -123,6 +138,15 @@ public:
     graph::TannerGraph  tanner_graph;
     bool                enable_memoization; // This should be set to true once the network has stabilized.
 private:
+    void flag_proxy_merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+
+    // This function replaces the first operand with the second in all tracking structures. A third operand,
+    // where, allows the user to identify which tracking structures to replace in. where is a bitvector:
+    //      bit 0 = flag_ownership_map
+    //      bit 1 = flag_assignment_map
+    //      bit 2 = proxy_indirection_map
+    void replace_in_tracking_structures(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t> with, uint8_t where=7);
+
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
         proxy_memo_map;
     std::map<sptr<net::raw_vertex_t>, parity_support_t>
