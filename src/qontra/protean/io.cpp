@@ -2,7 +2,7 @@
  *  date:   29 December 2023
  * */
 
-#include "qontra/protean/network.h"
+#include "qontra/protean/io.h"
 
 #include <fstream>
 #include <iostream>

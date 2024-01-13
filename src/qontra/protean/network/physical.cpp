@@ -1,10 +1,13 @@
-/* author: Suhas Vittal date:   27 December 2023
+/* 
+ *  author: Suhas Vittal
+ *  date:   27 December 2023
  * */
 
 
 #include "qontra/protean/network.h"
 
 #include <vtils/set_algebra.h>
+#include <vtils/utility.h>
 
 #include <PerfectMatching.h>
 
@@ -25,11 +28,6 @@ template <class T> inline std::pair<T, T>
 make_ordered_pair(T x, T y) {
     if (x < y)  return std::make_pair(x, y);
     else        return std::make_pair(y, x);
-}
-
-template <class T> inline void
-push_back_range(std::vector<T>& arr1, std::vector<T> arr2) {
-    arr1.insert(arr1.end(), arr2.begin(), arr2.end());
 }
 
 PhysicalNetwork::PhysicalNetwork(TannerGraph& tgr)
@@ -214,8 +212,7 @@ edge_build_outer_loop_start:
                     ita = support.erase(ita);
                     // Add this pair to the flag pairs.
                     flag_pairs.insert(make_ordered_pair(rv, rw));
-                    already_matched.insert(rv);
-                    already_matched.insert(rw);
+                    insert_all(already_matched, {rv, rw});
                     goto edge_build_outer_loop_start;
                 }
                 // Get corresponding physical vertices, get number of common neighbors,
@@ -262,8 +259,7 @@ edge_build_outer_loop_start:
             sptr<raw_vertex_t> rw = data_node_map.at(j);
             
             flag_pairs.insert(make_ordered_pair(rv, rw));
-            visited.insert(rv);
-            visited.insert(rw);
+            insert_all(visited, {rv, rw});
         }
         // Update the flag proposal structures.
         proposed_flag_pair_map[rpq] = flag_pairs;
@@ -560,7 +556,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
         stim::simd_bits<SIMD_WIDTH> h(HASH_SIZE);
         h[HASH_STABILIZER_OFFSET + i] = 1;
 
-        checks.push_back(std::make_tuple(stabilizer, h));
+        checks.emplace_back(stabilizer, h);
     }
     // Perform a BFS via the operator tree.
     while (curr_operator_tree_level.size() > 0
@@ -606,7 +602,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
                 stim::simd_bits<SIMD_WIDTH> new_hash = op_hash | stab_hash;
 
                 if (new_qubits.size() < OPERATOR_WEIGHT_MULT*min_observable_size) {
-                    next_level.push_back(std::make_tuple(new_qubits, new_hash));
+                    next_level.emplace_back(new_qubits, new_hash);
                 }
             }
         }
@@ -642,16 +638,14 @@ PhysicalNetwork::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> 
     return proxy_memo_map[src][dst];
 }
 
-void
+std::vector<sptr<raw_vertex_t>>
 PhysicalNetwork::get_support(sptr<raw_vertex_t> rpq,
         std::vector<sptr<raw_vertex_t>>& data,
         std::vector<sptr<raw_vertex_t>>& flags,
         std::vector<sptr<raw_vertex_t>>& proxies)
 {
     TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
-
     sptr<tanner::vertex_t> tpq = raw_connection_network.v_tanner_raw_map.at(rpq);
-
     for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
         sptr<raw_vertex_t> rdq = raw_connection_network.v_tanner_raw_map.at(tdq);
         if (raw_connection_network.flag_assignment_map[rpq].count(rdq)) {

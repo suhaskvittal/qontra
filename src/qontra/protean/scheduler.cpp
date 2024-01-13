@@ -3,10 +3,11 @@
  *  date:   7 January 2024
  * */
 
-#include "qontra/protean/network.h"
+#include "qontra/protean/scheduler.h"
 
 #include <vtils/linprog/manager.h>
 #include <vtils/two_level_map.h>
+#include <vtils/utility.h>
 
 #include <algorithm>
 
@@ -18,13 +19,7 @@ using namespace net;
 using namespace vtils;
 
 template <class V> using v_pair_t=std::pair<sptr<V>, sptr<V>>;
-
 static const v_pair_t<raw_vertex_t> NULL_CX_EDGE = std::make_pair(nullptr, nullptr);
-
-template <class T> inline void
-push_back_range(std::vector<T>& arr1, std::vector<T> arr2) {
-    arr1.insert(arr1.end(), arr2.begin(), arr2.end());
-}
 
 inline void
 safe_emplace_back(qes::Program<>& program, std::string name, std::vector<uint64_t> operands) {
@@ -398,7 +393,7 @@ Scheduler::prep_tear_get_h_operands(sptr<raw_vertex_t> rpq, stage_t s) {
     if (rpq->qubit_type == raw_vertex_t::type::xparity) {
         _operands.push_back(rpq);
     } else {
-        _operands.insert(_operands.end(), support.flags.begin(), support.flags.end());
+        push_back_range(_operands, support.flags);
     }
     // Perform the H gates if possible.
     for (sptr<raw_vertex_t> rx : _operands) {
@@ -513,8 +508,7 @@ Scheduler::body_get_cx_operands(
         sptr<phys_vertex_t> px = net_p->role_to_phys[rx],
                             py = net_p->role_to_phys[ry];
         visited_edge_map[re] = BODY_STAGE;
-        operands.push_back(px->id);
-        operands.push_back(py->id);
+        push_back_all(operands, {px->id, py->id});
     }
     // Now, we can look to performing other data qubit CNOTs.
     for (sptr<raw_vertex_t> rdq : parity_support_map[rpq].data) {
@@ -651,6 +645,66 @@ PhysicalNetwork::make_schedule() {
         obs_ctr++;
     }
     return program;
+}
+
+sptr<raw_vertex_t>
+Scheduler::test_and_get_other_endpoint_if_ready(
+        sptr<raw_vertex_t> endpoint,
+        std::vector<sptr<raw_vertex_t>> path) 
+{
+    for (size_t i = 1; i < path.size(); i++) {
+        sptr<raw_vertex_t> rx = path[i-1],
+                            ry = path[i];
+        sptr<raw_edge_t> re = net_p->raw_connection_network.get_edge(rx, ry);
+        if (rx == endpoint || ry == endpoint) {
+            if (!is_good_for_current_cycle(rx) || !is_good_for_current_cycle(ry)) return nullptr;
+            if (visited_edge_map[re] < BODY_STAGE) {
+                // Then the edge is not done.
+                return rx == endpoint ? ry : rx;
+            }
+        } else {
+            if (visited_edge_map[re] < BODY_STAGE) {
+                return nullptr;
+            }
+        }
+    }
+    return nullptr;
+}
+
+Scheduler::cx_t
+Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst, bool for_x_check, stage_t s) {
+    if (for_x_check) return get_next_edge_between(dst, src, false, s);
+
+    cx_return_status = CX_RET_GOOD;
+    if (has_contention(src) || has_contention(dst)) {
+        return ret_null_and_set_status(CX_RET_CONTENTION);
+    }
+    // Check if src and dst are directly connected, or are connected via proxy.
+    RawNetwork& raw_net = net_p->raw_connection_network;
+    if (raw_net.contains(src, dst)) {
+        sptr<raw_edge_t> re = raw_net.get_edge(src, dst);
+        if (visited_edge_map[re] < s) {
+            if (!is_good_for_current_cycle(src) || !is_good_for_current_cycle(dst)) {
+                return ret_null_and_set_status(CX_RET_TOO_EARLY);
+            }
+            return std::make_tuple(src, dst, re);
+        }
+    } else {
+        // Otherwise, they are connected via proxy.
+        std::vector<sptr<raw_vertex_t>> path = net_p->get_proxy_walk_path(src, dst);
+        for (size_t i = 0; i < path.size(); i++) {
+            sptr<raw_edge_t> re = raw_net.get_edge(path[i-1], path[i]);
+            if (visited_edge_map[re] < s) {
+                if (!is_good_for_current_cycle(path[i-1]) || !is_good_for_current_cycle(path[i])) {
+                    return ret_null_and_set_status(CX_RET_TOO_EARLY);
+                }
+                // Then, return this edge -- it is not done.
+                return std::make_tuple(path[i-1], path[i], re);
+            }
+        }
+    }
+    // No edge to be done:
+    return ret_null_and_set_status(CX_RET_FINISHED);
 }
 
 }   // protean
