@@ -106,7 +106,7 @@ RawNetwork::proxy_walk(sptr<net::raw_vertex_t> from,
     while (curr->qubit_type == net::raw_vertex_t::type::proxy) {
         walk_res_ref.push_back(curr);
 
-        sptr<net::raw_vertex_t> next = proxy_indirection_map[thru][curr];
+        sptr<net::raw_vertex_t> next = proxy_indirection_map[curr][prev];
         prev = curr;
         curr = next;
     }
