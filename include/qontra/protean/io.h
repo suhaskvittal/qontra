@@ -56,3 +56,7 @@ void write_flag_assignment_file(std::string, PhysicalNetwork&);
 
 }   // protean
 }   // qontra
+
+#include "io.inl"
+
+#endif  // PROTEAN_IO_h

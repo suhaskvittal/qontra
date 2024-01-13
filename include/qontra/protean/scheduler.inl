@@ -23,6 +23,16 @@ Scheduler::get_meas_ctr_map() {
     return meas_ctr_map;
 }
 
+inline RawNetwork::parity_support_t&
+Scheduler::get_support(sptr<net::raw_vertex_t> v) {
+    return net_p->raw_connection_network.get_support(v);
+}
+
+inline std::vector<sptr<net::raw_vertex_t>>&
+Scheduler::get_proxy_walk_path(sptr<net::raw_vertex_t> rx, sptr<net::raw_vertex_t> ry) {
+    return net_p->raw_connection_network.get_proxy_walk_path(rx, ry);
+}
+
 inline bool
 Scheduler::is_good_for_current_cycle(sptr<net::raw_vertex_t> rv) {
     sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
@@ -66,8 +76,8 @@ Scheduler::push_back_cx(std::vector<uint64_t>& qes_operands, cx_t cx, stage_t s)
 
     visited_edge_map[re] = s;
 
-    push_back_all(qes_operands, {px->id, py->id});
-    insert_all(cx_in_use_set, {px, py});
+    vtils::push_back_all(qes_operands, {px->id, py->id});
+    vtils::insert_all(cx_in_use_set, {px, py});
 }
 
 inline void

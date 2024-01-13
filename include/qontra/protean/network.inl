@@ -114,6 +114,19 @@ RawNetwork::proxy_walk(sptr<net::raw_vertex_t> from,
     return curr;
 }
 
+inline void
+RawNetwork::reset_memoization() {
+    proxy_memo_map.clear();
+    support_memo_map.clear();
+    same_support_memo_map.clear();
+}
+
+inline void
+RawNetwork::disable_memoization() {
+    reset_memoization();
+    enable_memoization = false;
+}
+
 inline bool
 ProcessorLayer::add_edge(sptr<net::phys_edge_t> e) {
     if (!Graph::add_edge(e)) return false;
@@ -267,6 +280,16 @@ inline void
 PhysicalNetwork::consume(sptr<net::phys_vertex_t> v, sptr<net::phys_vertex_t> w) {
     for (auto r : w->role_set) role_to_phys[r] = v;
     v->consume(w);
+}
+
+inline bool
+PhysicalNetwork::are_in_same_support(sptr<net::phys_vertex_t> v, sptr<net::phys_vertex_t> w) {
+    for (auto rv : v->role_set) {
+        for (auto rw : w->role_set) {
+            if (raw_connection_network.are_in_same_support(rv, rw) != nullptr) return true;
+        }
+    }
+    return false;
 }
 
 }   // protean

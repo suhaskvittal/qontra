@@ -3,10 +3,12 @@
  *  date:   29 December 2023
  * */
 
-#include <qontra/graph/io.h>
-#include <qontra/graph/tanner_graph.h>
+#include <qontra/protean/io.h>
 #include <qontra/protean/network.h>
 #include <qontra/protean/visualization.h>
+
+#include <qontra/graph/io.h>
+#include <qontra/graph/tanner_graph.h>
 
 #include <vtils/cmd_parse.h>
 

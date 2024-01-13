@@ -36,14 +36,15 @@ public:
     size_t  get_measurement_time(sptr<net::raw_vertex_t>);
     std::map<sptr<net::raw_vertex_t>, size_t>   get_meas_ctr_map(void);
 private:
-    struct parity_support_t {
-        std::set<sptr<net::raw_vertex_t>>   data;
-        std::set<sptr<net::raw_vertex_t>>   flags;
-    };
-
     typedef int stage_t;
     typedef std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_edge_t>>
         cx_t;
+
+    // Indirection functions (inlined):
+    //
+    // Just a level of indirection to avoid the syntax of net_p->raw_connection_network.get_support(...) (e.g,)
+    RawNetwork::parity_support_t&           get_support(sptr<net::raw_vertex_t>);
+    std::vector<sptr<net::raw_vertex_t>>&   get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 
     bool    is_good_for_current_cycle(sptr<net::raw_vertex_t>);
     bool    has_contention(sptr<net::raw_vertex_t>);
@@ -81,8 +82,7 @@ private:
         body_get_cx_operands(sptr<net::raw_vertex_t>, const std::vector<sptr<net::raw_vertex_t>>&, size_t k);
 
     // Basic data structures: just holds read-only information.
-    std::set<sptr<net::raw_vertex_t>>                   all_checks;
-    std::map<sptr<net::raw_vertex_t>, parity_support_t> parity_support_map;
+    std::set<sptr<net::raw_vertex_t>>   all_checks;
     // Tracking structures: used to track where each check is when constructing the schedule.
     std::map<sptr<net::raw_vertex_t>, stage_t>  stage_map;
     std::map<sptr<net::raw_edge_t>, stage_t>    visited_edge_map;

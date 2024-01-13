@@ -93,6 +93,9 @@ PhysicalNetwork::join_qubits_with_identical_support() {
 
 bool
 PhysicalNetwork::join_qubits_with_partial_support() {
+    // Disable memoization.
+    raw_connection_network.disable_memoization();
+
     bool mod = false;
     // These are vertices that are consumed by another.
     std::set<sptr<phys_vertex_t>> deleted_vertices;
@@ -118,6 +121,7 @@ PhysicalNetwork::join_qubits_with_partial_support() {
             sptr<phys_vertex_t> pw = _vertices[j];
             if (deleted_vertices.count(pw)) continue;
             if (pw->has_role_of_type(raw_vertex_t::type::data)) continue;
+            if (are_in_same_support(pv, pw)) continue;
 
             size_t common_neighbors = 0;
             for (sptr<phys_vertex_t> x : pv_adj) {
@@ -420,6 +424,8 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
 
 bool
 PhysicalNetwork::contract_small_degree_qubits() {
+    raw_connection_network.disable_memoization();
+
     bool mod = false;
     // Edges aren't added until after the loop ends. So, we need to track any updates.
     std::map<sptr<phys_vertex_t>, int> degree_update_map;
@@ -440,7 +446,11 @@ PhysicalNetwork::contract_small_degree_qubits() {
             delete_vertex(pv);
         } else if (dg == 1) {
             sptr<phys_vertex_t> px = get_neighbors(pv)[0];
+            // If px is a data qubit, do not proceed.
             if (px->has_role_of_type(raw_vertex_t::type::data)) continue;
+            // If any pair of roles from pv, px are in the same support, we will
+            // have a conflict during scheduling if we proceed, so stop.
+            if (are_in_same_support(pv, px)) continue;
 
             // This is simple -- just have px consume pv and delete pv.
             consume(px, pv);
@@ -449,15 +459,16 @@ PhysicalNetwork::contract_small_degree_qubits() {
             sptr<phys_vertex_t> px1 = get_neighbors(pv)[0],
                                 px2 = get_neighbors(pv)[1];
             // Simple: delete pv, and just add an edge between px1 and px2.
-            //
             // Move roles of pv to px1 or px2.
-            if (!px1->has_role_of_type(raw_vertex_t::type::data)) {
-                consume(px1, pv);
-            } else if (!px2->has_role_of_type(raw_vertex_t::type::data)) {
-                consume(px2, pv); 
-            } else {
-                continue;
-            }
+            //
+            // First, check if the transfer can be made.
+            bool px1_ok = !px1->has_role_of_type(raw_vertex_t::type::data)
+                            && !are_in_same_support(pv, px1);
+            bool px2_ok = !px2->has_role_of_type(raw_vertex_t::type::data)
+                            && !are_in_same_support(pv, px2);
+            if (px1_ok)         consume(px1, pv);
+            else if (px2_ok)    consume(px2, pv);
+            else                continue;
 
             delete_vertex(pv);
             if (!contains(px1, px2)) {
@@ -615,57 +626,10 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     return result;
 }
 
-std::vector<sptr<raw_vertex_t>>
-PhysicalNetwork::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) {
-    if (raw_connection_network.contains(src, dst)) return {};
-
-    static TwoLevelMap<sptr<raw_vertex_t>, sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>
-        proxy_memo_map;
-
-    if (!proxy_memo_map.count(src) || !proxy_memo_map[src].count(dst)) {
-        // We must search.
-        for (sptr<raw_vertex_t> rprx : raw_connection_network.get_neighbors(src)) {
-            if (rprx->qubit_type != raw_vertex_t::type::proxy) continue;
-            std::vector<sptr<raw_vertex_t>> walk_path;
-            if (dst == raw_connection_network.proxy_walk(src, dst, walk_path)) {
-                // We found the proxy qubit.
-                tlm_put(proxy_memo_map, src, dst, walk_path);
-                std::reverse(walk_path.begin(), walk_path.end());
-                tlm_put(proxy_memo_map, dst, src, walk_path);
-            }
-        }
-    }
-    return proxy_memo_map[src][dst];
-}
-
-std::vector<sptr<raw_vertex_t>>
-PhysicalNetwork::get_support(sptr<raw_vertex_t> rpq,
-        std::vector<sptr<raw_vertex_t>>& data,
-        std::vector<sptr<raw_vertex_t>>& flags,
-        std::vector<sptr<raw_vertex_t>>& proxies)
-{
-    TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
-    sptr<tanner::vertex_t> tpq = raw_connection_network.v_tanner_raw_map.at(rpq);
-    for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
-        sptr<raw_vertex_t> rdq = raw_connection_network.v_tanner_raw_map.at(tdq);
-        if (raw_connection_network.flag_assignment_map[rpq].count(rdq)) {
-            sptr<raw_vertex_t> rfq = raw_connection_network.flag_assignment_map[rpq][rdq];
-            if (!raw_connection_network.contains(rfq, rdq)) {
-                push_back_range(proxies, get_proxy_walk_path(rfq, rdq));
-            }
-            if (!raw_connection_network.contains(rfq, rpq)) {
-                push_back_range(proxies, get_proxy_walk_path(rfq, rpq));
-            }
-            flags.push_back(rfq);
-        } else if (!raw_connection_network.contains(rdq, rpq)) {
-            push_back_range(proxies, get_proxy_walk_path(rdq, rpq));
-        }
-        data.push_back(rdq);
-    }
-}
-
 void
 PhysicalNetwork::recompute_cycle_role_maps() {
+    // Enable memoization.
+    raw_connection_network.enable_memoization = true;
     // Basic idea: pack the roles together by parity check.
     //
     // We track an interaction graph, such that two checks share
@@ -676,7 +640,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
 
     struct int_v_t : public base::vertex_t {
         sptr<raw_vertex_t>              check;
-        std::vector<sptr<raw_vertex_t>> support;
+        std::set<sptr<raw_vertex_t>>    support;
     };
 
     struct int_e_t : public base::edge_t {
@@ -694,8 +658,10 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         iv->id = _id++;
         iv->check = rpq;
         // Get all qubits involved in check.
-        iv->support.push_back(rpq);
-        get_support(rpq, iv->support, iv->support, iv->support);
+        RawNetwork::parity_support_t& supp = raw_connection_network.get_support(rpq);
+        iv->support = supp.all;
+
+        interaction_graph.add_vertex(iv);
     }
     // Now, compute interaction graph edges.
     for (size_t i = 0; i < _id; i++) {
@@ -706,16 +672,19 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             sptr<int_e_t> ie = interaction_graph.make_edge(iv, iw);
             ie->is_undirected = true;
             for (sptr<raw_vertex_t> rx : iv->support) {
+                if (rx->qubit_type == raw_vertex_t::type::data) continue;
+
                 sptr<phys_vertex_t> px = role_to_phys[rx];
                 for (sptr<raw_vertex_t> ry : iw->support) {
                     sptr<phys_vertex_t> py = role_to_phys[ry];
                     if (px == py) ie->conflicts.emplace_back(rx, ry, px);
                 }
             }
+            if (ie->conflicts.size()) interaction_graph.add_edge(ie);
         }
     }
     // Clear all the cycle role maps for each physical qubit.
-    for (sptr<phys_vertex_t> pv : get_vertices()) pv->cycle_role_map.clear();
+    for (sptr<phys_vertex_t> pv : get_vertices()) pv->clear_roles();
     // Now, pack the roles. The idea here is for each iteration, schedule checks
     // that have no conflicts with each other.
     auto remaining_checks = interaction_graph.get_vertices();
@@ -739,10 +708,14 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             }
         }
         for (sptr<int_v_t> iv : checks_this_cycle) {
+            std::cout << "support(" << print_v(iv->check) << "):";
             for (sptr<raw_vertex_t> rv : iv->support) {
                 sptr<phys_vertex_t> pv = role_to_phys[rv];
-                pv->cycle_role_map.put(rv, cycle);
+                if (pv->role_set.count(rv)) continue;
+                pv->push_back_role(rv, cycle);
+                std::cout << " " << print_v(rv) << " (" << print_v(pv) << " @ " << pv->cycle_role_map.at(rv) << ")";
             }
+            std::cout << "\n";
         }
         cycle++;
     }

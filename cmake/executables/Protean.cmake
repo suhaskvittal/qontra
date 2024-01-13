@@ -5,11 +5,10 @@ include(${CMAKE_SOURCE_DIR}/cmake/FindCPLEX.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindGraphviz.cmake)
 
 set(PROTEAN_FILES
-    src/qontra/protean/network/io.cpp
+    src/qontra/protean/io.cpp
     src/qontra/protean/network/physical.cpp
     src/qontra/protean/network/raw.cpp
-    src/qontra/protean/network/schedule.cpp
-    src/qontra/protean/network/schedule/utils.cpp
+    src/qontra/protean/scheduler.cpp
     src/qontra/protean/visualization.cpp
     src/qontra/protean/visualization_attr.cpp
     src/qontra/protean/visualization_lp.cpp)

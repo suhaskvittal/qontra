@@ -58,6 +58,16 @@ struct phys_edge_t : graph::base::edge_t {
 // happen to implement syndrome extraction.
 class RawNetwork : public graph::Graph<net::raw_vertex_t, net::raw_edge_t> {
 public:
+    struct parity_support_t {
+        sptr<net::raw_vertex_t> check;
+
+        std::set<sptr<net::raw_vertex_t>>   data;
+        std::set<sptr<net::raw_vertex_t>>   flags;
+        std::set<sptr<net::raw_vertex_t>>   proxies;
+
+        std::set<sptr<net::raw_vertex_t>>   all;
+    };
+
     RawNetwork(graph::TannerGraph&);
 
     sptr<net::raw_vertex_t> make_vertex(void) override;
@@ -73,9 +83,21 @@ public:
 
     // Input: xyz qubit, proxy qubit, a reference to a vector which will be populated with the walk.
     // Returns: non-proxy qubit obtained by walking through the proxy_indirection_map.
-    sptr<net::raw_vertex_t> proxy_walk(sptr<net::raw_vertex_t>,
-                                            sptr<net::raw_vertex_t>,
-                                            std::vector<sptr<net::raw_vertex_t>>&);
+    sptr<net::raw_vertex_t>
+        proxy_walk(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>&);
+    // Input: two qubits (any type)
+    // Output: a path (inclusive) of proxies between the two qubits. This is memoized.
+    std::vector<sptr<net::raw_vertex_t>>&
+        get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    // Input: a parity qubit
+    // Output: the support of the parity qubit.
+    parity_support_t&       get_support(sptr<net::raw_vertex_t>);
+    // Input: two qubits (any type)
+    // Output: returns the check they belong to, or returns nullptr if no check exists. This is memoized.
+    sptr<net::raw_vertex_t> are_in_same_support(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+
+    void    reset_memoization(void);
+    void    disable_memoization(void);
     
     // Tanner graph tracking structures:
     vtils::BijectiveMap<sptr<graph::tanner::vertex_t>, sptr<net::raw_vertex_t>> v_tanner_raw_map;
@@ -98,8 +120,16 @@ public:
     std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
         schedule_order_map;
 
-    graph::TannerGraph tanner_graph;
+    graph::TannerGraph  tanner_graph;
+    bool                enable_memoization; // This should be set to true once the network has stabilized.
 private:
+    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
+        proxy_memo_map;
+    std::map<sptr<net::raw_vertex_t>, parity_support_t>
+        support_memo_map;
+    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
+        same_support_memo_map;
+
     uint64_t id_ctr = 0;
 };
 
@@ -193,10 +223,7 @@ private:
     // is a partial ordering of roles. However, to get the total order, we must consider edges between
     // roles as well. This function refreshes the maps to reflect this ordering.
     void recompute_cycle_role_maps(void);
-    // Allocates a new processor layer.
-    ProcessorLayer& push_back_new_processor_layer(void);
-    // Consumes a physical qubit safely.
-    void consume(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
+
     // Determines if a proposed flag (represented by the two raw vertices -- these are data qubits)
     // is actually useful -- that it protects against a weight-2 error.
     //
@@ -208,18 +235,12 @@ private:
             std::set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>>, 
             bool is_x_error);
 
-    // Retrieves the proxy_walk_path between two roles. This is memoized.
-    std::vector<sptr<net::raw_vertex_t>>
-        get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
-    // Gets the data, flag, and proxy qubits associated with a check qubit. This is memoized.
-    std::vector<sptr<net::raw_vertex_t>>
-        (sptr<net::raw_vertex_t>,
-                        std::vector<sptr<net::raw_vertex_t>>& data,
-                        std::vector<sptr<net::raw_vertex_t>>& flags,
-                        std::vector<sptr<net::raw_vertex_t>>& proxies);
-
-    bool    are_contained_in_same_support(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
-    bool    are_contained_in_same_support(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    // Allocates a new processor layer.
+    ProcessorLayer& push_back_new_processor_layer(void);
+    // Consumes a physical qubit safely.
+    void consume(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
+    // Returns true if two physical qubits are contained within the same support for any pair of roles.
+    bool are_in_same_support(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
 
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).

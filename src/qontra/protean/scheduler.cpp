@@ -29,7 +29,6 @@ safe_emplace_back(qes::Program<>& program, std::string name, std::vector<uint64_
 
 Scheduler::Scheduler(PhysicalNetwork* n_p)
     :all_checks(),
-    parity_support_map(),
     stage_map(),
     visited_edge_map(),
     h_gate_stage_map(),
@@ -48,18 +47,10 @@ Scheduler::Scheduler(PhysicalNetwork* n_p)
     // Initialize all structures.
     RawNetwork& raw_net = net_p->raw_connection_network;
     TannerGraph& tanner_graph = raw_net.tanner_graph;
-    // First, all_checks and parity_support_map
+    // First, all_checks
     for (sptr<tanner::vertex_t> tpq : tanner_graph.get_checks()) {
         sptr<raw_vertex_t> rpq = raw_net.v_tanner_raw_map.at(tpq);
         all_checks.insert(rpq);
-
-        parity_support_t support;
-        for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
-            sptr<raw_vertex_t> rdq = raw_net.v_tanner_raw_map.at(tdq);
-            support.data.insert(rdq);
-        }
-        support.flags.insert(raw_net.flag_ownership_map[rpq].begin(), raw_net.flag_ownership_map[rpq].end());
-        parity_support_map[rpq] = support;
     }
     // Now, the tracking structures. Just set default values.
     for (auto rv : raw_net.get_vertices()) {
@@ -67,7 +58,7 @@ Scheduler::Scheduler(PhysicalNetwork* n_p)
         flag_stage_map[rv] = -1;
     }
     for (auto rpq : all_checks) {
-        for (auto rdq : parity_support_map[rpq].data) {
+        for (auto rdq : get_support(rpq).data) {
             tlm_put(data_stage_map, rpq, rdq, -1);
         }
     }
@@ -124,7 +115,7 @@ Scheduler::build_preparation(qes::Program<>& program) {
     //  (1) h_gate_stage_map of Z flags/X checks are set to PREP_STAGE, and
     //  (2) flag_stage_map of flags for each check is set to PREP_STAGE
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
-        auto support = parity_support_map[rpq];
+        auto support = get_support(rpq);
         // Check condition 1.
         bool cond_met = true;
         if (rpq->qubit_type == raw_vertex_t::type::xparity) {
@@ -157,7 +148,7 @@ Scheduler::build_body(qes::Program<>& program) {
     // First, we need the max check operator weight for this stage.
     size_t check_operator_max_weight = 0;
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
-        check_operator_max_weight = std::max(parity_support_map[rpq].data.size(), check_operator_max_weight);
+        check_operator_max_weight = std::max(get_support(rpq).data.size(), check_operator_max_weight);
     }
     const size_t upper_bound = 2*check_operator_max_weight;
     // Now, we can make the schedules.
@@ -283,7 +274,7 @@ Scheduler::build_body(qes::Program<>& program) {
     // We are done with the CX body. We advance a parity qubit if:
     //  (1) all data qubits have data_stage_map = BODY_STAGE.
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
-        auto& support = parity_support_map[rpq];
+        auto& support = get_support(rpq);
         bool cond_met = true;
         for (sptr<raw_vertex_t> rdq : support.data) {
             cond_met &= (data_stage_map[rpq][rdq] == BODY_STAGE);
@@ -312,7 +303,7 @@ Scheduler::build_teardown(qes::Program<>& program) {
     std::vector<uint64_t> h_operands;
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
         bool all_cx_done = true;
-        for (sptr<raw_vertex_t> rfq : parity_support_map[rpq].flags) {
+        for (sptr<raw_vertex_t> rfq : get_support(rpq).flags) {
             all_cx_done &= (flag_stage_map[rfq] >= TEAR_STAGE);
         }
         if (all_cx_done) {
@@ -324,7 +315,7 @@ Scheduler::build_teardown(qes::Program<>& program) {
     //  (1) h_gate_state_map = TEAR_STAGE for the X-check/Z-flags
     //  (2) flag_stage_map = TEAR_STAGE.
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
-        auto support = parity_support_map[rpq];
+        auto support = get_support(rpq);
         // Check condition 1.
         bool cond_met = true;
         if (rpq->qubit_type == raw_vertex_t::type::xparity) {
@@ -349,7 +340,7 @@ Scheduler::build_measurement(qes::Program<>& program) {
     // Measure all parity qubits and flag qubits.
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
         push_back_measurement(m_operands, rpq);
-        for (sptr<raw_vertex_t> rfq : parity_support_map[rpq].flags) {
+        for (sptr<raw_vertex_t> rfq : get_support(rpq).flags) {
             push_back_measurement(m_operands, rfq);
         }
     }
@@ -358,16 +349,16 @@ Scheduler::build_measurement(qes::Program<>& program) {
     // We also need to clear out the corresponding active_role_map entries.
     std::vector<uint64_t> r_operands(m_operands);
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
-        auto& support = parity_support_map[rpq];
+        auto& support = get_support(rpq);
         for (sptr<raw_vertex_t> rdq : support.data) {
-            for (sptr<raw_vertex_t> rprx : net_p->get_proxy_walk_path(rdq, rpq)) {
+            for (sptr<raw_vertex_t> rprx : get_proxy_walk_path(rdq, rpq)) {
                 release_physical_qubit(rprx);
                 sptr<phys_vertex_t> pprx = net_p->role_to_phys[rprx];
                 r_operands.push_back(pprx->id);
             }
         }
         for (sptr<raw_vertex_t> rfq : support.flags) {
-            for (sptr<raw_vertex_t> rprx : net_p->get_proxy_walk_path(rfq, rpq)) {
+            for (sptr<raw_vertex_t> rprx : get_proxy_walk_path(rfq, rpq)) {
                 release_physical_qubit(rprx);
                 sptr<phys_vertex_t> pprx = net_p->role_to_phys[rprx];
                 r_operands.push_back(pprx->id);
@@ -388,7 +379,7 @@ Scheduler::prep_tear_get_h_operands(sptr<raw_vertex_t> rpq, stage_t s) {
     std::vector<uint64_t> operands;
     std::vector<sptr<raw_vertex_t>> _operands;
 
-    parity_support_t& support = parity_support_map[rpq];
+    auto& support = get_support(rpq);
     // Collect potential operands.
     if (rpq->qubit_type == raw_vertex_t::type::xparity) {
         _operands.push_back(rpq);
@@ -411,7 +402,7 @@ Scheduler::prep_tear_get_h_operands(sptr<raw_vertex_t> rpq, stage_t s) {
 std::vector<uint64_t>
 Scheduler::prep_tear_get_cx_operands(sptr<raw_vertex_t> rpq, Scheduler::stage_t s) {
     std::vector<uint64_t> operands;
-    parity_support_t& support = parity_support_map[rpq];
+    auto& support = get_support(rpq);
     for (sptr<raw_vertex_t> rfq : support.flags) {
         // Check if the flag is already done.
         if (flag_stage_map[rfq] >= s) continue;
@@ -437,7 +428,7 @@ Scheduler::body_get_partial_data_support(sptr<raw_vertex_t> rpq) {
 
     RawNetwork& raw_net = net_p->raw_connection_network;
 
-    parity_support_t& support = parity_support_map[rpq];
+    auto& support = get_support(rpq);
     for (sptr<raw_vertex_t> rdq : support.data) {
         // Four possibilites:
         //  (1) rdq is directly connected to rpq (no flag)
@@ -456,16 +447,16 @@ Scheduler::body_get_partial_data_support(sptr<raw_vertex_t> rpq) {
                 other = rfq;
             } else {
                 // Situation 4.
-                auto proxy_walk_path = is_x_check 
-                                        ? net_p->get_proxy_walk_path(rfq, rdq)
-                                        : net_p->get_proxy_walk_path(rdq, rfq);
+                auto& proxy_walk_path = is_x_check 
+                                        ? get_proxy_walk_path(rfq, rdq)
+                                        : get_proxy_walk_path(rdq, rfq);
                 other = test_and_get_other_endpoint_if_ready(rdq, proxy_walk_path);
             }
         } else {
             // Situation 2.
-            auto proxy_walk_path = is_x_check
-                                    ? net_p->get_proxy_walk_path(rpq, rdq) 
-                                    : net_p->get_proxy_walk_path(rdq, rpq);
+            auto& proxy_walk_path = is_x_check
+                                    ? get_proxy_walk_path(rpq, rdq) 
+                                    : get_proxy_walk_path(rdq, rpq);
             other = test_and_get_other_endpoint_if_ready(rdq, proxy_walk_path);
         }
         // If other == nullptr, this means that we are not ready to do the edge in the proxy walk.
@@ -511,7 +502,7 @@ Scheduler::body_get_cx_operands(
         push_back_all(operands, {px->id, py->id});
     }
     // Now, we can look to performing other data qubit CNOTs.
-    for (sptr<raw_vertex_t> rdq : parity_support_map[rpq].data) {
+    for (sptr<raw_vertex_t> rdq : get_support(rpq).data) {
         // Check if the data qubit is already done.
         if (data_stage_map[rpq][rdq] >= BODY_STAGE || s_rdq == rdq) continue;
         // Check if rdq is connected to a flag or rpq.
@@ -691,7 +682,7 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
         }
     } else {
         // Otherwise, they are connected via proxy.
-        std::vector<sptr<raw_vertex_t>> path = net_p->get_proxy_walk_path(src, dst);
+        std::vector<sptr<raw_vertex_t>>& path = get_proxy_walk_path(src, dst);
         for (size_t i = 0; i < path.size(); i++) {
             sptr<raw_edge_t> re = raw_net.get_edge(path[i-1], path[i]);
             if (visited_edge_map[re] < s) {
