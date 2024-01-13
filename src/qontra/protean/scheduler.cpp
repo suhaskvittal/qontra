@@ -160,7 +160,7 @@ Scheduler::build_body(qes::Program<>& program) {
         lp_var_t max_of_all = LP.add_slack_var(0, upper_bound, lp_var_t::bounds::both, lp_var_t::domain::integer);
         for (sptr<raw_vertex_t> rdq : partial_support) {
             // Build variable.
-            lp_var_t x = LP.add_var(rdq, 0, upper_bound, lp_var_t::bounds::both, lp_var_t::domain::integer);
+            lp_var_t x = LP.add_var(rdq, 1, upper_bound, lp_var_t::bounds::both, lp_var_t::domain::integer);
 
             lp_constr_t max_con(max_of_all, x, lp_constr_t::direction::ge);
             LP.add_constraint(max_con);
@@ -177,7 +177,6 @@ Scheduler::build_body(qes::Program<>& program) {
         }
         // Add stabilizer constraints.
         std::map<sptr<raw_vertex_t>, lp_expr_t> ind_sum_map;
-        std::cout << "conflicts @ cycle " << cycle << " (" << print_v(rpq) << "):";
         for (sptr<raw_vertex_t> rdq : partial_support) {
             lp_var_t x = LP.get_var(rdq);
             for (auto& p : existing_data_cnot_times[rdq]) {
@@ -191,8 +190,6 @@ Scheduler::build_body(qes::Program<>& program) {
                 if (is_from_x == is_x_check) continue;
                 lp_expr_t& ind_sum = ind_sum_map[rx];
 
-                std::cout << " " << print_v(rdq) << "(" << print_v(rx) << ")";
-                
                 const double M = 100000;
                 lp_var_t y = LP.add_slack_var(0, 1, lp_var_t::bounds::both, lp_var_t::domain::binary);
                 // x - t <= My and t - x <= M(1-y)
@@ -205,11 +202,9 @@ Scheduler::build_body(qes::Program<>& program) {
                 running_ind_ctr_map[rx][rpq]++;
             }
         }
-        std::cout << "\n";
         for (auto p : ind_sum_map) {
             // Check if the total number of crossing qubits is even. If so, add this constraint.
             if (running_ind_ctr_map[rpq][p.first] % 2 == 1) continue;
-            std::cout << "\tmaking crossing con.\n";
 
             lp_expr_t ind_sum = p.second + running_ind_sum_map[rpq][p.first];
             lp_var_t y = LP.add_slack_var(0, 0, lp_var_t::bounds::lower, lp_var_t::domain::integer);
@@ -238,11 +233,11 @@ Scheduler::build_body(qes::Program<>& program) {
             exit(1);
         }
         // Update the schedule.
-        std::vector<sptr<raw_vertex_t>> check_sch(static_cast<size_t>(round(obj))+1, nullptr);
+        std::vector<sptr<raw_vertex_t>> check_sch(static_cast<size_t>(round(obj)), nullptr);
         for (sptr<raw_vertex_t> rdq : partial_support) {
-            size_t t = LP.get_value(rdq);
+            size_t t = static_cast<size_t>(round(LP.get_value(rdq)));
             existing_data_cnot_times[rdq].push_back(std::make_pair(t, rpq));
-            check_sch[t] = rdq;
+            check_sch[t-1] = rdq;
         }
         data_cnot_schedules[rpq] = check_sch;
         // Update running_ind_sum_map.

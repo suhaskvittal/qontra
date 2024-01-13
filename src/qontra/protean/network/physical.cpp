@@ -708,14 +708,12 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             }
         }
         for (sptr<int_v_t> iv : checks_this_cycle) {
-            std::cout << "support(" << print_v(iv->check) << "):";
             for (sptr<raw_vertex_t> rv : iv->support) {
                 sptr<phys_vertex_t> pv = role_to_phys[rv];
-                if (pv->role_set.count(rv)) continue;
-                pv->push_back_role(rv, cycle);
-                std::cout << " " << print_v(rv) << " (" << print_v(pv) << " @ " << pv->cycle_role_map.at(rv) << ")";
+                if (!pv->role_set.count(rv)) {
+                    pv->push_back_role(rv, cycle);
+                }
             }
-            std::cout << "\n";
         }
         cycle++;
     }

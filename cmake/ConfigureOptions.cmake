@@ -13,7 +13,7 @@ if (NOT ARCH_x86_64)
 endif()
 
 if (NOT COMPILE_OPTIONS) 
-    set(RELEASE_COMPILE_OPTIONS -Ofast -fno-strict-aliasing -Wno-psabi)
+    set(RELEASE_COMPILE_OPTIONS -O3 -fno-strict-aliasing -Wno-psabi)
     set(DEBUG_COMPILE_OPTIONS -ggdb3 -fno-strict-aliasing -Wall)
 
     if (CMAKE_BUILD_TYPE MATCHES "Release")
