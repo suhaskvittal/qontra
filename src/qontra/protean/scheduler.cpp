@@ -345,19 +345,17 @@ Scheduler::build_measurement(qes::Program<>& program) {
     std::vector<uint64_t> r_operands(m_operands);
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
         auto& support = get_support(rpq);
-        for (sptr<raw_vertex_t> rdq : support.data) {
-            for (sptr<raw_vertex_t> rprx : get_proxy_walk_path(rdq, rpq)) {
-                release_physical_qubit(rprx);
-                sptr<phys_vertex_t> pprx = net_p->role_to_phys[rprx];
-                r_operands.push_back(pprx->id);
-            }
+        // Reset the proxies.
+        // 
+        // Also, we should release all parity qubits, flag qubits, and proxy qubits.
+        for (sptr<raw_vertex_t> rprx : support.proxies) {
+            sptr<phys_vertex_t> pprx = net_p->role_to_phys[rprx];
+            r_operands.push_back(pprx->id);
+            // Release the physical qubit for the proxy.
+            release_physical_qubit(rprx);
         }
+        // Now do flags:
         for (sptr<raw_vertex_t> rfq : support.flags) {
-            for (sptr<raw_vertex_t> rprx : get_proxy_walk_path(rfq, rpq)) {
-                release_physical_qubit(rprx);
-                sptr<phys_vertex_t> pprx = net_p->role_to_phys[rprx];
-                r_operands.push_back(pprx->id);
-            }
             release_physical_qubit(rfq);
         }
         release_physical_qubit(rpq);

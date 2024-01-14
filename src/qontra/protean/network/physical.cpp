@@ -448,9 +448,6 @@ PhysicalNetwork::contract_small_degree_qubits() {
             sptr<phys_vertex_t> px = get_neighbors(pv)[0];
             // If px is a data qubit, do not proceed.
             if (px->has_role_of_type(raw_vertex_t::type::data)) continue;
-            // If any pair of roles from pv, px are in the same support, we will
-            // have a conflict during scheduling if we proceed, so stop.
-            if (are_in_same_support(pv, px)) continue;
 
             // This is simple -- just have px consume pv and delete pv.
             consume(px, pv);
@@ -460,15 +457,13 @@ PhysicalNetwork::contract_small_degree_qubits() {
                                 px2 = get_neighbors(pv)[1];
             // Simple: delete pv, and just add an edge between px1 and px2.
             // Move roles of pv to px1 or px2.
-            //
-            // First, check if the transfer can be made.
-            bool px1_ok = !px1->has_role_of_type(raw_vertex_t::type::data)
-                            && !are_in_same_support(pv, px1);
-            bool px2_ok = !px2->has_role_of_type(raw_vertex_t::type::data)
-                            && !are_in_same_support(pv, px2);
-            if (px1_ok)         consume(px1, pv);
-            else if (px2_ok)    consume(px2, pv);
-            else                continue;
+            if (!px1->has_role_of_type(raw_vertex_t::type::data)) {
+                consume(px1, pv);
+            } else if (!px2->has_role_of_type(raw_vertex_t::type::data)) {
+                consume(px2, pv);
+            } else {
+                continue;
+            }
 
             delete_vertex(pv);
             if (!contains(px1, px2)) {
