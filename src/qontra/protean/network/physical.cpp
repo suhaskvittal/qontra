@@ -121,7 +121,6 @@ PhysicalNetwork::join_qubits_with_partial_support() {
             sptr<phys_vertex_t> pw = _vertices[j];
             if (deleted_vertices.count(pw)) continue;
             if (pw->has_role_of_type(raw_vertex_t::type::data)) continue;
-            if (are_in_same_support(pv, pw)) continue;
 
             size_t common_neighbors = 0;
             for (sptr<phys_vertex_t> x : pv_adj) {
