@@ -33,6 +33,10 @@ Scheduler::Scheduler(PhysicalNetwork* n_p)
     visited_edge_map(),
     h_gate_stage_map(),
     flag_stage_map(),
+    proxy_reset_map(),
+    proxy_occupied_map(),
+    active_role_map(),
+    remaining_roles_map(),
     data_stage_map(),
     data_cx_map(),
     cx_in_use_set(),
@@ -63,6 +67,17 @@ Scheduler::Scheduler(PhysicalNetwork* n_p)
         }
     }
     for (auto re : raw_net.get_edges()) visited_edge_map[re] = -1;
+
+    for (auto pv : net_p->get_vertices()) {
+        std::vector<sptr<raw_vertex_t>> roles(pv->role_set.begin(), pv->role_set.end());
+        std::sort(roles.begin(), roles.end(),
+                [&] (auto rx, auto ry)
+                {
+                    // We want the lower cycle roles towards the back.
+                    return pv->cycle_role_map.at(rx) > pv->cycle_role_map.at(ry);
+                });
+        remaining_roles_map[pv] = std::move(roles);
+    }
     // No need to initialize stage_map explicitly, default value is 0.
 }
 
@@ -88,6 +103,12 @@ Scheduler::run() {
         if (first_inst_of_cycle < program.size()) {
             program[first_inst_of_cycle].put("timing_error");
         }
+        // Print status of each parity check:
+        std::cerr << "[ scheduler ] parity check status:";
+        for (sptr<raw_vertex_t> rpq : all_checks) {
+            std::cout << "\n" << print_v(rpq) << " --> " << stage_map.at(rpq);
+        }
+        std::cerr << std::endl;
     } while (!done);
     return program;
 }
@@ -110,6 +131,8 @@ Scheduler::build_preparation(qes::Program<>& program) {
         }
         if (cx_operands.empty()) break;
         safe_emplace_back(program, "cx", cx_operands);
+        // Perform any proxy resets:
+        perform_proxy_resets(program);
     }
     // Now, we are done with preparation. We set stage_map to 1 if:
     //  (1) h_gate_stage_map of Z flags/X checks are set to PREP_STAGE, and
@@ -134,6 +157,8 @@ Scheduler::build_preparation(qes::Program<>& program) {
 
 void
 Scheduler::build_body(qes::Program<>& program) {
+    data_cx_map.clear();
+
     std::set<sptr<raw_vertex_t>> checks_this_stage = get_checks_at_stage(BODY_STAGE);
     // Here, we will build a linear program (a MIP specifically) to compute the schedule
     // based off the partial supports.
@@ -264,6 +289,7 @@ Scheduler::build_body(qes::Program<>& program) {
         }
         if (cx_operands.empty()) break;
         safe_emplace_back(program, "cx", cx_operands);
+        perform_proxy_resets(program);
         k++;
     }
     // We are done with the CX body. We advance a parity qubit if:
@@ -290,6 +316,7 @@ Scheduler::build_teardown(qes::Program<>& program) {
         }
         if (cx_operands.empty()) break;
         safe_emplace_back(program, "cx", cx_operands);
+        perform_proxy_resets(program);
     }
     // Perform the H gates.
     //
@@ -359,6 +386,7 @@ Scheduler::build_measurement(qes::Program<>& program) {
             release_physical_qubit(rfq);
         }
         release_physical_qubit(rpq);
+        std::cerr << "[ build_measurement ] " << print_v(rpq) << " has ended @ cycle = " << cycle << "\n";
     }
     safe_emplace_back(program, "reset", r_operands);
 
@@ -486,13 +514,7 @@ Scheduler::body_get_cx_operands(
     // We are obligated to first perform this CX.
     if (s_rdq != nullptr) {
         cx_t cx = data_cx_map[rpq][s_rdq];
-        sptr<raw_vertex_t> rx = std::get<0>(cx),
-                            ry = std::get<1>(cx);
-        sptr<raw_edge_t> re = std::get<2>(cx);
-        sptr<phys_vertex_t> px = net_p->role_to_phys[rx],
-                            py = net_p->role_to_phys[ry];
-        visited_edge_map[re] = BODY_STAGE;
-        push_back_all(operands, {px->id, py->id});
+        push_back_cx(operands, cx, BODY_STAGE);
     }
     // Now, we can look to performing other data qubit CNOTs.
     for (sptr<raw_vertex_t> rdq : get_support(rpq).data) {
@@ -508,7 +530,10 @@ Scheduler::body_get_cx_operands(
             // Something went wrong and we could not get an edge.
             //
             // Check if the edge is all done:
-            if (cx_return_status == CX_RET_FINISHED) data_stage_map[rpq][rdq] = BODY_STAGE;
+            if (cx_return_status == CX_RET_FINISHED) {
+                std::cerr << "finished CX(" << print_v(rdq) << ", " << print_v(other) << ")" << std::endl;
+                data_stage_map[rpq][rdq] = BODY_STAGE;
+            }
             continue;
         }
         // Check if one of the endpoints of the cx is a data qubit. If so, do not do the CX -- it needs
@@ -524,8 +549,6 @@ Scheduler::body_get_cx_operands(
 qes::Program<>
 PhysicalNetwork::make_schedule() {
     qes::Program<> program;
-    // Recompute cycle role maps.
-    recompute_cycle_role_maps();
     // The goal of this algorithm is to perform a CNOT
     // for every edge in raw_connection_network. The steps are:
     //  (1) Assign roles to each parity role.
@@ -580,14 +603,14 @@ PhysicalNetwork::make_schedule() {
                 std::vector<uint64_t> operands{event_ctr, mt};
                 if (r > 0) operands.push_back(mt - n_mt);
                 safe_emplace_back(program, "event", operands);
-//              program.back().put("qubit", print_v(rv));
+                program.back().put(print_v(rv));
                 event_ctr++;
             } else {
                 // Make detection events for the flag qubits.
                 for (sptr<raw_vertex_t> rfq : raw_connection_network.flag_ownership_map[rv]) {
                     const size_t mt = scheduler.get_measurement_time(rfq) + meas_ctr_offset;
                     safe_emplace_back(program, "event", {event_ctr, mt});
-//                  program.back().put("qubit", print_v(rfq));
+                    program.back().put(print_v(rfq));
                     event_ctr++;
                 }
             }
@@ -615,6 +638,7 @@ PhysicalNetwork::make_schedule() {
             operands.push_back(data_meas_ctr_map[rdq] + meas_ctr_offset);
         }
         safe_emplace_back(program, "event", operands);
+        program.back().put(print_v(rv));
         event_ctr++;
     }
     auto obs_list = tanner_graph.get_obs(config.is_memory_x);
@@ -636,13 +660,19 @@ Scheduler::test_and_get_other_endpoint_if_ready(
         sptr<raw_vertex_t> endpoint,
         std::vector<sptr<raw_vertex_t>> path) 
 {
+    /*
+    auto src = path[0],
+            dst = path[path.size()-1];
     for (size_t i = 1; i < path.size(); i++) {
         sptr<raw_vertex_t> rx = path[i-1],
                             ry = path[i];
         sptr<raw_edge_t> re = net_p->raw_connection_network.get_edge(rx, ry);
         if (rx == endpoint || ry == endpoint) {
-            if (!is_good_for_current_cycle(rx) || !is_good_for_current_cycle(ry)) return nullptr;
             if (visited_edge_map[re] < BODY_STAGE) {
+                // Check if the edge is even doable.
+                if (has_contention(rx) || has_contention(ry)) return nullptr;
+                if (!is_good_for_current_cycle(rx) || !is_good_for_current_cycle(ry)) return nullptr;
+                if (!is_proxy_usable(rx, src, dst) || !is_proxy_usable(ry, src, dst)) return nullptr;
                 // Then the edge is not done.
                 return rx == endpoint ? ry : rx;
             }
@@ -652,7 +682,16 @@ Scheduler::test_and_get_other_endpoint_if_ready(
             }
         }
     }
-    return nullptr;
+    */
+    cx_t cx = get_next_edge_between(path[0], path.back(), false, BODY_STAGE);
+    if (cx_return_status) return nullptr;
+    std::cerr << "\tjust testing :p" << std::endl;
+
+    sptr<raw_vertex_t> rx = std::get<0>(cx),
+                        ry = std::get<1>(cx);
+    if (rx == endpoint)         return ry;
+    else if (ry == endpoint)    return rx;
+    else                        return nullptr;
 }
 
 Scheduler::cx_t
@@ -660,14 +699,14 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
     if (for_x_check) return get_next_edge_between(dst, src, false, s);
 
     cx_return_status = CX_RET_GOOD;
-    if (has_contention(src) || has_contention(dst)) {
-        return ret_null_and_set_status(CX_RET_CONTENTION);
-    }
     // Check if src and dst are directly connected, or are connected via proxy.
     RawNetwork& raw_net = net_p->raw_connection_network;
     if (raw_net.contains(src, dst)) {
         sptr<raw_edge_t> re = raw_net.get_edge(src, dst);
         if (visited_edge_map[re] < s) {
+            if (has_contention(src) || has_contention(dst)) {
+                return ret_null_and_set_status(CX_RET_CONTENTION);
+            }
             if (!is_good_for_current_cycle(src) || !is_good_for_current_cycle(dst)) {
                 return ret_null_and_set_status(CX_RET_TOO_EARLY);
             }
@@ -677,13 +716,50 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
         // Otherwise, they are connected via proxy.
         std::vector<sptr<raw_vertex_t>>& path = get_proxy_walk_path(src, dst);
         for (size_t i = 1; i < path.size(); i++) {
-            sptr<raw_edge_t> re = raw_net.get_edge(path[i-1], path[i]);
+            sptr<raw_vertex_t> rx = path[i-1],
+                                ry = path[i];
+            sptr<raw_edge_t> re = raw_net.get_edge(rx, ry);
             if (visited_edge_map[re] < s) {
-                if (!is_good_for_current_cycle(path[i-1]) || !is_good_for_current_cycle(path[i])) {
+                if (has_contention(rx) || has_contention(ry)) {
+                    std::cerr << "CX(" << print_v(src) << ", " << print_v(dst) << ") has contention: (" 
+                        << print_v(path[i-1]) << ", " << print_v(path[i]) << ") @ cycle = " << cycle << std::endl;
+                    return ret_null_and_set_status(CX_RET_CONTENTION);
+                }
+                if (!is_good_for_current_cycle(rx) || !is_good_for_current_cycle(ry)) {
+                    sptr<phys_vertex_t> pv = net_p->role_to_phys[path[i-1]],
+                                        pw = net_p->role_to_phys[path[i]];
+                    std::cerr << "CX(" << print_v(src) << ", " << print_v(dst) << ") cannot proceed: " 
+                        << "need " << print_v(path[i-1]) << " to reach " << pv->cycle_role_map.at(path[i-1])
+                        << " and " << print_v(path[i]) << " to reach " << pw->cycle_role_map.at(path[i])
+                        << ", or need " << print_v(active_role_map[pv]) << " and/or " << print_v(active_role_map[pw])
+                        << " to release resource @ cycle = " << cycle << "\n";
                     return ret_null_and_set_status(CX_RET_TOO_EARLY);
                 }
+                if (!is_proxy_usable(rx, src, dst) || !is_proxy_usable(ry, src, dst)) {
+                    auto& erx = proxy_occupied_map[rx];
+                    auto& ery = proxy_occupied_map[ry];
+                    std::cerr << print_v(src) << " and " << print_v(dst) << " cannot acquire proxies: "
+                        << print_v(rx) << " [ " << print_v(std::get<0>(erx)) << ", "
+                        << print_v(std::get<1>(erx)) << ", " << std::get<2>(erx) << " ] and "
+                        << print_v(ry) << " [ " << print_v(std::get<0>(ery)) << ", "
+                        << print_v(std::get<1>(ery)) << ", " << std::get<2>(ery) << " ]" << std::endl;
+                    return ret_null_and_set_status(CX_RET_PROXY_OCCUPIED);
+                }
+                // Check if the first operand in the path is a proxy. If so, then mark for reset (it is done
+                // transfering state).
+                if (rx->qubit_type == raw_vertex_t::type::proxy) {
+                    proxy_reset_map[rx] = 1;
+                    std::cerr << print_v(src) << " and " << print_v(dst) << " will reset " << print_v(rx)
+                        << " for CX(" << print_v(rx) << ", " << print_v(ry) << ")" << std::endl;
+                }
+                // Similarly, set proxy_occupied_map as well.
+                if (ry->qubit_type == raw_vertex_t::type::proxy) {
+                    proxy_occupied_map[ry] = std::make_tuple(src, dst, 1);
+                    std::cerr << print_v(src) << " and " << print_v(dst) << " acquired " << print_v(ry)
+                        << " for CX(" << print_v(rx) << ", " << print_v(ry) << ")" << std::endl;
+                }
                 // Then, return this edge -- it is not done.
-                return std::make_tuple(path[i-1], path[i], re);
+                return std::make_tuple(rx, ry, re);
             }
         }
     }

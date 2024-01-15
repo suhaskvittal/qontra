@@ -93,10 +93,13 @@ public:
     // Returns: the deleted vertex, or nullptr if nothing was deleted.
     sptr<net::raw_vertex_t> merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 
-    // Input: xyz qubit, proxy qubit, a reference to a vector which will be populated with the walk.
-    // Returns: non-proxy qubit obtained by walking through the proxy_indirection_map.
-    sptr<net::raw_vertex_t>
-        proxy_walk(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>&);
+    // Input: xyz qubit, proxy qubit, a reference to a map which will populated with the walks. Each key
+    //  of the map will be a destination qubit pointing to the path required to reach the qubit.
+    // Returns: non-proxy qubits reachable from the proxy.
+    std::vector<sptr<net::raw_vertex_t>>
+        proxy_walk(sptr<net::raw_vertex_t>, 
+                    sptr<net::raw_vertex_t>, 
+                    std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>&);
     // Input: two qubits (any type)
     // Output: a path (inclusive) of proxies between the two qubits. This is memoized.
     std::vector<sptr<net::raw_vertex_t>>&
@@ -125,8 +128,8 @@ public:
     // parity qubit --> data qubit --> flag qubit used in syndrome extraction of check.
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
         flag_assignment_map;
-    // proxy qubit --> xyz qubit --> qubit xyz was linked to before
-    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
+    // proxy qubit --> xyz qubit --> qubits xyz was linked to before
+    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
         proxy_indirection_map;
 
     // Scheduling structures:
@@ -139,6 +142,7 @@ public:
     bool                enable_memoization; // This should be set to true once the network has stabilized.
 private:
     void flag_proxy_merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    void proxy_proxy_merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 
     // This function replaces the first operand with the second in all tracking structures. A third operand,
     // where, allows the user to identify which tracking structures to replace in. where is a bitvector:
@@ -228,6 +232,10 @@ public:
     // Try and place out-of-plane edges into the processor bulk, and deletes any
     // empty processor layers.
     bool reallocate_edges(void);
+    // Recomputes the cycle_role_map of each phys_vertex_t. During the optimizations, the cycle_role_map
+    // is a partial ordering of roles. However, to get the total order, we must consider edges between
+    // roles as well. This function refreshes the maps to reflect this ordering.
+    bool recompute_cycle_role_maps(void);
     // Relabel qubits so that the ids are not sporadic.
     bool relabel_qubits(void);
     // Computes the syndrome extraction schedule for the existing layout.
@@ -243,10 +251,6 @@ public:
         bool    is_memory_x = false;
     } config;
 private:
-    // Recomputes the cycle_role_map of each phys_vertex_t. During the optimizations, the cycle_role_map
-    // is a partial ordering of roles. However, to get the total order, we must consider edges between
-    // roles as well. This function refreshes the maps to reflect this ordering.
-    void recompute_cycle_role_maps(void);
 
     // Determines if a proposed flag (represented by the two raw vertices -- these are data qubits)
     // is actually useful -- that it protects against a weight-2 error.

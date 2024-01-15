@@ -40,6 +40,7 @@ update_network(std::string pass_string, PhysicalNetwork& network, bool verbose) 
         PAIR("prx", PhysicalNetwork::add_connectivity_reducing_proxies),
         PAIR("con", PhysicalNetwork::contract_small_degree_qubits),
         PAIR("ral", PhysicalNetwork::reallocate_edges),
+        PAIR("rcr", PhysicalNetwork::recompute_cycle_role_maps),
         PAIR("rlb", PhysicalNetwork::relabel_qubits)
     };
 

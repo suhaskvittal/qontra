@@ -47,7 +47,6 @@ private:
     std::vector<sptr<net::raw_vertex_t>>&   get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 
     bool    is_good_for_current_cycle(sptr<net::raw_vertex_t>);
-    bool    is_proxy_usable(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t> src, sptr<net::raw_vertex_t> dst);
     bool    has_contention(sptr<net::raw_vertex_t>);
     bool    test_and_set_physical_qubit(sptr<net::raw_vertex_t>);
     void    release_physical_qubit(sptr<net::raw_vertex_t>);
@@ -56,8 +55,7 @@ private:
 
     void    push_back_cx(std::vector<uint64_t>&, cx_t, stage_t);
     void    push_back_measurement(std::vector<uint64_t>&, sptr<net::raw_vertex_t>);
-
-    void    perform_proxy_resets(qes::Program<>&);
+    void    get_proxy_reset_operands(std::vector<uint64_t>&);
 
     // Retrieves the subset of checks whose stage_map is set to the input.
     std::set<sptr<net::raw_vertex_t>>       get_checks_at_stage(stage_t);
@@ -92,17 +90,7 @@ private:
     std::map<sptr<net::raw_vertex_t>, stage_t>  h_gate_stage_map;
     std::map<sptr<net::raw_vertex_t>, stage_t>  flag_stage_map;
 
-    // This map tracks if we need to reset a proxy. This is set by get_next_edge_between, but as
-    // the results of that function are not guaranteed to be committed, it sets it to 1. push_back_cx
-    // sets the value of any proxies to 2, and this confirms the proxy is ready to be reset.
-    std::map<sptr<net::raw_vertex_t>, int>  proxy_reset_map;
-    // This map marks if a proxy has a nonzero state by indicating which CX path it is currently
-    // involved in. If the value of a proxy key is valid, then the proxy is not usable.
-    //
-    // Like with proxy_reset_map, we need to track if the CX was actually committed. So, 0 = free, 1 = tentatively
-    // free, and 2 = not free.
-    std::map<sptr<net::raw_vertex_t>, std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, int>>
-        proxy_occupied_map;
+    std::set<sptr<net::raw_vertex_t>>   proxy_reset_set;
 
     std::map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>>
         active_role_map;
@@ -136,7 +124,6 @@ private:
     const int CX_RET_TOO_EARLY = 1;
     const int CX_RET_FINISHED = 2;
     const int CX_RET_CONTENTION = 3;
-    const int CX_RET_PROXY_OCCUPIED = 4;
 
     const stage_t PREP_STAGE = 0;
     const stage_t BODY_STAGE = 1;

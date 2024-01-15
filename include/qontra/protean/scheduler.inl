@@ -36,8 +36,18 @@ Scheduler::get_proxy_walk_path(sptr<net::raw_vertex_t> rx, sptr<net::raw_vertex_
 inline bool
 Scheduler::is_good_for_current_cycle(sptr<net::raw_vertex_t> rv) {
     sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
-    return pv->cycle_role_map.at(rv) <= cycle
-            && test_and_set_physical_qubit(rv);
+    return pv->cycle_role_map.at(rv) <= cycle && test_and_set_physical_qubit(rv);
+}
+
+inline bool
+Scheduler::is_proxy_usable(
+        sptr<net::raw_vertex_t> rprx,
+        sptr<net::raw_vertex_t> src,
+        sptr<net::raw_vertex_t> dst) 
+{
+    if (!proxy_occupied_map.count(rprx)) return true;
+    auto& entry = proxy_occupied_map[rprx];
+    return (std::get<0>(entry) == src && std::get<1>(entry) == dst) || (std::get<2>(entry) == 0);
 }
 
 inline bool
@@ -49,15 +59,24 @@ Scheduler::has_contention(sptr<net::raw_vertex_t> rv) {
 inline bool
 Scheduler::test_and_set_physical_qubit(sptr<net::raw_vertex_t> rv) {
     sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
+    // Check if the physical qubit is already taken by rv:
     if (active_role_map[pv] == rv)       { return true; }
-    if (active_role_map[pv] == nullptr)  { active_role_map[pv] = rv; return true; }
+    // Check if the physical qubit is unlocked, and also check if rv can take it.
+    if (active_role_map[pv] == nullptr && remaining_roles_map[pv].size() && remaining_roles_map[pv].back() == rv) {
+        active_role_map[pv] = rv;
+        return true;
+    }
     return false;
 }
 
 inline void
 Scheduler::release_physical_qubit(sptr<net::raw_vertex_t> rv) {
     sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
-    active_role_map[pv] = nullptr;
+    if (active_role_map[pv] == rv) {
+        std::cout << "released " << graph::print_v(rv) << "\n";
+        active_role_map[pv] = nullptr;
+        remaining_roles_map[pv].pop_back();
+    }
 }
 
 inline Scheduler::cx_t
@@ -78,6 +97,12 @@ Scheduler::push_back_cx(std::vector<uint64_t>& qes_operands, cx_t cx, stage_t s)
 
     vtils::push_back_all(qes_operands, {px->id, py->id});
     vtils::insert_all(cx_in_use_set, {px, py});
+    // Update proxy_reset_map
+    std::cerr << "committing CX(" << graph::print_v(rx) << ", " << graph::print_v(ry) << ")" << std::endl;
+    if (proxy_reset_map.count(rx))      proxy_reset_map[rx]++;
+    if (proxy_reset_map.count(ry))      proxy_reset_map[ry]++;
+    if (proxy_occupied_map.count(rx))   std::get<2>(proxy_occupied_map[rx])++;
+    if (proxy_occupied_map.count(ry))   std::get<2>(proxy_occupied_map[ry])++;
 }
 
 inline void
@@ -85,6 +110,37 @@ Scheduler::push_back_measurement(std::vector<uint64_t>& qes_operands, sptr<net::
     sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
     qes_operands.push_back(pv->id);
     meas_ctr_map[rv] = meas_ctr++;
+}
+
+inline void
+Scheduler::perform_proxy_resets(qes::Program<>& program) {
+    std::vector<uint64_t> operands;
+    for (auto it = proxy_reset_map.begin(); it != proxy_reset_map.end(); ) {
+        if (it->second == 0) {
+            it = proxy_reset_map.erase(it);
+        } else if (it->second == 1) {
+            std::cerr << "failed reset of proxy " << graph::print_v(it->first) << std::endl;
+            it++;
+        } else {
+            sptr<net::phys_vertex_t> pprx = net_p->role_to_phys[it->first];
+            operands.push_back(pprx->id);
+
+            proxy_occupied_map.erase(it->first);
+            std::cerr << "finished reset of proxy " << graph::print_v(it->first) << std::endl;
+            it = proxy_reset_map.erase(it);
+        }
+    }
+    if (operands.size()) {
+        program.emplace_back("reset", operands);
+    }
+    // Also remove any entries in proxy_occupied_map that are <2.
+    for (auto it = proxy_occupied_map.begin(); it != proxy_occupied_map.end(); ) {
+        if (std::get<2>(it->second) < 2) {
+            it = proxy_occupied_map.erase(it);
+        } else {
+            it++;
+        }
+    }
 }
 
 inline std::set<sptr<net::raw_vertex_t>>

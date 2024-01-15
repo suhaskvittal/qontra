@@ -21,6 +21,7 @@ namespace protean {
 //      Prx -- add_connectivity_reducing_proxies
 //      Con -- contract_small_degree_qubits
 //      Ral -- reallocate_qubits
+//      Rcr -- recompute_cycle_role_maps
 //      Rlb -- relabel_qubits
 // The above is not case sensitive.
 //

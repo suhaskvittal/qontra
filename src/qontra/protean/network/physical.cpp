@@ -620,7 +620,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     return result;
 }
 
-void
+bool
 PhysicalNetwork::recompute_cycle_role_maps() {
     raw_connection_network.disable_memoization();
     // Here, we want to enforce that for each check, each physical qubit has at most one role for that
@@ -728,7 +728,11 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             for (sptr<raw_vertex_t> rv : iv->support) {
                 sptr<phys_vertex_t> pv = role_to_phys[rv];
                 if (!pv->role_set.count(rv)) {
-                    pv->push_back_role(rv, cycle);
+                    if (rv->qubit_type == raw_vertex_t::type::data) {
+                        pv->push_back_role(rv, 0);
+                    } else {
+                        pv->push_back_role(rv, cycle);
+                    }
                 }
                 std::cout << "\t" << print_v(rv) << " (" << print_v(pv) << " @ " << pv->cycle_role_map.at(rv) << ")";
             }
@@ -736,6 +740,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         }
         cycle++;
     }
+    return true;
 }
 
 }   // protean
