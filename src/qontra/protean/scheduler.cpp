@@ -103,12 +103,14 @@ Scheduler::run() {
         if (first_inst_of_cycle < program.size()) {
             program[first_inst_of_cycle].put("timing_error");
         }
+#ifdef PROTEAN_DEBUG
         // Print status of each parity check:
         std::cerr << "[ scheduler ] parity check status:";
         for (sptr<raw_vertex_t> rpq : all_checks) {
-            std::cout << "\n" << print_v(rpq) << " --> " << stage_map.at(rpq);
+            std::cerr << "\n" << print_v(rpq) << " --> " << stage_map.at(rpq);
         }
         std::cerr << std::endl;
+#endif
     } while (!done);
     return program;
 }
@@ -386,7 +388,9 @@ Scheduler::build_measurement(qes::Program<>& program) {
             release_physical_qubit(rfq);
         }
         release_physical_qubit(rpq);
+#ifdef PROTEAN_DEBUG
         std::cerr << "[ build_measurement ] " << print_v(rpq) << " has ended @ cycle = " << cycle << "\n";
+#endif
     }
     safe_emplace_back(program, "reset", r_operands);
 
@@ -531,7 +535,9 @@ Scheduler::body_get_cx_operands(
             //
             // Check if the edge is all done:
             if (cx_return_status == CX_RET_FINISHED) {
+#ifdef PROTEAN_DEBUG
                 std::cerr << "finished CX(" << print_v(rdq) << ", " << print_v(other) << ")" << std::endl;
+#endif
                 data_stage_map[rpq][rdq] = BODY_STAGE;
             }
             continue;
@@ -603,14 +609,14 @@ PhysicalNetwork::make_schedule() {
                 std::vector<uint64_t> operands{event_ctr, mt};
                 if (r > 0) operands.push_back(mt - n_mt);
                 safe_emplace_back(program, "event", operands);
-                program.back().put(print_v(rv));
+//              program.back().put(print_v(rv));
                 event_ctr++;
             } else {
                 // Make detection events for the flag qubits.
                 for (sptr<raw_vertex_t> rfq : raw_connection_network.flag_ownership_map[rv]) {
                     const size_t mt = scheduler.get_measurement_time(rfq) + meas_ctr_offset;
                     safe_emplace_back(program, "event", {event_ctr, mt});
-                    program.back().put(print_v(rfq));
+//                  program.back().put(print_v(rfq));
                     event_ctr++;
                 }
             }
@@ -638,7 +644,7 @@ PhysicalNetwork::make_schedule() {
             operands.push_back(data_meas_ctr_map[rdq] + meas_ctr_offset);
         }
         safe_emplace_back(program, "event", operands);
-        program.back().put(print_v(rv));
+//      program.back().put(print_v(rv));
         event_ctr++;
     }
     auto obs_list = tanner_graph.get_obs(config.is_memory_x);
@@ -685,7 +691,6 @@ Scheduler::test_and_get_other_endpoint_if_ready(
     */
     cx_t cx = get_next_edge_between(path[0], path.back(), false, BODY_STAGE);
     if (cx_return_status) return nullptr;
-    std::cerr << "\tjust testing :p" << std::endl;
 
     sptr<raw_vertex_t> rx = std::get<0>(cx),
                         ry = std::get<1>(cx);
@@ -721,21 +726,27 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
             sptr<raw_edge_t> re = raw_net.get_edge(rx, ry);
             if (visited_edge_map[re] < s) {
                 if (has_contention(rx) || has_contention(ry)) {
+#ifdef PROTEAN_DEBUG
                     std::cerr << "CX(" << print_v(src) << ", " << print_v(dst) << ") has contention: (" 
                         << print_v(path[i-1]) << ", " << print_v(path[i]) << ") @ cycle = " << cycle << std::endl;
+#endif
                     return ret_null_and_set_status(CX_RET_CONTENTION);
                 }
                 if (!is_good_for_current_cycle(rx) || !is_good_for_current_cycle(ry)) {
+#ifdef PROTEAN_DEBUG
                     sptr<phys_vertex_t> pv = net_p->role_to_phys[path[i-1]],
                                         pw = net_p->role_to_phys[path[i]];
                     std::cerr << "CX(" << print_v(src) << ", " << print_v(dst) << ") cannot proceed: " 
                         << "need " << print_v(path[i-1]) << " to reach " << pv->cycle_role_map.at(path[i-1])
                         << " and " << print_v(path[i]) << " to reach " << pw->cycle_role_map.at(path[i])
-                        << ", or need " << print_v(active_role_map[pv]) << " and/or " << print_v(active_role_map[pw])
+                        << ", or need " << print_v(active_role_map[pv])
+                        << " and/or " << print_v(active_role_map[pw])
                         << " to release resource @ cycle = " << cycle << "\n";
+#endif
                     return ret_null_and_set_status(CX_RET_TOO_EARLY);
                 }
                 if (!is_proxy_usable(rx, src, dst) || !is_proxy_usable(ry, src, dst)) {
+#ifdef PROTEAN_DEBUG
                     auto& erx = proxy_occupied_map[rx];
                     auto& ery = proxy_occupied_map[ry];
                     std::cerr << print_v(src) << " and " << print_v(dst) << " cannot acquire proxies: "
@@ -743,20 +754,25 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
                         << print_v(std::get<1>(erx)) << ", " << std::get<2>(erx) << " ] and "
                         << print_v(ry) << " [ " << print_v(std::get<0>(ery)) << ", "
                         << print_v(std::get<1>(ery)) << ", " << std::get<2>(ery) << " ]" << std::endl;
+#endif
                     return ret_null_and_set_status(CX_RET_PROXY_OCCUPIED);
                 }
                 // Check if the first operand in the path is a proxy. If so, then mark for reset (it is done
                 // transfering state).
                 if (rx->qubit_type == raw_vertex_t::type::proxy) {
                     proxy_reset_map[rx] = 1;
+#ifdef PROTEAN_DEBUG
                     std::cerr << print_v(src) << " and " << print_v(dst) << " will reset " << print_v(rx)
                         << " for CX(" << print_v(rx) << ", " << print_v(ry) << ")" << std::endl;
+#endif
                 }
                 // Similarly, set proxy_occupied_map as well.
                 if (ry->qubit_type == raw_vertex_t::type::proxy) {
                     proxy_occupied_map[ry] = std::make_tuple(src, dst, 1);
+#ifdef PROTEAN_DEBUG
                     std::cerr << print_v(src) << " and " << print_v(dst) << " acquired " << print_v(ry)
                         << " for CX(" << print_v(rx) << ", " << print_v(ry) << ")" << std::endl;
+#endif
                 }
                 // Then, return this edge -- it is not done.
                 return std::make_tuple(rx, ry, re);

@@ -51,6 +51,7 @@ int main(int argc, char* argv[]) {
     // Load model from file and run memory experiment.
     DetailedStimCircuit circuit = make_circuit(qes_file, p);
     NeuralDecoder dec(circuit);
+    
     dec.load_model_from_file(model_file);
 
     experiments::memory_params_t params;

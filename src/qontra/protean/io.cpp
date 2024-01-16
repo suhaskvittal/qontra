@@ -94,6 +94,18 @@ update_network(std::string pass_string, PhysicalNetwork& network, bool verbose) 
 }
 
 void
+write_stats_file(std::string output_file, PhysicalNetwork& network) {
+    std::ofstream fout(output_file);
+    fout << "Property,Value\n"
+            << "Qubits," << network.n() << "\n"
+            << "Couplings," << network.m() << "\n"
+            << "Mean Degree," << network.get_mean_connectivity() << "\n"
+            << "Max Degree," << network.get_max_connectivity() << "\n"
+            << "Thickness," << network.get_thickness() << "\n";
+    fout.flush();
+}
+
+void
 write_schedule_file(std::string output_file, PhysicalNetwork& network) {
     qes::Program<> schedule = network.make_schedule();
     qes::to_file(output_file, schedule);
@@ -125,6 +137,7 @@ write_role_file(std::string output_file, PhysicalNetwork& network) {
         }
         fout << "\"\n";
     }
+    fout.flush();
 }
 
 void
@@ -184,6 +197,7 @@ write_tanner_graph_file(std::string output_file, PhysicalNetwork& network) {
             k++;
         }
     }
+    fout.flush();
 }
 
 void
@@ -223,6 +237,7 @@ write_flag_assignment_file(std::string output_file, PhysicalNetwork& network) {
         }
         fout << "\"" + flag_string + "\"\n";
     }
+    fout.flush();
 }
 
 

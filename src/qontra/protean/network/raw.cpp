@@ -197,19 +197,13 @@ RawNetwork::merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
     if (rx_prio >= ry_prio) { big = rx; little = ry; }
     else                    { big = ry; little = rx; }
     // Perform the merge.
-    std::cout << "merging " << print_v(little) << " into " << print_v(big) << ", new edges:";
     for (sptr<raw_vertex_t> rw : get_neighbors(little)) {
         if (big == rw) continue;
-        std::cout << " (" << print_v(big) << ", " << print_v(rw) << ")";
-        if (contains(big, rw))  {
-            std::cout << "<skip>";
-            continue;
-        }
+        if (contains(big, rw)) continue;
         sptr<raw_edge_t> e = make_edge(big, rw);
         e->is_undirected = true;
         add_edge(e);
     }
-    std::cout << "\n";
     // Depending on what big and little are, we need to update the
     // tracking data structures.
     if (big->qubit_type == raw_vertex_t::type::xparity || big->qubit_type == raw_vertex_t::type::zparity) {
@@ -298,22 +292,22 @@ RawNetwork::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) 
         for (sptr<raw_vertex_t> rx : get_neighbors(src)) {
             std::cerr << " " << print_v(rx);
             if (rx->qubit_type == raw_vertex_t::type::proxy) {
-                std::cout << "[";
+                std::cerr << "[";
                 for (sptr<raw_vertex_t> ry : proxy_indirection_map[rx][src]) {
-                    std::cout << " " << print_v(ry);
+                    std::cerr << " " << print_v(ry);
                 }
-                std::cout << " ]";
+                std::cerr << " ]";
             }
         }
         std::cerr << std::endl << "\tadj(" << print_v(dst) << "):";
         for (sptr<raw_vertex_t> rx : get_neighbors(dst)) {
             std::cerr << " " << print_v(rx);
             if (rx->qubit_type == raw_vertex_t::type::proxy) {
-                std::cout << "[";
+                std::cerr << "[";
                 for (sptr<raw_vertex_t> ry : proxy_indirection_map[rx][dst]) {
-                    std::cout << " " << print_v(ry);
+                    std::cerr << " " << print_v(ry);
                 }
-                std::cout << " ]";
+                std::cerr << " ]";
             }
         }
         std::cerr << std::endl;

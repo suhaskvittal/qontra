@@ -49,6 +49,7 @@ bool update_network(std::string pass_string, PhysicalNetwork&, bool verbose=fals
 //  (4) flag_assignment.txt: corresponding flags for each (raw) parity qubit
 void write_network_to_folder(std::string, PhysicalNetwork&);
 
+void write_stats_file(std::string, PhysicalNetwork&);
 void write_schedule_file(std::string, PhysicalNetwork&);
 void write_coupling_file(std::string, PhysicalNetwork&);
 void write_role_file(std::string, PhysicalNetwork&);

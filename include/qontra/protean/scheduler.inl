@@ -73,7 +73,9 @@ inline void
 Scheduler::release_physical_qubit(sptr<net::raw_vertex_t> rv) {
     sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
     if (active_role_map[pv] == rv) {
+#ifdef DEBUG
         std::cout << "released " << graph::print_v(rv) << "\n";
+#endif
         active_role_map[pv] = nullptr;
         remaining_roles_map[pv].pop_back();
     }
@@ -98,7 +100,9 @@ Scheduler::push_back_cx(std::vector<uint64_t>& qes_operands, cx_t cx, stage_t s)
     vtils::push_back_all(qes_operands, {px->id, py->id});
     vtils::insert_all(cx_in_use_set, {px, py});
     // Update proxy_reset_map
+#ifdef PROTEAN_DEBUG
     std::cerr << "committing CX(" << graph::print_v(rx) << ", " << graph::print_v(ry) << ")" << std::endl;
+#endif
     if (proxy_reset_map.count(rx))      proxy_reset_map[rx]++;
     if (proxy_reset_map.count(ry))      proxy_reset_map[ry]++;
     if (proxy_occupied_map.count(rx))   std::get<2>(proxy_occupied_map[rx])++;
@@ -119,14 +123,18 @@ Scheduler::perform_proxy_resets(qes::Program<>& program) {
         if (it->second == 0) {
             it = proxy_reset_map.erase(it);
         } else if (it->second == 1) {
+#ifdef PROTEAN_DEBUG
             std::cerr << "failed reset of proxy " << graph::print_v(it->first) << std::endl;
+#endif
             it++;
         } else {
             sptr<net::phys_vertex_t> pprx = net_p->role_to_phys[it->first];
             operands.push_back(pprx->id);
 
             proxy_occupied_map.erase(it->first);
+#ifdef PROTEAN_DEBUG
             std::cerr << "finished reset of proxy " << graph::print_v(it->first) << std::endl;
+#endif
             it = proxy_reset_map.erase(it);
         }
     }
