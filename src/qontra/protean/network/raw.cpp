@@ -185,6 +185,13 @@ RawNetwork::add_proxy(sptr<raw_edge_t> e) {
     // Update tracking structures and return.
     proxy_indirection_map[prxq][q1].push_back(q2);
     proxy_indirection_map[prxq][q2].push_back(q1);
+    // If q1 or q2 are proxies, we need to update their entries too.
+    if (q1->qubit_type == raw_vertex_t::type::proxy) {
+        update_endpoint_in_indirection_map(q1, q2, prxq);
+    }
+    if (q2->qubit_type == raw_vertex_t::type::proxy) {
+        update_endpoint_in_indirection_map(q2, q1, prxq);
+    }
     return prxq;
 }
 
@@ -370,6 +377,19 @@ RawNetwork::are_in_same_support(std::initializer_list<sptr<raw_vertex_t>> vertex
     return nullptr;
 }
 
+void
+RawNetwork::update_endpoint_in_indirection_map(
+        sptr<raw_vertex_t> proxy,
+        sptr<raw_vertex_t> old_endpoint,
+        sptr<raw_vertex_t> new_endpoint)
+{
+    map_move_and_delete(proxy_indirection_map[proxy], old_endpoint, new_endpoint);
+    for (auto& p : proxy_indirection_map[proxy]) {
+        for (auto& x : p.second) {
+            if (x == old_endpoint) x = new_endpoint;
+        }
+    }
+}
 
 void
 RawNetwork::flag_proxy_merge(sptr<raw_vertex_t> rfq, sptr<raw_vertex_t> rprx) {
@@ -397,6 +417,7 @@ RawNetwork::proxy_proxy_merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
     // We need to join the contents of rx and ry together.
     for (auto& p : proxy_indirection_map[ry]) {
         if (rx == p.first) continue;
+
         if (!proxy_indirection_map[rx].count(p.first)) {
             // This is a simple move.
             proxy_indirection_map[rx][p.first] = std::move(p.second);
@@ -464,5 +485,6 @@ RawNetwork::replace_in_tracking_structures(sptr<raw_vertex_t> v, sptr<raw_vertex
         }
     }
 }
+
 }   // protean
 }   // qontra

@@ -141,6 +141,11 @@ public:
     graph::TannerGraph  tanner_graph;
     bool                enable_memoization; // This should be set to true once the network has stabilized.
 private:
+    void update_endpoint_in_indirection_map(
+            sptr<net::raw_vertex_t> proxy,
+            sptr<net::raw_vertex_t> old_endpoint,
+            sptr<net::raw_vertex_t> new_endpoint);
+
     void flag_proxy_merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
     void proxy_proxy_merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 

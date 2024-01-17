@@ -391,6 +391,17 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                     sptr<raw_edge_t> re = raw_connection_network.get_edge(rv, rx);
                     if (re == nullptr) continue;
                     sptr<raw_vertex_t> rprx = raw_connection_network.add_proxy(re);
+
+                    std::set<uint64_t> good_ids{33, 231, 310, 130, 305, 222, 317, 70};
+                    if (good_ids.count(rv->id) && good_ids.count(rx->id))
+                    std::cout << "[ add_connectivity_reducing_proxies ] adding proxy " << print_v(rprx) 
+                                << " between "
+                                << print_v(pv) << "(" << print_v(rv) << ") and "
+                                << print_v(px) << "(" << print_v(rx) << ")"
+                                << " pointing [" << print_v(rv) << "] --> " << print_v(raw_connection_network.proxy_indirection_map[rprx][rv][0])
+                                << " and [" << print_v(rx) << "] --> " << print_v(raw_connection_network.proxy_indirection_map[rprx][rx][0])
+                                << std::endl;
+
                     // Get cycle of role (which is just the max of the cycles of rv and rx).
                     size_t cycle = std::max(pv->cycle_role_map.at(rv), px->cycle_role_map.at(rx));
                     pprx->push_back_role(rprx, cycle);
@@ -406,8 +417,8 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
             }
         }
         if (pprx->role_set.empty()) {
-            std::cerr << "[ warning ] found proxy " << print_v(pprx) << " with no roles\n";
-            continue;
+            std::cerr << "[ add_connectivity_reducing_proxies ] found proxy " << print_v(pprx) << " with no roles\n";
+            exit(1);
         }
         add_vertex(pprx);
         // Update the physical connectivity on our side.
