@@ -16,72 +16,71 @@ namespace qontra {
 namespace protean {
 
 void
+add_node_to_render_graph(
+        Agraph_t* gr,
+        PhysicalNetwork& net,
+        sptr<net::phys_vertex_t> pv,
+        render_config_t config) 
+{
+    attr_list_t attr = get_attributes(pv);
+    Agnode_t* av = cxx_agnode(gr, "PQ" + graph::print_v(pv), 1);
+    // Update the vertex attributes.
+    cxx_agset(av, "fillcolor", attr.fillcolor);
+    cxx_agset(av, "fontcolor", attr.fontcolor);
+    cxx_agset(av, "fontname", attr.fontname);
+    cxx_agset(av, "fontsize", attr.fontsize);
+    cxx_agset(av, "label", attr.name);
+    cxx_agset(av, "shape", attr.shape);
+    cxx_agset(av, "style", attr.style);
+
+    if (config.plane.count(pv)) {
+        coord_t<2> p = config.plane.at(pv);
+        std::string ps = std::to_string(p[0]) + "," + std::to_string(p[1]) + "!";
+
+        std::cout << "[ vis ] placing qubit " << graph::print_v(pv) << " at (" << p[0] << ", " << p[1] << ")\n";
+        cxx_agset(av, "pos", ps);
+    }
+}
+
+void
+add_edge_to_render_graph(
+        Agraph_t* gr, 
+        PhysicalNetwork& network,
+        sptr<net::phys_edge_t> pe,
+        render_config_t config)
+{
+    if (config.do_not_render_out_of_plane_edges && pe->is_out_of_plane()) return;
+    attr_list_t attr = get_attributes(pe);
+
+    sptr<net::phys_vertex_t> pv = network.get_source(pe),
+                             pw = network.get_target(pe);
+    Agnode_t* av = cxx_agnode(gr, "PQ" + graph::print_v(pv), 0);
+    Agnode_t* aw = cxx_agnode(gr, "PQ" + graph::print_v(pw), 0);
+    Agedge_t* ae = cxx_agedge(gr, av, aw, attr.name, 1);
+
+    cxx_agset(ae, "dir", "none");
+    cxx_agset(ae, "labelfontname", attr.fontname);
+    cxx_agset(ae, "labelfontsize", attr.fontsize);
+    cxx_agset(ae, "headlabel", attr.headlabel);
+    cxx_agset(ae, "penwidth", attr.penwidth);
+    cxx_agset(ae, "style", attr.style);
+    cxx_agset(ae, "taillabel", attr.taillabel);
+    cxx_agset(ae, "weight", attr.weight);
+}
+
+void
 render_network(std::string output_file, PhysicalNetwork& network, render_config_t config) {
     GVC_t* gvc = gvContext();
 
     Agraph_t* gr = cxx_agopen("processor", Agundirected, NULL);
-    // Setup default attributes.
-    agattr(gr, AGNODE, "fillcolor", "black");
-    agattr(gr, AGNODE, "fontcolor", "black");
-    agattr(gr, AGNODE, "fontname", "serif");
-    agattr(gr, AGNODE, "fontsize", "10");
-    agattr(gr, AGNODE, "label", "N/A");
-    agattr(gr, AGNODE, "shape", "circle");
-    agattr(gr, AGNODE, "style", "filled");
-    agattr(gr, AGNODE, "pos", "");
-
-    agattr(gr, AGEDGE, "dir", "none");
-    agattr(gr, AGEDGE, "labelfontname", "");
-    agattr(gr, AGEDGE, "labelfontsize", "");
-    agattr(gr, AGEDGE, "headlabel", "");
-    agattr(gr, AGEDGE, "penwidth", "");
-    agattr(gr, AGEDGE, "style", "solid");
-    agattr(gr, AGEDGE, "taillabel", "");
-    agattr(gr, AGEDGE, "weight", "");
-
-    std::map<sptr<net::phys_vertex_t>, Agnode_t*> phys_to_gvc;
     // Create a node for each vertex in network.
     for (sptr<net::phys_vertex_t> pv : network.get_vertices()) {
-        attr_list_t attr = get_attributes(pv);
-        Agnode_t* av = cxx_agnode(gr, "PQ" + graph::print_v(pv), 1);
-        phys_to_gvc[pv] = av;
-        // Update the vertex attributes.
-        cxx_agset(av, "fillcolor", attr.fillcolor);
-        cxx_agset(av, "fontcolor", attr.fontcolor);
-        cxx_agset(av, "fontname", attr.fontname);
-        cxx_agset(av, "fontsize", attr.fontsize);
-        cxx_agset(av, "label", attr.name);
-        cxx_agset(av, "shape", attr.shape);
-        cxx_agset(av, "style", attr.style);
-
-        if (config.plane.count(pv)) {
-            coord_t<2> p = config.plane.at(pv);
-            std::string ps = std::to_string(p[0]) + "," + std::to_string(p[1]) + "!";
-
-            std::cout << "[ vis ] placing qubit " << graph::print_v(pv) << " at (" << p[0] << ", " << p[1] << ")\n";
-            cxx_agset(av, "pos", ps);
-        }
+        add_node_to_render_graph(gr, network, pv, config);
     }
     // Create edges. Here, we will label the edges by the roles that have 
     // the edge.
     for (sptr<net::phys_edge_t> pe : network.get_edges()) {
-        if (config.do_not_render_out_of_plane_edges && pe->is_out_of_plane()) continue;
-        attr_list_t attr = get_attributes(pe);
-
-        sptr<net::phys_vertex_t> pv = network.get_source(pe),
-                                 pw = network.get_target(pe);
-        Agnode_t* av = cxx_agnode(gr, "PQ" + graph::print_v(pv), 0);
-        Agnode_t* aw = cxx_agnode(gr, "PQ" + graph::print_v(pw), 0);
-        Agedge_t* ae = cxx_agedge(gr, av, aw, attr.name, 1);
-
-        cxx_agset(ae, "dir", "none");
-        cxx_agset(ae, "labelfontname", attr.fontname);
-        cxx_agset(ae, "labelfontsize", attr.fontsize);
-        cxx_agset(ae, "headlabel", attr.headlabel);
-        cxx_agset(ae, "penwidth", attr.penwidth);
-        cxx_agset(ae, "style", attr.style);
-        cxx_agset(ae, "taillabel", attr.taillabel);
-        cxx_agset(ae, "weight", attr.weight);
+        add_edge_to_render_graph(gr, network, pe, config);
     }
     // Get output_file extension.
     const char* filename = output_file.c_str();
@@ -91,6 +90,60 @@ render_network(std::string output_file, PhysicalNetwork& network, render_config_
     gvRenderFilename(gvc, gr, ext, filename);
     gvFreeLayout(gvc, gr);
     agclose(gr);
+    gvFreeContext(gvc);
+}
+
+void
+render_network_by_check(
+        std::string output_folder,
+        std::string ext,
+        PhysicalNetwork& network,
+        render_config_t config) 
+{
+    GVC_t* gvc = gvContext();
+
+    RawNetwork raw_net = network.get_raw_connection_network();
+    for (sptr<net::raw_vertex_t> rpq : raw_net.get_vertices()) {
+        if (rpq->qubit_type != net::raw_vertex_t::type::xparity
+                && rpq->qubit_type != net::raw_vertex_t::type::zparity)
+        {
+            continue;
+        }
+        auto& support = raw_net.get_support(rpq);
+        // Draw all qubits in the support. In case any of them share physical qubits, track what
+        // physical qubits have been drawn.
+        Agraph_t* gr = cxx_agopen("processor", Agundirected, NULL);
+
+        std::set<sptr<net::phys_vertex_t>> visited;
+        for (sptr<net::raw_vertex_t> rv : support.all) {
+            sptr<net::phys_vertex_t> pv = network.get_physical_qubit_for(rv);
+            if (visited.count(pv)) continue;
+
+            add_node_to_render_graph(gr, network, pv, config);
+        }
+
+        for (sptr<net::raw_vertex_t> rv : support.all) {
+            sptr<net::phys_vertex_t> pv = network.get_physical_qubit_for(rv);
+            for (sptr<net::raw_vertex_t> rw : support.all) {
+                sptr<net::phys_vertex_t> pw = network.get_physical_qubit_for(rw);
+                if (pv <= pw) continue;
+                sptr<net::phys_edge_t> pe = network.get_edge(pv, pw);
+                if (pe == nullptr) continue;
+
+                add_edge_to_render_graph(gr, network, pe, config);
+            }
+        }
+        // Write to file.
+        std::string filename = output_folder + "/" + graph::print_v(rpq) + "." + ext;
+        const char* c_fname = filename.c_str();
+        const char* c_ext = ext.c_str();
+
+        gvLayout(gvc, gr, config.layout_engine.c_str());
+        gvRenderFilename(gvc, gr, c_ext, c_fname);
+        gvFreeLayout(gvc, gr);
+        agclose(gr);
+    }
+    gvFreeContext(gvc);
 }
 
 Plane

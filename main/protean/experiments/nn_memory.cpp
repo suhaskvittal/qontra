@@ -30,7 +30,10 @@ int main(int argc, char* argv[]) {
     CmdParser pp(argc, argv);
     std::string HELP = 
         "usage: ./pr_nn_memory --qes <file> --out <file> --model <file>\n"
-        "\toptional: --s <shots, default=1e6> --p <error-rate, default=1e-3>";
+        "\toptional: --s <shots, default=1e6> --p <error-rate, default=1e-3>\n"
+        "\tspecifying decoder type:\n"
+        "\t\t-nn: neural network (default)\n"
+        "\t\t-frag: fragmented neural network. If using this, then \"--model\" must be a folder.";
 
     std::string qes_file;
     std::string model_file;
@@ -50,13 +53,19 @@ int main(int argc, char* argv[]) {
 
     // Load model from file and run memory experiment.
     DetailedStimCircuit circuit = make_circuit(qes_file, p);
-    NeuralDecoder dec(circuit);
+
+    uptr<NeuralDecoder> dec = nullptr;
+    if (pp.option_set("frag")) {
+        dec = std::make_unique<FragmentedNeuralDecoder>(circuit);
+    } else {
+        dec = std::make_unique<NeuralDecoder>(circuit);
+    }
     
-    dec.load_model_from_file(model_file);
+    dec->load_model_from_file(model_file);
 
     experiments::memory_params_t params;
     params.shots = shots;
-    auto res = memory_experiment(&dec, params);
+    auto res = memory_experiment(dec.get(), params);
 
     // Write result to file.
     if (world_rank == 0) {

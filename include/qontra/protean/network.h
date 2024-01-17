@@ -241,7 +241,8 @@ public:
     // Computes the syndrome extraction schedule for the existing layout.
     qes::Program<> make_schedule(void);
 
-    RawNetwork get_raw_connection_network(void);
+    RawNetwork                  get_raw_connection_network(void);
+    sptr<net::phys_vertex_t>    get_physical_qubit_for(sptr<net::raw_vertex_t>);
 
     struct {
         size_t max_connectivity = 4;

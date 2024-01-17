@@ -168,6 +168,11 @@ PhysicalNetwork::get_raw_connection_network() {
     return raw_connection_network;
 }
 
+inline sptr<net::phys_vertex_t>
+PhysicalNetwork::get_physical_qubit_for(sptr<net::raw_vertex_t> r) {
+    return role_to_phys[r];
+}
+
 inline bool
 PhysicalNetwork::add_vertex(sptr<net::phys_vertex_t> v) {
     if (!Graph::add_vertex(v)) return false;

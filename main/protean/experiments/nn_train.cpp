@@ -21,7 +21,10 @@ int main(int argc, char* argv[]) {
     vtils::CmdParser pp(argc, argv);
     std::string HELP = 
         "usage: ./pr_nn_train --qes <file> --out <model-file>\n"
-        "\toptional: --s <shots, default=1e6> --e <epochs> --p <error-rate, default=1e-3>";
+        "\toptional: --s <shots, default=1e6> --e <epochs> --p <error-rate, default=1e-3>\n"
+        "\tspecifying decoder type:\n"
+        "\t\t-nn: neural network (default)\n"
+        "\t\t-frag: fragmented neural network. If using this, then \"--out\" must be a folder.";
 
     std::string qes_file;
     std::string model_file;
@@ -42,23 +45,29 @@ int main(int argc, char* argv[]) {
     experiments::G_BASE_SEED = rand();
 
     DetailedStimCircuit circuit = make_circuit(qes_file, p);
-    NeuralDecoder dec(circuit);
-    dec.config.max_epochs = epochs;
-    dec.training_circuit = circuit;
+    uptr<NeuralDecoder> dec = nullptr;
+    if (pp.option_set("frag")) {
+        dec = std::make_unique<FragmentedNeuralDecoder>(circuit);
+    } else {
+        dec = std::make_unique<NeuralDecoder>(circuit);
+    }
+    dec->config.max_epochs = epochs;
+    dec->training_circuit = circuit;
 
     if (vtils::file_exists(model_file)) {
-        dec.load_model_from_file(model_file);
+        dec->load_model_from_file(model_file);
     } else {
-        using namespace mlpack;
-        dec.model.Add<Linear>(256);
-        dec.model.Add<TanH>();
-        dec.model.Add<Linear>(64);
-        dec.model.Add<TanH>();
-        dec.model.Add<Linear>(circuit.count_observables());
-        dec.model.Add<TanH>();
-    }
+        size_t output_layer_size = pp.option_set("frag") ? 1 : circuit.count_observables();
 
-    dec.train(shots);
-    dec.save_model_to_file(model_file);
+        using namespace mlpack;
+        dec->model.Add<Linear>(256);
+        dec->model.Add<TanH>();
+        dec->model.Add<Linear>(64);
+        dec->model.Add<TanH>();
+        dec->model.Add<Linear>(output_layer_size);
+        dec->model.Add<TanH>();
+    }
+    dec->train(shots);
+    dec->save_model_to_file(model_file);
     return 0;
 }

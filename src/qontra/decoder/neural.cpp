@@ -12,6 +12,12 @@ using namespace experiments;
 
 static const uint64_t PER_HW_LIMIT = 100'000;
 
+NeuralDecoder::NeuralDecoder(DetailedStimCircuit circuit)
+    :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
+    model(),
+    training_circuit(circuit)
+{}
+
 void
 NeuralDecoder::train(uint64_t shots, bool verbose) {
     const size_t n_det = circuit.count_detectors();
@@ -43,8 +49,8 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
         }
         shots_elapsed++;
 
-        if (shots_elapsed % 100'000 == 0) {
-            std::cout << "[ neural ] shots_elapsed: " << shots_elapsed << std::endl;
+        if (shots_elapsed % 100'000 == 0 && verbose) {
+            std::cout << "[ NeuralDecoder ] shots_elapsed: " << shots_elapsed << std::endl;
         }
     };
     generate_syndromes(training_circuit, shots, cb);
@@ -59,10 +65,10 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
 
 Decoder::result_t
 NeuralDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
-    const uint det = circuit.count_detectors();
-    const uint obs = circuit.count_observables();
+    const uint n_det = circuit.count_detectors();
+    const uint n_obs = circuit.count_observables();
 
-    arma::mat data_matrix(det, 1, arma::fill::value(-1.0));
+    arma::mat data_matrix(n_det, 1, arma::fill::value(-1.0));
     
     timer.clk_start();
 
@@ -71,11 +77,10 @@ NeuralDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     arma::mat pred;
     model.Predict(data_matrix, pred);
 
-    fp_t t = (fp_t)timer.clk_end();
+    fp_t t = static_cast<fp_t>(timer.clk_end());
 
-    stim::simd_bits corr(obs);
-    corr.clear();
-    for (uint i = 0; i < obs; i++) {
+    stim::simd_bits<SIMD_WIDTH> corr(n_obs);
+    for (uint i = 0; i < n_obs; i++) {
         corr[i] ^= (bool)(pred(i, 0) > 0);
     }
 
@@ -86,14 +91,36 @@ NeuralDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     return res;
 }
 
-void
-NeuralDecoder::save_model_to_file(std::string fname) {
-    mlpack::data::Save(fname, "model", model, false);
+FragmentedNeuralDecoder::FragmentedNeuralDecoder(DetailedStimCircuit circuit)
+    :NeuralDecoder(circuit),
+    backing_decoders(circuit.count_observables())
+{
+    std::vector<DetailedStimCircuit> circuits = isolate_observables(circuit);
+    for (size_t i = 0; i < backing_decoders.size(); i++) {
+        backing_decoders[i] = std::make_unique<NeuralDecoder>(circuits[i]);
+    }
 }
 
-void
-NeuralDecoder::load_model_from_file(std::string fname) {
-    mlpack::data::Load(fname, "model", model);
+std::vector<DetailedStimCircuit>
+isolate_observables(DetailedStimCircuit circuit) {
+    std::vector<DetailedStimCircuit> arr(circuit.count_observables(), DetailedStimCircuit());
+    circuit.for_each_operation(
+            [&] (const stim::CircuitInstruction& inst)
+            {
+                if (inst.gate_type == stim::GateType::OBSERVABLE_INCLUDE) {
+                    for (size_t i = 0; i < arr.size(); i++) {
+                        double _tmp = 0;
+                        stim::CircuitInstruction
+                            new_obs_inst(inst.gate_type, stim::SpanRef(&_tmp), inst.targets);
+                        arr[i].safe_append(new_obs_inst);
+                    }
+                } else {
+                    for (size_t i = 0; i < arr.size(); i++) {
+                        arr[i].safe_append(inst);
+                    }
+                }
+            });
+    return arr;
 }
 
 }   // qontra

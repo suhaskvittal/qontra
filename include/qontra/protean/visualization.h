@@ -31,7 +31,10 @@ struct render_config_t {
     bool do_not_render_out_of_plane_edges=false;
 };
 
+// Renders the entire network in one file.
 void render_network(std::string output_file, PhysicalNetwork&, render_config_t);
+/// Renders each check in a different file. Good for readability or fine-grained examination.
+void render_network_by_check(std::string output_folder, std::string ext, PhysicalNetwork&, render_config_t);
 
 // place_network maps each qubit in the PhysicalNetwork on a coordinate plane
 // via linear programming. The program is a quadratic program and attempts

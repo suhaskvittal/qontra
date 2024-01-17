@@ -12,19 +12,18 @@
 
 #include <mlpack/methods/ann/ffn.hpp>
 
+#include <vector>
+
 namespace qontra {
 
 class NeuralDecoder : public Decoder {
 public:
-    NeuralDecoder(DetailedStimCircuit circ)
-        :Decoder(circ, graph::DecodingGraph::Mode::DO_NOT_BUILD),
-        training_circuit(circ)
-    {}
+    NeuralDecoder(DetailedStimCircuit);
 
-    void                train(uint64_t shots, bool verbose=true);
+    virtual void        train(uint64_t shots, bool verbose=true);
     Decoder::result_t   decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
-    void                load_model_from_file(std::string);
-    void                save_model_to_file(std::string);
+    virtual void        load_model_from_file(std::string);
+    virtual void        save_model_to_file(std::string);
 
     std::string name() override { return "NeuralDecoder"; }
 
@@ -36,6 +35,32 @@ public:
     DetailedStimCircuit training_circuit;
 };
 
+class FragmentedNeuralDecoder : public NeuralDecoder {
+public:
+    FragmentedNeuralDecoder(DetailedStimCircuit);
+
+    void                train(uint64_t shots, bool verbose=true) override;
+    Decoder::result_t   decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
+    void                load_model_from_folder(std::string);
+    void                save_model_to_folder(std::string);
+
+    // These two functions just call load_model_from_folder and save_model_to_folder.
+    void                load_model_from_file(std::string) override;
+    void                save_model_to_file(std::string) override;
+
+    std::string name() override { return "FragmentedNeuralDecoder"; }
+private:
+    std::string get_model_filename(size_t);
+    void        set_all_configs(void);
+
+    // The number of backing decoders is equal to the number of observables in the circuit.
+    std::vector<uptr<NeuralDecoder>> backing_decoders;
+};
+
+std::vector<DetailedStimCircuit> isolate_observables(DetailedStimCircuit);
+
 }   // qontra
+
+#include "neural.inl"
 
 #endif  // NEURAL_DECODER_h
