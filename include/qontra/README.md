@@ -130,4 +130,156 @@ more readable and extensible than Stim's current strategy of handling extra
 information, which encoding this additional information into the coordinates of
 the detectors.
 
-# 
+## Graphs
+
+Unfortunately, to the best of our knowledge, there is no "good" C++ graph
+library. Initially, QontraSim used Boost, but the extreme compile times for
+Boost Graph coupled with odd segfaults motivated a custom graph library.
+QontraSim's graph library boasts the following features:
+1. Low feature bloat: QontraSim's graph library isn't intended to be the Swiss army
+   knife that many other graph libraries aspire to be. For instance, other
+   libraries allow fine-grained optimizations such as changing backing data
+   structures. QontraSim, for the sake of *simplicity*, offers no such
+   optimizations. This simplicity avoids the problem of obtuse syntax as seen
+   with Boost Graph.
+2. Memory-safe: all vertices/edges are implemented via smart pointers.
+   It is very hard to cause a segfault.
+3. Extensible: the basic graph class is templated so that common use cases can
+   be fulfilled by simply defining vertices and edges. Furthermore, if the user
+   requires more control, then they can simply extend the base class.
+
+### Vertices and Edges
+
+`graph.h` implements the base class `Graph` along with other objects. We first
+discuss the concept of vertices and edges:
+```c++
+namespace base {
+
+struct vertex_t {
+    uint64_t id;
+};
+
+struct edge_t {
+    sptr<void> src;
+    sptr<void> dst;
+    bool is_undirected=true;
+
+    template <class V=void> sptr<V> get_source(void);
+    template <class V=void> sptr<V> get_target(void);
+};
+
+}
+```
+As claimed before, these classes are rather barebones. `base::vertex_t` has 
+a unique `id` that is used to identify a vertex within a Graph. `base::edge_t`
+has two endpoints and a boolean indicating if the edge is undirected. If a user
+wants to add additional information to the vertices or edges, they must
+implement a new class. It is *recommended* that new vertex and edge classes
+extend `base::vertex_t` and `base::edge_t`, respectively.
+
+The oddest implementation detail here is that `base::edge_t` implements its
+endpoints as `void` pointers. This is done to avoid implicit dependencies
+between `base::vertex_t` and `base::edge_t`. Instead, the user can use whatever
+vertex they want with `base::edge_t` and vice versa. Consequently, if the user
+needs an endpoint, they can retrieve it safely with `get_source` or
+`get_target`.
+
+Vertices and edges in general also have the following utility functions for
+printing information.
+```c++
+template <class V> std::string                  print_v(sptr<V>);
+template <> std::string                         print_v(sptr<void>);
+template <class V=void, class E> std::string    print_e(sptr<E>);
+```
+If the user defines a new vertex or edge class and would like to modify the
+output information, these functions can be specialized for those classes.
+
+### Graphs
+
+The base class `Graph` is a barebones graph class that offers many common
+functions. The following is a list of these functions:
+```c++
+virtual void    change_id(sptr<V>, uint64_t to);
+virtual void    manual_update_id(sptr<V>, uint64_t old_id, uint64_t new_id);
+
+virtual bool    contains(uint64_t id);
+virtual bool    contains(sptr<V>);
+virtual bool    contains(sptr<V>, sptr<V>);
+virtual bool    contains(sptr<E>);
+
+virtual sptr<V> make_vertex(void);
+virtual sptr<E> make_edge(sptr<V>, sptr<V>, bool is_undirected=true);
+
+virtual bool    add_vertex(sptr<V>);
+virtual bool    add_edge(sptr<E>);
+
+virtual sptr<V> make_and_add_vertex(uint64_t id);
+virtual sptr<E> make_and_add_edge(sptr<V>, sptr<V>, bool is_undirected=true);
+
+virtual sptr<V> get_vertex(uint64_t);
+virtual sptr<E> get_edge(sptr<V>, sptr<V>);
+virtual sptr<E> get_edge(uint64_t, uint64_t);
+
+virtual void    delete_vertex(sptr<V>);
+virtual void    delete_edge(sptr<E>);
+
+std::vector<sptr<V>>    get_vertices(void);
+std::vector<sptr<E>>    get_edges(void);
+
+size_t  n(void);    // Returns number of vertices.
+size_t  m(void);    // Returns number of edges.
+
+std::vector<sptr<V>>    get_neighbors(sptr<V>);
+std::vector<sptr<V>>    get_incoming(sptr<V>);
+std::vector<sptr<V>>    get_outgoing(sptr<V>);
+
+std::vector<sptr<V>>    get_common_neighbors(sptr<V>, sptr<V>);
+
+size_t  get_degree(sptr<V>);
+size_t  get_indegree(sptr<V>);
+size_t  get_outdegree(sptr<V>);
+size_t  get_inoutdegree(sptr<V>);
+
+fp_t    get_mean_degree(void);
+size_t  get_max_degree(void);
+```
+Our implementation of `Graph` uses an adjacency matrix for O(1) edge lookups, an
+adjacency list for O(1) neighborhood retrieval, and a reverse adjacency list to
+track incoming edges in digraphs. Most functions are O(1), except for the
+`delete_vertex` and `delete_edge` functions, which are O(n) and O(m),
+respectively.
+
+`Graph` also has the capability to maintain a sense of state. This is rather
+useful in cases where a property of a graph is repeatedly accessed but is
+expensive to recompute (i.e. planarity). Thus, for subclasses of `Graph`, the
+protected function
+```c++
+virtual bool update_state(void);
+```
+can be overridden to track custom properties. `update_state` returns `true` if
+the `Graph` was updated, and `false` otherwise. Thus, when overriding this
+function, it is recommended that the function body follows the format:
+```c++
+bool update_state() {
+    if (!<PARENT>::update_state()) return false;
+    // Else update state:
+    ...
+    return true;
+}
+```
+where `<PARENT>` is the immediate superclass. The implementation of
+`update_state` in `Graph` obviously does not follow the above format, but
+instead only updates the state of the graph if the protected variable
+`graph_has_changed` is `true`. This variable is set on modifications, such as
+vertex/edge additions or deletions. If subclasses also need to indicate when the
+graph has changed, it is recommended to either update `graph_has_changed` or use
+their own variable. Furthermore, the public function
+```c++
+void force_update_state(void);
+```
+is also provided so that users can force an update, regardless of the value of
+`graph_has_changed`.
+
+## Simulations
+
+## Error Modeling
