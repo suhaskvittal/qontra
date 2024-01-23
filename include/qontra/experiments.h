@@ -22,7 +22,7 @@ extern bool     G_USE_MPI;                          // Default is true.
 extern uint64_t G_SHOTS_PER_BATCH;                  // Default is 100'000.
 extern uint64_t G_BASE_SEED;                        // Default is 0.
 extern bool     G_FILTER_OUT_SYNDROMES;             // Default is true.
-extern uint64_t G_FILTERING_HAMMING_WEIGHT;         // Default is 2.
+extern uint64_t G_FILTERING_HAMMING_WEIGHT;         // Default is 0.
 
 void    configure_optimal_batch_size(void);
 
@@ -32,9 +32,9 @@ template <class CALLBACK>
 void        generate_syndromes(const DetailedStimCircuit&, uint64_t shots, CALLBACK);
 
 template <class CALLBACK>
-uint64_t    read_syndrome_trace(std::string input_file, const DetailedStimCircuit&, CALLBACK);
+uint64_t    read_syndrome_trace(std::string input_folder, const DetailedStimCircuit&, CALLBACK);
 
-void        build_syndrome_trace(std::string output_file, const DetailedStimCircuit&, uint64_t shots);
+void        build_syndrome_trace(std::string output_folder, const DetailedStimCircuit&, uint64_t shots);
 
 }   // qontra
 

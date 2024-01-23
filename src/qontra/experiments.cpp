@@ -14,7 +14,7 @@ bool        G_USE_MPI  = true;
 uint64_t    G_SHOTS_PER_BATCH = 100'000;
 uint64_t    G_BASE_SEED = 0;
 bool        G_FILTER_OUT_SYNDROMES = true;
-uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
+uint64_t    G_FILTERING_HAMMING_WEIGHT = 0;
 
 void
 build_syndrome_trace(std::string output_folder, const stim::Circuit& circuit, uint64_t shots) {
