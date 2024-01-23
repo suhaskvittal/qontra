@@ -6,22 +6,12 @@
 #ifndef QONTRA_STATS_h
 #define QONTRA_STATS_h
 
-#include <iostream>
-#include <map>
-#include <set>
-#include <string>
-
-#include <math.h>
 #include <mpi.h>
 #include <stdint.h>
-#include <string.h>
 
 namespace qontra {
 
-template <class T> inline MPI_Datatype get_mpi_type() { return MPI_UNSIGNED_LONG; }
-template <> inline MPI_Datatype get_mpi_type<uint64_t>() { return MPI_UNSIGNED_LONG; }
-template <> inline MPI_Datatype get_mpi_type<int64_t>() { return MPI_LONG; }
-template <> inline MPI_Datatype get_mpi_type<double>() { return MPI_DOUBLE; }
+template <class T> MPI_Datatype get_mpi_type(void);
 
 template <class T>
 class statistic_t {
@@ -59,41 +49,18 @@ public:
     {}
 
     template <class PTR>
-    static statistic_t from_range(MPI_Op op, PTR start, PTR end, size_t max_size) {
-        statistic_t s(op, max_size);
-        size_t true_size = 0;
-        while (start != end) {
-            s[true_size++] = *start;
-            start++;
-        }
-        s.resize(true_size);
-        return s;
-    }
+    static statistic_t from_range(MPI_Op, PTR, PTR, size_t);
 
-    void reduce() {
-        int world_rank, world_size;
-        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-
-        if (world_size == 1) return;    // Nothing to be done.
-
-        std::vector<T> buf(size());
-        MPI_Allreduce(&data[0], &buf[0], size(), mpi_type, mpi_op, MPI_COMM_WORLD);
-        data = std::move(buf);
-    }
+    void    reduce(void);
 
     // Python style slicing:
-    inline statistic_t slice(size_t from, size_t to) {
-        T* start = &data[from];
-        T* end = start + (to-from);
-        return from_range(mpi_op, start, end, to-from);
-    }
+    statistic_t slice(size_t from, size_t to);
 
-    inline void fill(T x) { memset(&data[0], x, size()); }
-    inline size_t size() const { return data.size(); }
-    inline void resize(size_t s) { data.resize(s); }
+    void        fill(T);
+    size_t      size(void) const;
+    void        resize(size_t);
 
-    inline std::vector<T> vec(void) { return data; }
+    std::vector<T>  vec(void) const;
 
     // Accesses to data in this class is via statistic_t[i] -- gets the i-th element.
     //
@@ -104,96 +71,38 @@ public:
     // Arithmetic operations below (some of which are overloads).
     //
     // Note that these are not well-defined for all types.
-    inline void negate(void) { apply_scalar_elementwise([] (T y) { return -y; }); }
-    inline void root(void) { apply_scalar_elementwise([] (T y) { return sqrt(y); }); }
-
-    inline statistic_t& operator+=(T x) 
-        { apply_scalar_elementwise([&] (T y) { return y + x; }); return *this; }
-    inline statistic_t& operator-=(T x) 
-        { apply_scalar_elementwise([&] (T y) { return y + x; }); return *this; }
-    inline statistic_t& operator*=(T x) 
-        { apply_scalar_elementwise([&] (T y) { return y * x; }); return *this; }
-    inline statistic_t& operator/=(T x) 
-        { apply_scalar_elementwise([&] (T y) { return y / x; }); return *this; }
-
-    inline statistic_t& operator+=(statistic_t& other) { 
-        apply_vector_elementwise(other, [] (T x, T y) { return x + y; });
-        return *this;
-    }
-
-    inline statistic_t& operator-=(statistic_t& other) { 
-        apply_vector_elementwise(other, [] (T x, T y) { return x - y; });
-        return *this;
-    }
-
-    inline statistic_t& operator*=(statistic_t& other) { 
-        apply_vector_elementwise(other, [] (T x, T y) { return x * y; });
-        return *this;
-    }
-
-    inline statistic_t& operator/=(statistic_t& other) { 
-        apply_vector_elementwise(other, [] (T x, T y) { return x / y; });
-        return *this;
-    }
-
-    inline void scalar_replace_if_better_extrema(T x) {
-        apply_scalar_elementwise([&] (T y) { return compare_and_return_extrema(x, y); });
-    }
-
-    template <class PTR>
-    inline void vector_replace_if_better_extrema(PTR array) {
-        apply_vector_elementwise(array, [&] (T x, T y) { return compare_and_return_extrema(x, y); });
-    }
+    void    negate(void);
+    void    root(void);
+    // Scalar arithmetic operations (operation is applied on all elements).
+    statistic_t&    operator+=(T);
+    statistic_t&    operator-=(T);
+    statistic_t&    operator*=(T);
+    statistic_t&    operator/=(T);
+    // Vector arithmetic operations (operation is applied elementwise).
+    statistic_t&    operator+=(statistic_t&);
+    statistic_t&    operator-=(statistic_t&);
+    statistic_t&    operator*=(statistic_t&);
+    statistic_t&    operator/=(statistic_t&);
+    // Comparison and update operations.
+    void                        scalar_replace_if_better_extrema(T);
+    template <class PTR> void   vector_replace_if_better_extrema(PTR array);
 
     // Some basic statistic functions:
     //      For functions that rely on another statistic_t object, if the sizes do not line up,
     //      then the output is meaningless.
-
-    inline statistic_t<fp_t> get_mean(uint64_t n) {
-        statistic_t<fp_t> mean(*this);
-        mean /= static_cast<fp_t>(n);
-        return mean;
-    }
-
-    statistic_t<fp_t> get_std(statistic_t<fp_t> mean, uint64_t n) {
-        statistic_t<fp_t> stddev(*this);
-        if (mean.size() != size()) return stddev;
-        // First compute variance.
-        stddev /= static_cast<fp_t>(n);
-        stddev -= mean;
-        // Now take the elementwise square root.
-        stddev.root();
-        return stddev;
-    }
-
-    template <class LAMBDA> inline void
-    apply_scalar_elementwise(LAMBDA f) {
-        for (size_t i = 0; i < size(); i++) {
-            data[i] = f(data[i]);
-        }
-    }
-
-    template <class LAMBDA, class PTR> inline void
-    apply_vector_elementwise(PTR other, LAMBDA f) {
-        for (size_t i = 0; i < size(); i++) {
-            data[i] = f(data[i], static_cast<T>(other[i]));
-        }
-    }
+    statistic_t<fp_t>   get_mean(uint64_t n);
+    statistic_t<fp_t>   get_std(statistic_t<fp_t> mean, uint64_t n);
 
     const MPI_Datatype  mpi_type;
     const MPI_Op        mpi_op;
 private:
-    inline T compare_and_return_extrema(T x, T y) {
-        if (mpi_op == MPI_MAX) {
-            return x > y ? x : y;
-        } else {
-            return x < y ? x : y;
-        }
-    }
+    T compare_and_return_extrema(T, T);
 
     std::vector<T> data;
 };
 
 }   // qontra
+
+#include "stats.inl"
 
 #endif  // QONTRA_STATS_h
