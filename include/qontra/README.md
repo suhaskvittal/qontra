@@ -5,13 +5,15 @@ For more information about each directory, go to the directory's README.
 
 ## File structure:
 
+```
 qontra
 |-- [decoder.h and decoder](#decoders) 
 |-- [experiments.h and experiments](#experiments) 
 |-- [ext](#qontra-extensions) 
 |-- [graph.h and graph](#graphs) 
-|-- [sim](#simulation) f
+|-- [sim](#simulation) 
 |-- [tables.h](#error-modeling) 
+```
 
 ## Decoders
 
@@ -113,3 +115,19 @@ syndromes in a folder containing `.dets` files (see Stim file formats). Finally,
 containing `.dets` files. Note that `build_syndrome_trace` makes one `.dets`
 file *per* batch so that reading the syndromes can be quickly parallelized when
 calling `read_syndrome_trace`.
+
+## Qontra Extensions
+
+QontraSim provides extensions to the Stim's circuit model. The first is moreso
+for custom simulations supported by QontraSim via the [QES (Quantum Experiment
+Specification)](https://github.com/suhaskvittal/qes) language, which is built
+for QontraSim. QES is intended to be modular and useful for writing arbitrary
+experiments without having to make significant modifications to simulation
+infrastructure nor the specific error rates. The second is the
+`DetailedStimCircuit` class, which extends `stim::Circuit` by adding additional
+information, such as indicating which qubits are flag qubits. We believe this is
+more readable and extensible than Stim's current strategy of handling extra
+information, which encoding this additional information into the coordinates of
+the detectors.
+
+# 
