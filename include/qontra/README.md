@@ -6,12 +6,12 @@ For more information about each directory, go to the directory's README.
 ## File structure:
 
 qontra
-|-- [decoder.h and decoder](#decoders)
-|-- [experiments.h and experiments](#experiments)
-|-- [ext](#qontra-extensions)
-|-- [graph.h and graph](#graphs)
-|-- [sim](#simulation)
-|-- [tables.h](#error-modeling)
+|-- [decoder.h and decoder](#decoders) 
+|-- [experiments.h and experiments](#experiments) 
+|-- [ext](#qontra-extensions) 
+|-- [graph.h and graph](#graphs) 
+|-- [sim](#simulation) f
+|-- [tables.h](#error-modeling) 
 
 ## Decoders
 
