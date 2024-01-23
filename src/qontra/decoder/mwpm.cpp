@@ -36,7 +36,7 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
         uint64_t di = detectors[i];
 
         auto vi = decoding_graph.get_vertex(di);
-        for (size_t j = i + 1; j < n_vertices; j++) {
+        for (size_t j = i+1; j < n_vertices; j++) {
             uint64_t dj = detectors[j];
 
             auto vj = decoding_graph.get_vertex(dj);
