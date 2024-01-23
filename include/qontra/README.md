@@ -5,15 +5,19 @@ For more information about each directory, go to the directory's README.
 
 ## File structure:
 
-```
 qontra
+
 |-- [decoder.h and decoder](#decoders) 
+
 |-- [experiments.h and experiments](#experiments) 
+
 |-- [ext](#qontra-extensions) 
+
 |-- [graph.h and graph](#graphs) 
+j
 |-- [sim](#simulation) 
+
 |-- [tables.h](#error-modeling) 
-```
 
 ## Decoders
 
