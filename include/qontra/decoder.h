@@ -21,7 +21,7 @@ namespace qontra {
 
 template <class T>
 // T = stim::simd_bits or stim::simd_bits_range_ref
-std::vector<uint> get_nonzero_detectors_(T, uint number_of_detectors);
+std::vector<uint64_t> get_nonzero_detectors_(T, size_t number_of_detectors);
 
 class Decoder {
 public: 
@@ -44,7 +44,7 @@ public:
 
     virtual ~Decoder() {}
 
-    typedef std::tuple<uint, uint, stim::simd_bits<SIMD_WIDTH>> assign_t;
+    typedef std::tuple<uint64_t, uint64_t, stim::simd_bits<SIMD_WIDTH>> assign_t;
 
     struct result_t {
         fp_t exec_time = 0.0;
@@ -57,11 +57,11 @@ public:
                                                     // This function
                                                     // will perform decoding
                                                     // and return a correction.
-    virtual std::string name(void) =0;  // Useful for printing out stats.
 
     DetailedStimCircuit get_circuit(void);
 protected:
-    template <class T> std::vector<uint> get_nonzero_detectors(T syndrome);
+    template <class T>
+    std::vector<uint64_t> get_nonzero_detectors(T syndrome);
 
     DetailedStimCircuit     circuit;
     graph::DecodingGraph    decoding_graph;

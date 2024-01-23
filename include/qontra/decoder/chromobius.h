@@ -24,8 +24,6 @@ public:
     {}
         
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
-
-    inline std::string name(void) override { return "Chromobius"; }
 private:
     chromobius::Decoder backing_decoder;
 };

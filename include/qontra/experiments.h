@@ -5,7 +5,7 @@
 #ifndef EXPERIMENTS_h
 #define EXPERIMENTS_h
 
-#include "decoder/decoder.h"
+#include "qontra/decoder.h"
 
 #include <stim.h>
 

@@ -12,10 +12,6 @@
 
 typedef double fp_t;
 
-#ifdef __APPLE__
-typedef uint32_t uint;
-#endif
-
 typedef std::vector<fp_t>   poly_t;
 
 template <class T> using sptr=std::shared_ptr<T>;

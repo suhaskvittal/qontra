@@ -25,8 +25,6 @@ public:
     virtual void        load_model_from_file(std::string);
     virtual void        save_model_to_file(std::string);
 
-    std::string name() override { return "NeuralDecoder"; }
-
     struct {
         int max_epochs = 100;
     } config;
@@ -47,8 +45,6 @@ public:
     // These two functions just call load_model_from_folder and save_model_to_folder.
     void                load_model_from_file(std::string) override;
     void                save_model_to_file(std::string) override;
-
-    std::string name() override { return "FragmentedNeuralDecoder"; }
 private:
     std::string get_model_filename(size_t);
     void        set_all_configs(void);

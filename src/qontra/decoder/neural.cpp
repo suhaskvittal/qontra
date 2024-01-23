@@ -29,22 +29,22 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
     uint64_t shots_elapsed = 0;
     callback_t cb;
     // We will train the model every batch.
-    std::map<uint, uint64_t> hw_freq;
+    std::map<size_t, uint64_t> hw_freq;
     cb.prologue = [&] (shot_payload_t payload) {
         stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = payload.syndrome;
         stim::simd_bits_range_ref<SIMD_WIDTH> obs = payload.observables;
 
-        const uint hw = syndrome.popcnt();
+        const size_t hw = syndrome.popcnt();
         if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
             return;
         }
         if (hw_freq[hw]++ >= PER_HW_LIMIT)  return;
 
-        std::vector<uint> detectors = get_nonzero_detectors(syndrome);
-        for (uint d : detectors) {
+        std::vector<uint64_t> detectors = get_nonzero_detectors(syndrome);
+        for (uint64_t d : detectors) {
             data_matrix(d, shots_elapsed) = 1;
         }
-        for (uint i = 0; i < n_obs; i++) {
+        for (size_t i = 0; i < n_obs; i++) {
             y(i, shots_elapsed) = obs[i] ? 1 : -1;
         }
         shots_elapsed++;
@@ -65,22 +65,22 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
 
 Decoder::result_t
 NeuralDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
-    const uint n_det = circuit.count_detectors();
-    const uint n_obs = circuit.count_observables();
+    const size_t n_det = circuit.count_detectors();
+    const size_t n_obs = circuit.count_observables();
 
     arma::mat data_matrix(n_det, 1, arma::fill::value(-1.0));
     
     timer.clk_start();
 
-    const std::vector<uint> detectors = get_nonzero_detectors(syndrome);
-    for (uint d : detectors) data_matrix(d, 0) = 1;
+    const std::vector<uint64_t> detectors = get_nonzero_detectors(syndrome);
+    for (uint64_t d : detectors) data_matrix(d, 0) = 1;
     arma::mat pred;
     model.Predict(data_matrix, pred);
 
     fp_t t = static_cast<fp_t>(timer.clk_end());
 
     stim::simd_bits<SIMD_WIDTH> corr(n_obs);
-    for (uint i = 0; i < n_obs; i++) {
+    for (size_t i = 0; i < n_obs; i++) {
         corr[i] ^= (bool)(pred(i, 0) > 0);
     }
 
