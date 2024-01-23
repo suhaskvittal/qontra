@@ -5,15 +5,41 @@
  *  Useful memory experiment functions.
  * */
 
-#ifndef QEC_MEMORY_h
-#define QEC_MEMORY_h
+#ifndef EXPERIMENTS_MEMORY_h
+#define EXPERIMENTS_MEMORY_h
 
 #include "qontra/ext/stim.h"
+#include "qontra/tables.h"
 
 #include <string>
 
-qontra::DetailedStimCircuit make_circuit(std::string qes_file, fp_t);
+namespace qontra {
 
-#include "qec_memory.inl"
+struct memory_config_t {
+    uint64_t    shots           = 0;
+    std::string trace_folder    = "DNE";
+};
 
-#endif  // QEC_MEMORY_h
+struct memory_result_t {
+    fp_t        logical_error_rate;
+    fp_t        hw_mean;
+    fp_t        hw_std;
+    uint64_t    hw_max;
+    fp_t        t_mean;
+    fp_t        t_std;
+    fp_t        t_max;
+    // More specific data:
+    std::vector<fp_t>   logical_error_rate_by_obs;  // Logical error rate for each observable.
+};
+
+DetailedStimCircuit make_circuit(std::string qes_file, fp_t);
+memory_result_t     memory_experiment(Decoder*, memory_config_t);
+
+template <class PROLOGUE, class EPILOGUE>
+memory_result_t memory_experiment(Decoder*, memory_config_t, PROLOGUE, EPILOGUE);
+
+}   // qontra
+
+#include "memory.inl"
+
+#endif  // EXPERIMENTS_MEMORY_h
