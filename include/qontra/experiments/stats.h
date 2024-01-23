@@ -65,8 +65,8 @@ public:
     // Accesses to data in this class is via statistic_t[i] -- gets the i-th element.
     //
     // [] returns a reference, at() returns a value.
-    inline T& operator[](int index) { return data[index]; }
-    inline T at(int index=0) const { return data[index]; }
+    inline T& operator[](size_t index);
+    inline T at(size_t index=0) const;
 
     // Arithmetic operations below (some of which are overloads).
     //
@@ -92,6 +92,9 @@ public:
     //      then the output is meaningless.
     statistic_t<fp_t>   get_mean(uint64_t n);
     statistic_t<fp_t>   get_std(statistic_t<fp_t> mean, uint64_t n);
+
+    template <class LAMBDA> void                apply_scalar_elementwise(LAMBDA);
+    template <class LAMBDA, class PTR> void     apply_vector_elementwise(PTR other, LAMBDA);
 
     const MPI_Datatype  mpi_type;
     const MPI_Op        mpi_op;

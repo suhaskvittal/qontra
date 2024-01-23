@@ -3,7 +3,7 @@
  *  date:   18 June 2023
  * */
 
-#include "sim/clifford_sim.h"
+#include "qontra/sim/base/clifford_sim.h"
 
 namespace qontra {
 

@@ -24,6 +24,18 @@ is_colored_boundary(sptr<decoding::vertex_t> v) {
             || v->id == GREEN_BOUNDARY_INDEX;
 }
 
+template <> inline std::string
+print_v<decoding::vertex_t>(sptr<decoding::vertex_t> v) {
+    if (is_boundary(v)) return "B";
+    else                return std::to_string(v->id);
+}
+
+template <> inline std::string
+print_v<decoding::colored_vertex_t>(sptr<decoding::colored_vertex_t> v) {
+    if (is_colored_boundary(v)) return "B[" + v->color + "]";
+    else                        return std::to_string(v->id) + "[" + v->color + "]";
+}
+
 inline std::string
 int_to_color(int x) {
     if (x == 0)         return "r";
@@ -42,11 +54,6 @@ inline DecodingGraph::matrix_entry_t
 DecodingGraph::get_error_chain_data(sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2) {
     update_state(); 
     return distance_matrix[v1][v2];
-}
-
-inline DecodingGraph::matrix_entry_t
-DecodingGraph::get_error_chain_data_from_flagged_graph(sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2) {
-    return flagged_decoding_graph->get_error_chain_data(v1, v2);
 }
 
 inline poly_t
@@ -75,42 +82,6 @@ DecodingGraph::build_distance_matrix() {
             { 
                 return dijkstra_cb(src, dst, dist, prev);
             });
-}
-
-inline face_t
-make_face(sptr<decoding::colored_vertex_t> v1,
-            sptr<decoding::colored_vertex_t> v2,
-            sptr<decoding::colored_vertex_t> v3)
-{
-    std::array<sptr<decoding::colored_vertex_t>, 3> tmp{ v1, v2, v3 };
-    std::sort(tmp.begin(), tmp.end());
-    return std::make_tuple(tmp[0], tmp[1], tmp[2]);
-}
-
-inline bool
-ColoredDecodingGraph::contains_face(const face_t& fc) {
-    return face_frame_map.count(fc);
-}
-
-inline std::set<uint>
-ColoredDecodingGraph::get_face_frame_changes(const face_t& fc) {
-    return face_frame_map[fc];
-}
-
-inline fp_t
-ColoredDecodingGraph::get_face_probability(const face_t& fc) {
-    return face_prob_map[fc];
-}
-
-inline DecodingGraph&
-ColoredDecodingGraph::operator[](std::string cc) {
-    assert(restricted_color_map.count(cc));
-    return restricted_graphs.at(restricted_color_map.at(cc));
-}
-
-inline DecodingGraph&
-ColoredDecodingGraph::operator[](const char* cc) {
-    return (*this)[std::string(cc)];
 }
 
 }   // graph

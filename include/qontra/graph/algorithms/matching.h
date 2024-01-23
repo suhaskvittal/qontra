@@ -6,7 +6,7 @@
 #ifndef GRAPH_ALGORITHMS_MATCHING_h
 #define GRAPH_ALGORITHMS_MATCHING_h
 
-#include "qontra/graph/graph.h"
+#include "qontra/graph.h"
 
 #include <map>
 #include <vector>

@@ -5,9 +5,9 @@
 
 namespace qontra {
 
-template <class T> std::vector<uint>
-get_nonzero_detectors_(T syndrome, uint number_of_detectors) {
-    std::vector<uint> det;
+template <class T> std::vector<uint64_t>
+get_nonzero_detectors_(T syndrome, uint64_t number_of_detectors) {
+    std::vector<uint64_t> det;
     uint64_t w = 0;
     uint64_t last_bit = 0;
     while (det.size() < syndrome.popcnt()) {
@@ -17,7 +17,7 @@ get_nonzero_detectors_(T syndrome, uint number_of_detectors) {
             w++;
             continue;
         }
-        uint d = (w << 6) | (i-1);
+        uint64_t d = (w << 6) | (i-1);
         if (d >= number_of_detectors) break;
         det.push_back(d);
         last_bit = i & 0x3f;
@@ -31,7 +31,7 @@ Decoder::get_circuit() {
     return circuit;
 }
 
-template <class T> inline std::vector<uint>
+template <class T> inline std::vector<uint64_t>
 Decoder::get_nonzero_detectors(T syndrome) {
     return get_nonzero_detectors_(syndrome, circuit.count_detectors());
 }

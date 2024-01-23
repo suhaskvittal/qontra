@@ -9,14 +9,14 @@
 #ifndef QONTRA_PYMATCHING_h
 #define QONTRA_PYMATCHING_h
 
-#include "qontra/decoder/decoder.h"
+#include "qontra/decoder.h"
 
 #include <stim.h>
 #include <pymatching/sparse_blossom/driver/mwpm_decoding.h>
 
 namespace qontra {
 
-pm::Mwpm    init_solver_from_circuit(stim::Circuit):
+pm::Mwpm    init_solver_from_circuit(stim::Circuit);
 
 class PyMatching : public Decoder {
 public:

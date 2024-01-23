@@ -73,7 +73,7 @@ public:
     virtual void    change_id(sptr<V>, uint64_t to);
     virtual void    manual_update_id(sptr<V>, uint64_t old_id, uint64_t new_id);
 
-    virtual bool    contains(uint64 id);
+    virtual bool    contains(uint64_t id);
     virtual bool    contains(sptr<V>);
     virtual bool    contains(sptr<V>, sptr<V>);
     virtual bool    contains(sptr<E>);

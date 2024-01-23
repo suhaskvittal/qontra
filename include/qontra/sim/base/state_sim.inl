@@ -16,9 +16,9 @@ StateSimulator::reset_sim() {
 }
 
 template <StateSimulator::ErrorChannel1Q CH> inline void
-StateSimulator::error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
+StateSimulator::error_channel(std::vector<uint64_t> operands, std::vector<fp_t> rates) {
     for (size_t i = 0; i < operands.size(); i++) {
-        uint j = operands[i];
+        uint64_t j = operands[i];
         stim::RareErrorIterator::for_samples(rates[i], shots, rng,
         [&] (size_t t) {
             if (lock_table[j][t])   return;
@@ -28,10 +28,10 @@ StateSimulator::error_channel(std::vector<uint> operands, std::vector<fp_t> rate
 }
 
 template <StateSimulator::ErrorChannel2Q CH> inline void
-StateSimulator::error_channel(std::vector<uint> operands, std::vector<fp_t> rates) {
+StateSimulator::error_channel(std::vector<uint64_t> operands, std::vector<fp_t> rates) {
     for (size_t i = 0; i < operands.size(); i += 2) {
-        uint j1 = operands[i];
-        uint j2 = operands[i+1];
+        uint64_t j1 = operands[i];
+        uint64_t j2 = operands[i+1];
         stim::RareErrorIterator::for_samples(rates[i>>1], shots, rng,
         [&] (size_t t) 
         {
@@ -64,7 +64,7 @@ StateSimulator::error_channel_m(
 
 inline void
 StateSimulator::shift_record_by(uint64_t offset) {
-    for (size_t i = 0; i < statesim::G_RECORD_SPACE_SIZE; i++) {
+    for (size_t i = 0; i < G_RECORD_SPACE_SIZE; i++) {
         if (i < offset) record_table[i].clear();
         else            record_table[i].swap_with(record_table[i-offset]);
     }
@@ -78,7 +78,7 @@ StateSimulator::snapshot() {
 
 inline void
 StateSimulator::rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH> pred) {
-    for (size_t i = 0; i < statesim::G_RECORD_SPACE_SIZE; i++) {
+    for (size_t i = 0; i < G_RECORD_SPACE_SIZE; i++) {
         copy_where(record_table_cpy[i], record_table[i], pred);
     }
     for (size_t i = 0; i < n_qubits; i++) {

@@ -5,7 +5,7 @@
 #ifndef GRAPH_ALGORITHMS_MAXCUT_h
 #define GRAPH_ALGORITHMS_MAXCUT_h
 
-#include "qontra/graph/graph.h"
+#include "qontra/graph.h"
 
 #include <array>
 #include <set>

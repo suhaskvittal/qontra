@@ -37,7 +37,7 @@ update_tanner_graph(TannerGraph& graph, std::string line) {
 
         check_v = std::make_shared<tanner::vertex_t>();
         check_v->qubit_type = is_x_check ? tanner::vertex_t::type::xparity : tanner::vertex_t::type::zparity;
-        check_v->id = ((uint64_t)check_id) | flag;
+        check_v->id = static_cast<uint64_t>(check_id) | flag;
         if (!graph.add_vertex(check_v)) {
             return;
         }
@@ -46,12 +46,12 @@ update_tanner_graph(TannerGraph& graph, std::string line) {
     }
     // Now, parse the data qubits involved in the check.
     TannerGraph::obs_t obs_qubits;
-    uint pssi = ssi+1;
+    size_t pssi = ssi+1;
     while (true) {
         if ((ssi = line.find(",", pssi)) == std::string::npos) {
             ssi = line.size();
         }
-        uint64_t dqid = ((uint64_t)std::stoi(line.substr(pssi, ssi-pssi))) | VERTEX_ID_DATA_FLAG;
+        uint64_t dqid = static_cast<uint64_t>(std::stoi(line.substr(pssi, ssi-pssi))) | VERTEX_ID_DATA_FLAG;
         auto data_v = graph.get_vertex(dqid);
         if (data_v == nullptr) {
             data_v = std::make_shared<tanner::vertex_t>();

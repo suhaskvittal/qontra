@@ -5,7 +5,7 @@
 #ifndef GRAPH_ALGORITHMS_MIS_h
 #define GRAPH_ALGORITHMS_MIS_h
 
-#include "qontra/graph/graph.h"
+#include "qontra/graph.h"
 
 #include <set>
 

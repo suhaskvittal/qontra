@@ -73,12 +73,7 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
         error_assignments.push_back(std::make_tuple(di, dj, local_assign));
     }
     fp_t t = (fp_t)timer.clk_end();
-    Decoder::result_t res = {
-        t
-        corr,
-        error_assignments
-    };
-    return res;
+    return { t, corr, error_assignments };
 }
 
 }   // qontra

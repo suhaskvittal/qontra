@@ -6,7 +6,7 @@
 #ifndef GRAPH_ALGORITHMS_SEARCH_h
 #define GRAPH_ALGORITHMS_SEARCH_h
 
-#include "qontra/graph/graph.h"
+#include "qontra/graph.h"
 
 namespace qontra {
 namespace graph {

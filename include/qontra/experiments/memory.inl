@@ -3,16 +3,19 @@
  *  date:   11 January 2024
  * */
 
-#include "qontra/decoder.h"
 #include "qontra/experiments.h"
 #include "qontra/experiments/stats.h"
 #include "qontra/ext/qes.h"
 
 namespace qontra {
 
-inline qontra::DetailedStimCircuit
+inline DetailedStimCircuit
 make_circuit(std::string qes_file, fp_t p) {
-    qes::Program<> program = qes::from_file(qes_file);
+    return make_circuit(qes::from_file(qes_file), p);
+}
+
+inline DetailedStimCircuit
+make_circuit(qes::Program<> program, fp_t p) {
     const size_t n = get_number_of_qubits(program);
 
     tables::ErrorAndTiming et;
@@ -52,9 +55,7 @@ memory_experiment(Decoder* dec, memory_config_t config, PROLOGUE p_cb, EPILOGUE 
         hw_sqr_sum += sqr(hw);
         hw_max.scalar_replace_if_better_extrema(hw);
 
-        if (experiments::G_FILTER_OUT_SYNDROMES
-                && hw <= experiments::G_FILTERING_HAMMING_WEIGHT) 
-        {
+        if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
             return;
         }
         // Decode syndrome
@@ -64,7 +65,7 @@ memory_experiment(Decoder* dec, memory_config_t config, PROLOGUE p_cb, EPILOGUE 
         t_sqr_sum += sqr(res.exec_time);
         t_max.scalar_replace_if_better_extrema(res.exec_time);
 
-        for (uint i = 0; i < n_obs; i++) {
+        for (size_t i = 0; i < n_obs; i++) {
             logical_errors[i+1] += (bool)(res.corr[i] != obs[i]);
         }
         e_cb(res);

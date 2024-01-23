@@ -6,7 +6,7 @@
 #ifndef GRAPH_ALGORITHMS_DISTANCE_h
 #define GRAPH_ALGORITHMS_DISTANCE_h
 
-#include "qontra/graph/graph.h"
+#include "qontra/graph.h"
 
 #include <vtils/two_level_map.h>
 

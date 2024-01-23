@@ -21,7 +21,7 @@ namespace qontra {
 
 template <class T>
 // T = stim::simd_bits or stim::simd_bits_range_ref
-std::vector<uint64_t> get_nonzero_detectors_(T, size_t number_of_detectors);
+std::vector<uint64_t> get_nonzero_detectors_(T, uint64_t number_of_detectors);
 
 class Decoder {
 public: 

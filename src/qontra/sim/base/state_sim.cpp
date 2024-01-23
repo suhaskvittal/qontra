@@ -3,20 +3,18 @@
  *  date:   30 June 2023
  * */
 
-#include "qontra/sim/state_sim.h"
+#include "qontra/sim/base/state_sim.h"
 
 namespace qontra {
 
-namespace statesim {
-    size_t G_RECORD_SPACE_SIZE = 8192;
-}
+size_t G_RECORD_SPACE_SIZE = 8192;
 
-StateSimulator::StateSimulator(uint n, uint64_t max_shots)
+StateSimulator::StateSimulator(uint64_t n, uint64_t max_shots)
     :n_qubits(n),
     max_shots(max_shots),
-    record_table(statesim::G_RECORD_SPACE_SIZE, max_shots),
+    record_table(G_RECORD_SPACE_SIZE, max_shots),
     lock_table(n, max_shots),
-    record_table_cpy(statesim::G_RECORD_SPACE_SIZE, max_shots),
+    record_table_cpy(G_RECORD_SPACE_SIZE, max_shots),
     lock_table_cpy(n, max_shots),
     rng(0)
 {

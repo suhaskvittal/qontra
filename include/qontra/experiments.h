@@ -12,8 +12,6 @@
 
 namespace qontra {
 
-namespace experiments {
-
 struct shot_payload_t {
     stim::simd_bits_range_ref<SIMD_WIDTH>   syndrome;
     stim::simd_bits_range_ref<SIMD_WIDTH>   observables;
@@ -25,8 +23,6 @@ extern uint64_t G_SHOTS_PER_BATCH;                  // Default is 100'000.
 extern uint64_t G_BASE_SEED;                        // Default is 0.
 extern bool     G_FILTER_OUT_SYNDROMES;             // Default is true.
 extern uint64_t G_FILTERING_HAMMING_WEIGHT;         // Default is 2.
-
-}   // experiments
 
 void    configure_optimal_batch_size(void);
 

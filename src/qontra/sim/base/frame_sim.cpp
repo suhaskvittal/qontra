@@ -3,12 +3,12 @@
  *  date:   30 June 2023
  * */
 
-#include "qontra/sim/frame_sim.h"
-#include "qontra/sim/frame_sim_gate_impl.h"
+#include "qontra/sim/base/frame_sim.h"
+#include "qontra/sim/base/frame_sim_gate_impl.h"
 
 namespace qontra {
 
-FrameSimulator::FrameSimulator(uint n, uint64_t max_shots)
+FrameSimulator::FrameSimulator(uint64_t n, uint64_t max_shots)
     :StateSimulator(n, max_shots),
     x_table(n, max_shots),
     z_table(n, max_shots),
@@ -39,8 +39,8 @@ FrameSimulator::FrameSimulator(FrameSimulator&& other)
 {}
 
 void
-FrameSimulator::H(std::vector<uint> operands, int64_t tr) {
-    for (uint i : operands) {
+FrameSimulator::H(std::vector<uint64_t> operands, int64_t tr) {
+    for (uint64_t i : operands) {
         if (tr >= 0) {
             stim::bit_ref x = x_table[i][tr],
                             z = z_table[i][tr],
@@ -59,8 +59,8 @@ FrameSimulator::H(std::vector<uint> operands, int64_t tr) {
 }
 
 void
-FrameSimulator::X(std::vector<uint> operands, int64_t tr) {
-    for (uint i : operands) {
+FrameSimulator::X(std::vector<uint64_t> operands, int64_t tr) {
+    for (uint64_t i : operands) {
         // Flip X wherever lock = 0
         if (tr >= 0) {
             stim::bit_ref x = x_table[i][tr],
@@ -75,8 +75,8 @@ FrameSimulator::X(std::vector<uint> operands, int64_t tr) {
 }
 
 void
-FrameSimulator::Z(std::vector<uint> operands, int64_t tr) {
-    for (uint i : operands) {
+FrameSimulator::Z(std::vector<uint64_t> operands, int64_t tr) {
+    for (uint64_t i : operands) {
         // Flip Z wherever lock = 0
         if (tr >= 0) {
             stim::bit_ref z = z_table[i][tr],
@@ -91,12 +91,12 @@ FrameSimulator::Z(std::vector<uint> operands, int64_t tr) {
 }
 
 void
-FrameSimulator::S(std::vector<uint> operands, int64_t tr) {} // Do not implement.
+FrameSimulator::S(std::vector<uint64_t> operands, int64_t tr) {} // Do not implement.
 
 void
-FrameSimulator::CX(std::vector<uint> operands, int64_t tr) {
+FrameSimulator::CX(std::vector<uint64_t> operands, int64_t tr) {
     for (size_t i = 0; i < operands.size(); i += 2) {
-        uint j1 = operands[i], j2 = operands[i+1];
+        uint64_t j1 = operands[i], j2 = operands[i+1];
     
         stim::simd_bits<SIMD_WIDTH> lock_both(lock_table[j1]);
         lock_both |= lock_table[j2];
@@ -153,9 +153,9 @@ FrameSimulator::CX(std::vector<uint> operands, int64_t tr) {
 }
 
 void
-FrameSimulator::LEAKAGE_ISWAP(std::vector<uint> operands, int64_t tr) {
+FrameSimulator::LEAKAGE_ISWAP(std::vector<uint64_t> operands, int64_t tr) {
     for (size_t i = 0; i < operands.size(); i += 2) {
-        uint j1 = operands[i], j2 = operands[i+1];
+        uint64_t j1 = operands[i], j2 = operands[i+1];
     
         stim::simd_bits<SIMD_WIDTH> lock_both(lock_table[j1]);
         lock_both |= lock_table[j2];
@@ -181,14 +181,14 @@ FrameSimulator::LEAKAGE_ISWAP(std::vector<uint> operands, int64_t tr) {
 
 void
 FrameSimulator::M(
-        std::vector<uint> operands, 
+        std::vector<uint64_t> operands, 
         std::vector<fp_t> m1w0,
         std::vector<fp_t> m0w1,
         int record,
         int64_t tr) 
 {
     size_t k = 0;
-    for (uint i : operands) {
+    for (uint64_t i : operands) {
         if (tr >= 0) {
             uint64_t rand = rng();
             stim::bit_ref x = x_table[i][tr],
@@ -248,8 +248,8 @@ FrameSimulator::M(
 }
 
 void
-FrameSimulator::R(std::vector<uint> operands, int64_t tr) {
-    for (uint i : operands) {
+FrameSimulator::R(std::vector<uint64_t> operands, int64_t tr) {
+    for (uint64_t i : operands) {
         if (tr >= 0) {
             uint64_t rand = rng();
             stim::bit_ref x = x_table[i][tr],

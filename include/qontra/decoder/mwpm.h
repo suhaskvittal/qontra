@@ -6,7 +6,7 @@
 #ifndef DECODER_MWPM_h
 #define DECODER_MWPM_h
 
-#include "qontra/decoder/decoder.h"
+#include "qontra/decoder.h"
 #include "qontra/graph/decoding_graph.h"
 
 namespace qontra {

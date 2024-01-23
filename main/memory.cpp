@@ -3,11 +3,10 @@
  *  date:   21 January 2024
  * */
 
-#include <qec_memory.h>
-
 #include <qontra/decoder/pymatching.h>
 #include <qontra/decoder/mwpm.h>
 #include <qontra/experiments.h>
+#include <qontra/experiments/memory.h>
 #include <qontra/ext/stim.h>
 
 #include <vtils/cmd_parse.h>
@@ -44,15 +43,13 @@ int main(int argc, char* argv[]) {
     pp.get_uint64("s", shots);
     pp.get_float("p", p);
 
-    experiments::G_BASE_SEED = 1;
-
     // Load model from file and run memory experiment.
     DetailedStimCircuit circuit = make_circuit(qes_file, p);
     MWPMDecoder dec(circuit);
 
-    experiments::memory_params_t params;
-    params.shots = shots;
-    auto res = memory_experiment(&dec, params);
+    memory_config_t config;
+    config.shots = shots;
+    auto res = memory_experiment(&dec, config);
 
     // Write result to file.
     if (world_rank == 0) {

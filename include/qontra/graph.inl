@@ -8,12 +8,12 @@ namespace graph {
 
 namespace base {
 
-template <class V=void> sptr<V>
+template <class V> sptr<V>
 edge_t::get_source() {
     return std::reinterpret_pointer_cast<V>(src);
 }
 
-template <class V=void> sptr<V>
+template <class V> sptr<V>
 edge_t::get_target() {
     return std::reinterpret_pointer_cast<V>(dst);
 }
@@ -30,7 +30,7 @@ print_v(sptr<void> v) {
     return print_v(std::reinterpret_pointer_cast<base::vertex_t>(v));
 }
 
-template <class V=void, class E> inline std::string
+template <class V, class E> inline std::string
 print_e(sptr<E> e) {
     sptr<V> src = std::reinterpret_pointer_cast<V>(e->src),
             dst = std::reinterpret_pointer_cast<V>(e->dst);
@@ -315,12 +315,12 @@ Graph<V, E>::get_inoutdegree(sptr<V> v) {
 }
 
 template <class V, class E> inline fp_t
-Graph<V, E>::get_mean_connectivity(void) {
-    return 2 * ((fp_t)edges.size()) / ((fp_t)vertices.size()); 
+Graph<V, E>::get_mean_degree(void) {
+    return 2 * static_cast<fp_t>(m()) / static_cast<fp_t>(n()); 
 }
 
 template <class V, class E> inline size_t
-Graph<V, E>::get_max_connectivity(void) {
+Graph<V, E>::get_max_degree(void) {
     update_state();
     return max_degree;
 }

@@ -18,7 +18,7 @@ int get_file_type(std::string filename) {
         ".qes",
         ".stim"
     };
-    for (uint i = 0; i < ext.size(); i++) {
+    for (size_t i = 0; i < ext.size(); i++) {
         if (filename.find(ext[i]) != std::string::npos) {
             return i;
         }

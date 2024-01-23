@@ -7,7 +7,7 @@
 #define QONTRA_TANNER_GRAPH_h
 
 #include "qontra/defs.h"
-#include "qontra/graph/graph.h"
+#include "qontra/graph.h"
 
 #include <algorithm>
 #include <fstream>

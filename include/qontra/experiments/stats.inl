@@ -3,6 +3,8 @@
  *  date    23 January 2024
  * */
 
+#include "qontra/experiments.h"
+
 #include <iostream>
 #include <map>
 #include <set>
@@ -32,7 +34,7 @@ statistic_t<T>::from_range(MPI_Op op, PTR start, PTR end, size_t max_size) {
 
 template <class T> void
 statistic_t<T>::reduce() {
-    if (!experiments::G_USE_MPI) return;
+    if (!G_USE_MPI) return;
 
     int world_rank = 0, world_size = 1;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -53,11 +55,11 @@ statistic_t<T>::slice(size_t from, size_t to) {
 
 template <class T> inline void              statistic_t<T>::fill(T x) { memset(&data[0], x, size()); }
 template <class T> inline size_t            statistic_t<T>::size() const { return data.size(); }
-template <class T> inline void              statistic_t<T>::resize() { data.resize(s); }
+template <class T> inline void              statistic_t<T>::resize(size_t s) { data.resize(s); }
 template <class T> inline std::vector<T>    statistic_t<T>::vec() const { return data; }
 
 template <class T> inline T&    statistic_t<T>::operator[](size_t index) { return data[index]; }
-template <class T> inline T     statistic_t<T>::at(size_t index=0) const { return data.at(index); }
+template <class T> inline T     statistic_t<T>::at(size_t index) const { return data.at(index); }
 
 template <class T> inline void
 statistic_t<T>::negate(void) {

@@ -10,19 +10,11 @@
 
 namespace qontra {
 
-namespace experiments {
-
 bool        G_USE_MPI  = true;
 uint64_t    G_SHOTS_PER_BATCH = 100'000;
 uint64_t    G_BASE_SEED = 0;
 bool        G_FILTER_OUT_SYNDROMES = true;
 uint64_t    G_FILTERING_HAMMING_WEIGHT = 2;
-
-}   // experiments
-
-using namespace experiments;
-
-template <class T> inline T sqr(T x) { return x*x; }
 
 void
 build_syndrome_trace(std::string output_folder, const stim::Circuit& circuit, uint64_t shots) {
@@ -32,8 +24,8 @@ build_syndrome_trace(std::string output_folder, const stim::Circuit& circuit, ui
         MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     }
 
-    const uint n_det = circuit.count_detectors();
-    const uint n_obs = circuit.count_observables();
+    const size_t n_det = circuit.count_detectors();
+    const size_t n_obs = circuit.count_observables();
 
     stim::simd_bit_table<SIMD_WIDTH> syndromes(G_SHOTS_PER_BATCH, n_det);
     stim::simd_bit_table<SIMD_WIDTH> observables(G_SHOTS_PER_BATCH, n_obs);
@@ -44,7 +36,7 @@ build_syndrome_trace(std::string output_folder, const stim::Circuit& circuit, ui
     ref.clear();
 
     uint64_t ctr = 0;
-    uint file_offset = world_rank;
+    int file_offset = world_rank;
 
     // Create a local function for writing syndromes and observables to a file.
     auto write_batch = [&] (void) {
@@ -56,7 +48,9 @@ build_syndrome_trace(std::string output_folder, const stim::Circuit& circuit, ui
 
         stim::simd_bit_table<SIMD_WIDTH> obs_tr(std::move(observables));
         obs_tr = obs_tr.transposed();
-        for (uint i = 0; i < n_obs; i++) output_trace[n_det + i] |= obs_tr[i];
+        for (size_t i = 0; i < n_obs; i++) {
+            output_trace[n_det + i] |= obs_tr[i];
+        }
 
         std::string filename = output_folder + "/" + get_batch_filename(file_offset);
 

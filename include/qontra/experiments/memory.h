@@ -8,6 +8,7 @@
 #ifndef EXPERIMENTS_MEMORY_h
 #define EXPERIMENTS_MEMORY_h
 
+#include "qontra/decoder.h"
 #include "qontra/ext/stim.h"
 #include "qontra/tables.h"
 
@@ -33,6 +34,7 @@ struct memory_result_t {
 };
 
 DetailedStimCircuit make_circuit(std::string qes_file, fp_t);
+DetailedStimCircuit make_circuit(qes::Program<>, fp_t);
 memory_result_t     memory_experiment(Decoder*, memory_config_t);
 
 template <class PROLOGUE, class EPILOGUE>

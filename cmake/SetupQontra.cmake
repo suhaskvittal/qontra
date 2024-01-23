@@ -17,25 +17,14 @@ set(QONTRA_FILES
     src/qontra/decoder/mwpm.cpp
     # Graphs
     src/qontra/graph/decoding_graph.cpp 
-    src/qontra/graph/lattice_graph.cpp
     src/qontra/graph/tanner_graph.cpp
     # Simulators
-#   src/qontra/sim/enumerator.cpp
-    src/qontra/sim/frame_sim.cpp
-    src/qontra/sim/state_sim.cpp
-    src/qontra/sim/memory_sim.cpp
+    src/qontra/sim/base/frame_sim.cpp
+    src/qontra/sim/base/state_sim.cpp
     )
 
 # Each extension may have its own source files. So, we will need to update
 # the source files based on that.
-
-if (COMPILE_MEMORY_SIM_EXT)
-    message(STATUS "Will compile memory simulator extensions.")
-    set(QONTRA_FILES
-            ${QONTRA_FILES}
-            src/sim/memory_sim_ext/lrc.cpp
-            src/sim/memory_sim_ext/eraser.cpp)
-endif()
 
 if (COMPILE_NEURAL_DECODER)
     message(STATUS "Will compile neural network decoder. "
@@ -53,10 +42,6 @@ target_compile_options(qontra PRIVATE ${COMPILE_OPTIONS} -fPIC)
 
 if (L1D_CACHE_LINE_SIZE)
     target_compile_definitions(qontra PUBLIC L1D_CACHE_LINE_SIZE=${L1D_CACHE_LINE_SIZE})
-endif()
-
-if (COMPILE_MEMORY_SIM_EXT)
-    target_compile_definitions(qontra PUBLIC QONTRA_MEMORY_SIM_EXT_ENABLED)
 endif()
 
 if (COMPILE_PYMATCHING)

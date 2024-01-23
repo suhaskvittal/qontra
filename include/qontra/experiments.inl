@@ -23,11 +23,11 @@ configure_optimal_batch_size() {
 #else
     uint64_t cache_line_size = L1D_CACHE_LINE_SIZE;
 #endif
-    experiments::G_SHOTS_PER_BATCH = cache_line_size << 3;   // Need to convert to bits.
+    G_SHOTS_PER_BATCH = cache_line_size << 3;   // Need to convert to bits.
 }
 
 inline std::string
-get_batch_filename(uint batchno) {
+get_batch_filename(size_t batchno) {
     std::string batch_file = std::string("/batch_")
                                 + std::to_string(batchno)
                                 + std::string(".dets");
@@ -60,7 +60,7 @@ generate_syndromes(const DetailedStimCircuit& circuit, uint64_t shots, CALLBACK 
 }
 
 template <class CALLBACK> uint64_t
-read_syndrome_trace(std::string input_file, const DetailedStimCircuit& circuit, CALLBACK cb) {
+read_syndrome_trace(std::string input_folder, const DetailedStimCircuit& circuit, CALLBACK cb) {
     const size_t n_det = circuit.count_detectors();
     const size_t n_obs = circuit.count_observables();
 
@@ -70,14 +70,14 @@ read_syndrome_trace(std::string input_file, const DetailedStimCircuit& circuit, 
         MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     }
 
-    uint file_offset = world_rank;
+    int file_offset = world_rank;
     uint64_t local_shots = 0;
 
-    std::string batch_file = folder + "/" + get_batch_filename(file_offset);
+    std::string batch_file = input_folder + "/" + get_batch_filename(file_offset);
     while (faccessat(AT_FDCWD, batch_file.c_str(), F_OK, 0) >= 0) {
         // We will temporarily write the data column-wise to input_trace, and then extract
         // the syndrome and observable tables from there.
-        stim::simd_bit_table<SIMD_WIDTH> input_trace(w_det+w_obs, G_SHOTS_PER_BATCH);
+        stim::simd_bit_table<SIMD_WIDTH> input_trace(n_det+n_obs, G_SHOTS_PER_BATCH);
 
         FILE* fin = fopen(batch_file.c_str(), "r");
         uint64_t true_shots = stim::read_file_data_into_shot_table(
@@ -108,7 +108,7 @@ read_syndrome_trace(std::string input_file, const DetailedStimCircuit& circuit, 
             cb({syndromes[s], observables[s]});
         }
         file_offset += world_size;
-        batch_file = folder + "/" + get_batch_filename(file_offset);
+        batch_file = input_folder + "/" + get_batch_filename(file_offset);
         local_shots += true_shots;
     }
     uint64_t shots;

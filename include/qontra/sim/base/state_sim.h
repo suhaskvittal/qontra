@@ -17,11 +17,7 @@
 
 namespace qontra {
 
-namespace statesim {
-
 extern size_t G_RECORD_SPACE_SIZE;
-
-}   //  statesim
 
 // This class is generic, and intended to be extensible.
 //
@@ -47,7 +43,7 @@ copy_where(T from, T to, U pred) {
 
 class StateSimulator {
 public:
-    StateSimulator(uint n, uint64_t max_shots);
+    StateSimulator(uint64_t n, uint64_t max_shots);
     StateSimulator(const StateSimulator&);
 
     void set_seed(uint64_t);
@@ -60,30 +56,30 @@ public:
     // This allows for fine-grained updates. Updates that between all trials and single
     // trials (i.e. a subset of trials) should save the state and rollback after performing
     // a gate, or simply perform the gate for each single trial (a judgement call).
-    virtual void    H(std::vector<uint>, int64_t tr=-1) =0;
-    virtual void    X(std::vector<uint>, int64_t tr=-1) =0;
-    virtual void    Z(std::vector<uint>, int64_t tr=-1) =0;
-    virtual void    S(std::vector<uint>, int64_t tr=-1) =0;
-    virtual void    CX(std::vector<uint>, int64_t tr=-1) =0;
-    virtual void    R(std::vector<uint>, int64_t tr=-1) =0;
+    virtual void    H(std::vector<uint64_t>, int64_t tr=-1) =0;
+    virtual void    X(std::vector<uint64_t>, int64_t tr=-1) =0;
+    virtual void    Z(std::vector<uint64_t>, int64_t tr=-1) =0;
+    virtual void    S(std::vector<uint64_t>, int64_t tr=-1) =0;
+    virtual void    CX(std::vector<uint64_t>, int64_t tr=-1) =0;
+    virtual void    R(std::vector<uint64_t>, int64_t tr=-1) =0;
 
     // Other operations that are not guaranteed to have an implementation.
-    virtual void    LEAKAGE_ISWAP(std::vector<uint>, int64_t tr=-1) {};
+    virtual void    LEAKAGE_ISWAP(std::vector<uint64_t>, int64_t tr=-1) {};
 
     // As these operations are non-Clifford, we
     // provide a default implementation that does
     // nothing.
-    virtual void    T(std::vector<uint>, int64_t tr=-1) {}
-    virtual void    RX(fp_t, std::vector<uint>, int64_t tr=-1) {}
-    virtual void    RY(fp_t, std::vector<uint>, int64_t tr=-1) {}
-    virtual void    RZ(fp_t, std::vector<uint>, int64_t tr=-1) {}
+    virtual void    T(std::vector<uint64_t>, int64_t tr=-1) {}
+    virtual void    RX(fp_t, std::vector<uint64_t>, int64_t tr=-1) {}
+    virtual void    RY(fp_t, std::vector<uint64_t>, int64_t tr=-1) {}
+    virtual void    RZ(fp_t, std::vector<uint64_t>, int64_t tr=-1) {}
 
     // Measurement is a special operation. 
     // The first argument is the operands (as with other operations).
     // The second and third arguments (mXwY) is the probability that we
     //  measured a value X but the correct state was Y.
     // The last value is the location in the record table to store the measurement.
-    virtual void    M(std::vector<uint>,
+    virtual void    M(std::vector<uint64_t>,
                         std::vector<fp_t> m1w0,
                         std::vector<fp_t> m0w1,
                         int record=-1,
@@ -100,23 +96,23 @@ public:
     //      FrameSimulator).
     //  + any additional infrastructure you may need.
     //
-    typedef void (StateSimulator::*ErrorChannel1Q)(uint, uint64_t);
-    typedef void (StateSimulator::*ErrorChannel2Q)(uint, uint, uint64_t);
+    typedef void (StateSimulator::*ErrorChannel1Q)(uint64_t, uint64_t);
+    typedef void (StateSimulator::*ErrorChannel2Q)(uint64_t, uint64_t, uint64_t);
 
-    template <ErrorChannel1Q CH> void error_channel(std::vector<uint>, std::vector<fp_t>);
-    template <ErrorChannel2Q CH> void error_channel(std::vector<uint>, std::vector<fp_t>);
+    template <ErrorChannel1Q CH> void error_channel(std::vector<uint64_t>, std::vector<fp_t>);
+    template <ErrorChannel2Q CH> void error_channel(std::vector<uint64_t>, std::vector<fp_t>);
 
     virtual void error_channel_m(uint64_t rec, fp_t, fp_t, stim::simd_bits_range_ref<SIMD_WIDTH>);
 
-    virtual void    eDP1(uint, uint64_t) =0;
-    virtual void    eX(uint, uint64_t) =0;
-    virtual void    eY(uint, uint64_t) =0;
-    virtual void    eZ(uint, uint64_t) =0;
-    virtual void    eL(uint, uint64_t) =0;
+    virtual void    eDP1(uint64_t, uint64_t) =0;
+    virtual void    eX(uint64_t, uint64_t) =0;
+    virtual void    eY(uint64_t, uint64_t) =0;
+    virtual void    eZ(uint64_t, uint64_t) =0;
+    virtual void    eL(uint64_t, uint64_t) =0;
 
-    virtual void    eDP2(uint, uint, uint64_t) =0;
-    virtual void    eLI(uint, uint, uint64_t) =0;
-    virtual void    eLT(uint, uint, uint64_t) =0;
+    virtual void    eDP2(uint64_t, uint64_t, uint64_t) =0;
+    virtual void    eLI(uint64_t, uint64_t, uint64_t) =0;
+    virtual void    eLT(uint64_t, uint64_t, uint64_t) =0;
 
     void    shift_record_by(uint64_t);
                             // Record shifting is particularly useful for
@@ -140,7 +136,7 @@ protected:
 
     std::mt19937_64 rng;
 
-    const uint      n_qubits;
+    const uint64_t  n_qubits;
     const uint64_t  max_shots;
 };
 

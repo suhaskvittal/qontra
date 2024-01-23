@@ -6,7 +6,7 @@
 #ifndef GRAPH_ALGORITHMS_PLANARITY_h
 #define GRAPH_ALGORITHMS_PLANARITY_h
 
-#include "qontra/graph/graph.h"
+#include "qontra/graph.h"
 
 #include <limits>
 #include <tuple>

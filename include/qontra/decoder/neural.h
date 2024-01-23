@@ -8,7 +8,7 @@
 
 #define MLPACK_ENABLE_ANN_SERIALIZATION
 
-#include "qontra/decoder/decoder.h"
+#include "qontra/decoder.h"
 
 #include <mlpack/methods/ann/ffn.hpp>
 

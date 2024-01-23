@@ -14,35 +14,35 @@ FrameSimulator::reset_sim() {
 }
 
 inline void
-FrameSimulator::eDP1(uint q, uint64_t t) {
+FrameSimulator::eDP1(uint64_t q, uint64_t t) {
     int p = rng() & 3;
     x_table[q][t] ^= (bool)(p & 1);
     z_table[q][t] ^= (bool)(p & 2);
 }
 
 inline void
-FrameSimulator::eX(uint q, uint64_t t) {
+FrameSimulator::eX(uint64_t q, uint64_t t) {
     x_table[q][t] ^= 1;
 }
 
 inline void
-FrameSimulator::eY(uint q, uint64_t t) {
+FrameSimulator::eY(uint64_t q, uint64_t t) {
     x_table[q][t] ^= 1;
     z_table[q][t] ^= 1;
 }
 
 inline void
-FrameSimulator::eZ(uint q, uint64_t t) {
+FrameSimulator::eZ(uint64_t q, uint64_t t) {
     z_table[q][t] ^= 1;
 }
 
 inline void
-FrameSimulator::eL(uint q, uint64_t t) {
+FrameSimulator::eL(uint64_t q, uint64_t t) {
     leak_table[q][t] ^= 1;
 }
 
 inline void
-FrameSimulator::eDP2(uint q1, uint q2, uint64_t t) {
+FrameSimulator::eDP2(uint64_t q1, uint64_t q2, uint64_t t) {
     int p = rng() & 15;
     x_table[q1][t] ^= (bool)(p & 1);
     z_table[q1][t] ^= (bool)(p & 2);
@@ -51,7 +51,7 @@ FrameSimulator::eDP2(uint q1, uint q2, uint64_t t) {
 }
 
 inline void
-FrameSimulator::eLI(uint q1, uint q2, uint64_t t) {
+FrameSimulator::eLI(uint64_t q1, uint64_t q2, uint64_t t) {
     int p = rng() % 3;
     bool c1 = (p == 0) || (p == 2);
     bool c2 = (p == 1) || (p == 2);
@@ -62,7 +62,7 @@ FrameSimulator::eLI(uint q1, uint q2, uint64_t t) {
 #define QONTRA_USE_MESSY_LEAKAGE_TRANSPORT
 
 inline void 
-FrameSimulator::eLT(uint q1, uint q2, uint64_t t) {
+FrameSimulator::eLT(uint64_t q1, uint64_t q2, uint64_t t) {
 #ifdef QONTRA_USE_MESSY_LEAKAGE_TRANSPORT
     bool c1 = leak_table[q2][t] & !leak_table[q1][t];
     bool c2 = leak_table[q1][t] & !leak_table[q2][t];
