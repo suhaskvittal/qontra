@@ -9,7 +9,7 @@
 #ifndef QONTRA_PYMATCHING_h
 #define QONTRA_PYMATCHING_h
 
-#include "decoder/decoder.h"
+#include "qontra/decoder/decoder.h"
 
 #include <stim.h>
 #include <pymatching/sparse_blossom/driver/mwpm_decoding.h>
@@ -40,7 +40,7 @@ public:
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) override {
         const uint n_observables = circuit.count_observables();
 
-        std::vector<uint> detectors = get_nonzero_detectors_(syndrome);
+        std::vector<uint> detectors = get_nonzero_detectors(syndrome);
         if (detectors.size() == 0) {
             stim::simd_bits<SIMD_WIDTH> corr(n_observables);
             corr.clear();
@@ -54,11 +54,6 @@ public:
         for (uint x : detectors) d64.push_back(x);
         stim::simd_bits<SIMD_WIDTH> corr(n_observables);
 
-        // Get working set into the cache first.
-        int64_t w;
-        pm::decode_detection_events(solver, d64, corr.u8, w);
-        corr.clear();
-        // Now time for realz.
         timer.clk_start();
         pm::decode_detection_events(solver, d64, corr.u8, w);
         fp_t t = (fp_t)timer.clk_end();

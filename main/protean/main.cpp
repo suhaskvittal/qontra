@@ -48,6 +48,7 @@ int main(int argc, char* argv[]) {
             << tanner_graph.get_vertices_by_type(tanner::vertex_t::type::data).size() << "\n"
             << "Checks = " << tanner_graph.get_checks().size() << "\n";
 
+    vtils::safe_create_directory(data_output_folder);
     // Make network:
     PhysicalNetwork network(tanner_graph);
     network.config.max_connectivity = static_cast<size_t>(max_connectivity);

@@ -8,12 +8,12 @@
 #ifndef QEC_MEMORY_h
 #define QEC_MEMORY_h
 
-#include <qontra/ext/stim.h>
+#include "qontra/ext/stim.h"
 
 #include <string>
 
 qontra::DetailedStimCircuit make_circuit(std::string qes_file, fp_t);
 
-#include "memory.inl"
+#include "qec_memory.inl"
 
 #endif  // QEC_MEMORY_h

@@ -3,6 +3,8 @@
 
 add_executable(converter main/converter.cpp)
 add_executable(syndromes main/syndromes.cpp)
+add_executable(memory main/memory.cpp)
 
 target_link_libraries(converter PRIVATE qontra)
 target_link_libraries(syndromes PRIVATE qontra)
+target_link_libraries(memory PRIVATE qontra)

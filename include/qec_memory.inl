@@ -3,7 +3,7 @@
  *  date:   11 January 2024
  * */
 
-#include <qontra/ext/qes.h>
+#include "qontra/ext/qes.h"
 
 qontra::DetailedStimCircuit
 make_circuit(std::string qes_file, fp_t p) {

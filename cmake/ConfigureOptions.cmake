@@ -33,7 +33,6 @@ message(STATUS "(Build type = ${CMAKE_BUILD_TYPE}, compile options are: ${COMPIL
 set(CMAKE_CXX_STANDARD 20)
 
 if (COMPILE_CHROMOBIUS)
-    set(CMAKE_CXX_STANDARD 20)
     set(COMPILE_PYMATCHING On)  # PyMatching is a dependency.
 endif()
 
