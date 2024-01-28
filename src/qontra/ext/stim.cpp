@@ -74,7 +74,7 @@ DetailedStimCircuit::from_qes(
         if (error_goes_before_op(inst) && !is_error_free) {
             std::vector<fp_t> e_array = get_errors(inst, errors);
             std::string error_name = apply_x_error_instead_of_depolarizing(inst) ? "X_ERROR" : "DEPOLARIZE1";
-            circuit.apply_errors(error_name, qubits, e_array, is_2q(inst));
+            circuit.apply_errors(error_name, qubits, e_array, is_2q_gate(inst));
         }
         // Convert the qes::Instruction to stim if there's an equivalent.
         if (name == "h") {
@@ -94,10 +94,10 @@ DetailedStimCircuit::from_qes(
             circuit.safe_append_u("R", v32(qubits));
         } else if (name == "event") {
             std::vector<uint32_t> offsets;
-            uint64_t detection_event = inst.get<uint64_t>(0);
+            int64_t detection_event = inst.get<int64_t>(0);
             // Note: first operand is not useful to Stim.
             for (size_t i = 1; i < inst.get_number_of_operands(); i++) {
-                uint32_t off = static_cast<uint32_t>(meas_ctr - inst.get<uint64_t>(i));
+                uint32_t off = static_cast<uint32_t>(meas_ctr - inst.get<int64_t>(i));
                 offsets.push_back(stim::TARGET_RECORD_BIT | off);
             }
             // Check annotations and property map for any additional data.
@@ -119,26 +119,26 @@ DetailedStimCircuit::from_qes(
             circuit.safe_append_u("DETECTOR", offsets, coord);
         } else if (name == "obs") {
             std::vector<uint32_t> offsets;
-            uint64_t obs = inst.get<uint64_t>(0);
+            int64_t obs = inst.get<int64_t>(0);
             for (size_t i = 1; i < inst.get_number_of_operands(); i++) {
                 uint32_t off = static_cast<uint32_t>(meas_ctr - inst.get<uint64_t>(i));
                 offsets.push_back(stim::TARGET_RECORD_BIT | off);
             }
             circuit.safe_append_ua("OBSERVABLE_INCLUDE", offsets, static_cast<double>(obs));
         } else if (name == "mshift") {
-            meas_ctr -= inst.get<uint64_t>(0);
+            meas_ctr -= inst.get<int64_t>(0);
         }
         // Apply any errors.
         // First do gate errors.
         if (!is_error_free && !error_goes_before_op(inst)) {
             std::vector<fp_t> e_array = get_errors(inst, errors);
             std::string error_name = apply_x_error_instead_of_depolarizing(inst) ? "X_ERROR" : "DEPOLARIZE1";
-            circuit.apply_errors(error_name, qubits, e_array, is_2q(inst));
+            circuit.apply_errors(error_name, qubits, e_array, is_2q_gate(inst));
         }
         // Now do idling errors and update elapsed_time.
         if (!takes_no_time) {
             // Use uint32_t as Stim uses that (saves a cast).
-            if (is_2q(inst)) {
+            if (is_2q_gate(inst)) {
                 for (uint64_t q : all_qubits) {
                     if (std::find(qubits.begin(), qubits.end(), q) == qubits.end()) {
                         // This will have an idling error.

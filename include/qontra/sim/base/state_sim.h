@@ -29,17 +29,11 @@ extern size_t G_RECORD_SPACE_SIZE;
 //  (2) CliffordSimulator, an optimized simulator. Use this when simulating
 //      proper quantum programs.
 
-template <class T, class U> inline void
+template <class T, class U>
 // T and U = stim::simd_bits or stim::simd_bits_range_ref
 // Different templates are used because their backing widths
 // may differ (e.g. 64 bit vs 256 bit).
-copy_where(T from, T to, U pred) {
-    from.for_each_word(to, pred, 
-            [&] (auto& f, auto& t, auto& p)
-            {
-                t = p.andnot(f) | (f & p);
-            });
-}
+void copy_where(T from, T to, U pred);
 
 class StateSimulator {
 public:
@@ -114,7 +108,7 @@ public:
     virtual void    eLI(uint64_t, uint64_t, uint64_t) =0;
     virtual void    eLT(uint64_t, uint64_t, uint64_t) =0;
 
-    void    shift_record_by(uint64_t);
+    void    shift_record_by(int64_t);
                             // Record shifting is particularly useful for
                             // operating on large programs, where the sliding
                             // window moves over time.

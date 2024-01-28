@@ -1,8 +1,30 @@
-/* author: Suhas Vittal
+/* 
+ *  author: Suhas Vittal
  *  date:   25 December 2023
  * */
 
 namespace qontra {
+
+template <class T, class U> inline void
+copy_where(T from, T to, U pred) {
+    from.for_each_word(to, pred, 
+            [&] (auto& f, auto& t, auto& p)
+            {
+                t = p.andnot(f) | (f & p);
+            });
+}
+
+// Specialization to T = stim::simd_bit_table<SIMD_WIDTH>&
+template <class U> inline void
+copy_where<stim::simd_bit_table<SIMD_WIDTH>&>(
+        stim::simd_bit_table<SIMD_WIDTH>& from,
+        stim::simd_bit_table<SIMD_WIDTH>& to,
+        U pred)
+{
+    for (size_t i = 0; i < from.num_major_bits_padded(); i++) {
+        copy_where(from[i], to[i], pred);
+    }
+}
 
 inline void
 StateSimulator::set_seed(uint64_t x) {
@@ -63,11 +85,8 @@ StateSimulator::error_channel_m(
 }
 
 inline void
-StateSimulator::shift_record_by(uint64_t offset) {
-    for (size_t i = 0; i < G_RECORD_SPACE_SIZE; i++) {
-        if (i < offset) record_table[i].clear();
-        else            record_table[i].swap_with(record_table[i-offset]);
-    }
+StateSimulator::shift_record_by(int64_t offset) {
+    left_shift(record_table, offset);
 }
 
 inline void
@@ -78,12 +97,8 @@ StateSimulator::snapshot() {
 
 inline void
 StateSimulator::rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH> pred) {
-    for (size_t i = 0; i < G_RECORD_SPACE_SIZE; i++) {
-        copy_where(record_table_cpy[i], record_table[i], pred);
-    }
-    for (size_t i = 0; i < n_qubits; i++) {
-        copy_where(lock_table_cpy[i], lock_table[i], pred);
-    }
+    copy_where(record_table_cpy, record_table, pred);
+    copy_where(lock_table_cpy, lock_table, pred);
 }
 
 }   // qontra

@@ -58,6 +58,30 @@ andnot(stim::bitword<W> x, stim::bitword<W> y) {
     return x.andnot(y);
 }
 
+template <size_t W> inline void
+left_shift(stim::simd_bit_table& tbl, int64_t by) {
+    if (by < 0) { right_shift(tbl, -by); return; }
+    else if (by == 0) return;
+
+    for (size_t i = 0; i < tbl.num_major_bits_padded(); i++) {
+        if (i < by) {
+            tbl[i].clear();
+        } else {
+            tbl[i].swap_with(tbl[i - by]);
+        }
+    }
+}
+
+template <size_t W> inline void
+right_shift(stim::simd_bit_table& tbl, int64_t by) {
+    if (by < 0) { left_shift(tbl, -by); return; }
+    else if (by == 0) return;
+
+    for (size_t i = tbl.num_major_bits_padded()-by-1; i >= 0; i--) {
+        tbl[i].swap_with(tbl[i + by]);
+    }
+}
+
 }   // qontra
 
 namespace stim {

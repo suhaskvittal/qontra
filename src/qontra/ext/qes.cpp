@@ -13,14 +13,10 @@ namespace qontra {
 
 std::vector<uint64_t>
 get_qubits(const qes::Instruction<>& inst) {
-    const std::string name = inst.get_name();
-
     std::vector<uint64_t> qubits;
-    if (name == "h" || name == "cx" || name == "cz" || name == "x" || name == "z"
-            || name == "s" || name == "measure" || name == "reset" || name == "liswap")
-    {
+    if (is_gate(inst)) {
         for (size_t i = 0; i < inst.get_number_of_operands(); i++) {
-            qubits.push_back(inst.get<uint64_t>(i));
+            qubits.push_back(static_cast<uint64_t>(inst.get<int64_t>(i)));
         }
     }
     return qubits;
@@ -28,9 +24,17 @@ get_qubits(const qes::Instruction<>& inst) {
 
 std::vector<double>
 get_errors(const qes::Instruction<>& inst, const ErrorTable& errors) {
-    std::vector<double> error_array;
     auto qubits = get_qubits(inst);
-    if (is_2q(inst)) {
+    if (inst.has_annotation("no_error")) {
+        if (is_2q_gate(inst)) {
+            return std::vector<double>(qubits.size()/2, 0);
+        } else {
+            return std::vector<double>(qubits.size(), 0);
+        }
+    }
+
+    std::vector<double> error_array;
+    if (is_2q_gate(inst)) {
         for (size_t i = 0; i < qubits.size(); i += 2) {
             uint64_t q1 = qubits[i],
                      q2 = qubits[i+1];
@@ -54,9 +58,17 @@ get_errors(const qes::Instruction<>& inst, const ErrorTable& errors) {
 
 std::vector<double>
 get_latency(const qes::Instruction<>& inst, const TimeTable& timing) {
-    std::vector<double> latency;
     auto qubits = get_qubits(inst);
-    if (is_2q(inst)) {
+    if (inst.has_annotation("no_tick")) {
+        if (is_2q_gate(inst)) {
+            return std::vector<double>(qubits.size()/2, 0);
+        } else {
+            return std::vector<double>(qubits.size(), 0);
+        }
+    }
+
+    std::vector<double> latency;
+    if (is_2q_gate(inst)) {
         for (size_t i = 0; i < qubits.size(); i += 2) {
             uint64_t q1 = qubits[i],
                      q2 = qubits[i+1];

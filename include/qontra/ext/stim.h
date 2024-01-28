@@ -51,6 +51,9 @@ void for_each_word(std::array<stim::simd_bits_range_ref<W>, N>, FUNC);
 bool                                    andnot(bool x, bool y);
 template <size_t W> stim::bitword<W>    andnot(stim::bitword<W>, stim::bitword<W>);
 
+template <size_t W> void    left_shift(stim::simd_bit_table<W>&, int64_t by);
+template <size_t W> void    right_shift(stim::simd_bit_table<W>&, int64_t by);
+
 }   // qontra
 
 namespace stim {

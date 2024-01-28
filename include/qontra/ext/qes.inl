@@ -7,34 +7,25 @@
 
 namespace qontra {
 
+inline double
+get_max_latency(const qes::Instruction<>& inst, const TimeTable& timing) {
+    return *std::max_element(get_latency(inst, timing));
+}
+
+inline isa_data_t
+isa_get(const qes::Instruction<>& inst) {
+    return isa_get(inst.get_name());
+}
+
 inline bool
 is_gate(const qes::Instruction<>& inst) {
-    const std::string name = inst.get_name();
-    return name == "h" || name == "x" || name == "z" || name == "cx"
-        || name == "cz" || name == "s" || name == "measure" 
-        || name == "reset" || name == "liswap";
+    INSTRUCTION_TYPE t = isa_get(inst).inst_type;
+    return t == INSTRUCTION_TYPE::QUANTUM_G1Q || t == INSTRUCTION_TYPE::QUANTUM_G2Q;
 }
 
 inline bool
-is_2q(const qes::Instruction<>& inst) {
-    const std::string name = inst.get_name();
-    return name == "cx" || name == "cz" || name == "liswap";
-}
-
-inline bool
-is_instantaneous(const qes::Instruction<>& inst) {
-    const std::string name = inst.get_name();
-    return name == "event" || name == "obs" || name == "mshift";
-}
-
-inline bool
-error_goes_before_op(const qes::Instruction<>& inst) {
-    return inst.get_name() == "measure";
-}
-
-inline bool
-apply_x_error_instead_of_depolarizing(const qes::Instruction<>& inst) {
-    return inst.get_name() == "measure" || inst.get_name() == "reset";
+is_2q_gate(const qes::Instruction<>& inst) {
+    return isa_get(inst).inst_type == INSTRUCTION_TYPE::QUANTUM_G2Q;
 }
 
 inline size_t
