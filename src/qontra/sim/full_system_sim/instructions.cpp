@@ -33,14 +33,14 @@ FullSystemSimulator::read_next_instruction(const qes::Program<>& from, program_s
     }
 
     // Identify the type of instruction and act accordingly.
-    const isa_data_t& itype = isa_get(instruction);
+    INSTRUCTION_TYPE itype = isa_get(instruction).inst_type;
 
     if (is_gate(instruction)) {
         elapsed_time += do_gate(instruction);
     } else if (itype == INSTRUCTION_TYPE::EVENT_OR_OBS) {
         create_event_or_obs(instruction);
     } else if (itype == INSTRUCTION_TYPE::MEMORY_SHIFT) {
-        int64_t shift = inst.get<int64_t>(0);
+        int64_t shift = instruction.get<int64_t>(0);
         if (instruction.get_name() == "mshift") {
             base_sim->shift_record_by(shift);
             meas_ctr -= shift;
@@ -48,7 +48,7 @@ FullSystemSimulator::read_next_instruction(const qes::Program<>& from, program_s
             left_shift(syndrome_table, shift);
         }
     } else if (itype == INSTRUCTION_TYPE::MEMORY_OFFSET) {
-        int64_t offset = inst.get<int64_t>(0);
+        int64_t offset = instruction.get<int64_t>(0);
         if (instruction.get_name() == "moffset") {
             meas_offset += offset;
         } else if (instruction.get_name() == "eoffset") {
@@ -58,7 +58,7 @@ FullSystemSimulator::read_next_instruction(const qes::Program<>& from, program_s
         uint64_t target_pc = static_cast<uint64_t>(instruction.get<int64_t>(0));
         std::string r = instruction.get<std::string>(1);
 
-        st.branch_and_wait_reach_map[target_pc] = get_register(r);
+        st.branch_and_wait_reach_map.emplace(target_pc, get_register(r));
     } else if (itype == INSTRUCTION_TYPE::PERMISSIVE_BR_TYPE2) {
         std::string r = instruction.get<std::string>(0);
         st.return_if_waiting_trials |= get_register(r);
@@ -96,8 +96,8 @@ FullSystemSimulator::read_next_instruction(const qes::Program<>& from, program_s
         get_register(r1).swap_with(other);
     }
     // Execute idling errors if necessary.
-    if (is_2q_op(instruction)) {
-        inject_idling_errors_negative(get_qubits(instruction));
+    if (is_2q_gate(instruction)) {
+        inject_idling_error_negative(get_qubits(instruction));
     }
     // Perform rollback.
     rollback_where(rollback_pred);
@@ -115,27 +115,27 @@ FullSystemSimulator::do_gate(const qes::Instruction<>& instruction, int64_t tria
     if (name == "measure") { 
         return do_measurement(instruction, trial);
     } else if (name == "h") {
-        sim->H(qubits, trial);
+        base_sim->H(qubits, trial);
         if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.safe_append_u("H", v32(qubits));
         }
-    } else if (op == "x") {
-        sim->X(qubits, trial);
+    } else if (name == "x") {
+        base_sim->X(qubits, trial);
         if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.safe_append_u("X", v32(qubits));
         }
-    } else if (op == "z") {
-        sim->Z(qubits, trial);
+    } else if (name == "z") {
+        base_sim->Z(qubits, trial);
         if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.safe_append_u("Z", v32(qubits));
         }
-    } else if (op == "cx") {
-        sim->CX(qubits, trial);
+    } else if (name == "cx") {
+        base_sim->CX(qubits, trial);
         if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.safe_append_u("CX", v32(qubits));
         }
-    } else if (op == "reset") {
-        sim->R(qubits, trial);
+    } else if (name == "reset") {
+        base_sim->R(qubits, trial);
         if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.safe_append_u("R", v32(qubits));
         }
@@ -143,40 +143,40 @@ FullSystemSimulator::do_gate(const qes::Instruction<>& instruction, int64_t tria
     // Inject errors.
     std::vector<fp_t> e_array = get_errors(instruction, config.errors);
     if (is_recording_stim_instructions && trial < 0) {
-        std::string error_name = apply_x_error_instead_of_depolarizing(instruction)
+        std::string error_name = isa_get(instruction).apply_x_error_instead_of_depolarizing() 
                                     ? "X_ERROR" : "DEPOLARIZE1";
-        sample_circuit.apply_errors(error_name, qubits, e_array, is_2q_op(instruction)); 
+        sample_circuit.apply_errors(error_name, qubits, e_array, is_2q_gate(instruction)); 
     }
     // Now, inject errors. We need to handle the case where trial >= 0
     // differently.
     if (trial >= 0) {
         for (size_t i = 0; i < e_array.size(); i++) {
             fp_t e = e_array[i];
-            if (is_2q_op(instruction)) {
+            if (is_2q_gate(instruction)) {
                 uint64_t q1 = qubits[2*i],
                         q2 = qubits[2*i+1];
-                if (sim->get_probability_sample_from_rng() < e) {
-                    sim->eDP2(q2, q2, trial);
+                if (base_sim->get_probability_sample_from_rng() < e) {
+                    base_sim->eDP2(q2, q2, trial);
                 }
             } else {
                 uint64_t q = qubits[i];
-                if (sim->get_probability_sample_from_rng() < e) {
-                    if (apply_x_error_instead_of_depolarizing(instruction)) {
-                        sim->eX(q, trial);
+                if (base_sim->get_probability_sample_from_rng() < e) {
+                    if (isa_get(instruction).apply_x_error_instead_of_depolarizing()) {
+                        base_sim->eX(q, trial);
                     } else {
-                        sim->eDP1(q, trial);
+                        base_sim->eDP1(q, trial);
                     }
                 }
             }
         }
     } else {
-        if (is_2q_op(instruction)) {
-            base_sim->error_channel<StateSimulator::eDP2>(qubits, e_array);
+        if (is_2q_gate(instruction)) {
+            base_sim->error_channel<&StateSimulator::eDP2>(qubits, e_array);
         } else {
-            if (apply_x_error_instead_of_depolarizing(instruction)) {
-                base_sim->error_channel<StateSimulator::eX>(qubits, e_array);
+            if (isa_get(instruction).apply_x_error_instead_of_depolarizing()) {
+                base_sim->error_channel<&StateSimulator::eX>(qubits, e_array);
             } else {
-                base_sim->error_channel<StateSimulator::eDP1>(qubits, e_array);
+                base_sim->error_channel<&StateSimulator::eDP1>(qubits, e_array);
             }
         }
     }
@@ -196,17 +196,18 @@ FullSystemSimulator::do_measurement(const qes::Instruction<>& instruction, int64
         // Stim doesn't have a way to implement biased measurements.
         // So, we just take the mean.
         if (is_recording_stim_instructions && trial < 0) {
+            uint32_t _q = static_cast<uint32_t>(q);
             fp_t emean = 0.5 * (config.errors.m1w0[q]+config.errors.m0w1[q]);
-            sample_circuit.safe_append_ua("X_ERROR", {q}, emean);
+            sample_circuit.safe_append_ua("X_ERROR", {_q}, emean);
         }
     }
     // Perform the measurement.
-    sim->M(operands, m1w0_array, m0w1_array, meas_ctr+meas_offset, trial);
+    base_sim->M(qubits, m1w0_array, m0w1_array, meas_ctr+meas_offset, trial);
     if (is_recording_stim_instructions && trial < 0) {
-        sample_circuit.safe_append_u("M", operands);
+        sample_circuit.safe_append_u("M", v32(qubits));
     }
     // We will only update the counter if this is a common measurement.
-    if (trial < 0)  meas_ctr += operands.size();
+    if (trial < 0)  meas_ctr += qubits.size();
     return get_max_latency(instruction, config.timing);
 }
 

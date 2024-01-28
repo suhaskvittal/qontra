@@ -16,11 +16,7 @@ copy_where(T from, T to, U pred) {
 
 // Specialization to T = stim::simd_bit_table<SIMD_WIDTH>&
 template <class U> inline void
-copy_where<stim::simd_bit_table<SIMD_WIDTH>&>(
-        stim::simd_bit_table<SIMD_WIDTH>& from,
-        stim::simd_bit_table<SIMD_WIDTH>& to,
-        U pred)
-{
+copy_where(stim::simd_bit_table<SIMD_WIDTH>& from, stim::simd_bit_table<SIMD_WIDTH>& to, U pred) {
     for (size_t i = 0; i < from.num_major_bits_padded(); i++) {
         copy_where(from[i], to[i], pred);
     }

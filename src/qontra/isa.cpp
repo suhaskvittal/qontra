@@ -6,6 +6,7 @@
 #include "qontra/isa.h"
 
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <map>
 
@@ -25,8 +26,9 @@ isa_get(std::string name) {
 #ifndef QONTRA_ISA_FILE
         std::cerr << "Preprocessor macro QONTRA_ISA_FILE is not set, so the ISA cannot be loaded." << std::endl;
         exit(1);
-#endif
+#else
         build_isa_from_file(QONTRA_ISA_FILE);
+#endif
     }
     if (!ISA.count(name)) {
         std::cerr << "Instruction \"" << name << "\" is not in ISA!" << std::endl;
@@ -60,7 +62,7 @@ build_isa_from_file(std::string filename) {
                 << inst_name << "\"." << std::endl;
             exit(1);
         }
-        INSTRUCTION_TYPE inst_type = std::stoi(ln.substr(pptr, cptr-pptr));
+        INSTRUCTION_TYPE inst_type = static_cast<INSTRUCTION_TYPE>(std::stoi(ln.substr(pptr, cptr-pptr)));
         // Get instruction flags.
         pptr = cptr+1;
         uint64_t flags = std::stoull(ln.substr(pptr));

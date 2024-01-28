@@ -59,7 +59,7 @@ andnot(stim::bitword<W> x, stim::bitword<W> y) {
 }
 
 template <size_t W> inline void
-left_shift(stim::simd_bit_table& tbl, int64_t by) {
+left_shift(stim::simd_bit_table<W>& tbl, int64_t by) {
     if (by < 0) { right_shift(tbl, -by); return; }
     else if (by == 0) return;
 
@@ -73,7 +73,7 @@ left_shift(stim::simd_bit_table& tbl, int64_t by) {
 }
 
 template <size_t W> inline void
-right_shift(stim::simd_bit_table& tbl, int64_t by) {
+right_shift(stim::simd_bit_table<W>& tbl, int64_t by) {
     if (by < 0) { left_shift(tbl, -by); return; }
     else if (by == 0) return;
 

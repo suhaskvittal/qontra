@@ -1,14 +1,10 @@
 # Author:   Suhas Vittal
 # date:     25 December 2023
 
-find_package(FLEX REQUIRED)
-find_package(BISON REQUIRED)
-
-# Setup Bison and Flex files.
-
 set(QONTRA_FILES
     # Top-Level
     src/qontra/experiments.cpp
+    src/qontra/isa.cpp
     src/qontra/tables.cpp
     # Extensions
     src/qontra/ext/qes.cpp
@@ -21,6 +17,9 @@ set(QONTRA_FILES
     # Simulators
     src/qontra/sim/base/frame_sim.cpp
     src/qontra/sim/base/state_sim.cpp
+    src/qontra/sim/full_system_sim/errors.cpp
+    src/qontra/sim/full_system_sim/instructions.cpp
+    src/qontra/sim/full_system_sim/run.cpp
     )
 
 # Each extension may have its own source files. So, we will need to update

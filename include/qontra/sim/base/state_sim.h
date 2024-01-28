@@ -35,6 +35,9 @@ template <class T, class U>
 // may differ (e.g. 64 bit vs 256 bit).
 void copy_where(T from, T to, U pred);
 
+template <class U>
+void copy_where(stim::simd_bit_table<SIMD_WIDTH>&, stim::simd_bit_table<SIMD_WIDTH>&, U pred);
+
 class StateSimulator {
 public:
     StateSimulator(uint64_t n, uint64_t max_shots);

@@ -30,9 +30,9 @@ struct isa_data_t {
 
     // flags is a catch-all. Accessing specific data from the flags can
     // be done via the functions:
-    bool    is_simd_like(void)                              return flags & 0x1;
-    bool    error_precedes_op(void)                         return flags & 0x2;
-    bool    apply_x_error_instead_of_depolarizing(void)     return flags & 0x4;
+    bool    is_simd_like(void) { return flags & 0x1; }
+    bool    error_precedes_op(void) { return flags & 0x2; }
+    bool    apply_x_error_instead_of_depolarizing(void) { return flags & 0x4; }
 };
 
 // Note: this function is case insensitive.
@@ -55,7 +55,5 @@ const isa_data_t&   isa_get(std::string);
 void        build_isa_from_file(std::string);
 
 }   // qontra
-
-#include "isa.inl"
 
 #endif  // QONTRA_ISA_h

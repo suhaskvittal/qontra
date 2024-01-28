@@ -27,8 +27,6 @@ bool    is_gate(const qes::Instruction<>&);
 bool    is_2q_gate(const qes::Instruction<>&);
 
 bool    is_instantaneous(const qes::Instruction<>&);
-bool    error_goes_before_op(const qes::Instruction<>&);
-bool    apply_x_error_instead_of_depolarizing(const qes::Instruction<>&);
 
 size_t  get_number_of_qubits(const qes::Program<>&);
 size_t  get_number_of_qubits(const qes::Program<>&, std::vector<uint64_t>& qubits);

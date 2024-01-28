@@ -19,7 +19,7 @@ FullSystemSimulator::FullSystemSimulator()
     max_event_written_to(0),
     max_obs_written_to(0),
     sample_circuit(),
-    is_recording_sim_instructions(false),
+    is_recording_stim_instructions(false),
     n_qubits(1),
     current_shots(0),
     base_sim(nullptr),

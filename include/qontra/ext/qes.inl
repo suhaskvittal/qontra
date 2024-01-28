@@ -3,13 +3,15 @@
  *  date:   6 January 2024
  * */
 
+#include <algorithm>
 #include <set>
 
 namespace qontra {
 
 inline double
 get_max_latency(const qes::Instruction<>& inst, const TimeTable& timing) {
-    return *std::max_element(get_latency(inst, timing));
+    std::vector<double> latencies = get_latency(inst, timing);
+    return *std::max_element(latencies.begin(), latencies.end());
 }
 
 inline isa_data_t
@@ -26,6 +28,11 @@ is_gate(const qes::Instruction<>& inst) {
 inline bool
 is_2q_gate(const qes::Instruction<>& inst) {
     return isa_get(inst).inst_type == INSTRUCTION_TYPE::QUANTUM_G2Q;
+}
+
+inline bool
+is_instantaneous(const qes::Instruction<>& inst) {
+    return !is_gate(inst);
 }
 
 inline size_t

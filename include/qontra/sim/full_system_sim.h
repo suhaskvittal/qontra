@@ -15,13 +15,20 @@ namespace qontra {
 size_t  get_register_index(std::string);
 
 struct program_status_t {
+    program_status_t(uint64_t shots)
+        :pc(0),
+        pc_specific_map(),
+        branch_and_wait_reach_map(),
+        return_if_waiting_trials(shots)
+    {}
+        
     // PC structures:
     uint64_t                        pc;
     std::map<uint64_t, uint64_t>    pc_specific_map;
     // Branch tracking structures:
     std::map<uint64_t, stim::simd_bits<SIMD_WIDTH>>
         branch_and_wait_reach_map;
-    std::set<uint64_t>
+    stim::simd_bits<SIMD_WIDTH>
         return_if_waiting_trials;
 };
 

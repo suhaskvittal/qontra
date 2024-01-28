@@ -56,7 +56,7 @@ FullSystemSimulator::load_subroutine(std::string name, const qes::Program<>& pro
 
 inline void
 FullSystemSimulator::execute_routine(const qes::Program<>& program) {
-    program_status_t status;
+    program_status_t status(current_shots);
     while (status.pc < program.size()) {
         const qes::Instruction<>& instruction = program.at(status.pc);
         // Check if the instruction is requesting the execution of the

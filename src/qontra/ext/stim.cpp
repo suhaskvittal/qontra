@@ -71,9 +71,10 @@ DetailedStimCircuit::from_qes(
             }
             elapsed_time = 0.0;
         }
-        if (error_goes_before_op(inst) && !is_error_free) {
+        if (isa_get(inst).error_precedes_op() && !is_error_free) {
             std::vector<fp_t> e_array = get_errors(inst, errors);
-            std::string error_name = apply_x_error_instead_of_depolarizing(inst) ? "X_ERROR" : "DEPOLARIZE1";
+            std::string error_name = isa_get(inst).apply_x_error_instead_of_depolarizing() 
+                                        ? "X_ERROR" : "DEPOLARIZE1";
             circuit.apply_errors(error_name, qubits, e_array, is_2q_gate(inst));
         }
         // Convert the qes::Instruction to stim if there's an equivalent.
@@ -121,7 +122,7 @@ DetailedStimCircuit::from_qes(
             std::vector<uint32_t> offsets;
             int64_t obs = inst.get<int64_t>(0);
             for (size_t i = 1; i < inst.get_number_of_operands(); i++) {
-                uint32_t off = static_cast<uint32_t>(meas_ctr - inst.get<uint64_t>(i));
+                uint32_t off = static_cast<uint32_t>(meas_ctr - inst.get<int64_t>(i));
                 offsets.push_back(stim::TARGET_RECORD_BIT | off);
             }
             circuit.safe_append_ua("OBSERVABLE_INCLUDE", offsets, static_cast<double>(obs));
@@ -130,9 +131,10 @@ DetailedStimCircuit::from_qes(
         }
         // Apply any errors.
         // First do gate errors.
-        if (!is_error_free && !error_goes_before_op(inst)) {
+        if (!is_error_free && !isa_get(inst).error_precedes_op()) {
             std::vector<fp_t> e_array = get_errors(inst, errors);
-            std::string error_name = apply_x_error_instead_of_depolarizing(inst) ? "X_ERROR" : "DEPOLARIZE1";
+            std::string error_name = isa_get(inst).apply_x_error_instead_of_depolarizing() 
+                                        ? "X_ERROR" : "DEPOLARIZE1";
             circuit.apply_errors(error_name, qubits, e_array, is_2q_gate(inst));
         }
         // Now do idling errors and update elapsed_time.
@@ -147,8 +149,7 @@ DetailedStimCircuit::from_qes(
                     }
                 }
             }
-            std::vector<double> latency_array = get_latency(inst, timing);
-            elapsed_time += *std::max_element(latency_array.begin(), latency_array.end());
+            elapsed_time += get_max_latency(inst, timing);
         }
     }
     return circuit;

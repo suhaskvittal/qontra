@@ -22,6 +22,8 @@ if (EXISTS ${CMAKE_SOURCE_DIR}/cmake/UserConfig.cmake)
     include(${CMAKE_SOURCE_DIR}/cmake/UserConfig.cmake)
 endif()
 
+set(QONTRA_ISA_FILE "${CMAKE_SOURCE_DIR}/isa.txt")
+
 include(${CMAKE_SOURCE_DIR}/cmake/ConfigureOptions.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/SetupQontra.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/LinkDependencies.cmake)
