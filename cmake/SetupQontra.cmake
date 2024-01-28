@@ -39,6 +39,8 @@ find_package(MPI REQUIRED)
 add_library(qontra ${QONTRA_FILES})
 target_compile_options(qontra PRIVATE ${COMPILE_OPTIONS} -fPIC)
 
+target_compile_definitions(qontra PUBLIC QONTRA_ISA_FILE="${QONTRA_ISA_FILE}")
+
 if (L1D_CACHE_LINE_SIZE)
     target_compile_definitions(qontra PUBLIC L1D_CACHE_LINE_SIZE=${L1D_CACHE_LINE_SIZE})
 endif()

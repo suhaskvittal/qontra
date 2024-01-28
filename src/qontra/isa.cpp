@@ -5,36 +5,20 @@
 
 #include "qontra/isa.h"
 
-#include <algorithm>
 #include <fstream>
 #include <iostream>
-#include <map>
 
 namespace qontra {
 
 static bool ISA_INITIALIZED = false;
 static std::map<std::string, isa_data_t> ISA;
 
-const isa_data_t&
-isa_get(std::string name) {
-    std::transform(name.begin(), name.end(), name.begin(),
-            [] (char x) {
-                return std::tolower(x);
-            });
+const std::map<std::string, isa_data_t>& isa() {
+    return ISA; 
+}
 
-    if (!ISA_INITIALIZED) {
-#ifndef QONTRA_ISA_FILE
-        std::cerr << "Preprocessor macro QONTRA_ISA_FILE is not set, so the ISA cannot be loaded." << std::endl;
-        exit(1);
-#else
-        build_isa_from_file(QONTRA_ISA_FILE);
-#endif
-    }
-    if (!ISA.count(name)) {
-        std::cerr << "Instruction \"" << name << "\" is not in ISA!" << std::endl;
-        exit(1);
-    }
-    return ISA[name];
+bool isa_is_initialized() {
+    return ISA_INITIALIZED;
 }
 
 void
@@ -43,7 +27,7 @@ build_isa_from_file(std::string filename) {
 
     std::string ln;
     while (std::getline(fin, ln)) {
-        if (ln.empty() == 0) continue;
+        if (ln.empty()) continue;
         // Parse the line.
         size_t pptr, cptr;
         // Get instruction name:
@@ -56,7 +40,7 @@ build_isa_from_file(std::string filename) {
         std::string inst_name = ln.substr(pptr, cptr-pptr);
         // Get instruction type.
         pptr = cptr+1;
-        cptr = ln.find(",");
+        cptr = ln.find(",", pptr);
         if (cptr == std::string::npos) {
             std::cerr << "Failed to find instruction type when reading instruction \""
                 << inst_name << "\"." << std::endl;
@@ -70,6 +54,7 @@ build_isa_from_file(std::string filename) {
         isa_data_t dat = { inst_type, flags };
         ISA[inst_name] = dat;
     }
+    ISA_INITIALIZED = true;
 }
 
 }   // qontra

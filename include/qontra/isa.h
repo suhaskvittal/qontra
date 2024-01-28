@@ -6,7 +6,9 @@
 #ifndef QONTRA_ISA_h
 #define QONTRA_ISA_h
 
+#include <map>
 #include <string>
+#include <vector>
 
 namespace qontra {
 
@@ -35,8 +37,17 @@ struct isa_data_t {
     bool    apply_x_error_instead_of_depolarizing(void) { return flags & 0x4; }
 };
 
+const std::map<std::string, isa_data_t>&    isa(void);
+bool                                        isa_is_initialized(void);
+
+// This function checks if the ISA is initialized. If not, then it is initialized via
+// build_isa_from_file (see below).
+void    test_and_init_isa(void);
+
 // Note: this function is case insensitive.
 const isa_data_t&   isa_get(std::string);
+
+std::vector<std::string>    isa_list_instructions(void);
 
 // The ISA is specified via a file. By default, this file is in the macro
 // QONTRA_ISA_FILE and is loaded on the first call to isa_get.
@@ -52,8 +63,10 @@ const isa_data_t&   isa_get(std::string);
 //  cx,1,1
 //
 // This is case insensitive.
-void        build_isa_from_file(std::string);
+void    build_isa_from_file(std::string);
 
 }   // qontra
+
+#include "isa.inl"
 
 #endif  // QONTRA_ISA_h
