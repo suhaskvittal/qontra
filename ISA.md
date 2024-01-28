@@ -129,7 +129,7 @@ movo    <register>, <obs-no>;
 
 ## Registers
 
-General purpose registers are `$r1` through `$r32`, and `$r0` is a special zero
+General purpose registers are `$r1` through `$r31`, and `$r0` is a special zero
 register. Special registers are as follows:
 1. `$rbrk` which is a condition register for the `return_if` instruction.
 

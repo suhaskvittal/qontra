@@ -26,6 +26,11 @@ FullSystemSimulator::read_next_instruction(const qes::Program<>& from, program_s
     for (auto& p : st.branch_and_wait_reach_map) {
         rollback_pred |= p.second;
     }
+    
+    // Injecting decoherence + dephasing errors.
+    if (instruction.has_annotation("timing_error")) {
+        inject_timing_error();
+    }
 
     // Identify the type of instruction and act accordingly.
     const isa_data_t& itype = isa_get(instruction);
@@ -89,6 +94,10 @@ FullSystemSimulator::read_next_instruction(const qes::Program<>& from, program_s
             }
         }
         get_register(r1).swap_with(other);
+    }
+    // Execute idling errors if necessary.
+    if (is_2q_op(instruction)) {
+        inject_idling_errors_negative(get_qubits(instruction));
     }
     // Perform rollback.
     rollback_where(rollback_pred);
@@ -201,109 +210,5 @@ FullSystemSimulator::do_measurement(const qes::Instruction<>& instruction, int64
     return get_max_latency(instruction, config.timing);
 }
 
-void
-FullSystemSimulator::create_event_or_obs(const qes::Instruction<>& instruction) {
-    std::string name = instruction.get_name();
-    int64_t index = instruction.get<int64_t>(0);
-    
-    stim::simd_bits_range_ref w = name == "event" ? syndrome_table[index] : observable_table[index];
-    for (size_t i = 1; i < instruction.get_number_of_operands(); i++) {
-        int64_t k = instruction.get<int64_t>(i);
-        w ^= base_sim->record_table[k];
-    }
-}
-
-void
-FullSystemSimulator::inject_timing_error(std::vector<uint64_t> qubits) {
-    std::vector<fp_t> xy_array, z_array;
-    for (uint q : qubits) {
-        fp_t t1 = config.timing.t1[q],
-            t2 = config.timing.t2[q];
-        
-        fp_t e_ad = 0.25 * (1 - exp(-elapsed_time/t1));
-        fp_t e_pd = 0.5 * (1 - exp(-elapsed_time/t2));
-
-        xy_array.push_back(e_ad);
-        z_array.push_back(e_pd-e_ad);
-
-        if (is_recording_stim_instructions) {
-            sample_circuit.safe_append_ua("X_ERROR", {q}, e_ad);
-            sample_circuit.safe_append_ua("Y_ERROR", {q}, e_ad);
-            sample_circuit.safe_append_ua("Z_ERROR", {q}, e_pd-e_ad);
-        }
-    }
-    sim->error_channel<&StateSimulator::eX>(qubits, xy_array);
-    sim->error_channel<&StateSimulator::eY>(qubits, xy_array);
-    sim->error_channel<&StateSimulator::eZ>(qubits, z_array);
-    // If there are any trials with time deltas, handle them now.
-    for (auto pair : shot_time_delta_map) {
-        uint64_t t = pair.first;
-        fp_t delta = pair.second;
-        for (uint q : qubits) {
-            fp_t t1 = config.timing.t1[q];
-            fp_t t2 = config.timing.t2[q];
-            
-            fp_t e_ad = 0.25 * (1 - exp(-delta/t1));
-            fp_t e_pd = 0.5 * (1 - exp(-delta/t2));
-
-            if (sim->get_probability_sample_from_rng() < e_ad)       sim->eX(q, t);
-            if (sim->get_probability_sample_from_rng() < e_ad)       sim->eY(q, t);
-            if (sim->get_probability_sample_from_rng() < e_pd-e_ad)  sim->eZ(q, t);
-        }
-    }
-    elapsed_time = 0;
-    shot_time_delta_map.clear();
-}
-
-void
-FullSystemSimulator::inject_idling_error_positive(std::vector<uint64_t> qubits, int64_t trial) {
-    // Do NOT record the error if trial >= 0.
-    std::vector<fp_t> error_rates;
-    for (uint64_t q : on_qubits) {
-        fp_t e = config.errors.idling[q];
-        error_rates.push_back(e);
-        if (is_recording_stim_instructions && trial < 0) {
-            sample_circuit.safe_append_ua("DEPOLARIZE1", {q}, e);
-        }
-    }
-
-    if (trial >= 0) {
-        // We are only injecting the error on a single trial.
-        for (size_t i = 0; i < error_rates.size(); i++) {
-            uint64_t q = on_qubits[i];
-            if (sim->get_probability_sample_from_rng() < error_rates[i]) sim->eDP1(q, trial);
-        }
-    } else {
-        sim->error_channel<&StateSimulator::eDP1>(on_qubits, error_rates);
-    }
-}
-
-void
-FullSystemSimulator::inject_idling_error_negative(std::vector<uint> not_on_qubits, int64_t trial) {
-    std::vector<uint> on_qubits;
-    for (size_t i = 0; i < n_qubits; i++) {
-        if (std::find(not_on_qubits.begin(), not_on_qubits.end(), i) == not_on_qubits.end()) {
-            on_qubits.push_back(i);
-        }
-    }
-    inject_idling_error_positive(on_qubits, trial);
-}
-
-void
-FullSystemSimulator::snapshot() {
-    base_sim->snapshot();
-
-    register_file_cpy = register_file;
-    syndrome_table_cpy = syndrome_table;
-    observable_table_cpy = observable_table;
-}
-
-void
-FullSystemSimulator::rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH> pred) {
-    base_sim->rollback_where(pred);
-    copy_where(register_file_cpy, register_file, pred);
-    copy_where(syndrome_table_cpy, syndrome_table, pred);
-    copy_where(observable_table_cpy, observable_table, pred);
-}
 
 }   // qontra

@@ -114,7 +114,7 @@ public:
                             // window moves over time.
     virtual void    snapshot(void);
                             // Saves the current state of the simulator.
-    virtual void rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH>);
+    virtual void    rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH>);
 
     fp_t get_probability_sample_from_rng(void) {
         static std::uniform_real_distribution<> dist(0.0, 1.0);

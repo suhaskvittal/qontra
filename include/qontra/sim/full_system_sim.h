@@ -7,6 +7,7 @@
 #define QONTRA_FULL_SYSTEM_SIM_h
 
 #include "qontra/ext/qes.h"
+#include "qontra/sim/base/state_sim.h"
 #include "qontra/tables.h"
 
 namespace qontra {
@@ -26,20 +27,23 @@ struct program_status_t {
 
 class FullSystemSimulator {
 public:
-    FullSystemSimulator(const qes::Program<>& microcode);
+    FullSystemSimulator();
 
-    void    run_program(const qes::Program<>&, uint64_t shots);
-    void    load_subroutine(std::string name, const qes::Program<>&);
+    template <class SIM>
+    void run_program(const qes::Program<>&, uint64_t shots);
+
+    void load_subroutine(std::string name, const qes::Program<>&);
 
     struct {
+        // Simulation configuration:
         uint64_t    distance;
-
         ErrorTable  errors;
         TimeTable   timing;
-
         std::string stim_output_file;
         std::string syndrome_output_folder;
         std::string data_output_file;
+        // Microarchitecture:
+        size_t  n_registers = 32;
     } config;
 private:
     void    run_batch(const qes::Program<>&, uint64_t shots_in_batch);
@@ -51,7 +55,7 @@ private:
 
     void    create_event_or_obs(const qes::Instruction<>&);
 
-    void    inject_timing_error(std::vector<uint64_t> qubits);
+    void    inject_timing_error(void);
     void    inject_idling_error_positive(std::vector<uint64_t> on_qubits, int64_t trial=-1);
     void    inject_idling_error_negative(std::vector<uint64_t> not_on_qubits, int64_t trial=-1);
 

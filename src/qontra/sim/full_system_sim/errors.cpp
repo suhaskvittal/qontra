@@ -1,0 +1,98 @@
+/*
+ *  author: Suhas Vittal
+ *  date:   28 January 2024
+ * */
+
+#include "qontra/sim/full_system_sim.h"
+
+namespace qontra {
+
+void
+FullSystemSimulator::create_event_or_obs(const qes::Instruction<>& instruction) {
+    std::string name = instruction.get_name();
+    int64_t index = instruction.get<int64_t>(0);
+    
+    stim::simd_bits_range_ref w = name == "event" ? syndrome_table[index] : observable_table[index];
+    for (size_t i = 1; i < instruction.get_number_of_operands(); i++) {
+        int64_t k = instruction.get<int64_t>(i);
+        w ^= base_sim->record_table[k];
+    }
+}
+
+void
+FullSystemSimulator::inject_timing_error() {
+    std::vector<fp_t> xy_array, z_array;
+    for (uint64_t q = 0; q < n_qubits; q++) {
+        fp_t t1 = config.timing.t1[q],
+            t2 = config.timing.t2[q];
+        
+        fp_t e_ad = 0.25 * (1 - exp(-elapsed_time/t1));
+        fp_t e_pd = 0.5 * (1 - exp(-elapsed_time/t2));
+
+        xy_array.push_back(e_ad);
+        z_array.push_back(e_pd-e_ad);
+
+        if (is_recording_stim_instructions) {
+            sample_circuit.safe_append_ua("X_ERROR", {q}, e_ad);
+            sample_circuit.safe_append_ua("Y_ERROR", {q}, e_ad);
+            sample_circuit.safe_append_ua("Z_ERROR", {q}, e_pd-e_ad);
+        }
+    }
+    sim->error_channel<&StateSimulator::eX>(qubits, xy_array);
+    sim->error_channel<&StateSimulator::eY>(qubits, xy_array);
+    sim->error_channel<&StateSimulator::eZ>(qubits, z_array);
+    // If there are any trials with time deltas, handle them now.
+    for (auto pair : shot_time_delta_map) {
+        uint64_t t = pair.first;
+        fp_t delta = pair.second;
+        for (uint64_t q = 0; q < n_qubits; q++) {
+            fp_t t1 = config.timing.t1[q];
+            fp_t t2 = config.timing.t2[q];
+            
+            fp_t e_ad = 0.25 * (1 - exp(-delta/t1));
+            fp_t e_pd = 0.5 * (1 - exp(-delta/t2));
+
+            if (sim->get_probability_sample_from_rng() < e_ad)       sim->eX(q, t);
+            if (sim->get_probability_sample_from_rng() < e_ad)       sim->eY(q, t);
+            if (sim->get_probability_sample_from_rng() < e_pd-e_ad)  sim->eZ(q, t);
+        }
+    }
+    elapsed_time = 0;
+    shot_time_delta_map.clear();
+}
+
+void
+FullSystemSimulator::inject_idling_error_positive(std::vector<uint64_t> qubits, int64_t trial) {
+    // Do NOT record the error if trial >= 0.
+    std::vector<fp_t> error_rates;
+    for (uint64_t q : on_qubits) {
+        fp_t e = config.errors.idling[q];
+        error_rates.push_back(e);
+        if (is_recording_stim_instructions && trial < 0) {
+            sample_circuit.safe_append_ua("DEPOLARIZE1", {q}, e);
+        }
+    }
+
+    if (trial >= 0) {
+        // We are only injecting the error on a single trial.
+        for (size_t i = 0; i < error_rates.size(); i++) {
+            uint64_t q = on_qubits[i];
+            if (sim->get_probability_sample_from_rng() < error_rates[i]) sim->eDP1(q, trial);
+        }
+    } else {
+        sim->error_channel<&StateSimulator::eDP1>(on_qubits, error_rates);
+    }
+}
+
+void
+FullSystemSimulator::inject_idling_error_negative(std::vector<uint> not_on_qubits, int64_t trial) {
+    std::vector<uint> on_qubits;
+    for (size_t i = 0; i < n_qubits; i++) {
+        if (std::find(not_on_qubits.begin(), not_on_qubits.end(), i) == not_on_qubits.end()) {
+            on_qubits.push_back(i);
+        }
+    }
+    inject_idling_error_positive(on_qubits, trial);
+}
+
+}   // qontra
