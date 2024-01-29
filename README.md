@@ -1,4 +1,4 @@
-# QontraSim, Version 0.2
+# QontraSim v0.2
 
 QontraSim is a general-purpose simulator for Quantum Error Correction, with a
 focus on the control system. QontraSim is partially built upon Stim, and boasts
