@@ -5,6 +5,8 @@
 
 #include "qontra/experiments.h"
 
+#include <vtils/filesystem.h>
+
 namespace qontra {
 
 inline size_t
@@ -28,12 +30,13 @@ FullSystemSimulator::run_program(const qes::Program<>& program, uint64_t shots) 
     }
     // Execute program simulation in batches:
     const uint64_t local_shots = shots / world_size + static_cast<int>(world_rank==0)*(shots % world_size);
-    base_sim->set_seed(G_BASE_SEED + world_rank);
 
     // Set up all structures.
     is_recording_stim_instructions = true;
     n_qubits = get_number_of_qubits(program);
     base_sim = uptr<SIM>(new SIM(n_qubits, G_SHOTS_PER_BATCH));
+
+    base_sim->set_seed(G_BASE_SEED + world_rank);
 
     register_file = stim::simd_bit_table<SIMD_WIDTH>(config.n_registers, G_SHOTS_PER_BATCH);
     syndrome_table = stim::simd_bit_table<SIMD_WIDTH>(G_RECORD_SPACE_SIZE, G_SHOTS_PER_BATCH);
@@ -41,10 +44,20 @@ FullSystemSimulator::run_program(const qes::Program<>& program, uint64_t shots) 
 
     shot_histogram.clear();
 
+    // Create the stats files if they do not exist:
+    using namespace vtils;
+    if (!file_exists(config.syndrome_output_folder)) safe_create_directory(config.syndrome_output_folder);
+    if (!file_exists(config.stim_output_file)) {
+        safe_create_directory(get_parent_directory(config.stim_output_file.c_str()));
+    }
+    if (!file_exists(config.data_output_file)) {
+        safe_create_directory(get_parent_directory(config.data_output_file.c_str()));
+    }
+
     uint64_t shots_remaining = local_shots;
     uint64_t batchno = world_rank;
     while (shots_remaining) {
-        const uint64_t shots_this_batch = shots_remaining < local_shots ? shots_remaining : G_SHOTS_PER_BATCH;
+        const uint64_t shots_this_batch = shots_remaining < G_SHOTS_PER_BATCH ? shots_remaining : G_SHOTS_PER_BATCH;
         run_batch(program, shots_this_batch);
         write_stats(batchno);
 

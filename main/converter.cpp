@@ -45,7 +45,7 @@ help_exit:
     std::string output_file(argv[2]);
 
     fp_t p = 1e-3;
-    pp.get_float("p", p);
+    pp.get("p", p);
 
     int type1 = get_file_type(input_file), type2 = get_file_type(output_file);
 

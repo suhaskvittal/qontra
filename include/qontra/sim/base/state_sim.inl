@@ -10,7 +10,7 @@ copy_where(T from, T to, U pred) {
     from.for_each_word(to, pred, 
             [&] (auto& f, auto& t, auto& p)
             {
-                t = p.andnot(f) | (f & p);
+                t = (p & f) | p.andnot(t);
             });
 }
 

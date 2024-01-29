@@ -14,7 +14,7 @@ endif()
 
 if (NOT COMPILE_OPTIONS) 
     set(RELEASE_COMPILE_OPTIONS -fno-strict-aliasing -Wno-psabi -Wno-write-strings)
-    set(DEBUG_COMPILE_OPTIONS -ggdb3 -fno-strict-aliasing -Wall -Wno-write-strings)
+    set(DEBUG_COMPILE_OPTIONS -ggdb3 -fno-strict-aliasing -Wall -Wno-write-strings -Wno-bool-operation)
 
     if (CMAKE_BUILD_TYPE MATCHES "Release")
         if (COMPILE_NEURAL_DECODER)

@@ -23,8 +23,13 @@ histogram_key_to_hex(histogram_key_t key) {
         if (i) ss << " ";
         // For readability, every 2 bytes, we will insert a space.
         for (size_t j = 0; j < 4; j++) {
-            if (j) ss << " ";
-            uint16_t x = static_cast<uint16_t>(key[i] >> (16*j)) & std::numeric_limits<uint16_t>::max();
+            uint64_t subword = key[i] >> (16*j);
+            if (j) {
+                // Check if the remaining bits are all 0.
+                if (i == key.size()-1 && subword == 0) break;
+                ss << " ";
+            }
+            uint16_t x = static_cast<uint16_t>(subword) & std::numeric_limits<uint16_t>::max();
             ss << std::hex << x;
         }
     }

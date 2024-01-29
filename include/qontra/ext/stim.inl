@@ -63,11 +63,12 @@ left_shift(stim::simd_bit_table<W>& tbl, int64_t by) {
     if (by < 0) { right_shift(tbl, -by); return; }
     else if (by == 0) return;
 
+    size_t _by = static_cast<size_t>(by);
     for (size_t i = 0; i < tbl.num_major_bits_padded(); i++) {
-        if (i < by) {
+        if (i < _by) {
             tbl[i].clear();
         } else {
-            tbl[i].swap_with(tbl[i - by]);
+            tbl[i].swap_with(tbl[i - _by]);
         }
     }
 }
@@ -77,8 +78,9 @@ right_shift(stim::simd_bit_table<W>& tbl, int64_t by) {
     if (by < 0) { left_shift(tbl, -by); return; }
     else if (by == 0) return;
 
-    for (size_t i = tbl.num_major_bits_padded()-by-1; i >= 0; i--) {
-        tbl[i].swap_with(tbl[i + by]);
+    size_t _by = static_cast<size_t>(by);
+    for (size_t i = tbl.num_major_bits_padded()-_by-1; i >= 0; i--) {
+        tbl[i].swap_with(tbl[i + _by]);
     }
 }
 

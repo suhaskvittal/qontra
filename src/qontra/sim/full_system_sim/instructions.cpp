@@ -156,7 +156,7 @@ FullSystemSimulator::do_gate(const qes::Instruction<>& instruction, int64_t tria
                 uint64_t q1 = qubits[2*i],
                         q2 = qubits[2*i+1];
                 if (base_sim->get_probability_sample_from_rng() < e) {
-                    base_sim->eDP2(q2, q2, trial);
+                    base_sim->eDP2(q1, q2, trial);
                 }
             } else {
                 uint64_t q = qubits[i];
@@ -216,13 +216,26 @@ FullSystemSimulator::create_event_or_obs(const qes::Instruction<>& instruction) 
     std::string name = instruction.get_name();
     int64_t index = instruction.get<int64_t>(0);
     
-    stim::simd_bits_range_ref w = name == "event" ? syndrome_table[index] : observable_table[index];
+    stim::simd_bits_range_ref<SIMD_WIDTH> w = 
+        name == "event" ? syndrome_table[index] : observable_table[index];
     uint64_t& max_index = name == "event" ? max_event_written_to : max_obs_written_to;
     for (size_t i = 1; i < instruction.get_number_of_operands(); i++) {
         int64_t k = instruction.get<int64_t>(i);
         w ^= base_sim->record_table[k];
     }
-    max_index = std::max(static_cast<uint64_t>(index), max_index);
+    max_index = std::max(static_cast<uint64_t>(index)+1, max_index);
+
+    if (is_recording_stim_instructions) {
+        std::vector<uint32_t> offsets;
+        for (size_t i = 1; i < instruction.get_number_of_operands(); i++) {
+            int64_t k = instruction.get<int64_t>(i);
+            offsets.push_back(stim::TARGET_RECORD_BIT | static_cast<uint32_t>(meas_ctr+meas_offset-k));
+        }
+        const std::vector<fp_t> coord{static_cast<fp_t>(index)};
+
+        std::string stim_inst_name = name == "event" ? "DETECTOR" : "OBSERVABLE_INCLUDE";
+        sample_circuit.safe_append_u(stim_inst_name, offsets, coord);
+    }
 }
 
 

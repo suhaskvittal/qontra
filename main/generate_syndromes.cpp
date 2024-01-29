@@ -31,12 +31,12 @@ int main(int argc, char* argv[]) {
     fp_t p = 1e-3;
     uint64_t hw_min = 1;
 
-    if (!pp.get_string("qes", qes_file)) return 1;
-    if (!pp.get_string("out", output_file)) return 1;
-    if (!pp.get_uint64("shots", shots)) return 1;
+    pp.get("qes", qes_file, true);
+    pp.get("out", output_file, true);
+    pp.get("shots", shots, true);
 
-    pp.get_uint64("hw-min", hw_min);
-    pp.get_float("p", p);
+    pp.get("hw-min", hw_min);
+    pp.get("p", p);
 
     G_FILTERING_HAMMING_WEIGHT = hw_min;
 
