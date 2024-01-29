@@ -5,8 +5,8 @@
  *  Useful memory experiment functions.
  * */
 
-#ifndef EXPERIMENTS_MEMORY_h
-#define EXPERIMENTS_MEMORY_h
+#ifndef QONTRA_EXPERIMENTS_MEMORY_h
+#define QONTRA_EXPERIMENTS_MEMORY_h
 
 #include "qontra/decoder.h"
 #include "qontra/ext/stim.h"
@@ -44,4 +44,4 @@ memory_result_t memory_experiment(Decoder*, memory_config_t, PROLOGUE, EPILOGUE)
 
 #include "memory.inl"
 
-#endif  // EXPERIMENTS_MEMORY_h
+#endif  // QONTRA_EXPERIMENTS_MEMORY_h

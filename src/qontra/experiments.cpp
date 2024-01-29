@@ -42,15 +42,8 @@ build_syndrome_trace(std::string output_folder, const stim::Circuit& circuit, ui
     auto write_batch = [&] (void) {
         ctr = 0;
         // Merge syndrome and observable tables into one.
-        stim::simd_bit_table<SIMD_WIDTH> output_trace(std::move(syndromes));
+        stim::simd_bit_table<SIMD_WIDTH> output_trace = syndromes.concat_major(observables, n_det, n_obs);
         output_trace = output_trace.transposed();
-        output_trace.resize(n_det+n_obs, G_SHOTS_PER_BATCH);
-
-        stim::simd_bit_table<SIMD_WIDTH> obs_tr(std::move(observables));
-        obs_tr = obs_tr.transposed();
-        for (size_t i = 0; i < n_obs; i++) {
-            output_trace[n_det + i] |= obs_tr[i];
-        }
 
         std::string filename = output_folder + "/" + get_batch_filename(file_offset);
 

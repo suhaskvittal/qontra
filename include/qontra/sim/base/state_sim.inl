@@ -59,7 +59,7 @@ StateSimulator::error_channel(std::vector<uint64_t> operands, std::vector<fp_t> 
     }
 }
 
-void
+inline void
 StateSimulator::error_channel_m(
         uint64_t rec,
         fp_t m1w0,

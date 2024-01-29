@@ -6,6 +6,7 @@
 #ifndef QONTRA_FULL_SYSTEM_SIM_h
 #define QONTRA_FULL_SYSTEM_SIM_h
 
+#include "qontra/experiments/histogram.h"
 #include "qontra/ext/qes.h"
 #include "qontra/sim/base/state_sim.h"
 #include "qontra/tables.h"
@@ -36,8 +37,11 @@ class FullSystemSimulator {
 public:
     FullSystemSimulator();
 
+    // run_program steps through the program in batches. The output is a shot histogram
+    // of all possible outputs. The keys of the histogram are the measured observables in each trial,
+    // and the values are the occurrences of each key.
     template <class SIM>
-    void run_program(const qes::Program<>&, uint64_t shots);
+    histogram_t<uint64_t> run_program(const qes::Program<>&, uint64_t shots);
 
     void load_subroutine(std::string name, const qes::Program<>&);
 
@@ -54,6 +58,8 @@ public:
     } config;
 private:
     void    run_batch(const qes::Program<>&, uint64_t shots_in_batch);
+    void    write_stats(uint64_t batchno);
+
     void    execute_routine(const qes::Program<>& program);
     void    read_next_instruction(const qes::Program<>& from, program_status_t&);
 
@@ -123,6 +129,7 @@ private:
     uint64_t                n_qubits;
     uint64_t                current_shots;
     uptr<StateSimulator>    base_sim;
+    histogram_t<uint64_t>   shot_histogram;
 
     std::map<std::string, qes::Program<>>   subroutine_map;
 
@@ -133,5 +140,7 @@ private:
 };
 
 }   // qontra
+
+#include "full_system_sim.inl"
 
 #endif  // QONTRA_FULL_SYSTEM_SIM_h

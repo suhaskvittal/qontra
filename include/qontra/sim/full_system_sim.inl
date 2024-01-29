@@ -19,7 +19,7 @@ get_register_index(std::string r) {
     }
 }
 
-template <class SIM> void
+template <class SIM> histogram_t<uint64_t>
 FullSystemSimulator::run_program(const qes::Program<>& program, uint64_t shots) {
     int world_rank = 0, world_size = 1;
     if (G_USE_MPI) {
@@ -33,20 +33,28 @@ FullSystemSimulator::run_program(const qes::Program<>& program, uint64_t shots) 
     // Set up all structures.
     is_recording_stim_instructions = true;
     n_qubits = get_number_of_qubits(program);
-    base_sim = uptr(new SIM(n_qubits, G_SHOTS_PER_BATCH));
+    base_sim = uptr<SIM>(new SIM(n_qubits, G_SHOTS_PER_BATCH));
 
-    register_file = stim::simd_bit_table<SIMD_WIDTH>(n_registers, G_SHOTS_PER_BATCH);
+    register_file = stim::simd_bit_table<SIMD_WIDTH>(config.n_registers, G_SHOTS_PER_BATCH);
     syndrome_table = stim::simd_bit_table<SIMD_WIDTH>(G_RECORD_SPACE_SIZE, G_SHOTS_PER_BATCH);
     observable_table = stim::simd_bit_table<SIMD_WIDTH>(G_RECORD_SPACE_SIZE, G_SHOTS_PER_BATCH);
 
+    shot_histogram.clear();
+
     uint64_t shots_remaining = local_shots;
+    uint64_t batchno = world_rank;
     while (shots_remaining) {
         const uint64_t shots_this_batch = shots_remaining < local_shots ? shots_remaining : G_SHOTS_PER_BATCH;
         run_batch(program, shots_this_batch);
-        // Save stats.
+        write_stats(batchno);
+
         is_recording_stim_instructions = false;
+
         shots_remaining -= shots_this_batch;
+        batchno += world_size;
     }
+    shot_histogram = histogram_reduce(shot_histogram);
+    return shot_histogram;
 }
 
 inline void
@@ -67,10 +75,15 @@ FullSystemSimulator::execute_routine(const qes::Program<>& program) {
             execute_routine(subroutine_map.at(subroutine_name));
             status.pc++;
         } else {
-            read_next_instruction(current_program, main_status);
+            read_next_instruction(program, status);
             if (status.return_if_waiting_trials.popcnt() == current_shots) break;
         }
     }
+}
+
+inline stim::simd_bits_range_ref<SIMD_WIDTH>
+FullSystemSimulator::get_register(std::string r) {
+    return register_file[get_register_index(r)];
 }
 
 inline void

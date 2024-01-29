@@ -3,8 +3,8 @@
  *  date:   15 December 2023
  * */
 
-#ifndef QONTRA_STATS_h
-#define QONTRA_STATS_h
+#ifndef QONTRA_EXPERIMENTS_STATS_h
+#define QONTRA_EXPERIMENTS_STATS_h
 
 #include <mpi.h>
 #include <stdint.h>
@@ -108,4 +108,4 @@ private:
 
 #include "stats.inl"
 
-#endif  // QONTRA_STATS_h
+#endif  // QONTRA_EXPERIMENTS_STATS_h

@@ -27,28 +27,24 @@ int get_file_type(std::string filename) {
 }
 
 int main(int argc, char* argv[]) {
-    vtils::CmdParser pp(argc, argv);
+    vtils::CmdParser pp(argc, argv, 2);
 
-    std::string help = "usage: ./converter --in <F> --out <G>\n"
+    std::string help = "usage: ./converter <file-in> <file-out>\n"
                         "The following conversions are supported:\n"
                         "\t(1) qes to stim\n"
                         "\n"
                         "Optional arguments:\n"
                         "\t--p (physical error rate, default 0.001)";
-    std::string input_file;
-    std::string output_file;
-
-    fp_t p = 1e-3;
-
-    if (pp.option_set("h")) {
+    if (pp.option_set("h") || argc < 2) {
 help_exit:
         std::cerr << help << std::endl;
         return 1;
     }
 
-    if (!pp.get_string("in", input_file))    goto help_exit;
-    if (!pp.get_string("out", output_file))  goto help_exit;
+    std::string input_file(argv[1]);
+    std::string output_file(argv[2]);
 
+    fp_t p = 1e-3;
     pp.get_float("p", p);
 
     int type1 = get_file_type(input_file), type2 = get_file_type(output_file);

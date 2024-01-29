@@ -3,8 +3,8 @@
  *  date:   12 June 2023
  * */
 
-#ifndef EXPERIMENTS_h
-#define EXPERIMENTS_h
+#ifndef QONTRA_EXPERIMENTS_h
+#define QONTRA_EXPERIMENTS_h
 
 #include "qontra/ext/stim.h"
 
@@ -29,10 +29,10 @@ void    configure_optimal_batch_size(void);
 std::string get_batch_filename(size_t batchno);
 
 template <class CALLBACK>
-void        generate_syndromes(const DetailedStimCircuit&, uint64_t shots, CALLBACK);
+void generate_syndromes(const DetailedStimCircuit&, uint64_t shots, CALLBACK);
 
 template <class CALLBACK>
-uint64_t    read_syndrome_trace(std::string input_folder, const DetailedStimCircuit&, CALLBACK);
+uint64_t read_syndrome_trace(std::string input_folder, const DetailedStimCircuit&, CALLBACK);
 
 void        build_syndrome_trace(std::string output_folder, const DetailedStimCircuit&, uint64_t shots);
 
@@ -40,4 +40,4 @@ void        build_syndrome_trace(std::string output_folder, const DetailedStimCi
 
 #include "experiments.inl"
 
-#endif  // EXPERIMENTS_h
+#endif  // QONTRA_EXPERIMENTS_h

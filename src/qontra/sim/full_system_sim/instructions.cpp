@@ -211,5 +211,19 @@ FullSystemSimulator::do_measurement(const qes::Instruction<>& instruction, int64
     return get_max_latency(instruction, config.timing);
 }
 
+void
+FullSystemSimulator::create_event_or_obs(const qes::Instruction<>& instruction) {
+    std::string name = instruction.get_name();
+    int64_t index = instruction.get<int64_t>(0);
+    
+    stim::simd_bits_range_ref w = name == "event" ? syndrome_table[index] : observable_table[index];
+    uint64_t& max_index = name == "event" ? max_event_written_to : max_obs_written_to;
+    for (size_t i = 1; i < instruction.get_number_of_operands(); i++) {
+        int64_t k = instruction.get<int64_t>(i);
+        w ^= base_sim->record_table[k];
+    }
+    max_index = std::max(static_cast<uint64_t>(index), max_index);
+}
+
 
 }   // qontra

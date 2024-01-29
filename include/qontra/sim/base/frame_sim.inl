@@ -82,7 +82,7 @@ FrameSimulator::snapshot() {
     leak_table_cpy = stim::simd_bit_table<SIMD_WIDTH>(leak_table);
 }
 
-void
+inline void
 FrameSimulator::rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH> pred) {
     StateSimulator::rollback_where(pred);
     for (size_t i = 0; i < n_qubits; i++) {
