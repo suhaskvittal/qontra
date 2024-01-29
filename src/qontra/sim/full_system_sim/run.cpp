@@ -37,6 +37,7 @@ FullSystemSimulator::FullSystemSimulator()
 
 void
 FullSystemSimulator::run_batch(const qes::Program<>& program, uint64_t shots) {
+    base_sim->reset_sim();
     base_sim->shots = shots;
     current_shots = shots;
     // Reset all structures.

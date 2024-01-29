@@ -4,442 +4,306 @@
  * */
 
 #include "qontra/sim/base/clifford_sim.h"
+#include "qontra/sim/base/gate_impl/clifford_sim.h"
 
 namespace qontra {
 
-#define L_I     StateSimulator::label_1q_t::I
-#define L_X     StateSimulator::label_1q_t::X
-#define L_Y     StateSimulator::label_1q_t::Y
-#define L_Z     StateSimulator::label_1q_t::Z
-#define L_L     StateSimulator::label_1q_t::L
+inline uint64_t csim_x_width(uint64_t n) { return 2*n*(n+1) + 1; }
+inline uint64_t csim_z_width(uint64_t n) { return 2*n*(n+1); }
+inline uint64_t csim_r_width(uint64_t n) { return 2*n + 4; }
 
-static const StateSimulator::label_1q_t IXYZ[4] = { L_I, L_X, L_Y, L_Z };
-static const StateSimulator::label_1q_t IX[2] = { L_I, L_X };
-static const StateSimulator::label_1q_t IY[2] = { L_I, L_Y };
-static const StateSimulator::label_1q_t IZ[2] = { L_I, L_Z };
-static const StateSimulator::label_1q_t IL[2] = { L_I, L_L };
+CliffordSimulator::CliffordSimulator(uint64_t n, uint64_t max_shots)
+    :StateSimulator(n, max_shots),
+    x_table(csim_x_width(n), max_shots),
+    z_table(csim_z_width(n), max_shots),
+    r_table(csim_r_width(n), max_shots),
+    x_table_cpy(csim_x_width(n), max_shots),
+    z_table_cpy(csim_z_width(n), max_shots),
+    r_table_cpy(csim_r_width(n), max_shots),
+    x_width(csim_x_width(n)),
+    z_width(csim_z_width(n)),
+    r_width(csim_r_width(n))
+{
+    init_tables();
+}
+
+CliffordSimulator::CliffordSimulator(const CliffordSimulator& other)
+    :StateSimulator(other),
+    x_table(other.x_table),
+    z_table(other.z_table),
+    r_table(other.r_table),
+    x_table_cpy(other.x_table_cpy),
+    z_table_cpy(other.z_table_cpy),
+    r_table_cpy(other.r_table_cpy),
+    x_width(other.x_width),
+    z_width(other.z_width),
+    r_width(other.r_width)
+{}
 
 void
-CliffordSimulator::H(std::vector<uint> operands) {
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        for (uint j : operands) {
-            uint k = i*n_qubits + j;    // Note that x_table and z_table are
-                                        // flattened 2D arrays.
-            r_table[i].for_each_word(
-                x_table[k], z_table[k], leak_table[j], lock_table[j],
-            [&](auto& r, auto& x, auto& z, auto& l, auto& lock)
-            {
-                r ^= x & z & ~l & ~lock;
-                stim::simd_word tmp = z;
-                z = (z & (l | lock)) | (x & ~(l | lock));
-                x = (x & (l | lock)) | (tmp & ~(l | lock));
-            });
+CliffordSimulator::H(std::vector<uint64_t> operands, int64_t tr) {
+    for (uint64_t i = 0; i < 2*n_qubits; i++) {
+        for (uint64_t q : operands) {
+            uint64_t k = get_index(i, q);
+            if (tr >= 0) {
+                stim::bit_ref r = r_table[i][tr],
+                                x = x_table[k][tr],
+                                z = z_table[k][tr],
+                                lock = lock_table[q][tr];
+                __h_gate(r, x, z, lock);
+            } else {
+                r_table[i].for_each_word(
+                    x_table[k], z_table[k], lock_table[q],
+                [](auto& r, auto& x, auto& z, auto& lock)
+                {
+                    __h_gate(r, x, z, lock);
+                });
+            }
         }
     }
 }
 
 void
-CliffordSimulator::X(std::vector<uint> operands) {
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        for (uint j : operands) {
-            uint k = i*n_qubits + j;
-            // Only flip where not leaked.
-            r_table[i].for_each_word(
-                z_table[k], leak_table[j], lock_table[j],
-            [&](auto& r, auto& z, auto& l, auto& lock)
-            {
-                r ^= z & ~l & ~lock;
-            });
+CliffordSimulator::X(std::vector<uint64_t> operands, int64_t tr) {
+    for (uint64_t i = 0; i < 2*n_qubits; i++) {
+        for (uint64_t q : operands) {
+            uint64_t k = get_index(i, q);
+            if (tr >= 0) {
+                stim::bit_ref r = r_table[i][tr],
+                                z = z_table[k][tr],
+                                lock = lock_table[q][tr];
+                __x_gate(r, z, lock);
+            } else {
+                r_table[i].for_each_word(
+                    z_table[k], lock_table[q],
+                [&](auto& r, auto& z, auto& lock)
+                {
+                    __x_gate(r, z, lock);
+                });
+            }
         }
     }
 }
 
 void
-CliffordSimulator::Z(std::vector<uint> operands) {
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        for (uint j : operands) {
-            uint k = i*n_qubits + j;
-            r_table[i].for_each_word(
-                x_table[k], leak_table[j], lock_table[j],
-            [&](auto& r, auto& x, auto& l, auto& lock)
-            {
-                r ^= x & ~l & ~lock;
-            });
+CliffordSimulator::Z(std::vector<uint64_t> operands, int64_t tr) {
+    for (uint64_t i = 0; i < 2*n_qubits; i++) {
+        for (uint64_t q : operands) {
+            uint64_t k = get_index(i, q);
+            if (tr >= 0) {
+                stim::bit_ref r = r_table[i][tr],
+                                x = x_table[k][tr],
+                                lock = lock_table[q][tr];
+                __z_gate(r, x, lock);
+            } else {
+                r_table[i].for_each_word(
+                    x_table[k], lock_table[q],
+                [&](auto& r, auto& x, auto& lock)
+                {
+                    __z_gate(r, x, lock);
+                });
+            }
         }
     }
 }
 
 void
-CliffordSimulator::S(std::vector<uint> operands) {
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        for (uint j : operands) {
-            uint k = i*n_qubits + j;
-            r_table[i].for_each_word(
-                    x_table[k], z_table[k], leak_table[j], lock_table[j],
-            [&](auto& r, auto& x, auto& z, auto& l, auto& lock)
-            {
-                r ^= x & z & ~l & ~lock;
-                z ^= x & ~l & ~lock;
-            });
+CliffordSimulator::S(std::vector<uint64_t> operands, int64_t tr) {
+    for (uint64_t i = 0; i < 2*n_qubits; i++) {
+        for (uint64_t q : operands) {
+            uint64_t k = get_index(i, q);
+            if (tr >= 0) {
+                stim::bit_ref r = r_table[i][tr],
+                                x = x_table[k][tr],
+                                z = z_table[k][tr],
+                                lock = lock_table[q][tr];
+                __s_gate(r, x, z, lock);
+            } else {
+                r_table[i].for_each_word(
+                        x_table[k], z_table[k], lock_table[q],
+                [&](auto& r, auto& x, auto& z, auto& lock)
+                {
+                    __s_gate(r, x, z, lock);
+                });
+            }
         }
     }
 }
 
 void
-CliffordSimulator::CX(std::vector<uint> operands) {
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        for (uint ii = 0; ii < operands.size(); ii += 2) {
-            uint j1 = operands[ii];
-            uint j2 = operands[ii+1];
-            uint k1 = i*n_qubits + j1;
-            uint k2 = i*n_qubits + j2;
+CliffordSimulator::CX(std::vector<uint64_t> operands, int64_t tr) {
+    for (uint64_t i = 0; i < 2*n_qubits; i++) {
+        for (size_t j = 0; j < operands.size(); j += 2) {
+            uint64_t q1 = operands[j],
+                     q2 = operands[j+1];
+            uint64_t k1 = get_index(i, q1),
+                     k2 = get_index(i, q2);
 
-            stim::simd_bits lock_both(lock_table[j1]);
-            lock_both |= lock_table[j2];
+            stim::simd_bits lock_both(lock_table[q1]);
+            lock_both |= lock_table[q2];
 
-            r_table[i].for_each_word(
-                x_table[k1], z_table[k1],
-                x_table[k2], z_table[k2],
-                leak_table[j1], leak_table[j2],
-                lock_both,
-            [&](auto& r, auto& x1, auto& z1, 
-                auto& x2, auto& z2, 
-                auto& l1, auto& l2,
-                auto& lock)
-            {
-                stim::simd_word rx1(rng(), rng());
-                stim::simd_word rz1(rng(), rng());
-                stim::simd_word rx2(rng(), rng());
-                stim::simd_word rz2(rng(), rng());
-
-                // Only update phase if the qubits are not leaked.
-                r ^= ((x1 & z2) & ~(x2 ^ z1) & ~(l1 | l2)) & ~lock;
-                x2 ^= ~(l1 | l2 | lock) & x1;
-                z1 ^= ~(l1 | l2 | lock) & z2;
-                // Apply depolarizing error if they are leaked.
-                r ^= ((z1 & rx1 & l2)
-                        & (x1 & rz1 & l2)
-                        & (z2 & rx2 & l1)
-                        & (x2 & rz2 & l2)) & ~lock;
-            });
+            if (tr >= 0) {
+                stim::bit_ref r = r_table[i][tr],
+                                x1 = x_table[k1][tr],
+                                z1 = z_table[k1][tr],
+                                x2 = x_table[k2][tr],
+                                z2 = z_table[k2][tr],
+                                lock = lock_both[tr];
+                __cx_gate(r, x1, z1, x2, z2, lock);
+            } else {
+                std::array<stim::simd_bits_range_ref<SIMD_WIDTH>, 6> args{{
+                    r_table[i],
+                    x_table[k1],
+                    z_table[k1],
+                    x_table[k2],
+                    z_table[k2],
+                    lock_both
+                }};
+                for_each_word(args, [] (std::array<stim::bitword<SIMD_WIDTH>*, 6>& word_array)
+                {
+                    auto& r = *word_array[0],
+                        & x1 = *word_array[1],
+                        & z1 = *word_array[2],
+                        & x2 = *word_array[3],
+                        & z2 = *word_array[4],
+                        & lock = *word_array[5];
+                    __cx_gate(r, x1, z1, x2, z2, lock);
+                });
+            }
         }
     }
 }
 
 void
 CliffordSimulator::M(
-        std::vector<uint> operands,
+        std::vector<uint64_t> operands,
         std::vector<fp_t> m1w0,
         std::vector<fp_t> m0w1,
-        int record)
+        int record,
+        int64_t tr)
 {
-    uint opk = 0;
-    for (uint j : operands) {
-        // Clear scratch space
-        for (uint i = 2*n_qubits*n_qubits; i < x_width; i++)    x_table[i].clear();
-        for (uint i = 2*n_qubits*n_qubits; i < z_width; i++)    z_table[i].clear();
-        for (uint i = 2*n_qubits; i < r_width; i++)             r_table[i].clear();
-
-        // Figure out if xij is nonzero anywhere (just need to OR all rows).
-        for (uint i = n_qubits; i < 2*n_qubits; i++) {
-            uint k = n_qubits*i + j;
-            x_table[x_width-1] |= x_table[k];
-        }
-        // If the qubit was leaked, also set it to 0: we can quickly determine
-        // the random result here.
-        leak_table[j].invert_bits();
-        x_table[x_width-1] &= leak_table[j];
-        leak_table[j].invert_bits();
-
-        // If the qubit is locked in a trial, also set it to 0. We will just
-        // record the measurement for the locked trial as 0.
-        lock_table[j].invert_bits();
-        x_table[x_width-1] &= lock_table[j];
-        
-        // Perform determinate measurement. We want to condition this
-        // to happen wherever x_table[x_width-1] = 0
-        // 
-        // Clear out row 2*n_qubits+1
-        for (uint jj = 0; jj < n_qubits; jj++) {
-            x_table[2*n_qubits*n_qubits + jj].clear();  // Remember X and Z tables are
-            z_table[2*n_qubits*n_qubits + jj].clear();  // flattened 2d arrays.
-        }
-        r_table[2*n_qubits].clear();
-        for (uint i = 0; i < n_qubits; i++) {
-            // Predicate the rowsum where xij = 1 and j is unlocked.
-            uint k = n_qubits*i + j;
-            stim::simd_bits pred(x_table[k]);
-            pred &= lock_table[j];
-            browsum(2*n_qubits, i+n_qubits, true, pred);
-        }
-        lock_table[j].invert_bits();
-        // Measurement outcome is r_table[2*n_qubits]
-        // Condition results based on x_table[x_width-1] = 0
-        // Also, if any of these qubits were leaked, set the measurement
-        // output to a random value.
-        r_table[2*n_qubits].for_each_word(
-                x_table[x_width-1], leak_table[j], lock_table[j],
-        [&] (auto& r, auto& x, auto& l, auto& lock)
-        {
-            stim::simd_word rand(rng(), rng());
-            r = ((r & ~l) | (rand & l)) & ~(x | lock);
-        });
-        // Now, perform any indeterminate measurements.
-        // This takes more time as we must handle each case separately.
-        for (uint64_t t = 0; t < shots; t++) {
-            if (!x_table[x_width-1][t]) continue;
-            // Find first i where xia = 1 in i = n+1 to 2n. Call this ii.
-            uint ii;
-            for (uint i = n_qubits; i < 2*n_qubits; i++) {
-                uint k = n_qubits*i + j;
-                if (x_table[k][t]) {
-                    ii = i;
-                    break;
+    size_t k = 0;
+    for (uint64_t q : operands) {
+        clear_scratch_space();
+        if (tr >= 0) {
+            measure_qubit_in_trial(q, tr);
+            if (record >= 0 && !lock_table[q][tr]) {
+                record_table[record][tr] = r_table[2*n_qubits][tr];
+                fp_t e = get_probability_sample_from_rng();
+                if (record_table[record][tr] == 0) {
+                    if (e < m1w0[k]) record_table[record][tr] = 1;
+                } else {
+                    if (e < m0w1[k]) record_table[record][tr] = 1;
                 }
+                record++;
+                k++;
             }
-            // First perform rowsums.
-            for (uint i = 0; i < 2*n_qubits; i++) {
-                uint k = n_qubits*i + j;
-                if (i != ii && x_table[k][t]) {
-                    rowsum(i, ii, t);
-                }
+        } else {
+            batch_measure_qubit(q);
+            if (record >= 0) {
+                record_table[record].for_each_word(r_table[2*n_qubits], lock_table[q],
+                        [&] (auto& rec, auto& r, auto& lock)
+                        {
+                            rec |= andnot(lock, r);
+                        });
+                r_table[2*n_qubits].clear();
+                error_channel_m(record, m1w0[k], m0w1[k], lock_table[q]);
+                record++;
+                k++;
             }
-            // Second, swap (ii-n)-th row with ii-th row and clear
-            // ii-th row. Set rii to random value.
-            for (uint jj = 0; jj < n_qubits; jj++) {
-                x_table[(ii-n_qubits)*n_qubits+jj][t] = x_table[ii*n_qubits+jj][t];
-                z_table[(ii-n_qubits)*n_qubits+jj][t] = z_table[ii*n_qubits+jj][t];
-                x_table[ii*n_qubits+jj][t] = 0;
-                z_table[ii*n_qubits+jj][t] = 0;
-            }
-            r_table[ii-n_qubits][t] = r_table[ii][t];
-            r_table[ii][t] = rng() & 1;
-            z_table[ii*n_qubits+j][t] = 1;
-            // For simplicity, copy the rii value (the measurement outcome)
-            // to the scratch space (row 2n+1) in r.
-            r_table[2*n_qubits][t] = r_table[ii][t];
-        }
-
-        if (record >= 0) {
-            record_table[record].for_each_word(r_table[2*n_qubits], lock_table[j],
-                    [&] (auto& rec, auto& r, auto& lock)
-                    {
-                        rec |= r & ~lock;
-                    });
-            r_table[2*n_qubits].clear();
-            error_channel_m(record, m1w0[opk], m0w1[opk], lock_table[j]);
-            record++;
-            opk++;
         }
     }
 }
 
 void
-CliffordSimulator::R(std::vector<uint> operands) {
-    // Remove leakage.
-    for (uint j : operands) {
-        leak_table[j].clear();
-    }
+CliffordSimulator::R(std::vector<uint64_t> operands, int64_t tr) {
     // Implement as a measure + X gate.
-    stim::simd_bits record_0_cpy(record_table[0]);
-    for (uint j : operands) {
-        M({j}, {0}, {0}, 0);
-        for (uint i = 0; i < 2*n_qubits; i++) {
-            uint k = i*n_qubits + j;
-            // Rec should be 0 whenever j is locked, so 
-            // the outcome should not change.
-            r_table[i].for_each_word(
-                z_table[k], record_table[0],
-            [&](auto& r, auto& z, auto& rec) {
-                r ^= z & rec;
-            });
-        }
-    }
-    record_table[0].swap_with(record_0_cpy);
-}
+    stim::simd_bit_table<SIMD_WIDTH> record_cpy = record_table;
+    std::vector<fp_t> all_zeros(operands.size(), 0.0);
 
-StateSimulator::label_1q_t
-CliffordSimulator::eDP1(uint q, uint64_t t) {
-    auto p = rng() & 3;
-    if (leak_table[q][t])   p = 0;
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        uint k = n_qubits*i + q;
-        r_table[i][t] ^= (z_table[k][t] & (p & 1)) ^ (x_table[k][t] & (p & 2));
-    }
-    return IXYZ[p];
-}
+    M(operands, all_zeros, all_zeros, 0, tr);
+    for (uint64_t i = 0; i < 2*n_qubits; i++) {
+        for (size_t j = 0; j < operands.size(); j++) {
+            uint64_t q = operands[j];
+            uint64_t k = get_index(i, q);
 
-StateSimulator::label_1q_t
-CliffordSimulator::eX(uint q, uint64_t t) {
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        uint k = n_qubits*i + q;
-        r_table[i][t] ^= z_table[k][t] & ~leak_table[q][t];
-    }
-    return IX[1 - leak_table[q][t]];
-}
-
-StateSimulator::label_1q_t
-CliffordSimulator::eY(uint q, uint64_t t) {
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        uint k = n_qubits*i + q;
-        r_table[i][t] ^= (x_table[k][t] ^ z_table[k][t]) & ~leak_table[q][t];
-    }
-    return IY[1 - leak_table[q][t]];
-}
-
-StateSimulator::label_1q_t
-CliffordSimulator::eZ(uint q, uint64_t t) {
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        uint k = n_qubits*i + q;
-        r_table[i][t] ^= x_table[k][t] & ~leak_table[q][t];
-    }
-    return IZ[1 - leak_table[q][t]];
-}
-
-StateSimulator::label_1q_t
-CliffordSimulator::eL(uint q, uint64_t t) {
-    leak_table[q][t] ^= 1;
-    return L_L;
-}
-
-StateSimulator::label_2q_t
-CliffordSimulator::eDP2(uint q1, uint q2, uint64_t t) {
-    auto p = rng() & 15;
-    if (leak_table[q1][t])  p &= 0xc;   // Clear out bottom 2 bits
-    if (leak_table[q2][t])  p &= 0x3;   // Clear out upper two bits.
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        uint k1 = n_qubits*i + q1;
-        uint k2 = n_qubits*i + q2;
-        r_table[i][t] ^= (z_table[k1][t] & (p & 1)) ^ (x_table[k1][t] & (p & 2));
-        r_table[i][t] ^= (z_table[k2][t] & (p & 4)) ^ (x_table[k2][t] & (p & 8));
-    }
-    return std::make_pair(IXYZ[p & 3], IXYZ[(p >> 2) & 3]);
-}
-
-StateSimulator::label_2q_t 
-CliffordSimulator::eLI(uint q1, uint q2, uint64_t t) {
-    auto p = rng() % 3;
-    bool c1 = (p == 0) || (p == 2);
-    bool c2 = (p == 1) || (p == 2);
-    leak_table[q1][t] ^= c1;
-    leak_table[q2][t] ^= c2;
-    return std::make_pair(IL[c1], IL[c2]);
-}
-
-StateSimulator::label_2q_t 
-CliffordSimulator::eLT(uint q1, uint q2, uint64_t t) {
-    bool c1 = leak_table[q2][t] & ~leak_table[q1][t];
-    bool c2 = leak_table[q1][t] & ~leak_table[q2][t];
-    leak_table[q1][t] ^= c1;
-    leak_table[q2][t] ^= c2;
-    return std::make_pair(IL[c1], IL[c2]);
-}
-
-void
-CliffordSimulator::init_tables() {
-    for (uint i = 0; i < 2*n_qubits; i++) {
-        for (uint j = 0; j < n_qubits; j++) {
-            uint k = i*n_qubits + j;
-            if (i < n_qubits && i == j) {
-                x_table[k].invert_bits();
-            } else if ((i-n_qubits) == j) {
-                z_table[k].invert_bits();
+            if (tr >= 0) {
+                r_table[i][tr] &= z_table[k][tr] & record_table[j][tr] & lock_table[q][tr];
+            } else {
+                r_table[i].for_each_word(z_table[k], record_table[j], lock_table[q],
+                        [] (auto& r, auto& z, auto& rec, auto& lock)
+                        {
+                            r ^= z & rec & lock;
+                        });
             }
         }
     }
-}
-
-void
-CliffordSimulator::rowsum(uint h, uint i, uint64_t t) {
-    auto rs1 = 0;
-    auto rs2 = r_table[h][t] ^ r_table[i][t];
-    for (uint j = 0; j < n_qubits; j++) {
-        uint kh = n_qubits*h + j;
-        uint ki = n_qubits*i + j;
-
-        auto x1 = x_table[ki][t];
-        auto x2 = x_table[kh][t];
-        auto z1 = z_table[ki][t];
-        auto z2 = z_table[kh][t];
-        
-        auto g1 = (~x1 & z1 & x2)
-                    | (x1 & ~z1 & z2) | (x1 & z1 & (x2 ^ z2));
-        auto g2 = (~x1 & z1 & x2 & x2) 
-                    | (x1 & ~z1 & x2 & z2)
-                    | (x1 & z1 & x2 & ~z2);
-        rs2 ^= (rs1 & g1) ^ g2;
-        rs1 ^= g1;
-        // Update X and Z
-        x_table[kh][t] ^= x1;
-        z_table[kh][t] ^= z1;
+    // Recover the record table entries that we had used.
+    for (size_t j = 0; j < operands.size(); j++) {
+        if (tr >= 0) {
+            record_table[j][tr].swap_with(record_cpy[j][tr]);
+        } else {
+            record_table[j].swap_with(record_cpy[j]);
+        }
     }
-    r_table[h][t] = rs2;
 }
 
 void
-CliffordSimulator::browsum(uint h, uint i, bool use_pred, 
-        stim::simd_bits_range_ref pred) 
-{
+CliffordSimulator::rowsum(uint64_t h, uint64_t i, uint64_t t) {
+    // Clear scratch storage:
+    r_table[2*n_qubits+1][t] = 0;
+    r_table[2*n_qubits+2][t] = 0;
+
+    r_table[2*n_qubits+2][t] = r_table[h][t] ^ r_table[i][t];
+    for (size_t j = 0; j < n_qubits; j++) {
+        uint64_t kh = get_index(h, j),
+                 ki = get_index(i, j);
+
+        stim::bit_ref x1 = x_table[ki][t],
+                        x2 = x_table[kh][t],
+                        z1 = z_table[ki][t],
+                        z2 = z_table[kh][t],
+                        s1 = r_table[2*n_qubits+1][t],
+                        s2 = r_table[2*n_qubits+2][t];
+        __rowsum_arith(x1, z1, x2, z2, s1, s2, true);
+    }
+    r_table[h][t] = r_table[2*n_qubits+2][t];
+}
+
+void
+CliffordSimulator::browsum(uint64_t h, uint64_t i, stim::simd_bits_range_ref<SIMD_WIDTH> pred) {
+    // Clear the scratch storage used.
+    r_table[2*n_qubits+1].clear();
+    r_table[2*n_qubits+2].clear();
     // 2n + 1 and 2n + 2 correspond to the 1s and 2s place in a 
     // 2-bit number.
     //
     // To perform the 2rh + 2ri computation, we can just
     // XOR the bits going to the 2s place (as this is mod 4).
-    stim::simd_word en_p(0, 0);
-    if (use_pred)   en_p = ~en_p;
-
     r_table[2*n_qubits+2] ^= r_table[h];
     r_table[2*n_qubits+2] ^= r_table[i];
-    for (uint j = 0; j < n_qubits; j++) {
-        uint kh = n_qubits * h + j;
-        uint ki = n_qubits * i + j;
-        x_table[ki].for_each_word(
-            z_table[ki], x_table[kh], z_table[kh],
-            r_table[2*n_qubits+1], r_table[2*n_qubits+2],
-            pred,
-        [&](auto& x1, auto& z1, auto& x2, auto& z2, auto& scr1, auto& scr2, auto& p)
+    for (uint64_t j = 0; j < n_qubits; j++) {
+        uint64_t kh = get_index(h, j),
+                 ki = get_index(i, j);
+        std::array<stim::simd_bits_range_ref<SIMD_WIDTH>, 7> args{{
+            x_table[ki],
+            z_table[ki],
+            x_table[kh],
+            z_table[kh],
+            r_table[2*n_qubits+1],
+            r_table[2*n_qubits+2],
+            pred
+        }};
+        for_each_word(args, [] (std::array<stim::bitword<SIMD_WIDTH>*, 7>& word_array)
         {
-            // Table:
-            // |----|----|-------|
-            // | 1  | 2  |   g   |
-            // |----|----|-------|
-            // | 00 | xx |   0   |
-            // | 01 | 0x |   0   |
-            // | 01 | 10 |   1   |  --> mag
-            // | 01 | 11 |  -1   |  --> sgn
-            // | 10 | x0 |   0   |
-            // | 10 | 01 |  -1   |  --> sgn
-            // | 10 | 11 |   1   |  --> mag
-            // | 11 | 00 |   0   |
-            // | 11 | 01 |   1   |  --> mag
-            // | 11 | 10 |  -1   |  --> sgn
-            // | 11 | 11 |   0   |
-            // |----|----|-------|
-            //
-            // I'll be honest, I completely forgot what the hell I did here.
-            // But whatever me wrote this was a genius because it works!
-            //  --> Well, it'd be awkward if it does not actually work...
-            //
-            // I'm assuming that gsum_mag and gsum_sgn track the value of
-            // the rowsum, and we can implement Z_4 arithmetic using bitwise
-            // operations. I'm sure it's more obvious once you sit down with
-            // pen and paper.
-
-            stim::simd_word gmag(0, 0);
-            stim::simd_word gsgn(0, 0);
-            
-            gmag ^= (~x1 & z1 & x2)
-                        | (x1 & ~z1 & z2) | (x1 & z1 & (x2 ^ z2));
-            gsgn ^= (~x1 & z1 & x2 & x2) 
-                        | (x1 & ~z1 & x2 & z2)
-                        | (x1 & z1 & x2 & ~z2);
-            // Perform the modular addition and save the results in
-            // the scratch storage
-            scr2 ^= (en_p & p) & ((scr1 & gmag) ^ gsgn);
-            scr1 ^= (en_p & p) & gmag;
-            // Update x2 and z2
-            x2 ^= (en_p & p) & x1;
-            z2 ^= (en_p & p) & z1;
+            auto& x1 = *word_array[0],
+                & z1 = *word_array[1],
+                & x2 = *word_array[2],
+                & z2 = *word_array[3],
+                & s1 = *word_array[4],
+                & s2 = *word_array[5],
+                & p = *word_array[6];
+            __rowsum_arith(x1, z1, x2, z2, s1, s2, p);
         });
     }   // After all the iterations, row 2n+1 and 2n+2 should have 
         // the value of the rowsum.
@@ -447,31 +311,125 @@ CliffordSimulator::browsum(uint h, uint i, bool use_pred,
     // Now, in locations where row 2n+2 == 0, we need to set rh = 0. Otherwise,
     // we set it to 1. This is as simple as just moving row 2n+2 to rh.
     r_table[h].for_each_word(r_table[2*n_qubits+2], pred,
-    [&] (auto& rh, auto& scr, auto& p) {
-        rh = ((en_p & p) & scr) | (~(en_p & p) & rh);
+    [&] (auto& rh, auto& s, auto& p) {
+        rh = (p & s) | andnot(p, rh);
     });
-    // Clear the scratch storage used.
-    r_table[2*n_qubits+1].clear();
-    r_table[2*n_qubits+2].clear();
 }
 
 void
-CliffordSimulator::snapshot() {
-    StateSimulator::snapshot();
-    x_table_cpy = stim::simd_bit_table(x_table);
-    z_table_cpy = stim::simd_bit_table(z_table);
-    r_table_cpy = stim::simd_bit_table(r_table);
-    leak_table_cpy = stim::simd_bit_table(leak_table);
+CliffordSimulator::batch_measure_qubit(uint64_t q) {
+    // We need to check amongst the stabilizer rows (n+1 to 2n) whether there is a p such that
+    // x_pq = 1.
+    //
+    // This is easily done by simply ORing all rows in the range.
+    for (uint64_t i = n_qubits; i < 2*n_qubits; i++) {
+        uint64_t k = get_index(i, q);
+        x_table[x_width-1] |= x_table[k];
+    }
+    // If the qubit is locked, treat the measurement as deterministic.
+    lock_table[q].invert_bits();
+    x_table[x_width-1] &= lock_table[q];
+    // As the deterministic case is easy to handle, we will do this first (where x_pq = 0).
+    // 
+    // First, clear row 2*n+1.
+    clear_row(2*n_qubits);
+    // Perform rowsum between row 2*n+1 and all rows i+n for 1 <= i <= n where x_iq = 1.
+    for (uint64_t i = 0; i < n_qubits; i++) {
+        uint64_t k = get_index(i, q);
+        // Predicate this rowsum where x_ij = 1 and j is unlocked.
+        stim::simd_bits<SIMD_WIDTH> pred(x_table[k]);
+        pred &= lock_table[q];
+        browsum(2*n_qubits, i+n_qubits, pred);
+    }
+    lock_table[q].invert_bits();
+    // The measurement results are in r_table[2*n_qubits].
+    //
+    // Filter the measurement results to meet the x_pj = 0 condition.
+    r_table[2*n_qubits].for_each_word(x_table[x_width-1], lock_table[q],
+        [] (auto& r, auto& x, auto& lock) {
+            r = andnot(x | lock, r);
+        });
+    // Now, handle the indeterminate case.
+    //
+    // We will try to batch this as much as possible.
+    stim::simd_bits completed_trials(x_table[x_width-1]);
+    completed_trials.invert_bits(); // Now, = 1 wherever a measurement is already done.
+    for (uint64_t t = 0; t < shots; t++) {
+        if (completed_trials[t]) continue;
+        // Find first p where x_pq = 1 in p = n+1 to 2n.
+        uint64_t p;
+        for (uint64_t i = n_qubits; i < 2*n_qubits; i++) {
+            uint64_t k = get_index(i, q);
+            if (x_table[k][t]) { p = i; break; }
+        }
+        // Collect all trials where x_pq = 1.
+        stim::simd_bits<SIMD_WIDTH> trials_with_good_p(x_table[get_index(p, q)]);
+        // Set all completed trials in trials_with_good_p to 0.
+        completed_trials.invert_bits();
+        trials_with_good_p &= completed_trials;
+        completed_trials.invert_bits();
+        // Now, perform the indeterminate measurement.
+        //
+        // First, do a rowsum on all rows i where x_iq = 1 and i != p.
+        for (uint64_t i = 0; i < 2*n_qubits; i++) {
+            uint64_t k = get_index(i, q);
+            if (i == p) continue;
+            // Create browsum predicate.
+            stim::simd_bits<SIMD_WIDTH> pred(trials_with_good_p);
+            pred &= x_table[k];
+            browsum(i, p, pred);
+        }
+        // Now, swap row p-n with row p and clear the p-th row. Set r_p to a random value.
+        //
+        // Also, for simplicity, copy r_p to the 2n+1 row (2n+1 row stores measurement outcomes for
+        // the qubit).
+        swap_rows_where(p-n_qubits, p, trials_with_good_p);
+        clear_row_where(p, trials_with_good_p);
+        stim::simd_bits<SIMD_WIDTH> rand_meas =
+            stim::simd_bits<SIMD_WIDTH>::random(r_table.num_minor_bits_padded(), rng);
+        r_table[p].for_each_word(r_table[2*n_qubits], rand_meas, trials_with_good_p,
+                [] (auto& r1, auto& r2, auto& rand, auto& tp)
+                {
+                    r1 = (tp & rand) | andnot(tp, r1);
+                    r2 = (tp & r1) | andnot(tp, r2);
+                });
+        z_table[get_index(p, q)] |= trials_with_good_p;
+        // Update completed_trials.
+        completed_trials |= trials_with_good_p;
+        if (completed_trials.popcnt() == shots) break;
+    }
 }
 
 void
-CliffordSimulator::rollback_where(stim::simd_bits_range_ref pred) {
-    StateSimulator::rollback_where(pred);
-    for (uint i = 0; i < x_width; i++)  copy_where(x_table_cpy[i], x_table[i], pred);
-    for (uint i = 0; i < z_width; i++)  copy_where(z_table_cpy[i], z_table[i], pred);
-    for (uint i = 0; i < r_width; i++)  copy_where(r_table_cpy[i], r_table[i], pred);
-    for (uint i = 0; i < leak_width; i++) {
-        copy_where(leak_table_cpy[i], leak_table[i], pred);
+CliffordSimulator::measure_qubit_in_trial(uint64_t q, int64_t tr) {
+    if (lock_table[q][tr]) return;  // Cannot measure the qubit.
+    // Simply perform the algorithm in batch_measure_qubit, but optimize it for a single trial.
+    for (uint64_t i = n_qubits; i < 2*n_qubits; i++) {
+        uint64_t k = get_index(i, q);
+        x_table[x_width-1][tr] |= x_table[k][tr];
+    }
+    if (x_table[x_width-1][tr]) {
+        uint64_t p;
+        for (uint64_t i = n_qubits; i < 2*n_qubits; i++) {
+            uint64_t k = get_index(i, q);
+            if (x_table[k][tr]) { p = i; break; }
+        }
+        for (uint64_t i = 0; i < 2*n_qubits; i++) {
+            uint64_t k = get_index(i, q);
+            if (i != p && x_table[k][tr]) rowsum(i, p, tr);
+        }
+        swap_rows_for_trial(p-n_qubits, p, tr);
+        clear_row_for_trial(p, tr);
+        r_table[p][tr] = rng() & 1;
+        z_table[get_index(p, q)][tr] = 1;
+        r_table[2*n_qubits][tr] = r_table[p][tr];
+    } else {
+        // Complete deterministic measurement.
+        clear_row_for_trial(2*n_qubits, tr);
+        for (uint64_t i = 0; i < n_qubits; i++) {
+            uint64_t k = get_index(i, q);
+            if (x_table[k][tr]) rowsum(2*n_qubits, i+n_qubits, tr);
+        }
     }
 }
 

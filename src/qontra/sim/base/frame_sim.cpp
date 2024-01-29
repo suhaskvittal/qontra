@@ -4,7 +4,7 @@
  * */
 
 #include "qontra/sim/base/frame_sim.h"
-#include "qontra/sim/base/frame_sim_gate_impl.h"
+#include "qontra/sim/base/gate_impl/frame_sim.h"
 
 namespace qontra {
 
@@ -134,18 +134,19 @@ FrameSimulator::CX(std::vector<uint64_t> operands, int64_t tr) {
                 rand_x_2,
                 rand_z_2
             }};
-            for_each_word(args, [] (std::array<stim::bitword<SIMD_WIDTH>, 11> word_array) {
-                auto& x1 = word_array[0],
-                    & z1 = word_array[1],
-                    & l1 = word_array[2],
-                    & x2 = word_array[3],
-                    & z2 = word_array[4],
-                    & l2 = word_array[5],
-                    & lock = word_array[6],
-                    & rx1 = word_array[7],
-                    & rz1 = word_array[8],
-                    & rx2 = word_array[9],
-                    & rz2 = word_array[10];
+            for_each_word(args, [] (std::array<stim::bitword<SIMD_WIDTH>*, 11>& word_array) 
+            {
+                auto& x1 = *word_array[0],
+                    & z1 = *word_array[1],
+                    & l1 = *word_array[2],
+                    & x2 = *word_array[3],
+                    & z2 = *word_array[4],
+                    & l2 = *word_array[5],
+                    & lock = *word_array[6],
+                    & rx1 = *word_array[7],
+                    & rz1 = *word_array[8],
+                    & rx2 = *word_array[9],
+                    & rz2 = *word_array[10];
                 __cx_gate(x1, z1, l1, x2, z2, l2, lock, rx1, rz1, rx2, rz2);
             });
         }
@@ -210,13 +211,13 @@ FrameSimulator::M(
                 rand_x,
                 rand_z
             }};
-            for_each_word(args, [] (std::array<stim::bitword<SIMD_WIDTH>, 6> word_array) {
-                auto &x = word_array[0],
-                     &z = word_array[1],
-                     &l = word_array[2],
-                     &lock = word_array[3],
-                     &rx = word_array[4],
-                     &rz = word_array[5];
+            for_each_word(args, [] (std::array<stim::bitword<SIMD_WIDTH>*, 6> word_array) {
+                auto &x = *word_array[0],
+                     &z = *word_array[1],
+                     &l = *word_array[2],
+                     &lock = *word_array[3],
+                     &rx = *word_array[4],
+                     &rz = *word_array[5];
                 __measure(x, z, l, lock, rx, rz);
             });
         }

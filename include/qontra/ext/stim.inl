@@ -39,11 +39,11 @@ DetailedStimCircuit::apply_errors(
 
 template <size_t W, size_t N, class FUNC> inline void
 for_each_word(std::array<stim::simd_bits_range_ref<W>, N> ranges, FUNC body) {
-    std::array<stim::bitword<W>, N> values;
+    std::array<stim::bitword<W>*, N> values;
 
     const size_t n = ranges[0].num_simd_words;
     for (size_t j = 0; j < n; j++) {
-        for (size_t i = 0; i < N; i++) values[i] = *(ranges[i].ptr_simd + j);
+        for (size_t i = 0; i < N; i++) values[i] = ranges[i].ptr_simd + j;
         body(values);
     }
 }

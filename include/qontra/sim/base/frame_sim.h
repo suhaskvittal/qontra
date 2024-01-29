@@ -18,15 +18,15 @@ public:
 
     void reset_sim(void) override;
 
-    void    H(std::vector<uint64_t>, int64_t fr=-1) override;
-    void    X(std::vector<uint64_t>, int64_t fr=-1) override;
-    void    Z(std::vector<uint64_t>, int64_t fr=-1) override;
-    void    S(std::vector<uint64_t>, int64_t fr=-1) override;
-    void    CX(std::vector<uint64_t>, int64_t fr=-1) override;
-    void    M(std::vector<uint64_t>, std::vector<fp_t>, std::vector<fp_t>, int record=-1, int64_t fr=-1) override;
-    void    R(std::vector<uint64_t>, int64_t fr=-1) override;
+    void    H(std::vector<uint64_t>, int64_t tr=-1) override;
+    void    X(std::vector<uint64_t>, int64_t tr=-1) override;
+    void    Z(std::vector<uint64_t>, int64_t tr=-1) override;
+    void    S(std::vector<uint64_t>, int64_t tr=-1) override;
+    void    CX(std::vector<uint64_t>, int64_t tr=-1) override;
+    void    M(std::vector<uint64_t>, std::vector<fp_t>, std::vector<fp_t>, int record=-1, int64_t tr=-1) override;
+    void    R(std::vector<uint64_t>, int64_t tr=-1) override;
 
-    void    LEAKAGE_ISWAP(std::vector<uint64_t>, int64_t fr=-1) override;
+    void    LEAKAGE_ISWAP(std::vector<uint64_t>, int64_t tr=-1) override;
 
     void    eDP1(uint64_t, uint64_t) override;
     void    eX(uint64_t, uint64_t) override;

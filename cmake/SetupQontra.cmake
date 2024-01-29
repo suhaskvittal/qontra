@@ -17,6 +17,7 @@ set(QONTRA_FILES
     # Simulators
     src/qontra/sim/base/frame_sim.cpp
     src/qontra/sim/base/state_sim.cpp
+    src/qontra/sim/base/clifford_sim.cpp
     src/qontra/sim/full_system_sim/errors.cpp
     src/qontra/sim/full_system_sim/instructions.cpp
     src/qontra/sim/full_system_sim/run.cpp

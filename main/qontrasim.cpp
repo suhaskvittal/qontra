@@ -4,6 +4,7 @@
  * */
 
 #include <qontra/ext/qes.h>
+#include <qontra/sim/base/clifford_sim.h>
 #include <qontra/sim/base/frame_sim.h>
 #include <qontra/sim/full_system_sim.h>
 
@@ -48,7 +49,7 @@ int main(int argc, char* argv[]) {
     pp.get("stim-out", sim.config.stim_output_file, true);
     pp.get("data-out", sim.config.data_output_file, true);
 
-    fp_t p = 1e-3;
+    fp_t p = 0.0;
     if (pp.get("config", ini_file)) {
         IniParser ini(ini_file);
         const auto& ini_map = ini.get_ini_map();
@@ -69,7 +70,7 @@ int main(int argc, char* argv[]) {
     const uint64_t n = get_number_of_qubits(main_program);
     tables::populate(n, sim.config.errors, sim.config.timing, et);
 
-    histogram_t<uint64_t> shots_hist = sim.run_program<FrameSimulator>(main_program, shots);
+    histogram_t<uint64_t> shots_hist = sim.run_program<CliffordSimulator>(main_program, shots);
     histogram_t<double> norm_hist = histogram_normalize(shots_hist);
 
     if (world_rank == 0) {
