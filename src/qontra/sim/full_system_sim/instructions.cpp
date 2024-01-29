@@ -129,6 +129,17 @@ FullSystemSimulator::do_gate(const qes::Instruction<>& instruction, int64_t tria
         if (is_recording_stim_instructions && trial < 0) {
             sample_circuit.safe_append_u("Z", v32(qubits));
         }
+    } else if (name == "s") {
+        base_sim->S(qubits, trial);
+        if (is_recording_stim_instructions && trial < 0) {
+            sample_circuit.safe_append_u("S", v32(qubits));
+        }
+    } else if (name == "sdg") {
+        base_sim->S(qubits, trial);
+        base_sim->Z(qubits, trial);
+        if (is_recording_stim_instructions && trial < 0) {
+            sample_circuit.safe_append_u("S_DAG", v32(qubits));
+        }
     } else if (name == "cx") {
         base_sim->CX(qubits, trial);
         if (is_recording_stim_instructions && trial < 0) {
