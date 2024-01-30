@@ -36,7 +36,12 @@ FullSystemSimulator::read_next_instruction(const qes::Program<>& from, program_s
     INSTRUCTION_TYPE itype = isa_get(instruction).inst_type;
 
     if (is_gate(instruction)) {
-        elapsed_time += do_gate(instruction);
+        fp_t lat = do_gate(instruction);
+        // Update timing only where rollback_pred = 0.
+        elapsed_time += lat;
+        for (uint64_t t = 0; t < current_shots; t++) {
+            if (rollback_pred[t]) shot_time_delta_map[t] -= lat;
+        }
     } else if (itype == INSTRUCTION_TYPE::EVENT_OR_OBS) {
         create_event_or_obs(instruction);
     } else if (itype == INSTRUCTION_TYPE::MEMORY_SHIFT) {
@@ -226,6 +231,7 @@ void
 FullSystemSimulator::create_event_or_obs(const qes::Instruction<>& instruction) {
     std::string name = instruction.get_name();
     int64_t index = instruction.get<int64_t>(0);
+    if (name == "event") index += event_offset;
     
     stim::simd_bits_range_ref<SIMD_WIDTH> w = 
         name == "event" ? syndrome_table[index] : observable_table[index];

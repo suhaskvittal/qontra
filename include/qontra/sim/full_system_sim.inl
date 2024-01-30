@@ -13,10 +13,10 @@ inline size_t
 get_register_index(std::string r) {
     const size_t REGISTER_SPECIAL_START = 32;
     // Check if the register is special, otherwise it is straightforward to get the index.
-    if (r == "rbrk") {
+    if (r == "$rbrk") {
         return REGISTER_SPECIAL_START + 0;
     } else {
-        int id = std::stoi(r.substr(1));
+        int id = std::stoi(r.substr(2));
         return static_cast<size_t>(id);
     }
 }
@@ -84,7 +84,7 @@ FullSystemSimulator::execute_routine(const qes::Program<>& program) {
         // microcode.
         if (instruction.get_name() == "call") {
             // Switch into the subroutine.
-            std::string subroutine_name = instruction.get<std::string>(1);
+            std::string subroutine_name = instruction.get<std::string>(0);
             execute_routine(subroutine_map.at(subroutine_name));
             status.pc++;
         } else {
@@ -97,6 +97,29 @@ FullSystemSimulator::execute_routine(const qes::Program<>& program) {
 inline stim::simd_bits_range_ref<SIMD_WIDTH>
 FullSystemSimulator::get_register(std::string r) {
     return register_file[get_register_index(r)];
+}
+
+inline void
+FullSystemSimulator::recalibrate_timing() {
+    // Compute min time when taking account delta.
+    fp_t min_time_delta = 0.0;
+    for (const auto& p : shot_time_delta_map) {
+        min_time_delta = std::min(min_time_delta, p.second);
+    }
+    if (min_time_delta >= 0.0) return;
+    // Otherwise, change everything up.
+    std::map<uint64_t, fp_t> new_time_delta_map;
+    for (uint64_t t = 0; t < current_shots; t++) {
+        if (shot_time_delta_map.count(t)) {
+            if (min_time_delta != shot_time_delta_map.at(t)) {
+                new_time_delta_map[t] = shot_time_delta_map.at(t) - min_time_delta;
+            }
+        } else {
+            new_time_delta_map[t] = -min_time_delta;
+        }
+    }
+    elapsed_time -= min_time_delta;
+    shot_time_delta_map = std::move(new_time_delta_map);
 }
 
 inline void

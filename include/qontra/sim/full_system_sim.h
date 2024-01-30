@@ -68,6 +68,8 @@ private:
 
     void    create_event_or_obs(const qes::Instruction<>&);
 
+    void    recalibrate_timing(void);
+
     void    inject_timing_error(void);
     void    inject_idling_error_positive(std::vector<uint64_t> on_qubits, int64_t trial=-1);
     void    inject_idling_error_negative(std::vector<uint64_t> not_on_qubits, int64_t trial=-1);

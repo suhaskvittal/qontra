@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     int world_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-    std::string help = "usage: ./qontrasim <qes-file>"
+    std::string help = "usage: ./qontrasim <qes-file> "
                         "--shots <shots> "
                         "--trace-out <trace-folder> "
                         "--stim-out <stim-file> "
@@ -52,11 +52,16 @@ int main(int argc, char* argv[]) {
     fp_t p = 0.0;
     pp.get("p", p);
     if (pp.get("config", ini_file)) {
+        std::string parent_dir = get_parent_directory(ini_file);
+
         IniParser ini(ini_file);
         const auto& ini_map = ini.get_ini_map();
+        std::cout << "ini keys:";
+        for (const auto& p : ini_map) std::cout << " " << p.first;
+        std::cout << "\n";
         // First load in the subroutines.
         for (const auto& p : ini_map.at("__ANON__")) {
-            qes::Program<> subroutine = qes::from_file(p.second);
+            qes::Program<> subroutine = qes::from_file(parent_dir + "/" + p.second);
             sim.load_subroutine(p.first, subroutine);
         }
         // Now load in error model data.

@@ -9,6 +9,8 @@ namespace qontra {
 
 void
 FullSystemSimulator::inject_timing_error() {
+    recalibrate_timing();
+
     std::vector<uint64_t> qubits;
     std::vector<fp_t> xy_array, z_array;
     for (uint64_t q = 0; q < n_qubits; q++) {
