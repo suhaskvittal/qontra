@@ -73,20 +73,18 @@ FullSystemSimulator::write_stats(uint64_t batchno) {
 
     stim::simd_bits<SIMD_WIDTH> ref(n_det+n_obs);
     stim::simd_bit_table<SIMD_WIDTH> output_trace = syndrome_table.concat_major(observable_table, n_det, n_obs);
-    // Transpose the table so major index = shots.
-    output_trace = output_trace.transposed();
-
+    // Check popcnts.
     std::string filename = config.syndrome_output_folder + "/" + get_batch_filename(batchno);
     FILE* trace_fout = fopen(filename.c_str(), "w");
     stim::write_table_data(trace_fout,
-                            G_SHOTS_PER_BATCH,
+                            current_shots,
                             n_det+n_obs,
                             ref,
                             output_trace,
                             stim::SampleFormat::SAMPLE_FORMAT_DETS,
                             'D',
-                            'L',
-                            n_det);
+                            'D',
+                            0);
     fclose(trace_fout);
     // Write other data to output_file here:
 

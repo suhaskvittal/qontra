@@ -42,3 +42,7 @@ endif()
 if (COMPILE_TESTS)
     include(${CMAKE_SOURCE_DIR}/cmake/executables/Test.cmake)
 endif()
+
+if (COMPILE_SSE)
+    include(${CMAKE_SOURCE_DIR}/cmake/executables/SSE.cmake)
+endif()

@@ -32,4 +32,6 @@ private:
 
 }   // qontra
 
+#include "pymatching.inl"
+
 #endif  // QONTRA_PYMATCHING_h

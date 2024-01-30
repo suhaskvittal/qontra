@@ -56,9 +56,6 @@ int main(int argc, char* argv[]) {
 
         IniParser ini(ini_file);
         const auto& ini_map = ini.get_ini_map();
-        std::cout << "ini keys:";
-        for (const auto& p : ini_map) std::cout << " " << p.first;
-        std::cout << "\n";
         // First load in the subroutines.
         for (const auto& p : ini_map.at("__ANON__")) {
             qes::Program<> subroutine = qes::from_file(parent_dir + "/" + p.second);

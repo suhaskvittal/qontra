@@ -235,6 +235,7 @@ FullSystemSimulator::create_event_or_obs(const qes::Instruction<>& instruction) 
     
     stim::simd_bits_range_ref<SIMD_WIDTH> w = 
         name == "event" ? syndrome_table[index] : observable_table[index];
+    w.clear();
     uint64_t& max_index = name == "event" ? max_event_written_to : max_obs_written_to;
     for (size_t i = 1; i < instruction.get_number_of_operands(); i++) {
         int64_t k = instruction.get<int64_t>(i);

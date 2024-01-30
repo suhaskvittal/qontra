@@ -21,13 +21,14 @@ inline pm::Mwpm init_solver_from_circuit(stim::Circuit circuit) {
 
 inline Decoder::result_t
 PyMatching::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
-    const uint n_observables = circuit.count_observables();
+    const size_t n_observables = circuit.count_observables();
 
     std::vector<uint64_t> detectors = get_nonzero_detectors(syndrome);
     stim::simd_bits<SIMD_WIDTH> corr(n_observables);
 
+    int64_t w;
     timer.clk_start();
-    pm::decode_detection_events(solver, d64, corr.u8, w);
+    pm::decode_detection_events(solver, detectors, corr.u8, w);
     fp_t t = (fp_t)timer.clk_end();
 
     return { t, corr };

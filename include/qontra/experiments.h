@@ -34,7 +34,7 @@ void generate_syndromes(const DetailedStimCircuit&, uint64_t shots, CALLBACK);
 template <class CALLBACK>
 uint64_t read_syndrome_trace(std::string input_folder, const DetailedStimCircuit&, CALLBACK);
 
-void        build_syndrome_trace(std::string output_folder, const DetailedStimCircuit&, uint64_t shots);
+void build_syndrome_trace(std::string output_folder, const DetailedStimCircuit&, uint64_t shots);
 
 }   // qontra
 
