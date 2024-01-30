@@ -50,6 +50,7 @@ int main(int argc, char* argv[]) {
     pp.get("data-out", sim.config.data_output_file, true);
 
     fp_t p = 0.0;
+    pp.get("p", p);
     if (pp.get("config", ini_file)) {
         IniParser ini(ini_file);
         const auto& ini_map = ini.get_ini_map();

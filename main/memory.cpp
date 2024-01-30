@@ -21,6 +21,7 @@ using namespace qontra;
 using namespace vtils;
 
 int main(int argc, char* argv[]) {
+    configure_optimal_batch_size();
     // Initialize MPI
     MPI_Init(NULL, NULL);
     int world_rank = 0, world_size = 1;
