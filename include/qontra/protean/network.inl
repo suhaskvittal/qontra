@@ -144,8 +144,8 @@ ProcessorLayer::add_edge(sptr<net::phys_edge_t> e) {
 
 inline size_t
 ProcessorLayer::get_max_endpoint_degree(sptr<net::phys_edge_t> e) {
-    sptr<net::phys_vertex_t> v = get_source(e),
-                             w = get_target(e);
+    sptr<net::phys_vertex_t> v = e->get_source<net::phys_vertex_t>(),
+                             w = e->get_target<net::phys_vertex_t>();
     return std::max(get_degree(v), get_degree(w));
 }
 

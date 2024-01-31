@@ -24,7 +24,8 @@ static const v_pair_t<raw_vertex_t> NULL_CX_EDGE = std::make_pair(nullptr, nullp
 inline void
 safe_emplace_back(qes::Program<>& program, std::string name, std::vector<uint64_t> operands) {
     if (operands.empty()) return;
-    program.emplace_back(name, operands);
+    std::vector<int64_t> _operands(operands.begin(), operands.end());
+    program.emplace_back(name, _operands);
 }
 
 Scheduler::Scheduler(PhysicalNetwork* n_p)

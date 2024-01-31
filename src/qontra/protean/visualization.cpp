@@ -52,8 +52,8 @@ add_edge_to_render_graph(
     if (config.do_not_render_out_of_plane_edges && pe->is_out_of_plane()) return;
     attr_list_t attr = get_attributes(pe);
 
-    sptr<net::phys_vertex_t> pv = network.get_source(pe),
-                             pw = network.get_target(pe);
+    sptr<net::phys_vertex_t> pv = pe->get_source<net::phys_vertex_t>(),
+                             pw = pe->get_target<net::phys_vertex_t>();
     Agnode_t* av = cxx_agnode(gr, "PQ" + graph::print_v(pv), 0);
     Agnode_t* aw = cxx_agnode(gr, "PQ" + graph::print_v(pw), 0);
     Agedge_t* ae = cxx_agedge(gr, av, aw, attr.name, 1);

@@ -99,8 +99,8 @@ write_stats_file(std::string output_file, PhysicalNetwork& network) {
     fout << "Property,Value\n"
             << "Qubits," << network.n() << "\n"
             << "Couplings," << network.m() << "\n"
-            << "Mean Degree," << network.get_mean_connectivity() << "\n"
-            << "Max Degree," << network.get_max_connectivity() << "\n"
+            << "Mean Degree," << network.get_mean_degree() << "\n"
+            << "Max Degree," << network.get_max_degree() << "\n"
             << "Thickness," << network.get_thickness() << "\n";
     fout.flush();
 }
@@ -116,8 +116,8 @@ write_coupling_file(std::string output_file, PhysicalNetwork& network) {
     std::ofstream fout(output_file);
     fout << "Qubit 1,Qubit 2,Processor Layer\n";
     for (sptr<phys_edge_t> pe : network.get_edges()) {
-        sptr<phys_vertex_t> pv = network.get_source(pe),
-                            pw = network.get_target(pe);
+        sptr<phys_vertex_t> pv = pe->get_source<phys_vertex_t>(),
+                            pw = pe->get_target<phys_vertex_t>();
         const size_t layer = pe->tsv_layer;
         fout << pv->id << "," << pw->id << "," << layer << "\n";
     }

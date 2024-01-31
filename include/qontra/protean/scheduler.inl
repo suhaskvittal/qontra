@@ -118,7 +118,7 @@ Scheduler::push_back_measurement(std::vector<uint64_t>& qes_operands, sptr<net::
 
 inline void
 Scheduler::perform_proxy_resets(qes::Program<>& program) {
-    std::vector<uint64_t> operands;
+    std::vector<int64_t> operands;
     for (auto it = proxy_reset_map.begin(); it != proxy_reset_map.end(); ) {
         if (it->second == 0) {
             it = proxy_reset_map.erase(it);

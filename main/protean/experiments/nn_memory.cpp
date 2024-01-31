@@ -3,10 +3,9 @@
  *  date:   11 January 2024
  * */
 
-#include <qec_memory.h>
-
 #include <qontra/decoder/neural.h>
 #include <qontra/experiments.h>
+#include <qontra/experiments/memory.h>
 
 #include <vtils/cmd_parse.h>
 #include <vtils/filesystem.h>
@@ -40,14 +39,14 @@ int main(int argc, char* argv[]) {
     uint64_t    shots = 1'000'000;
     fp_t        p = 1e-3;
 
-    pp.get_string("qes", qes_file, true);
-    pp.get_string("model", model_file, true);
-    pp.get_string("out", output_file, true);
+    pp.get("qes", qes_file, true);
+    pp.get("model", model_file, true);
+    pp.get("out", output_file, true);
 
-    pp.get_uint64("s", shots);
-    pp.get_float("p", p);
+    pp.get("s", shots);
+    pp.get("p", p);
 
-    experiments::G_BASE_SEED = 1;
+    G_BASE_SEED = 1;
 
     // Load model from file and run memory experiment.
     DetailedStimCircuit circuit = make_circuit(qes_file, p);
@@ -61,9 +60,9 @@ int main(int argc, char* argv[]) {
     
     dec->load_model_from_file(model_file);
 
-    experiments::memory_params_t params;
-    params.shots = shots;
-    auto res = memory_experiment(dec.get(), params);
+    memory_config_t config;
+    config.shots = shots;
+    memory_result_t res = memory_experiment(dec.get(), config);
 
     // Write result to file.
     if (world_rank == 0) {

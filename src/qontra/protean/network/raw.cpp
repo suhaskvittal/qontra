@@ -64,8 +64,8 @@ RawNetwork::RawNetwork(TannerGraph& tgr)
     }
 
     for (sptr<tanner::edge_t> te : tgr.get_edges()) {
-        sptr<tanner::vertex_t> tv1 = tgr.get_source(te),
-                                tv2 = tgr.get_target(te);
+        sptr<tanner::vertex_t> tv1 = te->get_source<tanner::vertex_t>(),
+                                tv2 = te->get_target<tanner::vertex_t>();
         auto rv1 = v_tanner_raw_map.at(tv1),
             rv2 = v_tanner_raw_map.at(tv2);
         sptr<raw_edge_t> re = make_edge(rv1, rv2);
@@ -170,8 +170,8 @@ RawNetwork::add_flag(sptr<raw_vertex_t> dq1, sptr<raw_vertex_t> dq2, sptr<raw_ve
 
 sptr<raw_vertex_t>
 RawNetwork::add_proxy(sptr<raw_edge_t> e) {
-    sptr<raw_vertex_t> q1 = get_source(e),
-                        q2 = get_target(e);
+    sptr<raw_vertex_t> q1 = e->get_source<raw_vertex_t>(),
+                        q2 = e->get_target<raw_vertex_t>();
     delete_edge(e);
     // Create proxy and corresponding edges.
     sptr<raw_vertex_t> prxq = make_vertex();

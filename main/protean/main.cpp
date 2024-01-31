@@ -30,15 +30,15 @@ int main(int argc, char* argv[]) {
     uint64_t schedule_rounds = 3;
     uint64_t max_connectivity = 4;
 
-    if (!pp.get_string("tanner", tanner_graph_file)) return 1;
-    if (!pp.get_string("out", data_output_folder)) return 1;
+    pp.get("tanner", tanner_graph_file, true);
+    pp.get("out", data_output_folder, true);
 
-    pp.get_string("render", render_output_folder);
-    pp.get_string("passes", pass_string);
-    pp.get_string("layout", layout_engine);
+    pp.get("render", render_output_folder);
+    pp.get("passes", pass_string);
+    pp.get("layout", layout_engine);
     
-    pp.get_uint64("s-rounds", schedule_rounds);
-    pp.get_uint64("max-conn", max_connectivity);
+    pp.get("s-rounds", schedule_rounds);
+    pp.get("max-conn", max_connectivity);
     bool schedule_is_mx = pp.option_set("mx");
 
     bool verbose = pp.option_set("verbose") || pp.option_set("v");
@@ -59,8 +59,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Qubits = " << network.n() << "\n"
             << "Couplings = " << network.m() << "\n"
-            << "Mean Degree = " << network.get_mean_connectivity() << "\n"
-            << "Max Degree = " << network.get_max_connectivity() << "\n"
+            << "Mean Degree = " << network.get_mean_degree() << "\n"
+            << "Max Degree = " << network.get_max_degree() << "\n"
             << "Thickness = " << network.get_thickness() << "\n";
     // Write data to output folder:
     write_network_to_folder(data_output_folder, network);

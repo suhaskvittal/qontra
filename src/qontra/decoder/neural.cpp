@@ -8,8 +8,6 @@
 
 namespace qontra {
 
-using namespace experiments;
-
 static const uint64_t PER_HW_LIMIT = 100'000;
 
 NeuralDecoder::NeuralDecoder(DetailedStimCircuit circuit)
@@ -27,33 +25,33 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
     arma::mat y(n_obs, shots, arma::fill::zeros);
 
     uint64_t shots_elapsed = 0;
-    callback_t cb;
     // We will train the model every batch.
     std::map<size_t, uint64_t> hw_freq;
-    cb.prologue = [&] (shot_payload_t payload) {
-        stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = payload.syndrome;
-        stim::simd_bits_range_ref<SIMD_WIDTH> obs = payload.observables;
+    generate_syndromes(training_circuit, shots,
+        [&] (shot_payload_t payload)
+        {
+            stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = payload.syndrome;
+            stim::simd_bits_range_ref<SIMD_WIDTH> obs = payload.observables;
 
-        const size_t hw = syndrome.popcnt();
-        if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
-            return;
-        }
-        if (hw_freq[hw]++ >= PER_HW_LIMIT)  return;
+            const size_t hw = syndrome.popcnt();
+            if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
+                return;
+            }
+            if (hw_freq[hw]++ >= PER_HW_LIMIT)  return;
 
-        std::vector<uint64_t> detectors = get_nonzero_detectors(syndrome);
-        for (uint64_t d : detectors) {
-            data_matrix(d, shots_elapsed) = 1;
-        }
-        for (size_t i = 0; i < n_obs; i++) {
-            y(i, shots_elapsed) = obs[i] ? 1 : -1;
-        }
-        shots_elapsed++;
+            std::vector<uint64_t> detectors = get_nonzero_detectors(syndrome);
+            for (uint64_t d : detectors) {
+                data_matrix(d, shots_elapsed) = 1;
+            }
+            for (size_t i = 0; i < n_obs; i++) {
+                y(i, shots_elapsed) = obs[i] ? 1 : -1;
+            }
+            shots_elapsed++;
 
-        if (shots_elapsed % 100'000 == 0 && verbose) {
-            std::cout << "[ NeuralDecoder ] shots_elapsed: " << shots_elapsed << std::endl;
-        }
-    };
-    generate_syndromes(training_circuit, shots, cb);
+            if (shots_elapsed % 100'000 == 0 && verbose) {
+                std::cout << "[ NeuralDecoder ] shots_elapsed: " << shots_elapsed << std::endl;
+            }
+        });
     data_matrix.reshape(n_det, shots_elapsed);
     y.reshape(n_obs, shots_elapsed);
 

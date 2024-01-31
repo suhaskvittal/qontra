@@ -3,10 +3,9 @@
  *  date:   11 January 2024
  * */
 
-#include "memory.h"
-
 #include <qontra/decoder/neural.h>
 #include <qontra/experiments.h>
+#include <qontra/experiments/memory.h>
 #include <qontra/ext/stim.h>
 #include <qontra/tables.h>
 
@@ -34,15 +33,15 @@ int main(int argc, char* argv[]) {
 
     fp_t        p = 1e-3;
 
-    pp.get_string("qes", qes_file, true);
-    pp.get_string("out", model_file, true);
+    pp.get("qes", qes_file, true);
+    pp.get("out", model_file, true);
 
-    pp.get_uint64("s", shots);
-    pp.get_uint64("e", epochs);
-    pp.get_float("p", p);
+    pp.get("s", shots);
+    pp.get("e", epochs);
+    pp.get("p", p);
 
-    experiments::G_USE_MPI = false;
-    experiments::G_BASE_SEED = rand();
+    G_USE_MPI = false;
+    G_BASE_SEED = rand();
 
     DetailedStimCircuit circuit = make_circuit(qes_file, p);
     uptr<NeuralDecoder> dec = nullptr;

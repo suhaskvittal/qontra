@@ -51,8 +51,8 @@ PhysicalNetwork::PhysicalNetwork(TannerGraph& tgr)
     }
     // And the corresponding edges as well.
     for (sptr<raw_edge_t> re : raw_connection_network.get_edges()) {
-        sptr<raw_vertex_t> rsrc = raw_connection_network.get_source(re),
-                            rdst = raw_connection_network.get_target(re);
+        sptr<raw_vertex_t> rsrc = re->get_source<raw_vertex_t>(),
+                            rdst = re->get_target<raw_vertex_t>();
         sptr<phys_edge_t> pe = make_edge(role_to_phys[rsrc], role_to_phys[rdst]);
         add_edge(pe);
     }

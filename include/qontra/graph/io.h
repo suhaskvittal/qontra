@@ -32,8 +32,8 @@ create_graph_from_string(std::string desc, FUNC cb) {
     GRAPH graph;
     
     std::string ln;
-    uint prev_index = 0;
-    uint index;
+    size_t prev_index = 0;
+    size_t index;
     while ((index=desc.find("\n", prev_index)) != std::string::npos) {
         ln = desc.substr(prev_index, index);
         cb(graph, ln);
