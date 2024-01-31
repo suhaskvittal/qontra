@@ -15,6 +15,8 @@ get_register_index(std::string r) {
     // Check if the register is special, otherwise it is straightforward to get the index.
     if (r == "$rbrk") {
         return REGISTER_SPECIAL_START + 0;
+    } else if (r == "$reoz") {
+        return REGISTER_SPECIAL_START + 1;
     } else {
         int id = std::stoi(r.substr(2));
         return static_cast<size_t>(id);
@@ -89,13 +91,24 @@ FullSystemSimulator::execute_routine(const qes::Program<>& program) {
             status.pc++;
         } else {
             read_next_instruction(program, status);
-            if (status.return_if_waiting_trials.popcnt() == current_shots) break;
         }
     }
 }
 
 inline stim::simd_bits_range_ref<SIMD_WIDTH>
 FullSystemSimulator::get_register(std::string r) {
+    // Handle certain registers differently. If it is a special register, we may need to
+    // update the value here.
+    if (r == "$reoz") {
+        // Set $reoz to the inverse of the bitwise OR of the 
+        // last config.sse.rreoz_track_n_det events.
+        size_t k = get_register_index("$reoz");
+        register_file[k].clear();
+        for (uint64_t e : sse.rreoz_events) {
+            register_file[k] |= syndrome_table[e];
+        }
+        register_file[k].invert_bits();
+    }
     return register_file[get_register_index(r)];
 }
 
@@ -118,7 +131,7 @@ FullSystemSimulator::recalibrate_timing() {
             new_time_delta_map[t] = -min_time_delta;
         }
     }
-    elapsed_time -= min_time_delta;
+    elapsed_time += min_time_delta;
     shot_time_delta_map = std::move(new_time_delta_map);
 }
 

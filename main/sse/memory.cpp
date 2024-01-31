@@ -39,6 +39,8 @@ int main(int argc, char* argv[]) {
     fclose(fin);
 
     PyMatching dec(error_model);
+
+    G_FILTER_OUT_SYNDROMES = false;
     
     memory_config_t config = { 0, trace_folder };
     memory_result_t res = memory_experiment(&dec, config);

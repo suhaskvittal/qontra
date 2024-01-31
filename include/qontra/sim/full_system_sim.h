@@ -11,6 +11,10 @@
 #include "qontra/sim/base/state_sim.h"
 #include "qontra/tables.h"
 
+#include <deque>
+#include <map>
+#include <vector>
+
 namespace qontra {
 
 size_t  get_register_index(std::string);
@@ -53,8 +57,18 @@ public:
         std::string stim_output_file;
         std::string syndrome_output_folder;
         std::string data_output_file;
+    
+        // Normally, the simulator will track the max written event. However, to force the simulator
+        // to write events that may not be written, these two parameters can be set.
+        int64_t     record_events_until = -1;
+        int64_t     record_obs_until = -1;
+
         // Microarchitecture:
         size_t  n_registers = 32;
+
+        struct {
+            size_t  rreoz_track_last_n_events = 0;
+        } sse;
     } config;
 private:
     void    run_batch(const qes::Program<>&, uint64_t shots_in_batch);
@@ -139,6 +153,11 @@ private:
     stim::simd_bit_table<SIMD_WIDTH>    register_file_cpy;
     stim::simd_bit_table<SIMD_WIDTH>    syndrome_table_cpy;
     stim::simd_bit_table<SIMD_WIDTH>    observable_table_cpy;
+
+    // Policy specific stuff below:
+    struct {
+        std::deque<uint64_t>   rreoz_events;
+    } sse;
 };
 
 }   // qontra

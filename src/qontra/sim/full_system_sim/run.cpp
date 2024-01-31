@@ -68,8 +68,8 @@ FullSystemSimulator::write_stats(uint64_t batchno) {
     // Write syndromes and observables to a file.
     //
     // First, we must combine the two tables into one table before writing.
-    const uint64_t n_det = max_event_written_to,
-                    n_obs = max_obs_written_to;
+    const uint64_t n_det = config.record_events_until >= 0 ? config.record_events_until : max_event_written_to,
+                    n_obs = config.record_obs_until >= 0 ? config.record_obs_until : max_obs_written_to;
 
     stim::simd_bits<SIMD_WIDTH> ref(n_det+n_obs);
     stim::simd_bit_table<SIMD_WIDTH> output_trace = syndrome_table.concat_major(observable_table, n_det, n_obs);

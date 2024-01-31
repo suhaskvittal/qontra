@@ -61,8 +61,10 @@ int main(int argc, char* argv[]) {
             qes::Program<> subroutine = qes::from_file(parent_dir + "/" + p.second);
             sim.load_subroutine(p.first, subroutine);
         }
-        // Now load in error model data.
-        ini.get("Error Model", "p", p);
+        // Set simulation config if possible.
+        ini.get("Config", "record_events_until", sim.config.record_events_until);
+        ini.get("Config", "record_obs_until", sim.config.record_obs_until);
+        ini.get("SSE", "$reoz_track_last_n_events", sim.config.sse.rreoz_track_last_n_events);
     }
     qes::Program<> main_program = qes::from_file(qes_file);
 
@@ -73,7 +75,7 @@ int main(int argc, char* argv[]) {
     const uint64_t n = get_number_of_qubits(main_program);
     tables::populate(n, sim.config.errors, sim.config.timing, et);
 
-    histogram_t<uint64_t> shots_hist = sim.run_program<CliffordSimulator>(main_program, shots);
+    histogram_t<uint64_t> shots_hist = sim.run_program<FrameSimulator>(main_program, shots);
     histogram_t<double> norm_hist = histogram_normalize(shots_hist);
 
     if (world_rank == 0) {

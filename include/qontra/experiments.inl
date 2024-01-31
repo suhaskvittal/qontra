@@ -89,7 +89,7 @@ read_syndrome_trace(std::string input_folder, const DetailedStimCircuit& circuit
                                 input_trace,
                                 false);
         fclose(fin);
-        input_trace.destructive_resize(n_det+n_obs, true_shots);
+        input_trace.resize(n_det+n_obs, true_shots);
         // Split the data into two tables.
         stim::simd_bit_table<SIMD_WIDTH> syndromes(std::move(input_trace));
         stim::simd_bit_table<SIMD_WIDTH> observables(n_obs, true_shots);
@@ -99,12 +99,10 @@ read_syndrome_trace(std::string input_folder, const DetailedStimCircuit& circuit
         }
         observables = observables.transposed();
         // Now, we will create syndromes by destructive resizing + transposing.
-        syndromes.destructive_resize(n_det, true_shots);
+        syndromes.resize(n_det, true_shots);
         syndromes = syndromes.transposed();
         // Finally, execute the callbacks.
         for (uint64_t s = 0; s < true_shots; s++) {
-            stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = syndromes[s],
-                                                    obs = observables[s];
             cb({syndromes[s], observables[s]});
         }
         file_offset += world_size;

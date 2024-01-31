@@ -254,6 +254,12 @@ FullSystemSimulator::create_event_or_obs(const qes::Instruction<>& instruction) 
         std::string stim_inst_name = name == "event" ? "DETECTOR" : "OBSERVABLE_INCLUDE";
         sample_circuit.safe_append_u(stim_inst_name, offsets, coord);
     }
+
+    // Update SSE.
+    sse.rreoz_events.push_back(index);
+    if (sse.rreoz_events.size() > config.sse.rreoz_track_last_n_events) {
+        sse.rreoz_events.pop_front();
+    }
 }
 
 
