@@ -3,7 +3,6 @@
  *  date:   27 December 2023
  * */
 
-
 #include "qontra/protean/network.h"
 
 #include <vtils/set_algebra.h>
@@ -282,20 +281,24 @@ edge_build_outer_loop_start:
         }
     }
     std::array<flag_pair_set_t, 2> flag_pair_sets{x_flags, z_flags};
+    size_t flags_removed = 0;
     for (size_t i = 0; i < 2; i++) {
         flag_pair_set_t& flags = flag_pair_sets[i];
         stim::simd_bits<SIMD_WIDTH> indicator_bits = do_flags_protect_weight_two_error(flags, i==0);
         // Remove any flags whose indicator bit is 0.
         size_t k = 0;
         for (auto it = flags.begin(); it != flags.end(); ) {
-            if (indicator_bits[k++]) {
+            if (indicator_bits[k]) {
                 it++;
             } else {
                 all_proposed_flag_pairs -= *it;
                 it = flags.erase(it);
+                flags_removed++;
             }
+            k++;
         }
     }
+    std::cout << "[ status ] removed flags = " << flags_removed << std::endl;
     // First, we will create flags for each parity qubit. This ignores the case where (q1, q2)
     // is a flag in two different parity qubits. However, note we are only interested in establishing
     // roles here. These common roles will eventually be compacted into one flag.
@@ -361,11 +364,8 @@ edge_build_outer_loop_start:
 bool
 PhysicalNetwork::add_connectivity_reducing_proxies() {
     bool mod = false;
-
-    std::map<sptr<phys_vertex_t>, int> degree_update_map;
-    std::vector<sptr<phys_edge_t>> new_edges;
     for (sptr<phys_vertex_t> pv : get_vertices()) {
-        const size_t dg = get_degree(pv) + degree_update_map[pv];
+        const size_t dg = get_degree(pv);
         if (dg <= config.max_connectivity) continue;
 
         size_t slack_violation = dg - config.max_connectivity;
@@ -374,13 +374,14 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         std::sort(adj.begin(), adj.end(),
                 [&] (auto a, auto b)
                 {
-                    return get_degree(a)+degree_update_map[a] > get_degree(b)+degree_update_map[b];
+                    return get_degree(a) > get_degree(b);
                 });
 
         sptr<phys_vertex_t> pprx = make_vertex();
         // Let k = slack_violation. Then the top k+1 neighbors will
         // be serviced by the proxy.
         std::vector<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
+
         for (size_t i = 0; i < std::min(slack_violation+1, adj.size()); i++) {
             sptr<phys_vertex_t> px = adj[i];
             // Now, for each role in pv and px, add a proxy in the raw_connection_network.
@@ -391,18 +392,6 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                     sptr<raw_edge_t> re = raw_connection_network.get_edge(rv, rx);
                     if (re == nullptr) continue;
                     sptr<raw_vertex_t> rprx = raw_connection_network.add_proxy(re);
-
-                    /*
-                    std::set<uint64_t> good_ids{33, 231, 310, 130, 305, 222, 317, 70};
-                    if (good_ids.count(rv->id) && good_ids.count(rx->id))
-                    std::cout << "[ add_connectivity_reducing_proxies ] adding proxy " << print_v(rprx) 
-                                << " between "
-                                << print_v(pv) << "(" << print_v(rv) << ") and "
-                                << print_v(px) << "(" << print_v(rx) << ")"
-                                << " pointing [" << print_v(rv) << "] --> " << print_v(raw_connection_network.proxy_indirection_map[rprx][rv][0])
-                                << " and [" << print_v(rx) << "] --> " << print_v(raw_connection_network.proxy_indirection_map[rprx][rx][0])
-                                << std::endl;
-                    */
 
                     // Get cycle of role (which is just the max of the cycles of rv and rx).
                     size_t cycle = std::max(pv->cycle_role_map.at(rv), px->cycle_role_map.at(rx));
@@ -425,12 +414,10 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         add_vertex(pprx);
         // Update the physical connectivity on our side.
         for (sptr<phys_vertex_t> x : share_an_edge_with_pprx) {
-            new_edges.push_back(make_edge(pprx, x));
-            degree_update_map[x]++;
+            add_edge(make_edge(pprx, x));
         }
         mod = true;
     }
-    for (auto e : new_edges) add_edge(e);
     return mod;
 }
 
@@ -439,13 +426,10 @@ PhysicalNetwork::contract_small_degree_qubits() {
     raw_connection_network.disable_memoization();
 
     bool mod = false;
-    // Edges aren't added until after the loop ends. So, we need to track any updates.
-    std::map<sptr<phys_vertex_t>, int> degree_update_map;
-    std::vector<sptr<phys_edge_t>> new_edges;
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
         
-        const size_t dg = get_degree(pv) + degree_update_map[pv];
+        const size_t dg = get_degree(pv);
         if (dg > 2) continue;
         
         if (dg == 0) {
@@ -454,7 +438,7 @@ PhysicalNetwork::contract_small_degree_qubits() {
             std::cerr << "[ warning ] found qubit with zero degree: " << print_v(pv) << "\n";
             std::cerr << "\troles =";
             for (auto r : pv->role_set) std::cerr << " " << print_v(r);
-            std::cerr << "\n";
+            std::cerr << std::endl;
             delete_vertex(pv);
         } else if (dg == 1) {
             sptr<phys_vertex_t> px = get_neighbors(pv)[0];
@@ -479,14 +463,11 @@ PhysicalNetwork::contract_small_degree_qubits() {
 
             delete_vertex(pv);
             if (!contains(px1, px2)) {
-                new_edges.push_back(make_edge(px1, px2));
-                degree_update_map[px1]++;
-                degree_update_map[px2]++;
+                add_edge(make_edge(px1, px2));
             }
         }
         mod = true;
     }
-    for (auto e : new_edges) add_edge(e);
     return mod;
 }
 
@@ -524,9 +505,11 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
         std::set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>> flag_pairs,
         bool is_x_error) 
 {
-    // For the purposes of this algorithm, have result be active-low.
-    stim::simd_bits<SIMD_WIDTH> result(flag_pairs.size());
-    result.invert_bits();   // All should be set to 1 to start with.
+    // For the purposes of this algorithm, have the bitvectors be active-low.
+    stim::simd_bits<SIMD_WIDTH> is_weight_two(flag_pairs.size()),   // 0 = good
+                                is_stabilizer(flag_pairs.size());   // 1 = good
+    is_weight_two.invert_bits();
+    is_stabilizer.invert_bits();
     // Algorithm: we need to check against any logical operator. This can be rather exhaustive.
     // We will use the concept of an operator tree.
     // 
@@ -577,10 +560,8 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
         checks.emplace_back(stabilizer, h);
     }
     // Perform a BFS via the operator tree.
-    while (curr_operator_tree_level.size() > 0
-        && curr_operator_tree_level.size() < OPERATOR_TREE_SIZE_LIMIT 
-        && result.not_zero()) 
-    {
+    stim::simd_bits<SIMD_WIDTH> result(flag_pairs.size());
+    do {
         // Check if any flags are a weight >2 error on any existing operators.
         std::vector<quop_t> next_level;
         for (quop_t op : curr_operator_tree_level) {
@@ -592,9 +573,16 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
                 for (auto pair : flag_pairs) {
                     sptr<raw_vertex_t> v1 = pair.first,
                                         v2 = pair.second;
-                    if (result[k] && op_qubits.count(v1) && op_qubits.count(v2)) {
-                        // This is a weight-2 error.
-                        result[k] = 0;
+                    if (result[k]) {
+                        if (op_qubits.count(v1) && op_qubits.count(v2)) {
+                            // This is a weight-2 error.
+                            is_weight_two[k] = 0;
+                        }
+                        // Check if op | v1 | v2 forms a stabilizer.
+                        std::set<sptr<raw_vertex_t>> op_v1_v2 = op_qubits ^ std::set<sptr<raw_vertex_t>>{v1, v2};
+                        for (quop_t ch : checks) {
+                            if (std::get<0>(ch) == op_v1_v2) is_stabilizer[k] = 0;
+                        }
                     }
                     k++;
                 }
@@ -625,11 +613,17 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
             }
         }
         curr_operator_tree_level = std::move(next_level);
-    }
+
+        result = is_weight_two & is_stabilizer;
+    } while (curr_operator_tree_level.size() > 0
+        && curr_operator_tree_level.size() < OPERATOR_TREE_SIZE_LIMIT 
+        && result.not_zero());
     if (curr_operator_tree_level.size() > OPERATOR_TREE_SIZE_LIMIT) {
         std::cerr << "[ warning ] operator tree limit reached. exiting error propagation analysis.\n";
     }
-    result.invert_bits();
+    // We want all flags where is_weight_two = 0 and is_stabilizer = 1.
+    is_weight_two.invert_bits();
+    result = is_weight_two & is_stabilizer;
     return result;
 }
 
@@ -657,8 +651,6 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             role_to_phys.erase(r);
         }
     }
-    // Enable memoization.
-    raw_connection_network.enable_memoization = true;
     // Basic idea: pack the roles together by parity check.
     //
     // We track an interaction graph, such that two checks share
@@ -741,6 +733,12 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             std::cout << "support(" << print_v(iv->check) << "):";
 #endif
             for (sptr<raw_vertex_t> rv : iv->support) {
+                if (!role_to_phys.count(rv) || role_to_phys[rv] == nullptr) {
+                    std::cerr << "Role does not exist: " << print_v(rv) << "\n"
+                        << "\tcontaining check: " << print_v(iv->check) << "\n"
+                        << "\traw_net contains role: " << raw_connection_network.contains(rv) << std::endl;
+                    exit(1);
+                }
                 sptr<phys_vertex_t> pv = role_to_phys[rv];
                 if (!pv->role_set.count(rv)) {
                     if (rv->qubit_type == raw_vertex_t::type::data) {

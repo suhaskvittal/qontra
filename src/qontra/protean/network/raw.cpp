@@ -192,6 +192,7 @@ RawNetwork::add_proxy(sptr<raw_edge_t> e) {
     if (q2->qubit_type == raw_vertex_t::type::proxy) {
         update_endpoint_in_indirection_map(q2, q1, prxq);
     }
+    std::cout << "added proxy " << print_v(prxq) << " between " << print_v(q1) << " and " << print_v(q2) << "\n";
     return prxq;
 }
 
@@ -222,6 +223,7 @@ RawNetwork::merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
             flag_proxy_merge(big, little);
         }
     } else {
+        std::cout << "merging " << print_v(little) << " into " << print_v(big) << "\n";
         proxy_proxy_merge(big, little);
     }
     delete_vertex(little);
@@ -233,6 +235,11 @@ RawNetwork::proxy_walk(sptr<raw_vertex_t> from,
                         sptr<raw_vertex_t> thru,
                         std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>& walk_res_ref) 
 {
+    if (!contains(from)) {
+        std::cerr << "Attempted to find proxy path from " << print_v(from) << " which does not exist" << std::endl;
+        exit(1);
+    }
+
     if (!proxy_indirection_map.count(thru) || !proxy_indirection_map[thru].count(from)) {
         return {};
     }
@@ -247,6 +254,15 @@ RawNetwork::proxy_walk(sptr<raw_vertex_t> from,
     while (bfs.size()) {
         sptr<raw_vertex_t> rx = bfs.front();
         bfs.pop_front();
+
+        if (!contains(rx)) {
+            std::cerr << "Found invalid role " << print_v(rx) << " when computing proxy path between "
+                << print_v(from) << " and " << print_v(thru) << std::endl;
+            std::cerr << "\tPrevious vertices in path:";
+            for (sptr<raw_vertex_t> ry : bfs_prev[rx]) std::cerr << " " << print_v(ry);
+            std::cerr << std::endl;
+            exit(1);
+        }
 
         if (rx->qubit_type != raw_vertex_t::type::proxy) {
             // We are done with this qubit -- it is not a proxy.
@@ -415,8 +431,22 @@ RawNetwork::flag_proxy_merge(sptr<raw_vertex_t> rfq, sptr<raw_vertex_t> rprx) {
 void
 RawNetwork::proxy_proxy_merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
     // We need to join the contents of rx and ry together.
+    std::vector<sptr<raw_vertex_t>> rx_endpoints_thru_ry;
+    std::cout << "\tMoving to " << print_v(rx) << ":\n";
     for (auto& p : proxy_indirection_map[ry]) {
-        if (rx == p.first) continue;
+        std::cout << "\t\tFor " << print_v(p.first) << ":";
+        for (auto r : p.second) {
+            std::cout << " " << print_v(r);
+        }
+        std::cout << "\n";
+        if (rx == p.first) {
+            // Our path looks like:
+            //  ABC <--> rx <--> ry <--> XYZ
+            // We now need to have
+            //  ABC <--> rx <--> XYZ
+            rx_endpoints_thru_ry = std::move(p.second);
+            continue;
+        }
 
         if (!proxy_indirection_map[rx].count(p.first)) {
             // This is a simple move.
@@ -432,10 +462,17 @@ RawNetwork::proxy_proxy_merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
         }
     }
     proxy_indirection_map.erase(ry);
+
+    std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>> new_rx_entries;
     // We also need to remove any references to ry in rx's part of the map.
     for (auto ita = proxy_indirection_map[rx].begin(); ita != proxy_indirection_map[rx].end(); ) {
         if (ita->first == ry) {
+            // This is the scenario about (see condition where rx == p.first).
+            std::vector<sptr<raw_vertex_t>> ry_endpoints_thru_rx = std::move(ita->second);
             ita = proxy_indirection_map[rx].erase(ita);
+            // Set up ABC <--> rx <--> XYZ
+            for (auto r : rx_endpoints_thru_ry) new_rx_entries[r] = ry_endpoints_thru_rx;
+            for (auto r : ry_endpoints_thru_rx) new_rx_entries[r] = rx_endpoints_thru_ry;
             continue;
         }
         for (auto itb = ita->second.begin(); itb != ita->second.end(); ) {
@@ -444,6 +481,20 @@ RawNetwork::proxy_proxy_merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
         }
         if (ita->second.empty()) ita = proxy_indirection_map[rx].erase(ita);
         else                     ita++;
+    }
+    // Update proxy_indirection_map with new_rx_entries.
+    for (auto& p : new_rx_entries) {
+        if (!proxy_indirection_map[rx].count(p.first)) {
+            proxy_indirection_map[rx].insert(p);
+        } else {
+            // Need to handle duplicates.
+            auto& arr = proxy_indirection_map[rx][p.first];
+            for (sptr<raw_vertex_t> r : p.second) {
+                if (std::find(arr.begin(), arr.end(), r) == arr.end()) {
+                    arr.push_back(r);
+                }
+            }
+        }
     }
     // Now replace ry with rx everywhere else in the proxy_indirection_map
     replace_in_tracking_structures(ry, rx, 4);

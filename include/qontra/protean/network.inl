@@ -300,5 +300,16 @@ PhysicalNetwork::are_in_same_support(sptr<net::phys_vertex_t> v, sptr<net::phys_
     return false;
 }
 
+inline void
+PhysicalNetwork::print_out_role_to_phys() {
+    std::cout << "[ role_to_phys ]\n";
+    for (auto& p : role_to_phys) {
+        std::cout << "\t" << graph::print_v(p.first) << " --> ";
+        if (p.second == nullptr) std::cout << "NULL";
+        else                     std::cout << graph::print_v(p.second);
+        std::cout << "\n";
+    }
+}
+
 }   // protean
 }   // qontra

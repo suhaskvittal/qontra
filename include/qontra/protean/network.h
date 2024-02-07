@@ -257,7 +257,6 @@ public:
         bool    is_memory_x = false;
     } config;
 private:
-
     // Determines if a proposed flag (represented by the two raw vertices -- these are data qubits)
     // is actually useful -- that it protects against a weight-2 error.
     //
@@ -275,6 +274,9 @@ private:
     void consume(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
     // Returns true if two physical qubits are contained within the same support for any pair of roles.
     bool are_in_same_support(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
+
+    // Debugging functions:
+    void print_out_role_to_phys(void);
 
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).

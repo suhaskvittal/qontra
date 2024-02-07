@@ -555,6 +555,8 @@ Scheduler::body_get_cx_operands(
 
 qes::Program<>
 PhysicalNetwork::make_schedule() {
+    raw_connection_network.enable_memoization = true;
+
     qes::Program<> program;
     // The goal of this algorithm is to perform a CNOT
     // for every edge in raw_connection_network. The steps are:
