@@ -92,14 +92,7 @@ public:
     //
     // Returns: the deleted vertex, or nullptr if nothing was deleted.
     sptr<net::raw_vertex_t> merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
-
-    // Input: xyz qubit, proxy qubit, a reference to a map which will populated with the walks. Each key
-    //  of the map will be a destination qubit pointing to the path required to reach the qubit.
-    // Returns: non-proxy qubits reachable from the proxy.
-    std::vector<sptr<net::raw_vertex_t>>
-        proxy_walk(sptr<net::raw_vertex_t>, 
-                    sptr<net::raw_vertex_t>, 
-                    std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>&);
+    
     // Input: two qubits (any type)
     // Output: a path (inclusive) of proxies between the two qubits. This is memoized.
     std::vector<sptr<net::raw_vertex_t>>&
@@ -128,9 +121,6 @@ public:
     // parity qubit --> data qubit --> flag qubit used in syndrome extraction of check.
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
         flag_assignment_map;
-    // proxy qubit --> xyz qubit --> qubits xyz was linked to before
-    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
-        proxy_indirection_map;
 
     // Scheduling structures:
     // 
@@ -147,13 +137,11 @@ private:
             sptr<net::raw_vertex_t> new_endpoint);
 
     void flag_proxy_merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
-    void proxy_proxy_merge(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 
     // This function replaces the first operand with the second in all tracking structures. A third operand,
     // where, allows the user to identify which tracking structures to replace in. where is a bitvector:
     //      bit 0 = flag_ownership_map
     //      bit 1 = flag_assignment_map
-    //      bit 2 = proxy_indirection_map
     void replace_in_tracking_structures(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t> with, uint8_t where=7);
 
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>

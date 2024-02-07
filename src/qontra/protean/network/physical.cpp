@@ -741,11 +741,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                 }
                 sptr<phys_vertex_t> pv = role_to_phys[rv];
                 if (!pv->role_set.count(rv)) {
-                    if (rv->qubit_type == raw_vertex_t::type::data) {
-                        pv->push_back_role(rv, 0);
-                    } else {
-                        pv->push_back_role(rv, cycle);
-                    }
+                    pv->push_back_role(rv, 0);
                 }
 #ifdef PROTEAN_DEBUG
                 std::cout << "\t" << print_v(rv) << " (" << print_v(pv)
