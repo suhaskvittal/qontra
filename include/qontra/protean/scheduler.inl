@@ -129,9 +129,6 @@ inline void
 Scheduler::release_qubit(sptr<net::raw_vertex_t> rv, bool pop_cycle) {
     sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
     if (active_role_map[pv] == rv) {
-#ifdef DEBUG
-        std::cout << "released " << graph::print_v(rv) << " from " << print_v(pv) << "\n";
-#endif
         active_role_map[pv] = nullptr;
         if (pop_cycle && !cycle_role_order_map[pv].empty()) {
             cycle_role_order_map[pv].pop_front();
@@ -185,12 +182,6 @@ Scheduler::push_back_cx(
 
     vtils::push_back_all(qes_operands, {px->id, py->id});
     vtils::insert_all(cx_in_use_set, {px, py});
-#ifdef PROTEAN_DEBUG
-    std::cerr << "committing CX(" << graph::print_v(rx) << ", " << graph::print_v(ry) << ")" 
-        << " between [ " << graph::print_v(src) << ", " << graph::print_v(dst) << " ] to stage "
-        << static_cast<int>(s)
-        << std::endl;
-#endif
     update_proxy_info(rx);
     update_proxy_info(ry);
 }

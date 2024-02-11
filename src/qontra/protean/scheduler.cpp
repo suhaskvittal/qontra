@@ -3,8 +3,6 @@
  *  date:   7 January 2024
  * */
 
-#define PROTEAN_DEBUG
-
 #include "qontra/protean/scheduler.h"
 
 #include <vtils/linprog/manager.h>
@@ -89,9 +87,6 @@ Scheduler::run() {
     
     bool done;
     do {
-#ifdef PROTEAN_DEBUG
-        std::cout << " ============ CYCLE " << cycle << " ====================\n";
-#endif
         size_t first_inst_of_cycle = program.size();
         build_preparation(program);
         build_body(program);
@@ -264,9 +259,6 @@ Scheduler::build_measurement(qes::Program<>& program) {
             release_qubit(rfq);
         }
         release_qubit(rpq);
-#ifdef PROTEAN_DEBUG
-        std::cerr << "[ build_measurement ] " << print_v(rpq) << " has ended @ cycle = " << cycle << "\n";
-#endif
     }
     safe_emplace_back(program, "reset", r_operands);
 
@@ -425,9 +417,6 @@ Scheduler::body_get_cx_operands(
             //
             // Check if the edge is all done:
             if (cx_return_status == cx_ret_t::done) {
-#ifdef PROTEAN_DEBUG
-                std::cerr << "finished CX(" << print_v(rdq) << ", " << print_v(other) << ")" << std::endl;
-#endif
                 data_stage_map[rpq][rdq] = stage_t::body;
             }
             continue;
@@ -556,9 +545,6 @@ PhysicalNetwork::make_schedule() {
 
 std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>
 Scheduler::compute_schedule(std::set<sptr<raw_vertex_t>>& checks_this_stage) {
-#ifdef PROTEAN_DEBUG
-    std::cout << "[ compute_schedule ] --------------------\n";
-#endif
     // Maps parity qubit -> check schedule array (nullptr is where a data qubit CNOT is not scheduled).
     std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>
         data_cnot_schedules;
@@ -633,10 +619,6 @@ Scheduler::compute_schedule(std::set<sptr<raw_vertex_t>>& checks_this_stage) {
             LP.add_constraint(con);
         }
         // Solve the LP.
-#ifdef PROTEAN_DEBUG
-        std::cout << "\tfor " << print_v(rpq) << ": variables = " << LP.variables.size()
-            << ", constraints = " << LP.l_constraints.size() << std::endl;
-#endif
         LP.build(max_of_all, false);
         double obj;
         int solstat;
@@ -663,9 +645,6 @@ Scheduler::compute_schedule(std::set<sptr<raw_vertex_t>>& checks_this_stage) {
             size_t t = static_cast<size_t>(round(LP.get_value(rdq)));
             existing_data_cnot_times[rdq].push_back(std::make_pair(t, rpq));
             check_sch[t-1] = rdq;
-#ifdef PROTEAN_DEBUG
-            std::cout << "\tscheduled " << print_v(rdq) << " @ " << t-1 << std::endl;
-#endif
         }
         data_cnot_schedules[rpq] = check_sch;
         // Update running_ind_sum_map.
@@ -706,27 +685,6 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
 
     // Check if the endpoints have been acquired or can be acquired.
     if (!test_and_set_qubit(src) || !test_and_set_qubit(dst)) {
-#ifdef PROTEAN_DEBUG
-        sptr<phys_vertex_t> px = net_p->role_to_phys.at(src),
-                            py = net_p->role_to_phys.at(dst);
-        sptr<raw_vertex_t> rx = active_role_map.count(px) ? active_role_map.at(px) : nullptr,
-                            ry = active_role_map.count(py) ? active_role_map.at(py) : nullptr;
-        if (px->cycle_role_map.at(src) <= cycle && py->cycle_role_map.at(dst) <= cycle) {
-            std::cerr << "CX(" << print_v(src) << ", " << print_v(dst) 
-                << ") could not acquire qubits [ " 
-                << print_v(src) << "(" << px->cycle_role_map.at(src)
-                << ")(" << print_v(px) << " --> " << print_v(rx) << ") "
-                << print_v(dst) << "(" << py->cycle_role_map.at(dst)
-                << ")(" << print_v(py) << " --> " << print_v(ry) << ") "
-                << " ] @ cycle = " << cycle << std::endl;
-            std::cerr << "\tcycle_order(" << print_v(px) << "):";
-            for (size_t c : cycle_role_order_map[px]) std::cerr << " " << c;
-            std::cerr << std::endl;
-            std::cerr << "\tcycle_order(" << print_v(py) << "):";
-            for (size_t c : cycle_role_order_map[py]) std::cerr << " " << c;
-            std::cerr << std::endl;
-        }
-#endif
         release_qubit(src, false);
         release_qubit(dst, false);
         return ret_null_and_set_status(cx_ret_t::too_early);
@@ -739,10 +697,6 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
         sptr<raw_edge_t> re = raw_net.get_edge(src, dst);
         if (get_visited_edge_map(re, src, dst) < s) {
             if (has_contention(src) || has_contention(dst)) {
-#ifdef PROTEAN_DEBUG
-                std::cerr << "CX(" << print_v(src) << ", " << print_v(dst) << ") has contention: (" 
-                    << print_v(src) << ", " << print_v(dst) << ") @ cycle = " << cycle << std::endl;
-#endif
                 return ret_null_and_set_status(cx_ret_t::contention);
             }
             return std::make_tuple(src, dst, re, false);
@@ -752,38 +706,9 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
         std::vector<sptr<raw_vertex_t>>& path = get_proxy_walk_path(src, dst);
         // Attempt to acquire resources for all roles in the path.
         if (!test_and_set_path(path)) {
-#ifdef PROTEAN_DEBUG
-            std::cerr << "CX(" << print_v(src) << ", " << print_v(dst) << ") could not acquire path: [";
-            for (auto r : path) std::cerr << " " << print_v(r);
-            std::cerr << " ] @ cycle " << cycle << std::endl;
-
-            for (auto r : path) {
-                auto p = net_p->role_to_phys.at(r);
-                sptr<raw_vertex_t> _r = active_role_map.count(p) ? active_role_map.at(p) : nullptr;
-                std::cerr << "\t" << print_v(r) << "(" << p->cycle_role_map.at(r)
-                        << ")(" << print_v(p) << " --> " << print_v(_r)
-                        << ")\tcycle order of " << print_v(p) << ":";
-                for (size_t c : cycle_role_order_map[p]) std::cerr << " " << c;
-                std::cerr << std::endl;
-            }
-#endif
             return ret_null_and_set_status(cx_ret_t::too_early);
         }
         if (!test_and_set_proxy_ownership(path)) {
-#ifdef PROTEAN_DEBUG
-            std::cerr << "CX(" << print_v(src) << ", " << print_v(dst) << ") could not use proxies: [";
-            for (auto r : path) {
-                if (!is_proxy_usable(r, src, dst)) {
-                    auto& entry = proxy_occupied_map.at(r);
-                    sptr<raw_vertex_t> rx = std::get<0>(entry),
-                                        ry = std::get<1>(entry);
-                    int state = std::get<2>(entry);
-                    std::cerr << " " << print_v(r) << "(" 
-                        << print_v(rx) << ", " << print_v(ry) << ", " << state << ")";
-                }
-            }
-            std::cerr << " ] @ cycle " << cycle << std::endl;
-#endif
             release_path(path);
             return ret_null_and_set_status(cx_ret_t::proxy_occupied);
         }
