@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
     const uint64_t n = get_number_of_qubits(main_program);
     tables::populate(n, sim.config.errors, sim.config.timing, et);
 
-    histogram_t<uint64_t> shots_hist = sim.run_program<FrameSimulator>(main_program, shots);
+    histogram_t<uint64_t> shots_hist = sim.run_program<CliffordSimulator>(main_program, shots);
     histogram_t<double> norm_hist = histogram_normalize(shots_hist);
 
     if (world_rank == 0) {

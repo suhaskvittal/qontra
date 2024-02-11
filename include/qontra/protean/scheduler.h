@@ -13,6 +13,7 @@
 #include <vtils/bijective_map.h>
 #include <vtils/two_level_map.h>
 
+#include <deque>
 #include <set>
 #include <tuple>
 
@@ -36,7 +37,23 @@ public:
     size_t  get_measurement_time(sptr<net::raw_vertex_t>);
     std::map<sptr<net::raw_vertex_t>, size_t>   get_meas_ctr_map(void);
 private:
-    typedef int stage_t;
+    enum class stage_t {
+        invalid = -1,
+        preparation = 0,
+        body = 1,
+        teardown = 2,
+        measurement = 3,
+        done = 4
+    };
+
+    enum class cx_ret_t {
+        ok = 0,
+        too_early = 1,
+        done = 2,
+        contention = 3,
+        proxy_occupied = 4
+    };
+
     typedef std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_edge_t>>
         cx_t;
 
@@ -45,22 +62,31 @@ private:
     // Just a level of indirection to avoid the syntax of net_p->raw_connection_network.get_support(...) (e.g,)
     RawNetwork::parity_support_t&           get_support(sptr<net::raw_vertex_t>);
     std::vector<sptr<net::raw_vertex_t>>&   get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    stage_t&    get_visited_edge_map(sptr<net::raw_edge_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
 
-    bool    is_good_for_current_cycle(sptr<net::raw_vertex_t>);
-    bool    is_proxy_usable(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t> src, sptr<net::raw_vertex_t> dst);
-    bool    has_contention(sptr<net::raw_vertex_t>);
-    bool    test_and_set_physical_qubit(sptr<net::raw_vertex_t>);
-    void    release_physical_qubit(sptr<net::raw_vertex_t>);
+    std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
+        compute_schedule(std::set<sptr<net::raw_vertex_t>>& checks_this_stage);
 
-    cx_t    ret_null_and_set_status(int);
+    bool is_proxy_usable(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t> src, sptr<net::raw_vertex_t> dst);
+    bool has_contention(sptr<net::raw_vertex_t>);
+    bool test_and_set_qubit(sptr<net::raw_vertex_t>);
+    bool test_and_set_path(const std::vector<sptr<net::raw_vertex_t>>&);
+    bool test_and_set_proxy_ownership(const std::vector<sptr<net::raw_vertex_t>>&);
+    void release_qubit(sptr<net::raw_vertex_t>, bool pop_cycle=true);
+    void release_path(const std::vector<sptr<net::raw_vertex_t>>&);
+    void release_proxy_ownership(const std::vector<sptr<net::raw_vertex_t>>&);
 
-    void    push_back_cx(std::vector<uint64_t>&, cx_t, stage_t);
-    void    push_back_measurement(std::vector<uint64_t>&, sptr<net::raw_vertex_t>);
+    cx_t ret_null_and_set_status(cx_ret_t);
 
-    void    perform_proxy_resets(qes::Program<>&);
+    void push_back_cx(
+            std::vector<uint64_t>&, cx_t, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, bool, stage_t);
+    void push_back_measurement(std::vector<uint64_t>&, sptr<net::raw_vertex_t>);
+
+    void update_proxy_info(sptr<net::raw_vertex_t> proxy, sptr<net::raw_vertex_t> other, bool proxy_is_cx_target);
+    void perform_proxy_resets(qes::Program<>&);
 
     // Retrieves the subset of checks whose stage_map is set to the input.
-    std::set<sptr<net::raw_vertex_t>>       get_checks_at_stage(stage_t);
+    std::set<sptr<net::raw_vertex_t>> get_checks_at_stage(stage_t);
 
     cx_t get_next_edge_between(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, bool for_x_check, stage_t);
 
@@ -88,26 +114,29 @@ private:
     std::set<sptr<net::raw_vertex_t>>   all_checks;
     // Tracking structures: used to track where each check is when constructing the schedule.
     std::map<sptr<net::raw_vertex_t>, stage_t>  stage_map;
-    std::map<sptr<net::raw_edge_t>, stage_t>    visited_edge_map;
+    // visited_edge_map keys are a bit complex: (edge, src, dst). If the edge is
+    // not a proxy edge, then the key is just ((x, y), x, y). If the edge is a
+    // proxy edge, then src and dst are the endpoints of the proxy path.
+    std::map<std::tuple<sptr<net::raw_edge_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>, stage_t>
+        visited_edge_map;
     std::map<sptr<net::raw_vertex_t>, stage_t>  h_gate_stage_map;
     std::map<sptr<net::raw_vertex_t>, stage_t>  flag_stage_map;
 
-    // This map tracks if we need to reset a proxy. This is set by get_next_edge_between, but as
-    // the results of that function are not guaranteed to be committed, it sets it to 1. push_back_cx
-    // sets the value of any proxies to 2, and this confirms the proxy is ready to be reset.
-    std::map<sptr<net::raw_vertex_t>, int>  proxy_reset_map;
     // This map marks if a proxy has a nonzero state by indicating which CX path it is currently
     // involved in. If the value of a proxy key is valid, then the proxy is not usable.
     //
-    // Like with proxy_reset_map, we need to track if the CX was actually committed. So, 0 = free, 1 = tentatively
-    // free, and 2 = not free.
+    // 0 = reserved for use, 1 = used once, and 2 = used twice and can be freed.
     std::map<sptr<net::raw_vertex_t>, std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, int>>
         proxy_occupied_map;
+    // Tracks the qubit that used the proxy. The tuple entry is (user, proxy is target). This is used
+    // when resetting the proxy.
+    std::map<sptr<net::raw_vertex_t>, std::tuple<sptr<net::raw_vertex_t>, bool>>
+        proxy_users_map;
 
     std::map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>>
         active_role_map;
-    std::map<sptr<net::phys_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
-        remaining_roles_map;
+    std::map<sptr<net::phys_vertex_t>, std::deque<size_t>>
+        cycle_role_order_map;
 
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, stage_t>
         data_stage_map;
@@ -117,7 +146,7 @@ private:
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, cx_t>
         data_cx_map;
     // Tracks which qubits have been used for CXs.
-    std::set<sptr<net::phys_vertex_t>>      cx_in_use_set;
+    std::set<sptr<net::phys_vertex_t>>          cx_in_use_set;
     // Tracks the order of measurements.
     std::map<sptr<net::raw_vertex_t>, size_t>   meas_ctr_map;
     size_t                                      meas_ctr;
@@ -127,22 +156,10 @@ private:
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, size_t>
         running_ind_ctr_map;
 
-    size_t  cycle;
-    int     cx_return_status;
+    size_t cycle;
+    cx_ret_t cx_return_status;
 
     PhysicalNetwork* net_p;
-
-    const int CX_RET_GOOD = 0;
-    const int CX_RET_TOO_EARLY = 1;
-    const int CX_RET_FINISHED = 2;
-    const int CX_RET_CONTENTION = 3;
-    const int CX_RET_PROXY_OCCUPIED = 4;
-
-    const stage_t PREP_STAGE = 0;
-    const stage_t BODY_STAGE = 1;
-    const stage_t TEAR_STAGE = 2;
-    const stage_t MEAS_STAGE = 3;
-    const stage_t DONE_STAGE = 4;
 };
 
 }   // protean

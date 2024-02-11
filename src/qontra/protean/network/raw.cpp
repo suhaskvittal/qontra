@@ -214,6 +214,11 @@ RawNetwork::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) 
             {
                 sptr<raw_vertex_t> x = e->get_source<raw_vertex_t>(),
                                     y = e->get_target<raw_vertex_t>();
+                if (x->qubit_type == raw_vertex_t::type::data
+                    || y->qubit_type == raw_vertex_t::type::data)
+                {
+                    return 100.0;
+                }
                 return 1.0;
             });
         // If enable_memoization = true, then compute distance to all vertices. Otherwise,

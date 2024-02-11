@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
     statistic_t<fp_t> hw_mean = hw_sum.get_mean(shots);
 
     if (world_rank == 0) {
-        out << "Statistics: mean = " << hw_sum.at() << ", max = " << hw_max.at() << "\n";
+        out << "Statistics: mean = " << hw_mean.at() << ", max = " << hw_max.at() << "\n";
     }
     for (int r = 0; r < world_size; r++) {
         MPI_Barrier(MPI_COMM_WORLD);
