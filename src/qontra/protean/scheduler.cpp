@@ -130,8 +130,6 @@ Scheduler::build_preparation(qes::Program<>& program) {
         }
         if (cx_operands.empty()) break;
         safe_emplace_back(program, "cx", cx_operands);
-        // Perform any proxy resets:
-        perform_proxy_resets(program);
     }
     // Now, we are done with preparation. We set stage_map to body if:
     //  (1) h_gate_stage_map of Z flags/X checks are set to stage_t::preparation, and
@@ -171,7 +169,6 @@ Scheduler::build_body(qes::Program<>& program) {
         }
         if (cx_operands.empty()) break;
         safe_emplace_back(program, "cx", cx_operands);
-        perform_proxy_resets(program);
         k++;
     }
     // We are done with the CX body. We advance a parity qubit if:
@@ -198,7 +195,6 @@ Scheduler::build_teardown(qes::Program<>& program) {
         }
         if (cx_operands.empty()) break;
         safe_emplace_back(program, "cx", cx_operands);
-        perform_proxy_resets(program);
     }
     // Perform the H gates.
     //
@@ -380,9 +376,9 @@ Scheduler::body_get_partial_data_support(sptr<raw_vertex_t> rpq) {
             // Record the CX gate for future use.
             cx_t cx;
             if (is_x_check) {
-                cx = std::make_tuple(other, rdq, re);
+                cx = std::make_tuple(other, rdq, re, false);
             } else {
-                cx = std::make_tuple(rdq, other, re);
+                cx = std::make_tuple(rdq, other, re, false);
             }
             tlm_put(data_cx_map, rpq, rdq, cx);
         }
@@ -440,7 +436,8 @@ Scheduler::body_get_cx_operands(
         // to wait its turn.
         sptr<raw_vertex_t> rx = std::get<0>(cx),
                             ry = std::get<1>(cx);
-        if (rx == rdq || ry == rdq) continue;
+        // We only care if the data qubit is not undoing an operation.
+        if (!std::get<3>(cx) && (rx == rdq || ry == rdq)) continue;
         push_back_cx(operands, cx, rdq, other, is_x_check, stage_t::body);
     }
     return operands;
@@ -694,6 +691,7 @@ Scheduler::test_and_get_other_endpoint_if_ready(
 {
     cx_t cx = get_next_edge_between(path[0], path.back(), false, stage_t::body);
     if (cx_return_status != cx_ret_t::ok) return nullptr;
+    if (std::get<3>(cx)) return nullptr;
 
     sptr<raw_vertex_t> rx = std::get<0>(cx),
                         ry = std::get<1>(cx);
@@ -747,7 +745,7 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
 #endif
                 return ret_null_and_set_status(cx_ret_t::contention);
             }
-            return std::make_tuple(src, dst, re);
+            return std::make_tuple(src, dst, re, false);
         }
     } else {
         // Otherwise, they are connected via proxy.
@@ -794,19 +792,30 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
             sptr<raw_vertex_t> rx = path[i-1],
                                 ry = path[i];
             sptr<raw_edge_t> re = raw_net.get_edge(rx, ry);
-            if (get_visited_edge_map(re, src, dst) < s) {
+            if (get_visited_edge_map(re, src, dst) != stage_t::needs_undo
+                && get_visited_edge_map(re, src, dst) != s) 
+            {
                 if (has_contention(rx) || has_contention(ry)) {
-#ifdef PROTEAN_DEBUG
-                    std::cerr << "CX(" << print_v(src) << ", " << print_v(dst) << ") has contention: (" 
-                        << print_v(path[i-1]) << ", " << print_v(path[i]) << ") @ cycle = " << cycle << std::endl;
-#endif
                     return ret_null_and_set_status(cx_ret_t::contention);
                 }
                 // Then, return this edge -- it is not done.
-                return std::make_tuple(rx, ry, re);
+                return std::make_tuple(rx, ry, re, i == path.size()-1);
             }
         }
-        // No edge to be done:
+        // Reverse direction -- need to undo the CNOTs (except the last in
+        // the path).
+        for (size_t i = path.size()-2; i >= 1; i--) {
+            sptr<raw_vertex_t> rx = path[i-1],
+                                ry = path[i];
+            sptr<raw_edge_t> re = raw_net.get_edge(rx, ry);
+            if (get_visited_edge_map(re, src, dst) == stage_t::needs_undo) {
+                if (has_contention(rx) || has_contention(ry)) {
+                    return ret_null_and_set_status(cx_ret_t::contention);
+                }
+                return std::make_tuple(rx, ry, re, true);
+            }
+        }
+        // Otherwise, we are done with the path and any undos.
         release_path(path);
         release_proxy_ownership(path);
     }

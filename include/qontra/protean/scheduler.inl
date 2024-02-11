@@ -151,7 +151,7 @@ Scheduler::release_proxy_ownership(const std::vector<sptr<net::raw_vertex_t>>& p
     for (size_t i = 1; i < path.size()-1; i++) {
         sptr<net::raw_vertex_t> r = path.at(i);
         auto& entry = proxy_occupied_map[r];
-        if (std::get<0>(entry) == src && std::get<1>(entry) == dst && std::get<2>(entry) == 0) {
+        if (std::get<0>(entry) == src && std::get<1>(entry) == dst) {
             proxy_occupied_map.erase(r);
         }
     }
@@ -160,7 +160,7 @@ Scheduler::release_proxy_ownership(const std::vector<sptr<net::raw_vertex_t>>& p
 inline Scheduler::cx_t
 Scheduler::ret_null_and_set_status(cx_ret_t s) {
     cx_return_status = s;
-    return std::make_tuple(nullptr, nullptr, nullptr);
+    return std::make_tuple(nullptr, nullptr, nullptr, false);
 }
 
 inline void
@@ -180,7 +180,8 @@ Scheduler::push_back_cx(
     sptr<net::phys_vertex_t> px = net_p->role_to_phys[rx];
     sptr<net::phys_vertex_t> py = net_p->role_to_phys[ry];
 
-    get_visited_edge_map(re, src, dst) = s;
+    get_visited_edge_map(re, src, dst) = 
+        (net_p->raw_connection_network.contains(src, dst) ^ std::get<3>(cx)) ? s : stage_t::needs_undo;
 
     vtils::push_back_all(qes_operands, {px->id, py->id});
     vtils::insert_all(cx_in_use_set, {px, py});
@@ -190,8 +191,8 @@ Scheduler::push_back_cx(
         << static_cast<int>(s)
         << std::endl;
 #endif
-    if (proxy_occupied_map.count(rx))   update_proxy_info(rx, ry, false);
-    if (proxy_occupied_map.count(ry))   update_proxy_info(ry, rx, true);
+    update_proxy_info(rx);
+    update_proxy_info(ry);
 }
 
 inline void
@@ -202,39 +203,9 @@ Scheduler::push_back_measurement(std::vector<uint64_t>& qes_operands, sptr<net::
 }
 
 inline void
-Scheduler::update_proxy_info(sptr<net::raw_vertex_t> prx, sptr<net::raw_vertex_t> other, bool is_target) {
-    if ((++std::get<2>(proxy_occupied_map[prx])) == 1) {
-        proxy_users_map[prx] = std::make_tuple(other, is_target);
-    }
-}
-
-inline void
-Scheduler::perform_proxy_resets(qes::Program<>& program) {
-    std::vector<int64_t> operands;
-    for (auto it = proxy_occupied_map.begin(); it != proxy_occupied_map.end(); ) {
-        sptr<net::raw_vertex_t> rx = it->first;
-        int state = std::get<2>(it->second);
-        if (state == 2) {
-            // Get user of the proxy.
-            auto& t = proxy_users_map.at(rx);
-            sptr<net::raw_vertex_t> ry = std::get<0>(t);
-            bool rx_was_target = std::get<1>(t);
-
-            sptr<net::phys_vertex_t> px = net_p->role_to_phys.at(rx),
-                                     py = net_p->role_to_phys.at(ry);
-            if (rx_was_target) {
-                vtils::push_back_all(operands, {py->id, px->id});
-            } else {
-                vtils::push_back_all(operands, {px->id, py->id});
-            }
-            proxy_users_map.erase(rx);
-            it = proxy_occupied_map.erase(it);
-        } else {
-            it++;
-        }
-    }
-    if (operands.size()) {
-        program.emplace_back("cx", operands);
+Scheduler::update_proxy_info(sptr<net::raw_vertex_t> prx) {
+    if (proxy_occupied_map.count(prx)) {
+        std::get<2>(proxy_occupied_map[prx])++;
     }
 }
 

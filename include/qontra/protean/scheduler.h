@@ -38,6 +38,7 @@ public:
     std::map<sptr<net::raw_vertex_t>, size_t>   get_meas_ctr_map(void);
 private:
     enum class stage_t {
+        needs_undo = -2,
         invalid = -1,
         preparation = 0,
         body = 1,
@@ -54,7 +55,8 @@ private:
         proxy_occupied = 4
     };
 
-    typedef std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_edge_t>>
+    // tuple: control, target, corresponding edge, is_undo_cx
+    typedef std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_edge_t>, bool>
         cx_t;
 
     // Indirection functions (inlined):
@@ -82,7 +84,7 @@ private:
             std::vector<uint64_t>&, cx_t, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, bool, stage_t);
     void push_back_measurement(std::vector<uint64_t>&, sptr<net::raw_vertex_t>);
 
-    void update_proxy_info(sptr<net::raw_vertex_t> proxy, sptr<net::raw_vertex_t> other, bool proxy_is_cx_target);
+    void update_proxy_info(sptr<net::raw_vertex_t> proxy);
     void perform_proxy_resets(qes::Program<>&);
 
     // Retrieves the subset of checks whose stage_map is set to the input.
@@ -128,10 +130,6 @@ private:
     // 0 = reserved for use, 1 = used once, and 2 = used twice and can be freed.
     std::map<sptr<net::raw_vertex_t>, std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, int>>
         proxy_occupied_map;
-    // Tracks the qubit that used the proxy. The tuple entry is (user, proxy is target). This is used
-    // when resetting the proxy.
-    std::map<sptr<net::raw_vertex_t>, std::tuple<sptr<net::raw_vertex_t>, bool>>
-        proxy_users_map;
 
     std::map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>>
         active_role_map;
