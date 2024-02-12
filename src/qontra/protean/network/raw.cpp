@@ -141,6 +141,9 @@ RawNetwork::add_flag(sptr<raw_vertex_t> dq1, sptr<raw_vertex_t> dq2, sptr<raw_ve
     flag_ownership_map[pq].push_back(fq);
     tlm_put(flag_assignment_map, pq, dq1, fq);
     tlm_put(flag_assignment_map, pq, dq2, fq);
+    if (pq->qubit_type == raw_vertex_t::type::xparity) {
+        x_flag_set.insert(fq);
+    }
     return fq;
 }
 

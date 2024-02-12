@@ -328,34 +328,39 @@ edge_build_outer_loop_start:
 
         sptr<phys_vertex_t> pv1 = role_to_phys[rv1],
                             pv2 = role_to_phys[rv2];
+        // Make a separate physical qubit for the X and Z flags.
+        for (int i = 0; i < 2; i++) {
+            sptr<phys_vertex_t> pfq = make_vertex();
+            std::set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv1, pv2};
+            for (auto& p2 : role_set) {
+                sptr<raw_vertex_t> rpq = p2.first,
+                                    rfq = p2.second;
+                if ((i == 0) ^ (rpq->qubit_type == raw_vertex_t::type::xparity)) {
+                    continue;
+                }
+                sptr<phys_vertex_t> ppq = role_to_phys[rpq];
 
-        sptr<phys_vertex_t> pfq = make_vertex();
-        std::set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv1, pv2};
-        for (auto& p2 : role_set) {
-            sptr<raw_vertex_t> rpq = p2.first,
-                                rfq = p2.second;
-            sptr<phys_vertex_t> ppq = role_to_phys[rpq];
-
-            // Compute cycle for role. This is the maximum of the cycles of rv1, rv2, and rfq.
-            size_t cycle = std::max({pv1->cycle_role_map.at(rv1),
-                                    pv2->cycle_role_map.at(rv2),
-                                    ppq->cycle_role_map.at(rpq)});
-            pfq->push_back_role(rfq, cycle);
-            role_to_phys[rfq] = pfq;
-            qubits_connected_to_pfq.insert(ppq);
-            // Delete edge between pv1/pv2 and ppq (if it exists).
-            if (contains(pv1, ppq)) {
-                delete_edge(get_edge(pv1, ppq));
-            } 
-            if (contains(pv2, ppq)) {
-                delete_edge(get_edge(pv2, ppq));
+                // Compute cycle for role. This is the maximum of the cycles of rv1, rv2, and rfq.
+                size_t cycle = std::max({pv1->cycle_role_map.at(rv1),
+                                        pv2->cycle_role_map.at(rv2),
+                                        ppq->cycle_role_map.at(rpq)});
+                pfq->push_back_role(rfq, cycle);
+                role_to_phys[rfq] = pfq;
+                qubits_connected_to_pfq.insert(ppq);
+                // Delete edge between pv1/pv2 and ppq (if it exists).
+                if (contains(pv1, ppq)) {
+                    delete_edge(get_edge(pv1, ppq));
+                } 
+                if (contains(pv2, ppq)) {
+                    delete_edge(get_edge(pv2, ppq));
+                }
             }
-        }
-        // Add edges for pfq.
-        add_vertex(pfq);
-        for (sptr<phys_vertex_t> x : qubits_connected_to_pfq) {
-            sptr<phys_edge_t> pe = make_edge(pfq, x);
-            add_edge(pe);
+            // Add edges for pfq.
+            add_vertex(pfq);
+            for (sptr<phys_vertex_t> x : qubits_connected_to_pfq) {
+                sptr<phys_edge_t> pe = make_edge(pfq, x);
+                add_edge(pe);
+            }
         }
     }
     return !all_proposed_flag_pairs.empty();
@@ -632,18 +637,30 @@ PhysicalNetwork::recompute_cycle_role_maps() {
     raw_connection_network.disable_memoization();
     // Here, we want to enforce that for each check, each physical qubit has at most one role for that
     // check.
+    //
+    // We also want to compress the flag roles, such that any physical qubit has
+    // at most 1 Z-flag and at most 1 X-flag.
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         std::set<sptr<raw_vertex_t>> deleted_vertices;
         for (sptr<raw_vertex_t> r1 : pv->role_set) {
+            bool r1_is_x_flag = r1->qubit_type == raw_vertex_t::qubit_type::flag
+                                && raw_connection_network.x_flag_set.count(r1);
             for (sptr<raw_vertex_t> r2 : pv->role_set) {
                 if (r1 <= r2) continue;
                 // If r1 is deleted during a test_and_merge, break.
                 if (deleted_vertices.count(r1)) break;
                 if (deleted_vertices.count(r2)) continue;
-                if (raw_connection_network.are_in_same_support(r1, r2) == nullptr) continue;
-
-                auto deleted = raw_connection_network.merge(r1, r2);
-                if (deleted != nullptr) deleted_vertices.insert(deleted);
+                bool r2_is_x_flag = r2->qubit_type == raw_vertex_t::qubit_type::flag
+                                    && raw_connection_network.x_flag_set.count(r2);
+                // Try the merge.
+                if (raw_connection_network.are_in_same_support(r1, r2) != nullptr
+                    || r1_is_x_flag == r2_is_x_flag) 
+                {
+                    auto deleted = raw_connection_network.merge(r1, r2);
+                    if (deleted != nullptr) {
+                        deleted_vertices.insert(deleted);
+                    }
+                }
             }
         }
         for (sptr<raw_vertex_t> r : deleted_vertices) {

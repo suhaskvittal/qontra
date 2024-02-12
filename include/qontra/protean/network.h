@@ -113,7 +113,7 @@ public:
     // Tanner graph tracking structures:
     vtils::BijectiveMap<sptr<graph::tanner::vertex_t>, sptr<net::raw_vertex_t>> v_tanner_raw_map;
 
-    // Flag and proxy tracking structures:
+    // Flag tracking structures:
     //
     // parity qubit --> list of flag qubits used in syndrome extraction of check.
     std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>> 
@@ -121,6 +121,7 @@ public:
     // parity qubit --> data qubit --> flag qubit used in syndrome extraction of check.
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
         flag_assignment_map;
+    std::set<sptr<net::raw_vertex_t>> x_flag_set;
 
     // Scheduling structures:
     // 
