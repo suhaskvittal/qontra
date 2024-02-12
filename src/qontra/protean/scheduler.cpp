@@ -330,6 +330,7 @@ Scheduler::body_get_partial_data_support(sptr<raw_vertex_t> rpq) {
         //  (2) rdq is indirectly connected to rpq (proxy walk)
         //  (3) rdq is directly connected to a flag
         //  (4) rdq is indirectly connected to a flag
+        cx_t cx = std::make_tuple(nullptr, nullptr, nullptr, false, false);
         sptr<raw_vertex_t> other = nullptr, other_endpoint;
         if (raw_net.contains(rdq, rpq)) {
             // Situation 1
@@ -346,7 +347,7 @@ Scheduler::body_get_partial_data_support(sptr<raw_vertex_t> rpq) {
                 auto& proxy_walk_path = is_x_check 
                                         ? get_proxy_walk_path(rfq, rdq)
                                         : get_proxy_walk_path(rdq, rfq);
-                other = test_and_get_other_endpoint_if_ready(rdq, proxy_walk_path);
+                other = test_and_get_other_endpoint_if_ready(rdq, proxy_walk_path, cx);
             }
             other_endpoint = rfq;
         } else {
@@ -354,7 +355,7 @@ Scheduler::body_get_partial_data_support(sptr<raw_vertex_t> rpq) {
             auto& proxy_walk_path = is_x_check
                                     ? get_proxy_walk_path(rpq, rdq) 
                                     : get_proxy_walk_path(rdq, rpq);
-            other = test_and_get_other_endpoint_if_ready(rdq, proxy_walk_path);
+            other = test_and_get_other_endpoint_if_ready(rdq, proxy_walk_path, cx);
             other_endpoint = rpq;
         }
         // If other == nullptr, this means that we are not ready to do the edge in the proxy walk.
@@ -366,11 +367,12 @@ Scheduler::body_get_partial_data_support(sptr<raw_vertex_t> rpq) {
         if (get_visited_edge_map(re, src, dst) < stage_t::body) {
             partial_support.insert(rdq);
             // Record the CX gate for future use.
-            cx_t cx;
-            if (is_x_check) {
-                cx = std::make_tuple(other, rdq, re, false);
-            } else {
-                cx = std::make_tuple(rdq, other, re, false);
+            if (std::get<0>(cx) == nullptr) {
+                if (is_x_check) {
+                    cx = std::make_tuple(other, rdq, re, false, true);
+                } else {
+                    cx = std::make_tuple(rdq, other, re, false, true);
+                }
             }
             tlm_put(data_cx_map, rpq, rdq, cx);
         }
@@ -425,8 +427,15 @@ Scheduler::body_get_cx_operands(
         // to wait its turn.
         sptr<raw_vertex_t> rx = std::get<0>(cx),
                             ry = std::get<1>(cx);
+        // So the conditions for NOT performing this CX are as follows:
+        //  (1) rpq/rfq and rdq are directly connected (no proxy path).
+        //  (2) If a proxy path exists, we require this is not an undo CX. This
+        //      condition can be checked via:
+        //          (1) visited_edge_map != needs_undo
         // We only care if the data qubit is not undoing an operation.
-        if (!std::get<3>(cx) && (rx == rdq || ry == rdq)) continue;
+        if (std::get<4>(cx) && (rx == rdq || ry == rdq)) {
+            continue;
+        }
         push_back_cx(operands, cx, rdq, other, is_x_check, stage_t::body);
     }
     return operands;
@@ -545,6 +554,8 @@ PhysicalNetwork::make_schedule() {
 
 std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>
 Scheduler::compute_schedule(std::set<sptr<raw_vertex_t>>& checks_this_stage) {
+    std::cout << "[ compute_schedule ] ==== CYCLE " << cycle << "====" << std::endl;
+
     // Maps parity qubit -> check schedule array (nullptr is where a data qubit CNOT is not scheduled).
     std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>
         data_cnot_schedules;
@@ -641,12 +652,31 @@ Scheduler::compute_schedule(std::set<sptr<raw_vertex_t>>& checks_this_stage) {
         }
         // Update the schedule.
         std::vector<sptr<raw_vertex_t>> check_sch(static_cast<size_t>(round(obj)), nullptr);
+        if (round(obj) < partial_support.size()) {
+            std::cerr << "[ error ] LP allocated times for fewer qubits than required." << std::endl;
+            exit(1);
+        }
         for (sptr<raw_vertex_t> rdq : partial_support) {
             size_t t = static_cast<size_t>(round(LP.get_value(rdq)));
             existing_data_cnot_times[rdq].push_back(std::make_pair(t, rpq));
+
+            if (check_sch[t-1] != nullptr) {
+                std::cerr << "[ error ] qubit " << print_v(rdq) << " assigned to timestep where "
+                    << print_v(check_sch[t-1]) << " is already assigned." << std::endl;
+                std::cout << "\tLP values: t(" << print_v(rdq) << ") = " << LP.get_value(rdq) << ", t("
+                    << print_v(check_sch[t-1]) << ") = " << LP.get_value(check_sch[t-1])
+                    << std::endl;
+                exit(1);
+            }
             check_sch[t-1] = rdq;
         }
         data_cnot_schedules[rpq] = check_sch;
+        std::cout << std::setw(5) << print_v(rpq) << " | ";
+        for (sptr<raw_vertex_t> rx : check_sch) {
+            if (rx == nullptr)  std::cout << std::setw(5) << "_";
+            else                std::cout << std::setw(5) << print_v(rx);
+        }
+        std::cout << std::endl;
         // Update running_ind_sum_map.
         for (auto p : ind_sum_map) {
             sptr<raw_vertex_t> rx = p.first;
@@ -666,14 +696,15 @@ Scheduler::compute_schedule(std::set<sptr<raw_vertex_t>>& checks_this_stage) {
 sptr<raw_vertex_t>
 Scheduler::test_and_get_other_endpoint_if_ready(
         sptr<raw_vertex_t> endpoint,
-        std::vector<sptr<raw_vertex_t>> path) 
+        std::vector<sptr<raw_vertex_t>> path,
+        cx_t& cx_ref) 
 {
-    cx_t cx = get_next_edge_between(path[0], path.back(), false, stage_t::body);
+    cx_ref = get_next_edge_between(path[0], path.back(), false, stage_t::body);
     if (cx_return_status != cx_ret_t::ok) return nullptr;
-    if (std::get<3>(cx)) return nullptr;
+    if (!std::get<4>(cx_ref)) return nullptr;
 
-    sptr<raw_vertex_t> rx = std::get<0>(cx),
-                        ry = std::get<1>(cx);
+    sptr<raw_vertex_t> rx = std::get<0>(cx_ref),
+                        ry = std::get<1>(cx_ref);
     if (rx == endpoint)         return ry;
     else if (ry == endpoint)    return rx;
     else                        return nullptr;
@@ -699,7 +730,7 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
             if (has_contention(src) || has_contention(dst)) {
                 return ret_null_and_set_status(cx_ret_t::contention);
             }
-            return std::make_tuple(src, dst, re, false);
+            return std::make_tuple(src, dst, re, false, true);
         }
     } else {
         // Otherwise, they are connected via proxy.
@@ -724,7 +755,7 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
                     return ret_null_and_set_status(cx_ret_t::contention);
                 }
                 // Then, return this edge -- it is not done.
-                return std::make_tuple(rx, ry, re, i == path.size()-1);
+                return std::make_tuple(rx, ry, re, i < path.size()-1, true);
             }
         }
         // Reverse direction -- need to undo the CNOTs (except the last in
@@ -737,12 +768,19 @@ Scheduler::get_next_edge_between(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst,
                 if (has_contention(rx) || has_contention(ry)) {
                     return ret_null_and_set_status(cx_ret_t::contention);
                 }
-                return std::make_tuple(rx, ry, re, true);
+                return std::make_tuple(rx, ry, re, false, false);
             }
         }
         // Otherwise, we are done with the path and any undos.
         release_path(path);
         release_proxy_ownership(path);
+        // Print out the path for debugging.
+        /*
+        std::cout << "[ status ] completed CX path between " << print_v(src) << " and "
+            << print_v(dst) << ": [";
+        for (sptr<raw_vertex_t> rx : path) std::cout << " " << print_v(rx);
+        std::cout << " ]" << std::endl;
+        */
     }
     // No edge to be done:
     return ret_null_and_set_status(cx_ret_t::done);

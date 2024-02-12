@@ -157,7 +157,7 @@ Scheduler::release_proxy_ownership(const std::vector<sptr<net::raw_vertex_t>>& p
 inline Scheduler::cx_t
 Scheduler::ret_null_and_set_status(cx_ret_t s) {
     cx_return_status = s;
-    return std::make_tuple(nullptr, nullptr, nullptr, false);
+    return std::make_tuple(nullptr, nullptr, nullptr, false, false);
 }
 
 inline void
@@ -177,8 +177,7 @@ Scheduler::push_back_cx(
     sptr<net::phys_vertex_t> px = net_p->role_to_phys[rx];
     sptr<net::phys_vertex_t> py = net_p->role_to_phys[ry];
 
-    get_visited_edge_map(re, src, dst) = 
-        (net_p->raw_connection_network.contains(src, dst) ^ std::get<3>(cx)) ? s : stage_t::needs_undo;
+    get_visited_edge_map(re, src, dst) = std::get<3>(cx) ? stage_t::needs_undo : s;
 
     vtils::push_back_all(qes_operands, {px->id, py->id});
     vtils::insert_all(cx_in_use_set, {px, py});

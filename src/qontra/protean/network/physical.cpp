@@ -729,9 +729,6 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             }
         }
         for (sptr<int_v_t> iv : checks_this_cycle) {
-#ifdef PROTEAN_DEBUG
-            std::cout << "support(" << print_v(iv->check) << "):";
-#endif
             for (sptr<raw_vertex_t> rv : iv->support) {
                 if (!role_to_phys.count(rv) || role_to_phys[rv] == nullptr) {
                     std::cerr << "Role does not exist: " << print_v(rv) << "\n"
@@ -747,14 +744,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                         pv->push_back_role(rv, cycle);
                     }
                 }
-#ifdef PROTEAN_DEBUG
-                std::cout << "\t" << print_v(rv) << " (" << print_v(pv)
-                    << " @ " << pv->cycle_role_map.at(rv) << ")";
-#endif
             }
-#ifdef PROTEAN_DEBUG
-            std::cout << "\n";
-#endif
         }
         cycle++;
     }

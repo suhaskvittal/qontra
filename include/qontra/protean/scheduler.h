@@ -55,8 +55,8 @@ private:
         proxy_occupied = 4
     };
 
-    // tuple: control, target, corresponding edge, is_undo_cx
-    typedef std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_edge_t>, bool>
+    // tuple: control, target, corresponding edge, will_need_undo, should_be_considered_in_partial_support
+    typedef std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_edge_t>, bool, bool>
         cx_t;
 
     // Indirection functions (inlined):
@@ -96,7 +96,9 @@ private:
     // completed, (2) upon arriving at an edge with the endpoint, returns the other endpoint if the edge
     // is not done, (3) returns nullptr if stopped early or no edge satisfying (2) is found.
     sptr<net::raw_vertex_t> test_and_get_other_endpoint_if_ready(
-                                    sptr<net::raw_vertex_t> endpoint, std::vector<sptr<net::raw_vertex_t>> path);
+                                    sptr<net::raw_vertex_t> endpoint,
+                                    std::vector<sptr<net::raw_vertex_t>> path,
+                                    cx_t&);
 
     // Note that preparation and teardown are the exact same operations, but teardown is reversed.
     //
