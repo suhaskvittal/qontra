@@ -22,8 +22,8 @@ if '--use-jid' in argv:
         ('2.2', 'jid.ral.fla.ral.rlb.rcr', 4),
         ('3.1', 'fla.ral(con.ral,prx.ral)+rlb.rcr', 4),
         ('3.2', 'jid.ral.fla.ral(con.ral.prx.ral)+rlb.rcr', 4),
-        ('4.1', 'fla.ral(con.ral.prx.ral)+rlb.rcr', 3),
-        ('4.2', 'jid.ral.fla.ral(con.ral.prx.ral)+rlb.rcr', 3),
+        ('4.1', 'fla.ral(prx.ral)+rlb.rcr', 3),
+        ('4.2', 'jid.ral.fla.ral(prx.ral)+rlb.rcr', 3),
     ]
 else:
     version_list = [

@@ -38,12 +38,12 @@ Scheduler::Scheduler(PhysicalNetwork* n_p)
     active_role_map(),
     cycle_role_order_map(),
     data_stage_map(),
+    scheduled_data_qubit_map(),
     data_cx_map(),
     cx_in_use_set(),
     meas_ctr_map(),
     meas_ctr(0),
     running_ind_sum_map(),
-    running_ind_ctr_map(),
     cycle(0),
     cx_return_status(cx_ret_t::ok),
     net_p(n_p)
@@ -569,10 +569,59 @@ Scheduler::compute_schedule(std::set<sptr<raw_vertex_t>>& checks_this_stage) {
         check_operator_max_weight = std::max(get_support(rpq).data.size(), check_operator_max_weight);
     }
     const size_t upper_bound = 2*check_operator_max_weight;
+    // Second, we need to compute any commutation sign adjustments for each pair
+    // of checks.
+    std::map<sptr<raw_vertex_t>, std::set<sptr<raw_vertex_t>>> partial_support_map, prev_map, post_map;
+    TwoLevelMap<sptr<raw_vertex_t>, sptr<raw_vertex_t>, int> comm_sgn_adjust_map;
+    for (sptr<raw_vertex_t> rx : checks_this_stage) {
+        if (!partial_support_map.count(rx)) {
+            partial_support_map[rx] = body_get_partial_data_support(rx);
+            prev_map[rx] = get_prev(rx);
+            post_map[rx] = get_post(rx, partial_support_map[rx]);
+        }
+        std::set<sptr<raw_vertex_t>> rx_supp = partial_support_map.at(rx),
+                                        rx_prev = prev_map.at(rx),
+                                        rx_post = post_map.at(rx);
+        if (rx_supp.empty()) continue;
+        for (sptr<raw_vertex_t> ry : checks_this_stage) {
+            if (rx >= ry) continue;
+            if (rx->qubit_type == ry->qubit_type) continue;
+            if (!partial_support_map.count(ry)) {
+                partial_support_map[ry] = body_get_partial_data_support(ry);
+                prev_map[ry] = get_prev(ry);
+                post_map[ry] = get_post(ry, partial_support_map[ry]);
+            }
+            std::set<sptr<raw_vertex_t>> ry_supp = partial_support_map.at(ry),
+                                            ry_prev = prev_map.at(ry),
+                                            ry_post = post_map.at(ry);
+            if (ry_supp.empty()) continue;
+            int sgn = 0;
+            for (sptr<raw_vertex_t> r : rx_prev) {
+                sgn += (ry_supp.count(r) || ry_post.count(r));
+            }
+            for (sptr<raw_vertex_t> r : rx_supp) {
+                sgn -= ry_prev.count(r);
+                sgn += ry_post.count(r);
+            }
+            for (sptr<raw_vertex_t> r : rx_post) {
+                sgn -= (ry_prev.count(r) || ry_supp.count(r));
+            }
+            if (sgn != 0) {
+                std::cout << "sign adjustment of "
+                    << print_v(rx) << "(" << rx_prev.size() << ";" << rx_supp.size() << ";" << rx_post.size()
+                    << ") and "
+                    << print_v(ry) << "(" << ry_prev.size() << ";" << ry_supp.size() << ";" << ry_post.size()
+                    << "): " << sgn << std::endl;
+            }
+            tlm_put(comm_sgn_adjust_map, rx, ry, -sgn);
+            tlm_put(comm_sgn_adjust_map, ry, rx, sgn);
+        }
+    }
     // Now, we can make the schedules.
     for (sptr<raw_vertex_t> rpq : checks_this_stage) {
         bool is_x_check = (rpq->qubit_type == raw_vertex_t::type::xparity);
-        auto partial_support = body_get_partial_data_support(rpq);
+        std::set<sptr<raw_vertex_t>> partial_support = partial_support_map[rpq];
+        if (partial_support.empty()) continue;
         // Build the LP.
         CPXLPManager<sptr<raw_vertex_t>> LP;
         lp_var_t max_of_all = LP.add_slack_var(0, upper_bound, lp_var_t::bounds::both, lp_var_t::domain::integer);
@@ -616,15 +665,10 @@ Scheduler::compute_schedule(std::set<sptr<raw_vertex_t>>& checks_this_stage) {
                 LP.add_constraint(con2);
                 LP.add_constraint(con3);
                 ind_sum += y;
-                running_ind_ctr_map[rpq][rx]++;
-                running_ind_ctr_map[rx][rpq]++;
             }
         }
         for (auto p : ind_sum_map) {
-            // Check if the total number of crossing qubits is even. If so, add this constraint.
-            if (running_ind_ctr_map[rpq][p.first] % 2 == 1) continue;
-
-            lp_expr_t ind_sum = p.second + running_ind_sum_map[rpq][p.first];
+            lp_expr_t ind_sum = p.second + running_ind_sum_map[rpq][p.first] + comm_sgn_adjust_map[rpq][p.first];
             lp_var_t y = LP.add_slack_var(0, 0, lp_var_t::bounds::lower, lp_var_t::domain::integer);
             lp_constr_t con(ind_sum, 2*y, lp_constr_t::direction::eq);
             LP.add_constraint(con);
@@ -669,6 +713,7 @@ Scheduler::compute_schedule(std::set<sptr<raw_vertex_t>>& checks_this_stage) {
                 exit(1);
             }
             check_sch[t-1] = rdq;
+            scheduled_data_qubit_map[rpq].insert(rdq);
         }
         data_cnot_schedules[rpq] = check_sch;
         std::cout << std::setw(5) << print_v(rpq) << " | ";

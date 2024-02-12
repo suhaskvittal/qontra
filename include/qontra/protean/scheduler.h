@@ -110,6 +110,11 @@ private:
     // Gets all data qubits that have a CNOT for this check operator.
     std::set<sptr<net::raw_vertex_t>>
         body_get_partial_data_support(sptr<net::raw_vertex_t>);
+    // Gets the prev and post data qubit sets given partial_support.
+    std::set<sptr<net::raw_vertex_t>>
+        get_prev(sptr<net::raw_vertex_t>);
+    std::set<sptr<net::raw_vertex_t>>
+        get_post(sptr<net::raw_vertex_t>, const std::set<sptr<net::raw_vertex_t>>&);
     // Gets the CX operands according to the data_cnot_schedules.
     std::vector<uint64_t> 
         body_get_cx_operands(sptr<net::raw_vertex_t>, const std::vector<sptr<net::raw_vertex_t>>&, size_t k);
@@ -138,6 +143,7 @@ private:
     std::map<sptr<net::phys_vertex_t>, std::deque<size_t>>
         cycle_role_order_map;
 
+    std::map<sptr<net::raw_vertex_t>, std::set<sptr<net::raw_vertex_t>>> scheduled_data_qubit_map;
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, stage_t>
         data_stage_map;
 
@@ -153,8 +159,6 @@ private:
 
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, double>
         running_ind_sum_map;
-    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, size_t>
-        running_ind_ctr_map;
 
     size_t cycle;
     cx_ret_t cx_return_status;

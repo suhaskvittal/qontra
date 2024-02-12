@@ -209,5 +209,22 @@ Scheduler::get_checks_at_stage(stage_t s) {
     return stage_checks;
 }
 
+inline std::set<sptr<net::raw_vertex_t>>
+Scheduler::get_prev(sptr<net::raw_vertex_t> rpq) {
+    return scheduled_data_qubit_map[rpq];
+}
+
+inline std::set<sptr<net::raw_vertex_t>>
+Scheduler::get_post(sptr<net::raw_vertex_t> rpq, const std::set<sptr<net::raw_vertex_t>>& curr) {
+    auto& support = get_support(rpq);
+    std::set<sptr<net::raw_vertex_t>> post;
+    for (sptr<net::raw_vertex_t> rdq : support.data) {
+        if (!scheduled_data_qubit_map[rpq].count(rdq) && !curr.count(rdq)) {
+            post.insert(rdq);
+        }
+    }
+    return post;
+}
+
 }   // protean
 }   // qontra
