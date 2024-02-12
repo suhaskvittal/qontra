@@ -386,7 +386,17 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         // Let k = slack_violation. Then the top k+1 neighbors will
         // be serviced by the proxy.
         std::vector<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
-
+        // Rules for adding proxies:
+        //  (1) pv is a data qubit.
+        //      --> anything goes.
+        //  (2) pv is a parity qubit.
+        //      --> anything goes.
+        //  (3) pv is a flag qubit
+        //      --> only non-data qubits. This is because if the flag is
+        //      connected to data qubits, then introducing proxies between the
+        //      flag and data qubits affects fault-tolerance guarantees.
+        //  (4) pv is a proxy
+        //      --> anything goes.
         for (size_t i = 0; i < std::min(slack_violation+1, adj.size()); i++) {
             sptr<phys_vertex_t> px = adj[i];
             // Now, for each role in pv and px, add a proxy in the raw_connection_network.
@@ -394,6 +404,10 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
             bool any_roles_added = false;
             for (sptr<raw_vertex_t> rv : pv->role_set) {
                 for (sptr<raw_vertex_t> rx : px->role_set) {
+                    // Enforce proxy addition rules.
+                    if (rv->qubit_type == raw_vertex_t::type::flag && rx->qubit_type == raw_vertex_t::type::data) {
+                        continue;
+                    }
                     sptr<raw_edge_t> re = raw_connection_network.get_edge(rv, rx);
                     if (re == nullptr) continue;
                     sptr<raw_vertex_t> rprx = raw_connection_network.add_proxy(re);
