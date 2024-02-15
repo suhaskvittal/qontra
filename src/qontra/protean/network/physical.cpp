@@ -657,19 +657,25 @@ PhysicalNetwork::recompute_cycle_role_maps() {
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         std::set<sptr<raw_vertex_t>> deleted_vertices;
         for (sptr<raw_vertex_t> r1 : pv->role_set) {
-            bool r1_is_x_flag = r1->qubit_type == raw_vertex_t::qubit_type::flag
-                                && raw_connection_network.x_flag_set.count(r1);
+            bool r1_is_x_flag = r1->qubit_type == raw_vertex_t::type::flag
+                                    && raw_connection_network.x_flag_set.count(r1);
             for (sptr<raw_vertex_t> r2 : pv->role_set) {
                 if (r1 <= r2) continue;
                 // If r1 is deleted during a test_and_merge, break.
                 if (deleted_vertices.count(r1)) break;
                 if (deleted_vertices.count(r2)) continue;
-                bool r2_is_x_flag = r2->qubit_type == raw_vertex_t::qubit_type::flag
-                                    && raw_connection_network.x_flag_set.count(r2);
+                bool r2_is_x_flag = r2->qubit_type == raw_vertex_t::type::flag
+                                        && raw_connection_network.x_flag_set.count(r2);
+                bool r1_r2_are_same_flag =
+                    (r1->qubit_type == raw_vertex_t::type::flag && r2->qubit_type == raw_vertex_t::type::flag)
+                    &&
+                    (raw_connection_network.x_flag_set.count(r1) == raw_connection_network.x_flag_set.count(r2));
                 // Try the merge.
                 if (raw_connection_network.are_in_same_support(r1, r2) != nullptr
-                    || r1_is_x_flag == r2_is_x_flag) 
+                    || r1_r2_are_same_flag)
                 {
+                    std::cout << "[ recompute_cycle_role_maps ] qubit " << print_v(pv)
+                        << ": merging " << print_v(r1) << " and " << print_v(r2) << std::endl;
                     auto deleted = raw_connection_network.merge(r1, r2);
                     if (deleted != nullptr) {
                         deleted_vertices.insert(deleted);

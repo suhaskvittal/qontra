@@ -10,12 +10,12 @@
 namespace qontra {
 
 inline DetailedStimCircuit
-make_circuit(std::string qes_file, fp_t p) {
-    return make_circuit(qes::from_file(qes_file), p);
+make_circuit(std::string qes_file, fp_t p, bool fix_timing_error_as_p) {
+    return make_circuit(qes::from_file(qes_file), p, fix_timing_error_as_p);
 }
 
 inline DetailedStimCircuit
-make_circuit(qes::Program<> program, fp_t p) {
+make_circuit(qes::Program<> program, fp_t p, bool fix_timing_error_as_p) {
     const size_t n = get_number_of_qubits(program);
 
     tables::ErrorAndTiming et;
@@ -26,7 +26,7 @@ make_circuit(qes::Program<> program, fp_t p) {
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
-    return DetailedStimCircuit::from_qes(program, errors, timing);
+    return DetailedStimCircuit::from_qes(program, errors, timing, fix_timing_error_as_p ? p : -1.0);
 }
 
 inline memory_result_t

@@ -109,17 +109,17 @@ DecodingGraph::build_error_polynomial() {
     fp_t expectation = 0.0;
     for (size_t i = 1; i < edges.size(); i++) {
         sptr<edge_t> e = edges[i];
-        poly_t a(pX.size()+1);  // p(X) * (1-e)
-        poly_t b(pX.size()+1);  // p(X) * eX
+        poly_t a(pX.size()+1, 0);  // p(X) * (1-e)
+        poly_t b(pX.size()+1, 0);  // p(X) * eX
         
         b[0] = 0;
         for (size_t j = 0; j < pX.size(); j++) {
             a[j] += pX[j] * (1 - e->error_probability);
             b[j+1] += pX[j] * e->error_probability;
         }
-        pX.clear(); pX.push_back(0);    // Clear and increment the size of pX
+        pX.push_back(0);    // Clear and increment the size of pX
         for (size_t j = 0; j < pX.size(); j++) {
-            pX[j] = a[0] + b[0];
+            pX[j] = a[j] + b[j];
             if (i == edges.size()-1) {
                 expectation += j * pX[j];
             }

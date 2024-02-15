@@ -10,7 +10,7 @@ namespace protean {
 
 inline size_t
 Scheduler::get_measurement_ctr() {
-    return meas_ctr;
+    return mctr;
 }
 
 inline size_t
@@ -23,207 +23,85 @@ Scheduler::get_meas_ctr_map() {
     return meas_ctr_map;
 }
 
+inline void
+Scheduler::push_back_measurement(std::vector<int64_t>& operands, sptr<net::raw_vertex_t> rv) {
+    meas_ctr_map[rv] = mctr++;
+    operands.push_back(qu(rv));
+}
+
+template <class FUNC> inline bool
+Scheduler::try_and_push_back_cx_operands(
+        std::vector<int64_t>& cx_operands,
+        std::set<int64_t>& in_use,
+        const std::vector<sptr<net::raw_vertex_t>>& path,
+        size_t k,
+        FUNC additional_test,
+        bool reverse_cx_dir)
+{
+    if (k >= path.size()) return false;
+    sptr<net::raw_vertex_t> rx = path.at(k-1),
+                        ry = path.at(k);
+    if (!additional_test(rx, ry)) return false;
+    int64_t qx = qu(rx),
+            qy = qu(ry);
+    if (in_use.count(qx) || in_use.count(qy)) return false;
+    if (reverse_cx_dir) std::swap(qx, qy);
+    
+    vtils::push_back_all(cx_operands, {qx, qy});
+    vtils::insert_all(in_use, {qx, qy});
+
+    return true;
+}
+
 inline RawNetwork::parity_support_t&
 Scheduler::get_support(sptr<net::raw_vertex_t> v) {
     return net_p->raw_connection_network.get_support(v);
 }
 
-inline std::vector<sptr<net::raw_vertex_t>>&
-Scheduler::get_proxy_walk_path(sptr<net::raw_vertex_t> rx, sptr<net::raw_vertex_t> ry) {
-    return net_p->raw_connection_network.get_proxy_walk_path(rx, ry);
-}
-
-inline Scheduler::stage_t&
-Scheduler::get_visited_edge_map(
-        sptr<net::raw_edge_t> re,
-        sptr<net::raw_vertex_t> src,
-        sptr<net::raw_vertex_t> dst) 
-{
-    auto k = std::make_tuple(re, src, dst);
-    if (!visited_edge_map.count(k)) {
-        visited_edge_map[k] = stage_t::invalid;
-    }
-    return visited_edge_map[k];
-}
-
-inline bool
-Scheduler::is_proxy_usable(
-        sptr<net::raw_vertex_t> rprx,
-        sptr<net::raw_vertex_t> src,
-        sptr<net::raw_vertex_t> dst) 
-{
-    if (!proxy_occupied_map.count(rprx)) return true;
-    auto& entry = proxy_occupied_map[rprx];
-    return std::get<0>(entry) == src && std::get<1>(entry) == dst;
-}
-
-inline bool
-Scheduler::has_contention(sptr<net::raw_vertex_t> rv) {
-    sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
-    return cx_in_use_set.count(pv);
+inline int64_t
+Scheduler::qu(sptr<net::raw_vertex_t> rv) {
+    sptr<net::phys_vertex_t> pv = net_p->role_to_phys.at(rv);
+    return static_cast<int64_t>(pv->id);
 }
 
 inline bool
 Scheduler::test_and_set_qubit(sptr<net::raw_vertex_t> rv) {
-    sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
-    // Check if rv is allowed to test the qubit.
-    if (pv->cycle_role_map.at(rv) > cycle) {
-        return false;
-    }
-    // Check if the physical qubit is already taken by rv:
-    if (active_role_map[pv] == rv && active_role_map[pv] != nullptr) {
-        return true;
-    }
-    // Check if the physical qubit is unlocked, and also check if rv can take it.
-    if (active_role_map[pv] == nullptr
-        && (cycle_role_order_map[pv].empty()
-            || cycle_role_order_map[pv].front() == pv->cycle_role_map.at(rv)))
-    {
+    sptr<net::phys_vertex_t> pv = net_p->role_to_phys.at(rv);
+    if (!active_role_map.count(pv) || active_role_map.at(pv) == nullptr) {
         active_role_map[pv] = rv;
         return true;
+    } else if (active_role_map.at(pv) == rv) {
+        return true;
+    } else {
+        return false;
     }
-    return false;
 }
 
 inline bool
-Scheduler::test_and_set_path(const std::vector<sptr<net::raw_vertex_t>>& path) {
-    size_t i = 1;
-    for ( ; i < path.size()-1; i++) {
-        if (!test_and_set_qubit(path.at(i))) goto failed_test_and_set_path;
-    }
-    return true;
-failed_test_and_set_path:
-    // If we fail, we need to unset the prior qubits in the path.
-    --i;
-    for ( ; i >= 1; i--) {
-        release_qubit(path.at(i), false);
-    }
-    return false;
-}
-
-inline bool
-Scheduler::test_and_set_proxy_ownership(const std::vector<sptr<net::raw_vertex_t>>& path) {
-    sptr<net::raw_vertex_t> src = path[0],
-                            dst = path.back();
-    size_t i = 1;
-    for ( ; i < path.size()-1; i++) {
-        sptr<net::raw_vertex_t> r = path.at(i);
-        if (is_proxy_usable(r, src, dst)) {
-            if (!proxy_occupied_map.count(r)) {
-                proxy_occupied_map[r] = std::make_tuple(src, dst, 0);
-            }
-        } else {
-            goto failed_test_and_set_proxy_ownership;
-        }
-    }
-    return true;
-failed_test_and_set_proxy_ownership:
-    --i;
-    for ( ; i >= 1; i--) {
-        proxy_occupied_map.erase(path.at(i));
-    }
-    return false;
-}
-
-inline void
-Scheduler::release_qubit(sptr<net::raw_vertex_t> rv, bool pop_cycle) {
-    sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
-    if (active_role_map[pv] == rv) {
+Scheduler::release_qubit(sptr<net::raw_vertex_t> rv) {
+    sptr<net::phys_vertex_t> pv = net_p->role_to_phys.at(rv);
+    if (active_role_map.at(pv) == rv) {
         active_role_map[pv] = nullptr;
-        if (pop_cycle && !cycle_role_order_map[pv].empty()) {
-            cycle_role_order_map[pv].pop_front();
-        }
+        return true;
+    }
+    return false;
+}
+
+inline void
+Scheduler::test_and_set_exit_on_fail(sptr<net::raw_vertex_t> rv, std::string caller) {
+    if (!test_and_set_qubit(rv)) {
+        print_test_and_set_debug_and_exit(rv, caller);
     }
 }
 
 inline void
-Scheduler::release_path(const std::vector<sptr<net::raw_vertex_t>>& path) {
-    for (size_t i = 1; i < path.size()-1; i++) release_qubit(path.at(i));
-}
-
-inline void
-Scheduler::release_proxy_ownership(const std::vector<sptr<net::raw_vertex_t>>& path) {
-    sptr<net::raw_vertex_t> src = path[0],
-                            dst = path.back();
-    for (size_t i = 1; i < path.size()-1; i++) {
-        sptr<net::raw_vertex_t> r = path.at(i);
-        auto& entry = proxy_occupied_map[r];
-        if (std::get<0>(entry) == src && std::get<1>(entry) == dst) {
-            proxy_occupied_map.erase(r);
-        }
-    }
-}
-
-inline Scheduler::cx_t
-Scheduler::ret_null_and_set_status(cx_ret_t s) {
-    cx_return_status = s;
-    return std::make_tuple(nullptr, nullptr, nullptr, false, false);
-}
-
-inline void
-Scheduler::push_back_cx(
-        std::vector<uint64_t>& qes_operands,
-        cx_t cx,
-        sptr<net::raw_vertex_t> src,
-        sptr<net::raw_vertex_t> dst,
-        bool is_x_check,
-        stage_t s) 
-{
-    if (is_x_check) return push_back_cx(qes_operands, cx, dst, src, false, s);
-
-    sptr<net::raw_vertex_t> rx = std::get<0>(cx),
-                        ry = std::get<1>(cx);
-    sptr<net::raw_edge_t> re = std::get<2>(cx);
-    sptr<net::phys_vertex_t> px = net_p->role_to_phys[rx];
-    sptr<net::phys_vertex_t> py = net_p->role_to_phys[ry];
-
-    get_visited_edge_map(re, src, dst) = std::get<3>(cx) ? stage_t::needs_undo : s;
-
-    vtils::push_back_all(qes_operands, {px->id, py->id});
-    vtils::insert_all(cx_in_use_set, {px, py});
-    update_proxy_info(rx);
-    update_proxy_info(ry);
-}
-
-inline void
-Scheduler::push_back_measurement(std::vector<uint64_t>& qes_operands, sptr<net::raw_vertex_t> rv) {
-    sptr<net::phys_vertex_t> pv = net_p->role_to_phys[rv];
-    qes_operands.push_back(pv->id);
-    meas_ctr_map[rv] = meas_ctr++;
-}
-
-inline void
-Scheduler::update_proxy_info(sptr<net::raw_vertex_t> prx) {
-    if (proxy_occupied_map.count(prx)) {
-        std::get<2>(proxy_occupied_map[prx])++;
-    }
-}
-
-inline std::set<sptr<net::raw_vertex_t>>
-Scheduler::get_checks_at_stage(stage_t s) {
-    std::set<sptr<net::raw_vertex_t>> stage_checks(all_checks);
-    for (auto it = stage_checks.begin(); it != stage_checks.end(); ) {
-        if (stage_map[*it] != s)    it = stage_checks.erase(it);
-        else                        it++;
-    }
-    return stage_checks;
-}
-
-inline std::set<sptr<net::raw_vertex_t>>
-Scheduler::get_prev(sptr<net::raw_vertex_t> rpq) {
-    return scheduled_data_qubit_map[rpq];
-}
-
-inline std::set<sptr<net::raw_vertex_t>>
-Scheduler::get_post(sptr<net::raw_vertex_t> rpq, const std::set<sptr<net::raw_vertex_t>>& curr) {
-    auto& support = get_support(rpq);
-    std::set<sptr<net::raw_vertex_t>> post;
-    for (sptr<net::raw_vertex_t> rdq : support.data) {
-        if (!scheduled_data_qubit_map[rpq].count(rdq) && !curr.count(rdq)) {
-            post.insert(rdq);
-        }
-    }
-    return post;
+Scheduler::print_test_and_set_debug_and_exit(sptr<net::raw_vertex_t> rv, std::string caller) {
+    sptr<net::phys_vertex_t> pv = net_p->role_to_phys.at(rv);
+    std::cerr << "[ " << caller << " ] qubit " << graph::print_v(rv)
+        << " failed to acquire " << graph::print_v(pv)
+        << " from " << graph::print_v(active_role_map.at(pv))
+        << std::endl;
+    exit(1);
 }
 
 }   // protean
