@@ -7,10 +7,9 @@
 #define QONTRA_DECODING_GRAPH_h
 
 #include "qontra/defs.h"
+#include "qontra/ext/stim.h"
 #include "qontra/graph/algorithms/distance.h"
 #include "qontra/graph.h"
-
-#include <stim.h>
 
 namespace qontra {
 namespace graph {
@@ -119,7 +118,7 @@ private:
 // method use that).
 
 DecodingGraph
-to_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGraph::Mode::NORMAL);
+to_decoding_graph(const DetailedStimCircuit&, DecodingGraph::Mode=DecodingGraph::Mode::NORMAL);
 
 }   // graph
 }   // qontra

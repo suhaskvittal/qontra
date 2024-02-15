@@ -140,7 +140,7 @@ DecodingGraph::update_state() {
 }
 
 DecodingGraph
-to_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
+to_decoding_graph(const DetailedStimCircuit& circuit, DecodingGraph::Mode mode) {
     if (mode == DecodingGraph::Mode::DO_NOT_BUILD)  return DecodingGraph();
     DecodingGraph graph(mode);
 
@@ -169,6 +169,12 @@ to_decoding_graph(const stim::Circuit& circuit, DecodingGraph::Mode mode) {
     error_callback_t err_f = 
         [&](fp_t prob, std::vector<uint64_t> dets, std::set<uint64_t> frames)
         {
+            std::cout << "number of dets: " << dets.size() << ", dets:";
+            for (uint64_t d : dets) {
+                std::cout << " " << d;
+                if (circuit.flag_detection_events.count(d)) std::cout << "(F)";
+            }
+            std::cout << std::endl;
             if (prob == 0 || dets.size() == 0 || dets.size() > 2) {
                 return;  // Zero error probability -- not an edge.
             }
