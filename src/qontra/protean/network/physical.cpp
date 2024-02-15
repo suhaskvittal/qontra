@@ -674,8 +674,6 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                 if (raw_connection_network.are_in_same_support(r1, r2) != nullptr
                     || r1_r2_are_same_flag)
                 {
-                    std::cout << "[ recompute_cycle_role_maps ] qubit " << print_v(pv)
-                        << ": merging " << print_v(r1) << " and " << print_v(r2) << std::endl;
                     auto deleted = raw_connection_network.merge(r1, r2);
                     if (deleted != nullptr) {
                         deleted_vertices.insert(deleted);
@@ -734,6 +732,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
 
                 sptr<phys_vertex_t> px = role_to_phys[rx];
                 for (sptr<raw_vertex_t> ry : iw->support) {
+                    if (rx == ry) continue;
                     sptr<phys_vertex_t> py = role_to_phys[ry];
                     if (px == py) ie->conflicts.emplace_back(rx, ry, px);
                 }

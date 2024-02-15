@@ -15,12 +15,16 @@
 
 using namespace qontra;
 
+// This file is a potpourri file. Modify as you'd like.
+
 int main(int argc, char* argv[]) {
     std::string qes_file(argv[1]);
     fp_t p = atof(argv[2]);
 
     DetailedStimCircuit error_model = make_circuit(qes_file, p, true);
+
     graph::DecodingGraph gr = graph::to_decoding_graph(error_model);
+    /*
     // Print out error polynomial:
     poly_t errp = gr.get_error_polynomial();
 
@@ -39,5 +43,7 @@ int main(int argc, char* argv[]) {
         << std::setprecision(6)
         << gr.get_expected_errors()
         << std::endl;
+    */
+    
     return 0;
 }

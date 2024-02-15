@@ -19,11 +19,11 @@ if '--use-jid' in argv:
     version_list = [
         ('1', 'ral.rlb.rcr', 4),
         ('2.1', 'fla.ral.rlb.rcr', 4),
-        ('2.2', 'jid.ral.fla.ral.rlb.rcr', 4),
+        ('2.2', 'jid.ral.fla.ral.jid.ral.rlb.rcr', 4),
         ('3.1', 'fla.ral(con.ral,prx.ral)+rlb.rcr', 4),
-        ('3.2', 'jid.ral.fla.ral(con.ral.prx.ral)+rlb.rcr', 4),
-        ('4.1', 'fla.ral(prx.ral)+rlb.rcr', 3),
-        ('4.2', 'jid.ral.fla.ral(prx.ral)+rlb.rcr', 3),
+        ('3.2', 'jid.ral.fla.ral.jid.ral(con.ral.prx.ral)+rlb.rcr', 4),
+        ('4.1', 'fla.ral(con.prx.ral)+rlb.rcr', 3),
+        ('4.2', 'jid.ral.fla.ral.jid.ral(con.ral.prx.ral)+rlb.rcr', 3),
     ]
 else:
     version_list = [

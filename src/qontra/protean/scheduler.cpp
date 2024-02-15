@@ -30,6 +30,12 @@ print_path_inl(std::vector<PTR> path) {
 }
 
 inline void
+safe_emplace_back(qes::Program<>& program, std::string name, std::vector<int64_t> operands) {
+    if (operands.empty()) return;
+    program.emplace_back(name, std::vector<int64_t>(operands.begin(), operands.end()));
+}
+
+inline void
 safe_emplace_back(qes::Program<>& program, std::string name, std::vector<uint64_t> operands) {
     if (operands.empty()) return;
     program.emplace_back(name, std::vector<int64_t>(operands.begin(), operands.end()));
@@ -150,8 +156,8 @@ Scheduler::build_teardown(qes::Program<>& program) {
             r_operands.push_back(qu(rprx));
         }
     }
-    program.emplace_back("measure", m_operands);
-    program.emplace_back("reset", r_operands);
+    safe_emplace_back(program, "measure", m_operands);
+    safe_emplace_back(program, "reset", r_operands);
 }
 
 void
@@ -171,7 +177,7 @@ Scheduler::prep_tear_h_gates(qes::Program<>& program) {
             }
         }
     }
-    program.emplace_back("h", h_operands);
+    safe_emplace_back(program, "h", h_operands);
 }
 
 void
@@ -263,7 +269,7 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
             k++;
         }
         if (cx_operands.empty()) break;
-        program.emplace_back("cx", cx_operands);
+        safe_emplace_back(program, "cx", cx_operands);
     }
 }
 
@@ -427,8 +433,9 @@ PhysicalNetwork::make_schedule() {
                 // Make detection events for the flag qubits.
                 for (sptr<raw_vertex_t> rfq : raw_connection_network.flag_ownership_map[rv]) {
                     const size_t mt = scheduler.get_measurement_time(rfq) + meas_ctr_offset;
-                    safe_emplace_back(program, "event", {event_ctr, mt});
+                    safe_emplace_back(program, "event", std::vector<uint64_t>{event_ctr, mt});
                     program.back().put(print_v(rfq));
+                    program.back().put("flag");
                     event_ctr++;
                 }
             }
