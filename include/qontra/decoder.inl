@@ -3,6 +3,8 @@
  *  date    25 December 2023
  * */
 
+#include <strings.h>
+
 namespace qontra {
 
 template <class T> std::vector<uint64_t>

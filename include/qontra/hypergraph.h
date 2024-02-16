@@ -18,8 +18,6 @@ namespace base {
 struct hyperedge_t {
     std::vector<sptr<void>> endpoints;
 
-    sptr<void> operator[](size_t) const;
-
     template <class V=void> std::vector<sptr<V>> get(void) const;
     template <class V=void> sptr<V>              get(size_t) const;
     
@@ -38,6 +36,8 @@ public:
     HyperGraph(void)
         :vertices(),
         edges(),
+        incidence_graph(),
+        incidence_object_map(),
         adjacency_lists(),
         adjacency_mult_map(),
         id_to_vertex(),
@@ -50,6 +50,8 @@ public:
     HyperGraph(const HyperGraph& other)
         :vertices(other.vertices),
         edges(other.edges),
+        incidence_graph(other.incidence_graph),
+        incidence_object_map(other.incidence_object_map),
         adjacency_lists(other.adjacency_lists),
         adjacency_mult_map(other.adjacency_mult_map),
         id_to_vertex(other.id_to_vertex),
@@ -66,6 +68,7 @@ public:
     virtual bool    contains(sptr<V>) const;
     virtual bool    contains(sptr<HE>) const;
 
+    virtual bool    contains(std::vector<sptr<void>>) const;
     virtual bool    contains(std::vector<sptr<V>>) const;
 
     virtual sptr<V>     make_vertex(void) const;
@@ -120,6 +123,7 @@ protected:
     std::vector<sptr<HE>>   edges;
 
     IncidenceGraph incidence_graph;
+    std::map<sptr<base::vertex_t>, sptr<void>> incidence_object_map;
     std::map<sptr<V>, std::vector<sptr<V>>> adjacency_lists;
     vtils::TwoLevelMap<sptr<V>, sptr<V>, size_t> adjacency_mult_map;
 

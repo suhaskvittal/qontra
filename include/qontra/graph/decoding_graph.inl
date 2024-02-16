@@ -43,13 +43,12 @@ DecodingGraph::get(int c1, int c2, sptr<decoding::vertex_t> v1, sptr<decoding::v
 
 template <class CONTAINER> std::vector<sptr<decoding::vertex_t>>
 DecodingGraph::get_complementary_boundaries_to(CONTAINER vlist) {
-    std::set<int> colors_in_vlist;
+    std::set<int> colors_in_vlist(vlist.begin(), vlist.end());
     for (sptr<decoding::vertex_t> v : vlist) colors_in_vlist.insert(v->color);
+
     std::vector<sptr<decoding::vertex_t>> boundary_list;
-    for (int c = 0; c < number_of_colors; c++) {
-        if (!colors_in_vlist.count(c)) {
-            boundary_list.push_back(get_boundary_vertex(c));
-        }
+    for (int c : get_complementary_colors_to(colors_in_vlist, number_of_colors)) {
+        boundary_list.push_back(get_boundary_vertex(c));
     }
     return boundary_list;
 }
@@ -57,10 +56,10 @@ DecodingGraph::get_complementary_boundaries_to(CONTAINER vlist) {
 inline void
 DecodingGraph::activate_flags(const std::vector<uint64_t>& all_detectors) {
     deactivate_flags();
-    flags_are_active = true;
     for (uint64_t d : detectors) {
         if (flag_detectors.count(d)) active_flags.push_back(d);
     }
+    flags_are_active = !active_flags.empty();
 }
 
 inline void
@@ -90,6 +89,16 @@ DecodingGraph::update_state() {
     distance_matrix_map.clear();
     build_error_polynomial();
     return true;
+}
+
+template <class CONTAINER> inline std::vector<int>
+get_complementary_color_to(CONTAINER clist, int number_of_colors) {
+    std::set<int> clist_set(clist.begin(), clist.end());
+    std::vector<int> compl_list;
+    for (int c = 0; c < number_of_colors; c++) {
+        if (!clist.count(c)) compl_list.push_back(c);
+    }
+    return compl_list;
 }
 
 inline uint64_t

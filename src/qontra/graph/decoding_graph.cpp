@@ -15,7 +15,7 @@ namespace graph {
 using namespace decoding;
 
 DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_per_error)
-    :Graph(),
+    :HyperGraph(),
     number_of_colors(circuit.number_of_colors_in_circuit),
     error_polynomial(),
     expected_errors(),
@@ -45,12 +45,17 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
         sptr<vertex_t> vb = make_and_add_vertex(d);
         vb->is_boundary_vertex = true;
     } else {
+        std::vector<sptr<vertex_t>> boundary_vertices;
         for (int c = 0; c < number_of_colors; c++) {
             uint64_t d = get_color_boundary_index(c);
             sptr<vertex_t> vb = make_and_add_vertex(d);
             vb->is_boundary_vertex = true;
             vb->color = c;
+            boundary_vertices.push_back(vb);
         }
+        // Make all of these boundaries connected to each other by a 1.0 probability hyperedge.
+        sptr<hyperedge_t> e = make_and_add_edge(boundary_vertices);
+        e->probability = 1.0;
     }
     auto df = 
         [&] (uint64_t d)
@@ -82,11 +87,8 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                     for (uint64_t d : detectors) {
                         colors_in_detectors.push_back(circuit.detector_color_map.at(d));
                     }
-                    std::vector<uint64_t> boundary_indices;
-                    for (int c = 0; c < number_of_colors; c++) {
-                        if (!colors_in_detectors.count(c)) {
-                            boundary_indices.push_back(get_color_boundary_index(c));
-                        }
+                    for (int c : get_complementary_colors_to(colors_in_detectors, number_of_colors)) {
+                        boundary_indices.push_back(get_color_boundary_index(c));
                     }
                     // If boundary_indices.size() + dets.size() overflows, it's
                     // just best to leave dets as is (likely a measurement

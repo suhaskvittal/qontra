@@ -54,7 +54,7 @@ typedef std::vector<fp_t> poly_t;
 
 typedef Graph<decoding::vertex_t, decoding::edge_t> DijkstraGraph;
 
-class DecodingGraph : HyperGraph<decoding::vertex_t, decoding::hyperedge_t> {
+class DecodingGraph : public HyperGraph<decoding::vertex_t, decoding::hyperedge_t> {
 public:
     DecodingGraph(void);
     DecodingGraph(const DecodingGraph&);
@@ -103,6 +103,9 @@ private:
     std::set<uint64_t> flag_detectors;
     bool flags_are_active;
 };
+
+template <class CONTAINER>
+std::vector<int> get_complementary_colors_to(CONTAINER);
 
 uint64_t    get_color_boundary_index(int);
 fp_t        compute_weight(fp_t probability);

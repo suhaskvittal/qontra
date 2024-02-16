@@ -8,11 +8,6 @@ namespace graph {
 
 namespace base {
 
-inline sptr<void>
-hyperedge_t::operator[](size_t i) const {
-    return endpoints.at(i);
-}
-
 template <class V> inline std::vector<sptr<V>>
 hyperedge_t::get() const {
     return std::vector<sptr<V>>(endpoints.begin(), endpoints.end());
@@ -35,7 +30,7 @@ print_he(sptr<HE> e) {
     std::string out = "(";
     for (size_t i = 0; i < e.get_order(); i++) {
         if (i > 0) out += ",";
-        out += print_v<V>(e[i]);
+        out += print_v<V>(e->endpoints[i]);
     }
     out += ")";
     return out;
@@ -68,6 +63,15 @@ template <class V, class HE> inline bool
 HyperGraph<V, HE>::contains(sptr<HE> e) const {
     sptr<base::vertex_t> iv_e = get_incidence_vertex(e);
     return iv_e != nullptr;
+}
+
+template <class V, class HE> inline bool
+HyperGraph<V, HE>::contains(std::vector<sptr<void>> vlist) const {
+    std::vector<sptr<V>> _vlist(vlist.size());
+    for (size_t i = 0; i < vlist.size(); i++) {
+        _vlist[i] = std::reinterpret_pointer_cast<V>(vlist[i]);
+    }
+    return contains(_vlist);
 }
 
 template <class V, class HE> inline bool
@@ -105,30 +109,33 @@ HyperGraph<V, HE>::add_vertex(sptr<V> v) {
     id_to_vertex[v->id] = v;
     vertices.push_back(v);
     // Add to incidence graph.
-    incidence_graph.make_and_add_vertex(reinterpret_cast<uint64_t>(v));
+    sptr<base::vertex_t> iv_v =
+        incidence_graph.make_and_add_vertex(reinterpret_cast<uint64_t>(v.get()));
+    incidence_object_map[iv_v] = std::reinterpret_pointer_cast<void>(v);
     graph_has_changed = true;
     return true;
 }
 
 template <class V, class HE> bool
 HyperGraph<V, HE>::add_edge(sptr<HE> e) {
-    if (!is_edge_valid(e) || contains(e.endpoints.begin(), e.endpoints.end())) {
+    if (!is_edge_valid(e) || contains(e->endpoints)) {
         return false;
     }
     edges.push_back(e);
     // Update incidence_graph and adjacency_lists
-    sptr<base::vertex_t> iv_e = incidence_graph.make_and_add_vertex(reinterpret_cast<uint64_t>(e));
+    sptr<base::vertex_t> iv_e = incidence_graph.make_and_add_vertex(reinterpret_cast<uint64_t>(e.get()));
+    incidence_object_map[iv_e] = std::reinterpret_pointer_cast<void>(e);
     for (size_t i = 0; i < e->get_order(); i++) {
-        sptr<V> v = std::reinterpret_pointer_cast<V>(e[i]);
+        sptr<V> v = std::reinterpret_pointer_cast<V>(e->endpoints[i]);
         // Update adjacency_list before graph as share_hyperedge uses the
         // incidence_graph.
         for (size_t j = i+1; j < e->get_order(); j++) {
-            sptr<V> w = e[j];
-            if (!share_hyperedge(v, w)) {
+            sptr<V> w = std::reinterpret_pointer_cast<V>(e->endpoints[j]);
+            if (!share_hyperedge({v, w})) {
                 adjacency_lists[v].push_back(w);
                 adjacency_lists[w].push_back(v);
-                vtils::tlm_put(adjacency_mult_map, v, w, 0);
-                vtils::tlm_put(adjacency_mult_map, w, v, 0);
+                vtils::tlm_put(adjacency_mult_map, v, w, static_cast<size_t>(0));
+                vtils::tlm_put(adjacency_mult_map, w, v, static_cast<size_t>(0));
             }
             adjacency_mult_map[v][w]++;
             adjacency_mult_map[w][v]++;
@@ -164,7 +171,8 @@ HyperGraph<V, HE>::get_edge(std::vector<sptr<V>> vlist) const {
         inc_vlist.push_back(get_incidence_vertex(vlist.at(i)));
     }
     std::vector<sptr<base::vertex_t>> common = incidence_graph.get_common_neighbors(inc_vlist);
-    return common.size() == 1 && incidence_graph.get_degree(common[0]) == vlist.size() ? common[0] : nullptr;
+    return common.size() == 1 && incidence_graph.get_degree(common[0]) == vlist.size()
+            ? std::reinterpret_pointer_cast<HE>(incidence_object_map.at(common[0])) : nullptr;
 }
 
 template <class V, class HE> inline sptr<HE>
@@ -218,7 +226,7 @@ HyperGraph<V, HE>::delete_edge(sptr<HE> e) {
     sptr<base::vertex_t> iv_e = get_incidence_vertex(e);
     incidence_graph.delete_vertex(iv_e);
     // Update the adjacency lists of all endpoints of e.
-    update_adjacency_list_after_delete(e);
+    update_adjacency_lists_after_delete(e);
     for (auto it = edges.begin(); it != edges.end();) {
         if (*it == e)   it = edges.erase(it);
         else            it++;
@@ -328,7 +336,7 @@ template <class V, class HE> inline size_t
 HyperGraph<V, HE>::const_get_max_order() const {
     if (!graph_has_changed) return max_order;
     size_t mord = 0;
-    for (sptr<V> e : edges) {
+    for (sptr<HE> e : edges) {
         mord = std::max(e->get_order(), mord);
     }
     return mord;
@@ -354,7 +362,7 @@ template <class V, class HE>
 template <class PTR>
 inline sptr<base::vertex_t>
 HyperGraph<V, HE>::get_incidence_vertex(PTR obj_p) const {
-    return incidence_graph.get_vertex(reinterpret_cast<uint64_t>(obj_p));
+    return incidence_graph.get_vertex(reinterpret_cast<uint64_t>(obj_p.get()));
 }
 
 template <class V, class HE> bool
@@ -366,7 +374,7 @@ HyperGraph<V, HE>::is_edge_valid(sptr<HE> e) {
     //  3. All of them exist in this graph.
     std::set<sptr<V>> visited;
     for (size_t i = 0; i < e->get_order(); i++) {
-        sptr<V> v = std::reinterpret_pointer_cast<V>(e[i]);
+        sptr<V> v = std::reinterpret_pointer_cast<V>(e->endpoints[i]);
         if (v == nullptr) return false;
         if (visited.count(v)) return false;
         if (!contains(v)) return false;
@@ -378,11 +386,11 @@ HyperGraph<V, HE>::is_edge_valid(sptr<HE> e) {
 template <class V, class HE> void
 HyperGraph<V, HE>::update_adjacency_lists_after_delete(sptr<HE> e) {
     for (size_t i = 0; i < e->get_order(); i++) {
-        sptr<V> v = std::reinterpret_pointer_cast(e[i]);
+        sptr<V> v = std::reinterpret_pointer_cast<V>(e->endpoints[i]);
         auto& adj = adjacency_lists[v];
         for (size_t j = 0; j < e->get_order(); j++) {
             if (i == j) continue;
-            sptr<V> w = std::reinterpret_pointer_cast(e[j]);
+            sptr<V> w = std::reinterpret_pointer_cast<V>(e->endpoints[j]);
             for (auto it = adj.begin(); it != adj.end(); ) {
                 if (*it == w) {
                     if ((--adjacency_mult_map[v][w]) == 0) {
