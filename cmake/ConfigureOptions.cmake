@@ -13,8 +13,17 @@ if (NOT ARCH_x86_64)
 endif()
 
 if (NOT COMPILE_OPTIONS) 
-    set(RELEASE_COMPILE_OPTIONS -fno-strict-aliasing -Wno-psabi -Wno-write-strings)
-    set(DEBUG_COMPILE_OPTIONS -ggdb3 -fno-strict-aliasing -Wall -Wno-write-strings -Wno-bool-operation)
+    set(UNI_COMPILE_OPTIONS
+        -Wno-write-strings
+        -Winline)
+    set(RELEASE_COMPILE_OPTIONS
+        -fno-strict-aliasing
+        -Wno-psabi)
+    set(DEBUG_COMPILE_OPTIONS
+        -ggdb3
+        -fno-strict-aliasing
+        -Wall
+        -Wno-bool-operation)
 
     if (CMAKE_BUILD_TYPE MATCHES "Release")
         if (COMPILE_NEURAL_DECODER)
@@ -26,6 +35,7 @@ if (NOT COMPILE_OPTIONS)
     else()
         set(COMPILE_OPTIONS ${DEBUG_COMPILE_OPTIONS})
     endif()
+    set(COMPILE_OPTIONS ${COMPILE_OPTIONS} ${UNI_COMPILE_OPTIONS})
 endif()
 
 message(STATUS "(Build type = ${CMAKE_BUILD_TYPE}, compile options are: ${COMPILE_OPTIONS})")

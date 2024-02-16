@@ -15,6 +15,7 @@
 #include <vtils/two_level_map.h>
 
 #include <map>
+#include <vector>
 
 namespace qontra {
 namespace graph {
@@ -73,13 +74,14 @@ public:
     virtual void    change_id(sptr<V>, uint64_t to);
     virtual void    manual_update_id(sptr<V>, uint64_t old_id, uint64_t new_id);
 
-    virtual bool    contains(uint64_t id);
-    virtual bool    contains(sptr<V>);
-    virtual bool    contains(sptr<V>, sptr<V>);
-    virtual bool    contains(sptr<E>);
+    virtual bool    contains(uint64_t id) const;
+    virtual bool    contains(sptr<V>) const;
+    virtual bool    contains(sptr<V>, sptr<V>) const;
+    virtual bool    contains(sptr<E>) const;
 
-    virtual sptr<V> make_vertex(void);
-    virtual sptr<E> make_edge(sptr<V>, sptr<V>, bool is_undirected=true);
+    virtual sptr<V> make_vertex(void) const;
+    virtual sptr<V> make_vertex(uint64_t) const;
+    virtual sptr<E> make_edge(sptr<V>, sptr<V>, bool is_undirected=true) const;
 
     virtual bool    add_vertex(sptr<V>);
     virtual bool    add_edge(sptr<E>);
@@ -87,32 +89,34 @@ public:
     virtual sptr<V> make_and_add_vertex(uint64_t id);
     virtual sptr<E> make_and_add_edge(sptr<V>, sptr<V>, bool is_undirected=true);
 
-    virtual sptr<V> get_vertex(uint64_t);
-    virtual sptr<E> get_edge(sptr<V>, sptr<V>);
-    virtual sptr<E> get_edge(uint64_t, uint64_t);
+    virtual sptr<V> get_vertex(uint64_t) const;
+    virtual sptr<E> get_edge(sptr<V>, sptr<V>) const;
+    virtual sptr<E> get_edge(uint64_t, uint64_t) const;
 
     virtual void    delete_vertex(sptr<V>);
     virtual void    delete_edge(sptr<E>);
 
-    std::vector<sptr<V>>    get_vertices(void);
-    std::vector<sptr<E>>    get_edges(void);
+    std::vector<sptr<V>>    get_vertices(void) const;
+    std::vector<sptr<E>>    get_edges(void) const;
 
-    size_t  n(void);
-    size_t  m(void);
+    size_t  n(void) const;
+    size_t  m(void) const;
 
-    std::vector<sptr<V>>    get_neighbors(sptr<V>);
-    std::vector<sptr<V>>    get_incoming(sptr<V>);
-    std::vector<sptr<V>>    get_outgoing(sptr<V>);
+    std::vector<sptr<V>>    get_neighbors(sptr<V>) const;
+    std::vector<sptr<V>>    get_incoming(sptr<V>) const;
+    std::vector<sptr<V>>    get_outgoing(sptr<V>) const;
 
-    std::vector<sptr<V>>    get_common_neighbors(sptr<V>, sptr<V>);
+    template <class CONTAINER> std::vector<sptr<V>> get_common_neighbors(CONTAINER) const;
 
-    size_t  get_degree(sptr<V>);
-    size_t  get_indegree(sptr<V>);
-    size_t  get_outdegree(sptr<V>);
-    size_t  get_inoutdegree(sptr<V>);
+    size_t  get_degree(sptr<V>) const;
+    size_t  get_indegree(sptr<V>) const;
+    size_t  get_outdegree(sptr<V>) const;
+    size_t  get_inoutdegree(sptr<V>) const;
 
-    fp_t    get_mean_degree(void);
+    fp_t    get_mean_degree(void) const;
     size_t  get_max_degree(void);
+
+    size_t  const_get_max_degree(void) const;
 
     void    force_update_state(void);
 protected:
