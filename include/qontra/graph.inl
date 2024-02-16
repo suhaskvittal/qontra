@@ -34,22 +34,12 @@ print_v(sptr<void> v) {
 
 template <class V, class E> inline std::string
 print_e(sptr<E> e) {
-    sptr<V> src = e->get_source<V>(),
-            dst = e->get_target<V>();
+    sptr<V> src = std::reinterpret_pointer_cast<V>(e->src),
+            dst = std::reinterpret_pointer_cast<V>(e->dst);
     std::string dir_prefix = e->is_undirected ? "u" : "d";
     return dir_prefix + "(" + print_v<V>(src) + "," + print_v<V>(dst) + ")";
 }
 
-template <class V, class HE> inline std::string
-print_he(sptr<HE> e) {
-    std::string out = "(";
-    for (size_t i = 0; i < e.get_order(); i++) {
-        if (i > 0) out += ",";
-        out += print_v(e[i]);
-    }
-    out += ")";
-    return out;
-}
 
 template <class V, class E> inline void
 Graph<V, E>::change_id(sptr<V> v, uint64_t to) {
@@ -78,8 +68,8 @@ Graph<V, E>::contains(sptr<V> v) const {
 
 template <class V, class E> inline bool
 Graph<V, E>::contains(sptr<E> e) const {
-    sptr<V> v1 = e->get_source<V>(),
-            v2 = e->get_target<V>();
+    sptr<V> v1 = std::reinterpret_pointer_cast<V>(e->src),
+            v2 = std::reinterpret_pointer_cast<V>(e->dst);
     return adjacency_matrix.count(v1)
             && adjacency_matrix.at(v1).count(v2)
             && adjacency_matrix.at(v1).at(v2) == e;
@@ -125,8 +115,8 @@ Graph<V, E>::add_vertex(sptr<V> v) {
 template <class V, class E> bool
 Graph<V, E>::add_edge(sptr<E> e) {
     if (e == nullptr) return false;
-    sptr<V> src = e->get_source<V>(),
-            dst = e->get_target<V>();
+    sptr<V> src = std::reinterpret_pointer_cast<V>(e->src),
+            dst = std::reinterpret_pointer_cast<V>(e->dst);
     if (src == dst)                         return false;
     if (!contains(src) || !contains(dst))   return false;
     if (contains(src, dst))                 return false;
@@ -187,8 +177,8 @@ Graph<V, E>::delete_vertex(sptr<V> v) {         // O(n) operation
 
     for (auto it = edges.begin(); it != edges.end();) {
         sptr<E> e = *it;
-        sptr<V> u1 = e->get_source<V>(),
-                u2 = e->get_target<V>();
+        sptr<V> u1 = std::reinterpret_pointer_cast<V>(e->src),
+                u2 = std::reinterpret_pointer_cast<V>(e->dst);
         if (u1 == v || u2 == v) { 
             // Delete v from the adjacency list of the other vertex.
             sptr<V> other = u1;
@@ -224,8 +214,8 @@ Graph<V, E>::delete_vertex(sptr<V> v) {         // O(n) operation
 template <class V, class E> void
 Graph<V, E>::delete_edge(sptr<E> e) {  // O(m) operation
     if (e == nullptr || !contains(e)) return;
-    sptr<V> src = e->get_source<V>(),
-            dst = e->get_target<V>();
+    sptr<V> src = std::reinterpret_pointer_cast<V>(e->src),
+            dst = std::reinterpret_pointer_cast<V>(e->dst);
 
     adjacency_matrix[src][dst] = nullptr;
     
@@ -291,7 +281,7 @@ Graph<V, E>::get_neighbors(sptr<V> v) const {
 
 template <class V, class E> inline std::vector<sptr<V>>
 Graph<V, E>::get_incoming(sptr<V> v) const {
-    return r_adjacency_list.at(v);
+    return r_adjacency_lists.at(v);
 }
 
 template <class V, class E> inline std::vector<sptr<V>>

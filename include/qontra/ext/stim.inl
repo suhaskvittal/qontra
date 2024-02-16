@@ -14,8 +14,10 @@ DetailedStimCircuit::operator=(const stim::Circuit& other) {
 inline DetailedStimCircuit&
 DetailedStimCircuit::operator=(const DetailedStimCircuit& other) {
     stim::Circuit::operator=(other);
-    detection_event_to_color = other.detection_event_to_color;
-    flag_detection_events = other.flag_detection_events;
+    number_of_colors_in_circuit = other.number_of_colors_in_circuit;
+    detector_base_map = other.detector_base_map;
+    detector_color_map = other.detector_color_map;
+    flag_detectors = other.flag_detectors;
     return *this;
 }
 
@@ -88,7 +90,8 @@ right_shift(stim::simd_bit_table<W>& tbl, int64_t by) {
 
 namespace stim {
 
-template <size_t W> inline bitword<W> operator~(bitword<W> w) {
+template <size_t W>
+inline bitword<W> operator~(bitword<W> w) {
     return w ^ bitword<W>::tile64(UINT64_MAX);
 }
 

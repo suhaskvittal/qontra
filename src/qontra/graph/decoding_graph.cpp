@@ -1,296 +1,302 @@
 /*
  *  author: Suhas Vittal
- *  date:   2 August 2022
+ *  date:   15 February 2024
  * */
 
 #include "qontra/graph/decoding_graph.h"
 
-#include <vtils/set_algebra.h>
+#include <vtils/utility.h>
+
+#include <initializer_list>
 
 namespace qontra {
 namespace graph {
 
-typedef std::function<void(fp_t, std::vector<uint64_t>, std::set<uint64_t>)>
-    error_callback_t;
-typedef std::function<void(uint64_t, std::array<fp_t, N_COORD>)>
-    detector_callback_t;
-
-void
-read_detector_error_model(
-        const stim::DetectorErrorModel&, 
-        uint64_t n_iter,
-        uint64_t& det_offset, 
-        std::array<fp_t, N_COORD>& coord_offset,
-        error_callback_t,
-        detector_callback_t);
-
 using namespace decoding;
 
-//
-// DecodingGraph Definitions
-//
-
-DecodingGraph::DecodingGraph(Mode m)
+DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_per_error)
     :Graph(),
-    distance_matrix(),
+    number_of_colors(circuit.number_of_colors_in_circuit),
     error_polynomial(),
     expected_errors(),
-    mode(m)
+    dijkstra_graph_map(),
+    flagged_dijkstra_graph_map(),
+    distance_matrix_map(),
+    flagged_distance_matrix_map(),
+    active_flags(),
+    flag_edge_map(),
+    flag_detectors(circuit.flag_detectors),
+    flags_are_active(false)
 {
-    std::array<fp_t, N_COORD> boundary_coords;
-    boundary_coords.fill(-1);
-
-    sptr<decoding::vertex_t> boundary = std::make_shared<decoding::vertex_t>();
-    boundary->id = BOUNDARY_INDEX;
-    boundary->coords = boundary_coords;
-    add_vertex(boundary);
-}
-
-DecodingGraph::DecodingGraph(const DecodingGraph& other)
-    :Graph(other),
-    distance_matrix(other.distance_matrix),
-    error_polynomial(other.error_polynomial),
-    expected_errors(other.expected_errors),
-    mode(other.mode)
-{}
-
-DecodingGraph&
-DecodingGraph::operator=(const DecodingGraph& other) {
-    Graph::operator=(other);
-    distance_matrix = other.distance_matrix;
-    error_polynomial = other.error_polynomial;
-    expected_errors = other.expected_errors;
-    mode = other.mode;
-    return *this;
-}
-
-DecodingGraph::matrix_entry_t
-DecodingGraph::dijkstra_cb(sptr<vertex_t> src,
-                            sptr<vertex_t> dst,
-                            const std::map<sptr<vertex_t>, fp_t>& dist,
-                            const std::map<sptr<vertex_t>, sptr<vertex_t>>& pred)
-{
-    uint32_t length = 0;
-    std::set<uint64_t> frames;
-
-    fp_t weight = dist.at(dst);
-    bool found_boundary = false;
-    std::vector<sptr<vertex_t>> path;
-    if (weight < 1000) {
-        auto curr = dst;
-        while (curr != src) {
-            auto next = pred.at(curr);
-            if (curr == next) {
-                weight = 1000000000;
-                path.clear();
-                found_boundary = false;
-                goto failed;
-            }
-            auto e = get_edge(next, curr);
-            // Update data
-            frames ^= e->frames;
-            length++;
-            path.push_back(curr);
-            found_boundary |= (is_boundary(curr) || is_colored_boundary(curr)) && (curr != dst);
-            curr = next;
+    stim::DetectorErrorModel dem =
+        stim::ErrorAnalyzer::circuit_to_detector_error_model(
+                circuit,
+                true,   // decompose errors
+                true,   // fold loops
+                false,  // allow gauge detectors (non-deterministic detectors)
+                1.0,    // approx disjoint errors threshold
+                true,   // ignore decomposition failures
+                false
+            );
+    // Create boundaries first.
+    if (number_of_colors == 0) {
+        // Then we have a single boundary.
+        uint64_t d = get_color_boundary_index(COLOR_ANY);
+        sptr<vertex_t> vb = make_and_add_vertex(d);
+        vb->is_boundary_vertex = true;
+    } else {
+        for (int c = 0; c < number_of_colors; c++) {
+            uint64_t d = get_color_boundary_index(c);
+            sptr<vertex_t> vb = make_and_add_vertex(d);
+            vb->is_boundary_vertex = true;
+            vb->color = c;
         }
-        path.push_back(src);
     }
-failed:
-    fp_t prob = pow(10, -weight);
-    return (matrix_entry_t) {length, prob, weight, frames, path, found_boundary};
+    auto df = 
+        [&] (uint64_t d)
+        {
+            this->make_and_add_vertex(d);
+        };
+    auto ef =
+        [&] (fp_t p, std::vector<uint64_t> detectors, std::set<uint64_t> frames)
+        {
+            if (p == 0 || dets.size() == 0) return;
+            // Remove all flags from the detectors.
+            std::vector<uint64_t> flags;
+            for (auto it = detectors.begin(); it != detectors.end(); ) {
+                if (flag_detectors.count(*it)) {
+                    flags.push_back(*it);
+                    it = detectors.erase(it);
+                } else {
+                    it++;
+                }
+            }
+            // If it is less than the expected number of flips, then add
+            // boundaries.
+            if (dets.size() < flips_per_error) {
+                if (number_of_colors == 0) {
+                    uint64_t b = get_color_boundary_index(COLOR_ANY);
+                    detectors.push_back(b);
+                } else {
+                    std::set<int> colors_in_detectors;
+                    for (uint64_t d : detectors) {
+                        colors_in_detectors.push_back(circuit.detector_color_map.at(d));
+                    }
+                    std::vector<uint64_t> boundary_indices;
+                    for (int c = 0; c < number_of_colors; c++) {
+                        if (!colors_in_detectors.count(c)) {
+                            boundary_indices.push_back(get_color_boundary_index(c));
+                        }
+                    }
+                    // If boundary_indices.size() + dets.size() overflows, it's
+                    // just best to leave dets as is (likely a measurement
+                    // error).
+                    if (boundary_indices.size() + detectors.size() == flips_per_error) {
+                        vtils::push_back_range(detectors, boundary_indices);
+                    }
+                }
+            }
+            // If there is an overflow, print out debug info and exit.
+            if (dets.size() > flips_per_error) {
+                std::cerr << "[ DecodingGraph ] found error flipping detectors [";
+                for (uint64_t d : detectors) std::cerr << " " << d;
+                std::cerr << " ] and flags [";
+                for (uint64_t d : flags) std::cerr << " " << d;
+                std::cerr << " ] which had more than " << flips_per_error << " flips." << std::endl;
+                exit(1);
+            }
+            // Create hyperedge now.
+            std::vector<sptr<vertex_t>> vlist;
+            for (uint64_t d : detectors) {
+                if (!this->contains(d)) {
+                    vlist.push_back(this->make_and_add_vertex(d));
+                } else {
+                    vlist.push_back(this->get_vertex(d));
+                }
+            }
+            sptr<hyperedge_t> e = this->get_edge(vlist);
+            if (e != nullptr) {
+                fp_t r = e->probability;
+                if (frames == e->frames) {
+                    p = p*(1-r) + r*(1-p);
+                }
+            } else {
+                e = this->make_vertex(vlist);
+            }
+            e->probability = p;
+            e->frames = frames;
+            // If this is a flag edge, do not add it to the graph. Instead, add
+            // it to the flag_edge_map.
+            if (flags.empty()) {
+                this->add_vertex(e);
+            } else {
+                for (uint64_t f : flags) {
+                    this->flag_edge_map[f].insert(e);
+                }
+            }
+        };
+    uint64_t detector_offset = 0;
+    read_detector_error_model(dem, 1, detector_offset, ef, df);
+}
+
+void
+DecodingGraph::dijkstra(int c1, int c2, sptr<vertex_t> from) {
+    if (c1 > c2) return dijkstra(c2, c1, from);
+    auto c1_c2 = std::make_pair(c1, c2);
+    
+    auto& dgr_map = flags_are_active ? flagged_dijkstra_graph_map : dijkstra_graph_map;
+    auto& dm_map = flags_are_active ? flagged_distance_matrix_map : distance_matrix_map;
+
+    if (!dgr_map.count(c1_c2)) {
+        make_dijkstra_graph(c1, c2);
+    }
+    // Retrieve the dijkstra graph from the map. Place it back later.
+    uptr<DijkstraGraph> dgr = std::move(dgr_map[c1_c2]);
+    std::map<sptr<vertex_t>, fp_t> dist;
+    std::map<sptr<vertex_t>, sptr<vertex_t>> pred;
+    dijkstra(dgr.get(), from, dist, pred, 
+        [] (sptr<edge_t> e)
+        {
+            return compute_weight(e->probability);
+        });
+    // Now, update the distance matrix. We'll do this manually to optimize for
+    // speed.
+    auto& dm = dm_map[c1_c2];
+    for (sptr<vertex_t> w : dgr->get_vertices()) {
+        error_chain_t ec;
+
+        bool failed_to_converge = false;
+        size_t n_iter = 0;
+
+        sptr<vertex_t> curr = w;
+        while (curr != from) {
+            sptr<vertex_t> next = pred[w];
+            sptr<edge_t> e = dgr->get_edge(curr, next);
+            // Update error chain data.
+            ec.length++;
+            ec.probability *= e->probability;
+            ec.weight += compute_weight(e->probability);
+            ec.path.push_back(curr);
+            if (is_boundary(curr)) {
+                ec.runs_through_boundary = true;
+                ec.boundary_vertices.push_back(curr);
+            }
+            curr = next;
+            // Check if are taking too long.
+            if ((++n_iter) >= 10'000) {
+                failed_to_converge = true;
+                break;
+            }
+        }
+        // Some last updates (adding from).
+        ec.length++;
+        ec.path.push_back(from);
+        if (is_boundary(from)) {
+            ec.runs_through_boundary = true;
+            ec.boundary_vertices.push_back(from);
+        }
+        // Handle the case where we fail to converge:
+        if (failed_to_converge) {
+            ec.length = std::numeric_limits<size_t>::max();
+            ec.probability = 0.0;
+            ec.weight = std::numeric_limits<fp_t>::max();
+            ec.runs_through_boundary = false;
+            ec.path.clear();
+            ec.boundary_vertices.clear();
+        }
+        // Update dm.
+        dm[from][w] = std::move(ec);
+    }
+    dgr_map[c1_c2] = std::move(dgr);
+}
+
+void
+DecodingGraph::make_dijkstra_graph(int c1, int c2) {
+    // We need to build a suitable graph for Dijkstra's:
+    uptr<Graph<vertex_t, edge_t>> dgr = std::make_unique();
+    // Populate dgr.
+    for (sptr<vertex_t> v : get_vertices()) {
+        if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
+            dgr->add_vertex(v);
+        }
+    }
+    // Now, add edges to the graph.
+    // First handle flag edges.
+    std::set<sptr<hyperedge_t>> visited_flag_edges;
+    fp_t renorm_factor = 1.0;
+    for (uint64_t fd : active_flags) {
+        for (sptr<hyperedge_t> he : flag_edge_map[fd]) {
+            if (visited_flag_edges.count(he)) continue;
+
+            fp_t p = he->error_probability;
+            for (size_t i = 0; i < he->get_order(); i++) {
+                sptr<vertex_t> v = he[i];
+                if (!dgr->contains(v)) continue;
+                for (size_t j = i+1; j < he->get_order(); j++) {
+                    sptr<vertex_t> w = he[j];
+                    if (!dgr->contains(w)) continue;
+                    // Make edge if it does not exist. Update probability.
+                    sptr<edge_t> e = dgr->get_edge(v, w);
+                    if (e == nullptr) {
+                        e = dgr->make_and_add_edge(v, w);
+                    }
+                    fp_t& r = e->probability;
+                    r = (1-r)*p + (1-p)*r;
+                }
+            }
+            renorm_factor *= p;
+            visited_flag_edges.insert(he);
+        }
+    }
+    // Now handle other edges.
+    for (sptr<vertex_t> v : dgr->get_vertices()) {
+        for (sptr<vertex_t> w : dgr->get_vertices()) {
+            if (dgr->contains(v, w)) continue;
+            sptr<edge_t> e = dgr->get_edge(v, w);
+            if (e == nullptr) {
+                e = dgr->make_and_add_edge(v, w);
+            }
+            fp_t p = 0.0;
+            for (sptr<hyperedge_t> he : get_common_hyperedges({v, w})) {
+                fp_t r = he->probability;
+                p = (1-p)*r + (1-r)*p;
+            }
+            e->probability = renorm_factor*p;
+        }
+    }
+    // Now the graph is done.
+    auto c1_c2 = std::make_pair(c1, c2),
+    if (flags_are_active) {
+        flagged_dijkstra_graph_map[c1_c2] = std::move(dgr);
+    } else {
+        dijkstra_graph_map[c1_c2] = std::move(dgr);
+    }
 }
 
 void
 DecodingGraph::build_error_polynomial() {
-    sptr<edge_t> e0 = edges[0];
-    poly_t pX{1 - e0->error_probability, e0->error_probability};
-    // Multiply the polynomials together
+    sptr<hyperedge_t> e0 = edges[0];
+    poly_t pX{1 - e0->probability, e0->probability};
+    
     fp_t expectation = 0.0;
     for (size_t i = 1; i < edges.size(); i++) {
-        sptr<edge_t> e = edges[i];
-        poly_t a(pX.size()+1, 0);  // p(X) * (1-e)
-        poly_t b(pX.size()+1, 0);  // p(X) * eX
-        
-        b[0] = 0;
+        sptr<hyperedge_t> e = edges[i];
+        poly_t a(pX.size()+1, 0),
+               b(pX.size()+1, 0);
         for (size_t j = 0; j < pX.size(); j++) {
-            a[j] += pX[j] * (1 - e->error_probability);
-            b[j+1] += pX[j] * e->error_probability;
+            a[j] = pX[j] * (1 - e->probability);
+            b[j] = pX[j] * e->probability;
         }
-        pX.push_back(0);    // Clear and increment the size of pX
+        pX = std::move(a);
         for (size_t j = 0; j < pX.size(); j++) {
-            pX[j] = a[j] + b[j];
+            pX[j] += b[j];
             if (i == edges.size()-1) {
                 expectation += j * pX[j];
             }
         }
     }
-    error_polynomial = pX;
+    error_polynomial = std::move(pX);
     expected_errors = expectation;
-}
-
-bool 
-DecodingGraph::update_state() {
-    if (!__DecodingGraphParent::update_state()) return false;
-    if (mode != Mode::LOW_MEMORY) {
-        build_distance_matrix();
-    }
-    build_error_polynomial();
-    return true;
-}
-
-DecodingGraph
-to_decoding_graph(const DetailedStimCircuit& circuit, DecodingGraph::Mode mode) {
-    if (mode == DecodingGraph::Mode::DO_NOT_BUILD)  return DecodingGraph();
-    DecodingGraph graph(mode);
-
-    stim::DetectorErrorModel dem = 
-        stim::ErrorAnalyzer::circuit_to_detector_error_model(
-            circuit,
-            true,  // decompose_errors
-            true,  // fold loops
-            false, // allow gauge detectors
-            1.0,   // approx disjoint errors threshold
-            false, // ignore decomposition failures
-            false
-        );
-    // Create callbacks.
-    detector_callback_t det_f =
-        [&graph](uint64_t det, std::array<fp_t, N_COORD> coords) 
-        {
-            sptr<vertex_t> v = graph.get_vertex(det);
-            if (v == nullptr) {
-                v = std::make_shared<vertex_t>();
-                v->id = det;
-                graph.add_vertex(v);
-            }
-            v->coords = coords;
-        };
-    error_callback_t err_f = 
-        [&](fp_t prob, std::vector<uint64_t> dets, std::set<uint64_t> frames)
-        {
-            std::cout << "number of dets: " << dets.size() << ", dets:";
-            for (uint64_t d : dets) {
-                std::cout << " " << d;
-                if (circuit.flag_detection_events.count(d)) std::cout << "(F)";
-            }
-            std::cout << std::endl;
-            if (prob == 0 || dets.size() == 0 || dets.size() > 2) {
-                return;  // Zero error probability -- not an edge.
-            }
-            
-            if (dets.size() == 1) {
-                // We are connecting to the boundary here.
-                dets.push_back(BOUNDARY_INDEX);
-            }
-            // Now, we should only have two entries in det.
-            sptr<vertex_t> v1 = graph.get_vertex(dets[0]);
-            sptr<vertex_t> v2 = graph.get_vertex(dets[1]);
-            if (v1 == nullptr) {
-                sptr<vertex_t> v = std::make_shared<vertex_t>();
-                v->id = dets[0];
-                graph.add_vertex(v);
-                v1 = v;
-            }
-            if (v2 == nullptr) {
-                sptr<vertex_t> v = std::make_shared<vertex_t>();
-                v->id = dets[1];
-                graph.add_vertex(v);
-                v2 = v;
-            }
-            auto e = graph.get_edge(v1, v2);
-            if (e != nullptr) {
-                fp_t old_prob = e->error_probability;
-                std::set<uint64_t> old_frames = e->frames;
-                if (frames == old_frames) {
-                    prob = prob * (1-old_prob) + old_prob * (1-prob);
-                }
-            } else {
-                // Create new edge if it does not exist.
-                e = std::make_shared<edge_t>();
-                e->src = std::static_pointer_cast<void>(v1);
-                e->dst = std::static_pointer_cast<void>(v2);
-                graph.add_edge(e);
-            }
-            fp_t edge_weight = (fp_t)log10((1-prob)/prob);
-            e->edge_weight = edge_weight;
-            e->error_probability = prob;
-            e->frames = frames;
-        };
-    // Declare coord offset array.
-    uint64_t det_offset = 0;
-    std::array<fp_t, N_COORD> coord_offset;
-    coord_offset.fill(0);  // Zero initialize.
-    // Use callbacks to build graph.
-    read_detector_error_model(dem, 1, det_offset, coord_offset, err_f, det_f);
-    return graph;
-}
-
-void 
-read_detector_error_model(
-        const stim::DetectorErrorModel& dem,
-        uint64_t n_iter,
-        uint64_t& det_offset,
-        std::array<fp_t, N_COORD>& coord_offset,
-        error_callback_t err_f,
-        detector_callback_t det_f) 
-{
-    while (n_iter--) {  // Need this to handle repeats.
-        for (stim::DemInstruction inst : dem.instructions) {
-            stim::DemInstructionType type = inst.type;
-            if (type == stim::DemInstructionType::DEM_REPEAT_BLOCK) {
-                // The targets for this instruction are
-                // (1) number of repeats, and
-                // (2) block number.
-                size_t n_repeats = static_cast<size_t>(inst.target_data[0].data);
-                stim::DetectorErrorModel subblock = dem.blocks[inst.target_data[1].data];
-                read_detector_error_model(
-                        subblock, n_repeats, det_offset, coord_offset, err_f, det_f);
-            } else if (type == stim::DemInstructionType::DEM_ERROR) {
-                std::vector<uint64_t> detectors;
-                std::set<uint64_t> frames;
-                 
-                fp_t e_prob = static_cast<fp_t>(inst.arg_data[0]);
-                for (stim::DemTarget target : inst.target_data) {
-                    if (target.is_relative_detector_id()) {
-                        // This is a detector, add it to the list.
-                        detectors.push_back(
-                                static_cast<uint64_t>(target.data + det_offset));
-                    } else if (target.is_observable_id()) {
-                        frames.insert(target.data); 
-                    } else if (target.is_separator()) {
-                        // This is just due to decomposition.
-                        // Handle each part of the decomposition
-                        // separately.
-                        err_f(e_prob, detectors, frames);
-                        // Clear detectors and frames.
-                        // We have already done the callback.
-                        detectors.clear();
-                        frames.clear();
-                    }
-                }
-                // Handle last error.
-                err_f(e_prob, detectors, frames);
-            } else if (type == stim::DemInstructionType::DEM_SHIFT_DETECTORS) {
-                det_offset += inst.target_data[0].data;
-                size_t k = 0;
-                for (double a : inst.arg_data) {
-                    coord_offset[k++] += (fp_t)a;
-                }
-            } else if (type == stim::DemInstructionType::DEM_DETECTOR) {
-                // Compute coordinates.
-                std::array<fp_t, N_COORD> coords(coord_offset);
-                size_t k = 0;
-                for (double a : inst.arg_data) {
-                    coords[k++] += (fp_t)a; 
-                }
-                // Now go through all declared detectors.
-                for (stim::DemTarget target : inst.target_data) {
-                    det_f(target.data + det_offset, coords);
-                }
-            }
-        }
-    }
 }
 
 }   // graph

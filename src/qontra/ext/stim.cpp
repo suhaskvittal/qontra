@@ -18,17 +18,27 @@ v32(std::vector<uint64_t> arr) {
 }
 
 DetailedStimCircuit::DetailedStimCircuit()
-    :stim::Circuit() 
+    :stim::Circuit(),
+    number_of_colors_in_circuit(0),
+    detector_base_map(),
+    detector_color_map(),
+    flag_detectors()
 {}
 
 DetailedStimCircuit::DetailedStimCircuit(const stim::Circuit& other)
-    :stim::Circuit(other)
+    :stim::Circuit(other),
+    number_of_colors_in_circuit(0),
+    detector_base_map(),
+    detector_color_map(),
+    flag_detectors()
 {}
 
 DetailedStimCircuit::DetailedStimCircuit(const DetailedStimCircuit& other)
     :stim::Circuit(other),
-    detection_event_to_color(other.detection_event_to_color),
-    flag_detection_events(other.flag_detection_events)
+    number_of_colors_in_circuit(other.number_of_colors_in_circuit),
+    detector_base_map(other.detector_base_map),
+    detector_color_map(other.detector_color_map),
+    flag_detectors(other.flag_detectors)
 {}
 
 DetailedStimCircuit
@@ -103,12 +113,16 @@ DetailedStimCircuit::from_qes(
             }
             // Check annotations and property map for any additional data.
             int color_id = 0;
+            if (inst.has_property("base")) {
+                uint64_t base = static_cast<uint64_t>(inst.get_property<int64_t>("base"));
+                circuit.detector_base_map[detection_event] = base;
+            }
             if (inst.has_property("color")) {
                 color_id = static_cast<int>(inst.get_property<int64_t>("color"));
-                circuit.detection_event_to_color[detection_event] = color_id;
+                circuit.detector_color_map[detection_event] = color_id;
             }
             if (inst.has_annotation("flag")) {
-                circuit.flag_detection_events.insert(detection_event);
+                circuit.flag_detectors.insert(detection_event);
             }
             // Append instruction
             const std::vector<double> coord{

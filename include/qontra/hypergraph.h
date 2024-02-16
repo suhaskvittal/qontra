@@ -18,8 +18,10 @@ namespace base {
 struct hyperedge_t {
     std::vector<sptr<void>> endpoints;
 
-    template <class V=void> std::vector<sptr<V>> operator()(void) const;
-    template <class V=void> sptr<V>              operator[](size_t) const;
+    sptr<void> operator[](size_t) const;
+
+    template <class V=void> std::vector<sptr<V>> get(void) const;
+    template <class V=void> sptr<V>              get(size_t) const;
     
     size_t  get_order(void) const;
 };
@@ -28,10 +30,12 @@ struct hyperedge_t {
 
 template <class V=void, class HE> std::string   print_he(sptr<HE>);
 
+typedef Graph<base::vertex_t, base::edge_t> IncidenceGraph;
+
 template <class V, class HE>
-class Hypergraph {
+class HyperGraph {
 public:
-    Hypergraph(void)
+    HyperGraph(void)
         :vertices(),
         edges(),
         adjacency_lists(),
@@ -43,7 +47,7 @@ public:
         max_order(0)
     {}
 
-    Hypergraph(const Hypergraph& other)
+    HyperGraph(const HyperGraph& other)
         :vertices(other.vertices),
         edges(other.edges),
         adjacency_lists(other.adjacency_lists),
@@ -62,26 +66,21 @@ public:
     virtual bool    contains(sptr<V>) const;
     virtual bool    contains(sptr<HE>) const;
 
-    template <class CONTAINER> virtual bool contains(CONTAINER) const;
-    template <class ITER> virtual bool      contains(ITER begin, ITER end) const;
+    virtual bool    contains(std::vector<sptr<V>>) const;
 
-    virtual sptr<V>                             make_vertex(void) const;
-    virtual sptr<V>                             make_vertex(uint64_t) const;
-    template <class CONTAINER> virtual sptr<HE> make_edge(CONTAINER) const;
-    template <class ITER> virtual sptr<HE>      make_edge(ITER begin, ITER end) const;
+    virtual sptr<V>     make_vertex(void) const;
+    virtual sptr<V>     make_vertex(uint64_t) const;
+    virtual sptr<HE>    make_edge(std::vector<sptr<V>>) const;
 
-    virtual bool    add_vertex(sptr<V>);
-    virtual bool    add_edge(sptr<HE>);
+    virtual bool        add_vertex(sptr<V>);
+    virtual bool        add_edge(sptr<HE>);
 
-    virtual sptr<V>                             make_and_add_vertex(uint64_t id);
-    template <class CONTAINER> virtual sptr<HE> make_and_add_edge(CONTAINER);
-    template <class ITER> virtual sptr<HE>      make_and_add_edge(ITER begin, ITER end);
+    virtual sptr<V>     make_and_add_vertex(uint64_t id);
+    virtual sptr<HE>    make_and_add_edge(std::vector<sptr<V>>);
 
-    virtual sptr<V>                             get_vertex(uint64_t) const;
-    template <class CONTAINER> virtual sptr<HE> get_edge(CONTAINER) const;
-    template <class ITER> virtual sptr<HE>      get_edge(ITER, ITER) const;
-    template <class CONTAINER> virtual sptr<HE> get_edge_from_ids(CONTAINER) const;
-    template <class ITER> virtual sptr<HE>      get_edge_from_ids(ITER, ITER) const;
+    virtual sptr<V>     get_vertex(uint64_t) const;
+    virtual sptr<HE>    get_edge(std::vector<sptr<V>>) const;
+    virtual sptr<HE>    get_edge(std::vector<uint64_t>) const;
     
     virtual void    delete_vertex(sptr<V>);
     virtual void    delete_edge(sptr<HE>);
@@ -94,11 +93,11 @@ public:
 
     bool    has_endpoint(sptr<HE>, sptr<V>) const;
 
-    template <class CONTAINER> bool                     share_hyperedge(CONTAINER) const;
-    template <class CONTAINER> std::vector<sptr<HE>>    get_common_hyperedges(CONTAINER) const;
+    bool                    share_hyperedge(std::vector<sptr<V>>) const;
+    std::vector<sptr<HE>>   get_common_hyperedges(std::vector<sptr<V>>) const;
 
-    std::vector<sptr<V>>                            get_neighbors(sptr<V>) const;
-    template <class CONTAINER> std::vector<sptr<V>> get_common_neighbors(CONTAINER) const;
+    std::vector<sptr<V>>    get_neighbors(sptr<V>) const;
+    std::vector<sptr<V>>    get_common_neighbors(std::vector<sptr<V>>) const;
 
     size_t  get_degree(sptr<V>) const;
 
@@ -112,27 +111,24 @@ public:
 
     void    force_update_state(void);
 protected:
-    struct inc_vertex_t : base::vertex_t { sptr<void> obj_p; bool is_vertex; };
-    struct inc_edge_t : base::edge_t {};
-    typedef Graph<inc_vertex_t, inc_edge_t> IncidenceGraph;
-
     virtual bool    update_state(void);
 
     template <class PTR>
-    sptr<inc_vertex_t> get_incidence_vertex(PTR) const;
+    sptr<base::vertex_t> get_incidence_vertex(PTR) const;
 
     std::vector<sptr<V>>    vertices;
     std::vector<sptr<HE>>   edges;
 
     IncidenceGraph incidence_graph;
     std::map<sptr<V>, std::vector<sptr<V>>> adjacency_lists;
-    TwoLevelMap<sptr<V>, sptr<V>, size_t>   adjacency_mult_map;
+    vtils::TwoLevelMap<sptr<V>, sptr<V>, size_t> adjacency_mult_map;
 
     std::map<uint64_t, sptr<V>> id_to_vertex;
 
     bool graph_has_changed;
 private:
     bool    is_edge_valid(sptr<HE>);
+    void    update_adjacency_lists_after_delete(sptr<HE>);
 
     fp_t   mean_degree;
     size_t max_degree;
