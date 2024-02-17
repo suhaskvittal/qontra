@@ -92,11 +92,11 @@ DecodingGraph::update_state() {
 }
 
 template <class CONTAINER> inline std::vector<int>
-get_complementary_color_to(CONTAINER clist, int number_of_colors) {
+get_complementary_colors_to(CONTAINER clist, int number_of_colors) {
     std::set<int> clist_set(clist.begin(), clist.end());
     std::vector<int> compl_list;
     for (int c = 0; c < number_of_colors; c++) {
-        if (!clist.count(c)) compl_list.push_back(c);
+        if (!clist_set.count(c)) compl_list.push_back(c);
     }
     return compl_list;
 }

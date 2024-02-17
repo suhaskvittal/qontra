@@ -60,7 +60,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     auto df = 
         [&] (uint64_t d)
         {
-            this->make_and_add_vertex(d);
+            if (!this->contains(d)) this->make_and_add_vertex(d);
         };
     auto ef =
         [&] (fp_t p, std::vector<uint64_t> detectors, std::set<uint64_t> frames)
@@ -174,12 +174,15 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
 
         sptr<vertex_t> curr = w;
         while (curr != from) {
-            sptr<vertex_t> next = pred[w];
+            sptr<vertex_t> next = pred[curr];
+            if (curr == next) {
+                failed_to_converge = true;
+                break;
+            }
             sptr<edge_t> e = dgr->get_edge(curr, next);
             // Update error chain data.
             ec.length++;
             ec.probability *= e->probability;
-            ec.weight += compute_weight(e->probability);
             ec.path.push_back(curr);
             if (curr->is_boundary_vertex) {
                 ec.runs_through_boundary = true;
@@ -193,6 +196,7 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
             }
         }
         // Some last updates (adding from).
+        ec.weight = dist.at(w);
         ec.length++;
         ec.path.push_back(from);
         if (from->is_boundary_vertex) {
@@ -255,7 +259,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     // Now handle other edges.
     for (sptr<vertex_t> v : dgr->get_vertices()) {
         for (sptr<vertex_t> w : dgr->get_vertices()) {
-            if (dgr->contains(v, w)) continue;
+            if (v == w) continue;
             sptr<edge_t> e = dgr->get_edge(v, w);
             if (e == nullptr) {
                 e = dgr->make_and_add_edge(v, w);

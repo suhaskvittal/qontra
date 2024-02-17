@@ -108,6 +108,7 @@ Graph<V, E>::add_vertex(sptr<V> v) {
     if (v == nullptr || contains(v->id)) return false;
     id_to_vertex[v->id] = v;
     vertices.push_back(v);
+    adjacency_lists[v] = {};
     graph_has_changed = true;
     return true;
 }

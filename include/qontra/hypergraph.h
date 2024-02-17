@@ -38,6 +38,7 @@ public:
         edges(),
         incidence_graph(std::make_unique<IncidenceGraph>()),
         incidence_object_map(),
+        incidence_id_map(),
         adjacency_lists(),
         adjacency_mult_map(),
         id_to_vertex(),
@@ -115,6 +116,7 @@ protected:
 
     uptr<IncidenceGraph> incidence_graph;
     std::map<sptr<base::vertex_t>, sptr<void>> incidence_object_map;
+    std::map<sptr<void>, uint64_t> incidence_id_map;
     std::map<sptr<V>, std::vector<sptr<V>>> adjacency_lists;
     vtils::TwoLevelMap<sptr<V>, sptr<V>, size_t> adjacency_mult_map;
 

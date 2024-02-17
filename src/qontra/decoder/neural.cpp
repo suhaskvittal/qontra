@@ -11,7 +11,7 @@ namespace qontra {
 static const uint64_t PER_HW_LIMIT = 100'000;
 
 NeuralDecoder::NeuralDecoder(DetailedStimCircuit circuit)
-    :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
+    :Decoder(circuit),
     model(),
     training_circuit(circuit)
 {}

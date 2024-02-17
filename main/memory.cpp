@@ -46,11 +46,13 @@ int main(int argc, char* argv[]) {
 
     // Load model from file and run memory experiment.
     DetailedStimCircuit circuit = make_circuit(qes_file, p);
-    MWPMDecoder dec(circuit);
+    uptr<Decoder> dec;
+    dec = std::make_unique<MWPMDecoder>(circuit);
+    
 
     memory_config_t config;
     config.shots = shots;
-    auto res = memory_experiment(&dec, config);
+    auto res = memory_experiment(dec.get(), config);
 
     // Write result to file.
     if (world_rank == 0) {

@@ -26,10 +26,13 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     for (auto& match : assignments) {
         uint64_t di = std::get<0>(match),
                  dj = std::get<1>(match);
-        sptr<vertex_t> vi = decoding_graph->get_vertex(di),
-                       vj = decoding_graph->get_vertex(dj);
-        sptr<hyperedge_t> e = decoding_graph->get_edge({vi, vj}); 
-        for (uint64_t f : e->frames) corr[f] ^= 1;
+        error_chain_t ec = decoding_graph->get(di, dj);
+        for (size_t i = 1; i < ec.path.size(); i++) {
+            sptr<vertex_t> vi = ec.path[i-1],
+                            vj = ec.path[i];
+            sptr<hyperedge_t> e = decoding_graph->get_edge({vi, vj}); 
+            for (uint64_t f : e->frames) corr[f] ^= 1;
+        }
     }
 
     return { t, corr, assignments };

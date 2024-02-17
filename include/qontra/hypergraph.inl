@@ -56,7 +56,7 @@ HyperGraph<V, HE>::contains(uint64_t id) const {
 
 template <class V, class HE> inline bool
 HyperGraph<V, HE>::contains(sptr<V> v) const {
-    return id_to_vertex.count(v->id);
+    return id_to_vertex.count(v->id) && id_to_vertex.at(v->id) == v;
 }
 
 template <class V, class HE> inline bool
@@ -76,7 +76,7 @@ HyperGraph<V, HE>::contains(std::vector<sptr<void>> vlist) const {
 
 template <class V, class HE> inline bool
 HyperGraph<V, HE>::contains(std::vector<sptr<V>> vlist) const {
-    std::vector<sptr<base::vertex_t>> inc_vlist(vlist.size());
+    std::vector<sptr<base::vertex_t>> inc_vlist;
     for (size_t i = 0; i < vlist.size(); i++) {
         inc_vlist.push_back(get_incidence_vertex(vlist.at(i)));
     }
@@ -108,6 +108,7 @@ HyperGraph<V, HE>::add_vertex(sptr<V> v) {
     if (v == nullptr || contains(v->id)) return false;
     id_to_vertex[v->id] = v;
     vertices.push_back(v);
+    adjacency_lists[v] = {};
     // Add to incidence graph.
     sptr<base::vertex_t> iv_v = add_incidence_vertex(v);
     graph_has_changed = true;
@@ -163,9 +164,11 @@ HyperGraph<V, HE>::get_vertex(uint64_t id) const {
 
 template <class V, class HE>  inline sptr<HE>
 HyperGraph<V, HE>::get_edge(std::vector<sptr<V>> vlist) const {
-    std::vector<sptr<base::vertex_t>> inc_vlist(vlist.size());
+    std::vector<sptr<base::vertex_t>> inc_vlist;
     for (size_t i = 0; i < vlist.size(); i++) {
-        inc_vlist.push_back(get_incidence_vertex(vlist.at(i)));
+        if (!contains(vlist.at(i))) return nullptr;
+        sptr<base::vertex_t> iv_v = get_incidence_vertex(vlist.at(i));
+        inc_vlist.push_back(iv_v);
     }
     std::vector<sptr<base::vertex_t>> common = incidence_graph->get_common_neighbors(inc_vlist);
     return common.size() == 1 && incidence_graph->get_degree(common[0]) == vlist.size()
@@ -267,6 +270,20 @@ HyperGraph<V, HE>::share_hyperedge(std::vector<sptr<V>> vlist) const {
     return incidence_graph->get_common_neighbors(inc_vlist).size();
 }
 
+template <class V, class HE> std::vector<sptr<HE>>
+HyperGraph<V, HE>::get_common_hyperedges(std::vector<sptr<V>> vlist) const {
+    std::vector<sptr<base::vertex_t>> inc_vlist(vlist.size());
+    for (size_t i = 0; i < vlist.size(); i++) {
+        inc_vlist[i] = get_incidence_vertex(vlist.at(i));
+    }
+    auto common = incidence_graph->get_common_neighbors(inc_vlist);
+    std::vector<sptr<HE>> he_list;
+    for (sptr<base::vertex_t> iv_e : common) {
+        he_list.push_back(get_edge_from_incidence_vertex(iv_e));
+    }
+    return he_list;
+}
+
 template <class V, class HE> inline std::vector<sptr<V>>
 HyperGraph<V, HE>::get_neighbors(sptr<V> v) const {
     return adjacency_lists.at(v);
@@ -355,13 +372,15 @@ HyperGraph<V, HE>::update_state() {
     return true;
 }
 
-template <class V, class HE>
+template <class V, class HE> 
 template <class PTR>
 inline sptr<base::vertex_t>
 HyperGraph<V, HE>::add_incidence_vertex(PTR obj_p) {
-    sptr<base::vertex_t> iv =
-        incidence_graph->make_and_add_vertex(reinterpret_cast<uint64_t>(obj_p.get()));
-    incidence_object_map[iv] = std::reinterpret_pointer_cast<void>(obj_p);
+    uint64_t id = incidence_graph->n();
+    sptr<base::vertex_t> iv = incidence_graph->make_and_add_vertex(id);
+
+    incidence_object_map[iv] = obj_p;
+    incidence_id_map[obj_p] = id;
     return iv;
 }
 
@@ -369,7 +388,7 @@ template <class V, class HE>
 template <class PTR>
 inline sptr<base::vertex_t>
 HyperGraph<V, HE>::get_incidence_vertex(PTR obj_p) const {
-    return incidence_graph->get_vertex(reinterpret_cast<uint64_t>(obj_p.get()));
+    return incidence_graph->get_vertex(incidence_id_map.at(obj_p));
 }
 
 template <class V, class HE> inline sptr<V>

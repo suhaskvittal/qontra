@@ -11,6 +11,7 @@ set(QONTRA_FILES
     src/qontra/ext/stim.cpp
     # Decoders
     src/qontra/decoder/mwpm.cpp
+    src/qontra/decoder/matching_base.cpp
     # Graphs
     src/qontra/graph/decoding_graph.cpp 
     src/qontra/graph/tanner_graph.cpp

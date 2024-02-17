@@ -23,12 +23,14 @@ MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int 
         if (circuit.flag_detectors.count(d)) {
             flags.push_back(d);
         } else {
-            if (circuit.detector_color_map[d] == c1) {
-                n_of_c1++;
-            } else if (circuit_detector_color_map[d] == c2) {
-                n_of_c2++;
-            } else {
-                continue;
+            if (c1 != COLOR_ANY) {
+                if (circuit.detector_color_map[d] == c1) {
+                    n_of_c1++;
+                } else if (circuit.detector_color_map[d] == c2) {
+                    n_of_c2++;
+                } else {
+                    continue;
+                }
             }
             detectors.push_back(d);
         }
@@ -61,7 +63,7 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
             uint64_t dj = detectors.at(j);
             error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
             // Quantize the weight.
-            uint32_t iw = static_cast<uint32_t>(1024 * ec.weight);
+            uint32_t iw = ec.weight > 1000.0 ? 1'000'000 : static_cast<uint32_t>(1000 * ec.weight);
             pm.AddEdge(i, j, iw);
         }
     }
@@ -82,8 +84,8 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
                 auto v = ec.path.at(i);
                 uint64_t d = v->id;
                 part.push_back(d);
-                all_entries_are_boundaries |= !(v->is_boundary);
-                if (v->is_boundary) {
+                all_entries_are_boundaries |= !(v->is_boundary_vertex);
+                if (v->is_boundary_vertex) {
                     if (!all_entries_are_boundaries) {
                         // Add the endpoints as an assignment.
                         assign_arr.emplace_back(part[0], part.back());

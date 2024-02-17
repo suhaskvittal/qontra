@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
 
     DetailedStimCircuit error_model = make_circuit(qes_file, p, true);
 
-    graph::DecodingGraph gr = graph::to_decoding_graph(error_model);
+    uptr<graph::DecodingGraph> gr = std::make_unique<graph::DecodingGraph>(error_model, 3);
     /*
     // Print out error polynomial:
     poly_t errp = gr.get_error_polynomial();
