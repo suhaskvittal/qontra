@@ -76,7 +76,10 @@ private:
         
     size_t cycle;
     size_t mctr;
-    PhysicalNetwork* net_p;
+
+    graph::TannerGraph* tanner_graph;
+    uptr<RawNetwork>& raw_network;
+    PhysicalNetwork* network;
 };
 
 }   // protean

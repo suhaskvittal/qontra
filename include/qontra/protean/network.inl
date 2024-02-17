@@ -81,22 +81,20 @@ phys_vertex_t::clear_roles() {
 }
 
 inline bool
-phys_vertex_t::has_role_of_type(raw_vertex_t::type t) {
+phys_vertex_t::has_role_of_type(raw_vertex_t::type t) const {
     return role_type_map.count(t);
 }
 
 inline bool
-phys_edge_t::is_out_of_plane() {
+phys_edge_t::is_out_of_plane() const {
     return tsv_layer > 0;
 }
 
 }   // net
 
 inline sptr<net::raw_vertex_t>
-RawNetwork::make_vertex() {
-    sptr<net::raw_vertex_t> v = std::make_shared<net::raw_vertex_t>();
-    v->id = id_ctr++;
-    return v;
+RawNetwork::make_and_add_vertex() {
+    return Graph::make_and_add_vertex(id_ctr++);
 }
 
 inline sptr<net::raw_vertex_t>
@@ -163,7 +161,12 @@ ProcessorLayer::update_state() {
     return true;
 }
 
-inline RawNetwork
+inline graph::TannerGraph*
+PhysicalNetwork::get_tanner_graph() {
+    return tanner_graph;
+}
+
+inline uptr<RawNetwork>&
 PhysicalNetwork::get_raw_connection_network() {
     return raw_connection_network;
 }
@@ -177,7 +180,7 @@ inline bool
 PhysicalNetwork::add_vertex(sptr<net::phys_vertex_t> v) {
     if (!Graph::add_vertex(v)) return false;
     // Add v to each processor layer.
-    for (ProcessorLayer& pl : processor_layers) pl.add_vertex(v);
+    for (auto& pl : processor_layers) pl->add_vertex(v);
     return true;
 }
 
@@ -186,16 +189,16 @@ PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
     if (!Graph::add_edge(e)) return false;
     // Here, we will attempt to find a processor layer that will house e.
     for (size_t k = 0; k < get_thickness(); k++) {
-        auto& layer = processor_layers[k];
-        if (layer.is_planar() && layer.add_edge(e)) {
+        uptr<ProcessorLayer>& layer = processor_layers[k];
+        if (layer->is_planar() && layer->add_edge(e)) {
             e->tsv_layer = k;
             return true;
         }
     }
     // If none can be found, then make a new layer.
     std::cout << "[ debug ] creating new processor layer\n";
-    ProcessorLayer& new_layer = push_back_new_processor_layer();
-    if (new_layer.add_edge(e)) {
+    uptr<ProcessorLayer>& new_layer = push_back_new_processor_layer();
+    if (new_layer->add_edge(e)) {
         e->tsv_layer = get_thickness()-1;
         return true;
     } else {
@@ -204,8 +207,8 @@ PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
         std::cout << "[ debug ] failed to add edge " << graph::print_e<net::phys_vertex_t>(e)
                         << ", reasons:\n"
                         << "\tlayer does not contain endpoints: "
-                        << graph::print_v(src) << "(" << new_layer.contains(src)
-                        << "), " << graph::print_v(dst) << "(" << new_layer.contains(dst) << ")\n";
+                        << graph::print_v(src) << "(" << new_layer->contains(src)
+                        << "), " << graph::print_v(dst) << "(" << new_layer->contains(dst) << ")\n";
         Graph::delete_edge(e);
         return false;
     }
@@ -215,21 +218,19 @@ inline void
 PhysicalNetwork::delete_vertex(sptr<net::phys_vertex_t> v) {
     Graph::delete_vertex(v);
     for (auto& layer : processor_layers) {
-        layer.delete_vertex(v);
+        layer->delete_vertex(v);
     } 
 }
 
 inline void
 PhysicalNetwork::delete_edge(sptr<net::phys_edge_t> e) {
     Graph::delete_edge(e);
-    processor_layers[e->tsv_layer].delete_edge(e);
+    processor_layers[e->tsv_layer]->delete_edge(e);
 }
 
 inline sptr<net::phys_vertex_t>
-PhysicalNetwork::make_vertex() {
-    sptr<net::phys_vertex_t> v = std::make_shared<net::phys_vertex_t>();
-    v->id = id_ctr++;
-    return v;
+PhysicalNetwork::make_and_add_vertex() {
+    return Graph::make_and_add_vertex(id_ctr++);
 }
 
 inline bool
@@ -238,9 +239,9 @@ PhysicalNetwork::test_and_move_edge_down(sptr<net::phys_edge_t> e) {
     auto& curr_layer = processor_layers[e->tsv_layer];
     auto& next_layer = processor_layers[e->tsv_layer-1];
 
-    if (next_layer.add_edge(e)) {
+    if (next_layer->add_edge(e)) {
         // Move was successful.
-        curr_layer.delete_edge(e);
+        curr_layer->delete_edge(e);
         e->tsv_layer--;
         return true;
     } else {
@@ -255,7 +256,7 @@ PhysicalNetwork::get_thickness() {
 
 inline size_t
 PhysicalNetwork::get_bulk_degree(sptr<net::phys_vertex_t> v) {
-    return processor_layers[0].get_degree(v);
+    return processor_layers[0]->get_degree(v);
 }
 
 inline bool
@@ -266,7 +267,7 @@ PhysicalNetwork::relabel_qubits() {
         // Otherwise, relabel the vertex.
         manual_update_id(pv, pv->id, i);
         for (auto& layer : processor_layers) {
-            layer.manual_update_id(pv, pv->id, i);
+            layer->manual_update_id(pv, pv->id, i);
         }
         pv->id = i;
     }
@@ -274,13 +275,13 @@ PhysicalNetwork::relabel_qubits() {
     return true;
 }
 
-inline ProcessorLayer&
+inline uptr<ProcessorLayer>&
 PhysicalNetwork::push_back_new_processor_layer() {
-    ProcessorLayer new_layer;
+    uptr<ProcessorLayer> new_layer = std::make_unique<ProcessorLayer>();
     for (sptr<net::phys_vertex_t> v : get_vertices()) {
-        new_layer.add_vertex(v);
+        new_layer->add_vertex(v);
     }
-    processor_layers.push_back(new_layer);
+    processor_layers.push_back(std::move(new_layer));
     return processor_layers.back();
 }
 
@@ -294,21 +295,10 @@ inline bool
 PhysicalNetwork::are_in_same_support(sptr<net::phys_vertex_t> v, sptr<net::phys_vertex_t> w) {
     for (auto rv : v->role_set) {
         for (auto rw : w->role_set) {
-            if (raw_connection_network.are_in_same_support(rv, rw) != nullptr) return true;
+            if (raw_connection_network->are_in_same_support(rv, rw) != nullptr) return true;
         }
     }
     return false;
-}
-
-inline void
-PhysicalNetwork::print_out_role_to_phys() {
-    std::cout << "[ role_to_phys ]\n";
-    for (auto& p : role_to_phys) {
-        std::cout << "\t" << graph::print_v(p.first) << " --> ";
-        if (p.second == nullptr) std::cout << "NULL";
-        else                     std::cout << graph::print_v(p.second);
-        std::cout << "\n";
-    }
 }
 
 }   // protean

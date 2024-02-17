@@ -1,5 +1,4 @@
-/* 
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   27 December 2023
  * */
 
@@ -40,7 +39,8 @@ struct phys_vertex_t : graph::base::vertex_t {
     void add_role(sptr<raw_vertex_t>, size_t cycle);
     void delete_role(sptr<raw_vertex_t>);
     void push_back_role(sptr<raw_vertex_t>, size_t min_cycle=0);
-    bool has_role_of_type(raw_vertex_t::type);
+
+    bool has_role_of_type(raw_vertex_t::type) const;
     
     void clear_roles(void);
 private:
@@ -50,7 +50,7 @@ private:
 struct phys_edge_t : graph::base::edge_t {
     size_t tsv_layer;
 
-    bool is_out_of_plane(void);
+    bool is_out_of_plane(void) const;
 };
 
 }   // net
@@ -69,11 +69,12 @@ public:
         std::set<sptr<net::raw_vertex_t>>   all;
     };
 
-    RawNetwork(graph::TannerGraph&);
+    RawNetwork(graph::TannerGraph*);
+    RawNetwork(RawNetwork&&) = default;
 
     void delete_vertex(sptr<net::raw_vertex_t>) override;
 
-    sptr<net::raw_vertex_t> make_vertex(void) override;
+    sptr<net::raw_vertex_t> make_and_add_vertex(void);
 
     // Input: data qubit, data qubit, parity qubit
     // Returns: flag qubit.
@@ -129,8 +130,8 @@ public:
     std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
         schedule_order_map;
 
-    graph::TannerGraph  tanner_graph;
-    bool                enable_memoization; // This should be set to true once the network has stabilized.
+    graph::TannerGraph* tanner_graph;
+    bool enable_memoization; // This should be set to true once the network has stabilized.
 private:
     void update_endpoint_in_indirection_map(
             sptr<net::raw_vertex_t> proxy,
@@ -160,9 +161,7 @@ private:
 class ProcessorLayer : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
 public:
     bool add_edge(sptr<net::phys_edge_t>) override;
-
     size_t get_max_endpoint_degree(sptr<net::phys_edge_t>);
-
     bool is_planar(void);
 protected:
     bool update_state(void) override;
@@ -173,7 +172,8 @@ private:
 // A PhysicalNetwork is the realization of the processor.
 class PhysicalNetwork : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
 public:
-    PhysicalNetwork(graph::TannerGraph&);
+    PhysicalNetwork(graph::TannerGraph*);
+    PhysicalNetwork(PhysicalNetwork&&) = default;
     
     static PhysicalNetwork from_folder(std::string);
 
@@ -185,7 +185,7 @@ public:
     void delete_vertex(sptr<net::phys_vertex_t>) override;
     void delete_edge(sptr<net::phys_edge_t>) override;
 
-    sptr<net::phys_vertex_t> make_vertex(void) override;
+    sptr<net::phys_vertex_t> make_and_add_vertex(void);
 
     // If the edge can be moved to the immediately lower processor layer, it is done and the
     // function returns true. Otherwise, it returns false.
@@ -235,8 +235,18 @@ public:
     // Computes the syndrome extraction schedule for the existing layout.
     qes::Program<> make_schedule(void);
 
-    RawNetwork                  get_raw_connection_network(void);
+    graph::TannerGraph* get_tanner_graph(void);
+    uptr<RawNetwork>&   get_raw_connection_network(void);
+
     sptr<net::phys_vertex_t>    get_physical_qubit_for(sptr<net::raw_vertex_t>);
+
+    // IO:
+    void    write_stats_file(std::string);
+    void    write_schedule_file(std::string);
+    void    write_coupling_file(std::string);
+    void    write_role_file(std::string);
+    void    write_tanner_graph_file(std::string);
+    void    write_flag_assignment_file(std::string);
 
     struct {
         size_t max_connectivity = 4;
@@ -258,34 +268,28 @@ private:
             bool is_x_error);
 
     // Allocates a new processor layer.
-    ProcessorLayer& push_back_new_processor_layer(void);
+    uptr<ProcessorLayer>& push_back_new_processor_layer(void);
     // Consumes a physical qubit safely.
     void consume(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
     // Returns true if two physical qubits are contained within the same support for any pair of roles.
     bool are_in_same_support(sptr<net::phys_vertex_t>, sptr<net::phys_vertex_t>);
 
-    // Debugging functions:
-    void print_out_role_to_phys(void);
-
+    // The reason tanner_graph is a raw pointer whereas raw_connection_network is a unique ptr
+    // is that tanner_graph is supplied by the user. The user may choose to allocate it on the stack.
+    graph::TannerGraph* tanner_graph;
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
-    RawNetwork raw_connection_network;
+    uptr<RawNetwork> raw_connection_network;
     std::map<sptr<net::raw_vertex_t>, sptr<net::phys_vertex_t>> role_to_phys;
     // processor_layers contains the physical placement of edges in the processor. processor_layers[0]
     // always corresponds to the processor bulk (lowest layer), and other layers are the TSV layers.
-    std::vector<ProcessorLayer> processor_layers;
+    std::vector<uptr<ProcessorLayer>> processor_layers;
     // Other tracking structures:
     //
     // Tracks the heights of TSV edges for each vertex.
     std::map<sptr<net::phys_vertex_t>, std::set<size_t>> occupied_tsvs;
     
     uint64_t id_ctr;
-
-    friend void write_schedule_file(std::string, PhysicalNetwork&);
-    friend void write_coupling_file(std::string, PhysicalNetwork&);
-    friend void write_role_file(std::string, PhysicalNetwork&);
-    friend void write_tanner_graph_file(std::string, PhysicalNetwork&);
-    friend void write_flag_assignment_file(std::string, PhysicalNetwork&);
 
     friend class Scheduler;
 };

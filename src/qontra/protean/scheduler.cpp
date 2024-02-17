@@ -47,13 +47,13 @@ Scheduler::Scheduler(PhysicalNetwork* n_p)
     meas_ctr_map(),
     cycle(0),
     mctr(0),
-    net_p(n_p)
+    tanner_graph(n_p->get_tanner_graph()),
+    raw_network(n_p->get_raw_connection_network()),
+    network(n_p)
 {}
 
 qes::Program<>
 Scheduler::run() {
-    RawNetwork& raw_net = net_p->raw_connection_network;
-
     qes::Program<> program;
     std::set<sptr<raw_vertex_t>> finished_checks;
     cycle = 0;
@@ -64,11 +64,11 @@ Scheduler::run() {
         size_t k = program.size();
 
         checks_this_cycle.clear();
-        for (sptr<raw_vertex_t> rv : raw_net.get_vertices()) {
+        for (sptr<raw_vertex_t> rv : raw_network->get_vertices()) {
             if (rv->qubit_type == raw_vertex_t::type::xparity
                 || rv->qubit_type == raw_vertex_t::type::zparity)
             {
-                sptr<phys_vertex_t> pv = net_p->role_to_phys.at(rv);
+                sptr<phys_vertex_t> pv = network->role_to_phys.at(rv);
                 size_t cyc = pv->cycle_role_map.at(rv);
                 if (cyc <= cycle && !finished_checks.count(rv)) {
                     checks_this_cycle.push_back(rv);
@@ -104,8 +104,6 @@ Scheduler::build_preparation(qes::Program<>& program) {
 
 void
 Scheduler::build_body(qes::Program<>& program) {
-    RawNetwork& raw_net = net_p->raw_connection_network;
-
     auto cx_sch_map = compute_schedules();
     // Perform the CX gates. Note that the schedule contains times
     // for data CX to their target (either parity or flag).
@@ -122,7 +120,7 @@ Scheduler::build_body(qes::Program<>& program) {
             // Now get the k-th data qubit.
             sptr<raw_vertex_t> rdq = sch.at(k);
             if (rdq == nullptr) continue;
-            sptr<raw_vertex_t> common_rpq = raw_net.are_in_same_support(rdq, rsq);
+            sptr<raw_vertex_t> common_rpq = raw_network->are_in_same_support(rdq, rsq);
             if (common_rpq->qubit_type == raw_vertex_t::type::xparity) {
                 cx_arr.emplace_back(rsq, rdq);
             } else {
@@ -163,7 +161,6 @@ Scheduler::build_teardown(qes::Program<>& program) {
 void
 Scheduler::prep_tear_h_gates(qes::Program<>& program) {
     std::vector<int64_t> h_operands;
-    RawNetwork& raw_net = net_p->raw_connection_network;
     for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
         test_and_set_exit_on_fail(rpq, "build_preparation");
         // Perform an H gate if necessary.
@@ -198,8 +195,6 @@ Scheduler::prep_tear_cx_gates(qes::Program<>& program) {
 
 void
 Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<>& program) {
-    RawNetwork& raw_net = net_p->raw_connection_network;
-
     std::vector<std::vector<sptr<raw_vertex_t>>> path_arr(cx_arr.size());
     std::vector<size_t> k_arr(cx_arr.size(), 1);
 
@@ -207,7 +202,7 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
         cx_t cx = cx_arr.at(i);
         sptr<net::raw_vertex_t> src = std::get<0>(cx),
                                 dst = std::get<1>(cx);
-        path_arr[i] = raw_net.get_proxy_walk_path(src, dst);
+        path_arr[i] = raw_network->get_proxy_walk_path(src, dst);
     }
     // Also track undo paths:
     std::vector<std::vector<sptr<raw_vertex_t>>> undo_arr;
@@ -275,8 +270,6 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
 
 std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>
 Scheduler::compute_schedules() {
-    RawNetwork& raw_net = net_p->raw_connection_network;
-
     std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>> sch_map;
     // Compute max operator weight.
     size_t max_operator_weight = 0;
@@ -303,12 +296,12 @@ Scheduler::compute_schedules() {
         for (sptr<raw_vertex_t> rx : support.data) {
             lp_var_t x = LP.get_var(rx);
             sptr<raw_vertex_t> rx_rsq =
-                raw_net.flag_assignment_map[rpq].count(rx) ? raw_net.flag_assignment_map[rpq][rx] : rpq;
+                raw_network->flag_assignment_map[rpq].count(rx) ? raw_network->flag_assignment_map[rpq][rx] : rpq;
             for (sptr<raw_vertex_t> ry : support.data) {
                 if (rx >= ry) continue;
                 lp_var_t y = LP.get_var(ry);
                 sptr<raw_vertex_t> ry_rsq =
-                    raw_net.flag_assignment_map[rpq].count(ry) ? raw_net.flag_assignment_map[rpq][ry] : rpq;
+                    raw_network->flag_assignment_map[rpq].count(ry) ? raw_network->flag_assignment_map[rpq][ry] : rpq;
                 // Only add the following constraint if rx and ry both interact
                 // with rpq or the same flag.
                 if (rx_rsq == ry_rsq) {
@@ -372,7 +365,7 @@ Scheduler::compute_schedules() {
         }
         for (sptr<raw_vertex_t> rdq : support.data) {
             sptr<raw_vertex_t> rsq = 
-                raw_net.flag_assignment_map[rpq].count(rdq) ? raw_net.flag_assignment_map[rpq][rdq] : rpq;
+                raw_network->flag_assignment_map[rpq].count(rdq) ? raw_network->flag_assignment_map[rpq][rdq] : rpq;
             size_t t = static_cast<size_t>(round(LP.get_value(rdq)));
             existing_cnot_times[rdq].emplace_back(t, rpq);
             if (!sch_map.count(rsq)) {
@@ -395,7 +388,7 @@ PhysicalNetwork::make_schedule() {
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         r_operands.push_back(pv->id);
     }
-    for (sptr<raw_vertex_t> rv : raw_connection_network.get_vertices()) {
+    for (sptr<raw_vertex_t> rv : raw_connection_network->get_vertices()) {
         if (rv->qubit_type != raw_vertex_t::type::data) continue;
         sptr<phys_vertex_t> pv = role_to_phys[rv];
         data_meas_ctr_map[rv] = m_operands.size();
@@ -416,7 +409,7 @@ PhysicalNetwork::make_schedule() {
     for (size_t r = 0; r < config.rounds; r++) {
         push_back_range(program, round);
         // Build detection events.
-        for (sptr<raw_vertex_t> rv : raw_connection_network.get_vertices()) {
+        for (sptr<raw_vertex_t> rv : raw_connection_network->get_vertices()) {
             bool is_x_check = (rv->qubit_type == raw_vertex_t::type::xparity);
             bool is_z_check = (rv->qubit_type == raw_vertex_t::type::zparity);
             if (!is_z_check && !is_x_check) continue;
@@ -431,7 +424,7 @@ PhysicalNetwork::make_schedule() {
                 event_ctr++;
             } else {
                 // Make detection events for the flag qubits.
-                for (sptr<raw_vertex_t> rfq : raw_connection_network.flag_ownership_map[rv]) {
+                for (sptr<raw_vertex_t> rfq : raw_connection_network->flag_ownership_map[rv]) {
                     const size_t mt = scheduler.get_measurement_time(rfq) + meas_ctr_offset;
                     safe_emplace_back(program, "event", std::vector<uint64_t>{event_ctr, mt});
                     program.back().put(print_v(rfq));
@@ -447,8 +440,7 @@ PhysicalNetwork::make_schedule() {
     safe_emplace_back(program, "h", h_operands);
     safe_emplace_back(program, "measure", m_operands);
     // Build detection events and observable.
-    TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
-    for (sptr<raw_vertex_t> rv : raw_connection_network.get_vertices()) {
+    for (sptr<raw_vertex_t> rv : raw_connection_network->get_vertices()) {
         bool is_x_check = (rv->qubit_type == raw_vertex_t::type::xparity);
         bool is_z_check = (rv->qubit_type == raw_vertex_t::type::zparity);
         if (!is_z_check && !is_x_check) continue;
@@ -457,21 +449,21 @@ PhysicalNetwork::make_schedule() {
         const size_t pq_mt = scheduler.get_measurement_time(rv) + prev_meas_ctr_offset;
         std::vector<uint64_t> operands{event_ctr, pq_mt};
 
-        sptr<tanner::vertex_t> tv = raw_connection_network.v_tanner_raw_map.at(rv);
-        for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tv)) {
-            sptr<raw_vertex_t> rdq = raw_connection_network.v_tanner_raw_map.at(tdq);
+        sptr<tanner::vertex_t> tv = raw_connection_network->v_tanner_raw_map.at(rv);
+        for (sptr<tanner::vertex_t> tdq : tanner_graph->get_neighbors(tv)) {
+            sptr<raw_vertex_t> rdq = raw_connection_network->v_tanner_raw_map.at(tdq);
             operands.push_back(data_meas_ctr_map[rdq] + meas_ctr_offset);
         }
         safe_emplace_back(program, "event", operands);
         program.back().put(print_v(rv));
         event_ctr++;
     }
-    auto obs_list = tanner_graph.get_obs(config.is_memory_x);
+    auto obs_list = tanner_graph->get_obs(config.is_memory_x);
     size_t obs_ctr = 0;
     for (auto& obs : obs_list) {
         std::vector<uint64_t> operands{obs_ctr};
         for (sptr<tanner::vertex_t> tdq : obs) {
-            sptr<raw_vertex_t> rdq = raw_connection_network.v_tanner_raw_map.at(tdq);
+            sptr<raw_vertex_t> rdq = raw_connection_network->v_tanner_raw_map.at(tdq);
             operands.push_back(data_meas_ctr_map[rdq] + meas_ctr_offset);
         }
         safe_emplace_back(program, "obs", operands);

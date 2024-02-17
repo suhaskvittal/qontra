@@ -16,7 +16,7 @@ namespace protean {
 using namespace net;
 
 bool
-update_network(std::string pass_string, PhysicalNetwork& network, bool verbose) {
+update_network(std::string pass_string, PhysicalNetwork* network, bool verbose) {
     bool network_was_changed = false;
     if (verbose) {
         std::cout << "[ update_network ] running on pass_string = " << pass_string << std::endl;
@@ -50,7 +50,7 @@ update_network(std::string pass_string, PhysicalNetwork& network, bool verbose) 
             std::cout << "[ update_network ] calling pass " << p << std::endl;
         }
         pass_t pass = PASSES.at(p);
-        return (network.*pass)();
+        return (network->*pass)();
     };
 
     for (size_t i = 0; i <= pass_string.size(); i++) {
@@ -94,28 +94,28 @@ update_network(std::string pass_string, PhysicalNetwork& network, bool verbose) 
 }
 
 void
-write_stats_file(std::string output_file, PhysicalNetwork& network) {
+PhysicalNetwork::write_stats_file(std::string output_file) {
     std::ofstream fout(output_file);
     fout << "Property,Value\n"
-            << "Qubits," << network.n() << "\n"
-            << "Couplings," << network.m() << "\n"
-            << "Mean Degree," << network.get_mean_degree() << "\n"
-            << "Max Degree," << network.get_max_degree() << "\n"
-            << "Thickness," << network.get_thickness() << "\n";
+            << "Qubits," << n() << "\n"
+            << "Couplings," << m() << "\n"
+            << "Mean Degree," << get_mean_degree() << "\n"
+            << "Max Degree," << get_max_degree() << "\n"
+            << "Thickness," << get_thickness() << "\n";
     fout.flush();
 }
 
 void
-write_schedule_file(std::string output_file, PhysicalNetwork& network) {
-    qes::Program<> schedule = network.make_schedule();
+PhysicalNetwork::write_schedule_file(std::string output_file) {
+    qes::Program<> schedule = make_schedule();
     qes::to_file(output_file, schedule);
 }
 
 void
-write_coupling_file(std::string output_file, PhysicalNetwork& network) {
+PhysicalNetwork::write_coupling_file(std::string output_file) {
     std::ofstream fout(output_file);
     fout << "Qubit 1,Qubit 2,Processor Layer\n";
-    for (sptr<phys_edge_t> pe : network.get_edges()) {
+    for (sptr<phys_edge_t> pe : get_edges()) {
         sptr<phys_vertex_t> pv = pe->get_source<phys_vertex_t>(),
                             pw = pe->get_target<phys_vertex_t>();
         const size_t layer = pe->tsv_layer;
@@ -124,11 +124,11 @@ write_coupling_file(std::string output_file, PhysicalNetwork& network) {
 }
 
 void
-write_role_file(std::string output_file, PhysicalNetwork& network) {
+PhysicalNetwork::write_role_file(std::string output_file) {
     std::ofstream fout(output_file);
     fout << "Physical Qubit,Degree,Roles\n";
-    for (sptr<phys_vertex_t> pv : network.get_vertices()) {
-        fout << pv->id << "," << network.get_degree(pv) << ",\"";
+    for (sptr<phys_vertex_t> pv : get_vertices()) {
+        fout << pv->id << "," << get_degree(pv) << ",\"";
         bool first = true;
         for (sptr<raw_vertex_t> rv : pv->role_set) {
             if (!first) fout << ",";
@@ -141,16 +141,12 @@ write_role_file(std::string output_file, PhysicalNetwork& network) {
 }
 
 void
-write_tanner_graph_file(std::string output_file, PhysicalNetwork& network) {
+PhysicalNetwork::write_tanner_graph_file(std::string output_file) {
     std::ofstream fout(output_file);
-    
-    using namespace graph;
-    RawNetwork raw_net = network.get_raw_connection_network();
-    TannerGraph& tanner_graph = raw_net.tanner_graph;
     // First write checks.
     fout << "Parity Role/Logical Observable,Role Operator String,Physical Operator String\n";
-    for (sptr<tanner::vertex_t> tpq : tanner_graph.get_checks()) {
-        sptr<raw_vertex_t> rpq = raw_net.v_tanner_raw_map.at(tpq);
+    for (sptr<tanner::vertex_t> tpq : tanner_graph->get_checks()) {
+        sptr<raw_vertex_t> rpq = raw_connection_network->v_tanner_raw_map.at(tpq);
         if (rpq->qubit_type == raw_vertex_t::type::xparity) {
             fout << "x";
         } else {
@@ -159,9 +155,9 @@ write_tanner_graph_file(std::string output_file, PhysicalNetwork& network) {
         fout << rpq->id;
         std::string role_check_string, phys_check_string;
         bool first = true;
-        for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
-            sptr<raw_vertex_t> rdq = raw_net.v_tanner_raw_map.at(tdq);
-            sptr<phys_vertex_t> pdq = network.role_to_phys[rdq];
+        for (sptr<tanner::vertex_t> tdq : tanner_graph->get_neighbors(tpq)) {
+            sptr<raw_vertex_t> rdq = raw_connection_network->v_tanner_raw_map.at(tdq);
+            sptr<phys_vertex_t> pdq = role_to_phys[rdq];
             
             if (!first) {
                 role_check_string += ",";
@@ -177,7 +173,7 @@ write_tanner_graph_file(std::string output_file, PhysicalNetwork& network) {
     for (size_t c = 0; c <= 1; c++) {
         bool is_x_obs = (c == 0);
         size_t k = 0;
-        for (auto obs : tanner_graph.get_obs(is_x_obs)) {
+        for (auto obs : tanner_graph->get_obs(is_x_obs)) {
             fout << "o" << (is_x_obs ? "x" : "z") << k;
 
             std::string role_obs_string, phys_obs_string;
@@ -188,8 +184,8 @@ write_tanner_graph_file(std::string output_file, PhysicalNetwork& network) {
                     phys_obs_string += ",";
                 }
                 first = false;
-                sptr<raw_vertex_t> rv = raw_net.v_tanner_raw_map.at(tv);
-                sptr<phys_vertex_t> pv = network.role_to_phys[rv];
+                sptr<raw_vertex_t> rv = raw_connection_network->v_tanner_raw_map.at(tv);
+                sptr<phys_vertex_t> pv = role_to_phys[rv];
                 role_obs_string += "d" + std::to_string(rv->id);
                 phys_obs_string += std::to_string(pv->id);
             }
@@ -201,12 +197,11 @@ write_tanner_graph_file(std::string output_file, PhysicalNetwork& network) {
 }
 
 void
-write_flag_assignment_file(std::string output_file, PhysicalNetwork& network) {
+PhysicalNetwork::write_flag_assignment_file(std::string output_file) {
     std::ofstream fout(output_file);
     fout << "Parity Role,D:D:F Role List\n";
 
-    RawNetwork raw_net = network.get_raw_connection_network();
-    for (auto& p1 : raw_net.flag_assignment_map) {
+    for (auto& p1 : raw_connection_network->flag_assignment_map) {
         sptr<raw_vertex_t> rpq = p1.first;
         if (rpq->qubit_type == raw_vertex_t::type::xparity) {
             fout << "x";

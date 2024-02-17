@@ -40,7 +40,7 @@ map_move_and_delete(MAP& m, T v, T w) {
     m.erase(v);
 }
 
-RawNetwork::RawNetwork(TannerGraph& tgr) 
+RawNetwork::RawNetwork(TannerGraph* tgr) 
     :Graph(),
     v_tanner_raw_map(),
     tanner_graph(tgr),
@@ -51,8 +51,8 @@ RawNetwork::RawNetwork(TannerGraph& tgr)
     id_ctr(0)
 {
     // Essentially copy over the tanner graph.
-    for (sptr<tanner::vertex_t> tv : tgr.get_vertices()) {
-        sptr<raw_vertex_t> rv = make_vertex();
+    for (sptr<tanner::vertex_t> tv : tgr->get_vertices()) {
+        sptr<raw_vertex_t> rv = make_and_add_vertex();
         if (tv->qubit_type == tanner::vertex_t::type::xparity) {
             rv->qubit_type = raw_vertex_t::type::xparity;
         } else if (tv->qubit_type == tanner::vertex_t::type::zparity) {
@@ -61,16 +61,14 @@ RawNetwork::RawNetwork(TannerGraph& tgr)
             rv->qubit_type = raw_vertex_t::type::data;
         }
         v_tanner_raw_map.put(tv, rv);
-        add_vertex(rv);
     }
 
-    for (sptr<tanner::edge_t> te : tgr.get_edges()) {
+    for (sptr<tanner::edge_t> te : tgr->get_edges()) {
         sptr<tanner::vertex_t> tv1 = te->get_source<tanner::vertex_t>(),
                                 tv2 = te->get_target<tanner::vertex_t>();
         auto rv1 = v_tanner_raw_map.at(tv1),
             rv2 = v_tanner_raw_map.at(tv2);
-        sptr<raw_edge_t> re = make_edge(rv1, rv2);
-        add_edge(re);
+        sptr<raw_edge_t> re = make_and_add_edge(rv1, rv2);
     }
 }
 
@@ -126,16 +124,12 @@ RawNetwork::add_flag(sptr<raw_vertex_t> dq1, sptr<raw_vertex_t> dq2, sptr<raw_ve
     delete_edge(re1);
     delete_edge(re2);
     // Create flag and corresponding edges.
-    sptr<raw_vertex_t> fq = make_vertex();
+    sptr<raw_vertex_t> fq = make_and_add_vertex();
     fq->qubit_type = raw_vertex_t::type::flag;
-    add_vertex(fq);
 
-    sptr<raw_edge_t> rfe1 = make_edge(dq1, fq),
-                       rfe2 = make_edge(dq2, fq),
-                       rfe3 = make_edge(fq, pq);
-    add_edge(rfe1);
-    add_edge(rfe2);
-    add_edge(rfe3);
+    make_and_add_edge(dq1, fq);
+    make_and_add_edge(dq2, fq);
+    make_and_add_edge(fq, pq);
 
     // Update tracking structures and return.
     flag_ownership_map[pq].push_back(fq);
@@ -153,14 +147,11 @@ RawNetwork::add_proxy(sptr<raw_edge_t> e) {
                         q2 = e->get_target<raw_vertex_t>();
     delete_edge(e);
     // Create proxy and corresponding edges.
-    sptr<raw_vertex_t> prxq = make_vertex();
+    sptr<raw_vertex_t> prxq = make_and_add_vertex();
     prxq->qubit_type = raw_vertex_t::type::proxy;
-    add_vertex(prxq);
 
-    sptr<raw_edge_t> e1 = make_edge(q1, prxq),
-                        e2 = make_edge(prxq, q2);
-    add_edge(e1);
-    add_edge(e2);
+    make_and_add_edge(q1, prxq);
+    make_and_add_edge(prxq, q2);
     return prxq;
 }
 
@@ -176,9 +167,7 @@ RawNetwork::merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
     for (sptr<raw_vertex_t> rw : get_neighbors(little)) {
         if (big == rw) continue;
         if (contains(big, rw)) continue;
-        sptr<raw_edge_t> e = make_edge(big, rw);
-        e->is_undirected = true;
-        add_edge(e);
+        make_and_add_edge(big, rw);
     }
     // Depending on what big and little are, we need to update the
     // tracking data structures.
@@ -257,7 +246,7 @@ RawNetwork::get_support(sptr<raw_vertex_t> rpq) {
         // Get all data qubits in support. The flags and proxies in rpq's support are
         // any encountered when entangling the data qubits with the parity qubit.
         sptr<tanner::vertex_t> tpq = v_tanner_raw_map.at(rpq);
-        for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
+        for (sptr<tanner::vertex_t> tdq : tanner_graph->get_neighbors(tpq)) {
             sptr<raw_vertex_t> rdq = v_tanner_raw_map.at(tdq);
             // rdq is connected via a flag.
             if (flag_assignment_map[rpq].count(rdq)) {

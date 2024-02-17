@@ -29,9 +29,10 @@ make_ordered_pair(T x, T y) {
     else        return std::make_pair(y, x);
 }
 
-PhysicalNetwork::PhysicalNetwork(TannerGraph& tgr)
+PhysicalNetwork::PhysicalNetwork(TannerGraph* tgr)
     :Graph(),
-    raw_connection_network(tgr),
+    tanner_graph(tgr),
+    raw_connection_network(std::make_unique<RawNetwork>(tgr)),
     role_to_phys(),
     // Planarity tracking:
     processor_layers(),
@@ -42,18 +43,16 @@ PhysicalNetwork::PhysicalNetwork(TannerGraph& tgr)
 {
     push_back_new_processor_layer(); // The first ever processor layer.
     // Create a corresponding physical qubit for every vertex in raw_connection_network.
-    for (sptr<raw_vertex_t> rv : raw_connection_network.get_vertices()) {
-        sptr<phys_vertex_t> pv = make_vertex();
+    for (sptr<raw_vertex_t> rv : raw_connection_network->get_vertices()) {
+        sptr<phys_vertex_t> pv = make_and_add_vertex();
         pv->push_back_role(rv);
         role_to_phys[rv] = pv;
-        add_vertex(pv);
     }
     // And the corresponding edges as well.
-    for (sptr<raw_edge_t> re : raw_connection_network.get_edges()) {
+    for (sptr<raw_edge_t> re : raw_connection_network->get_edges()) {
         sptr<raw_vertex_t> rsrc = re->get_source<raw_vertex_t>(),
                             rdst = re->get_target<raw_vertex_t>();
-        sptr<phys_edge_t> pe = make_edge(role_to_phys[rsrc], role_to_phys[rdst]);
-        add_edge(pe);
+        make_and_add_edge(role_to_phys[rsrc], role_to_phys[rdst]);
     }
 }
 
@@ -93,7 +92,7 @@ PhysicalNetwork::join_qubits_with_identical_support() {
 bool
 PhysicalNetwork::join_qubits_with_partial_support() {
     // Disable memoization.
-    raw_connection_network.disable_memoization();
+    raw_connection_network->disable_memoization();
 
     bool mod = false;
     // These are vertices that are consumed by another.
@@ -155,21 +154,20 @@ PhysicalNetwork::make_flags() {
     //      errors. Remove these flags.
     //  (3) For the remaining flags (which are raw vertices), create corresponding physical
     //      vertices and update the connectivity.
-    TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
-
+    //
     // The entries should be ordered pairs to avoid double counting.
     typedef std::set<v_pair_t<raw_vertex_t>>    flag_pair_set_t;
 
     std::map<sptr<raw_vertex_t>, flag_pair_set_t> proposed_flag_pair_map;
     flag_pair_set_t all_proposed_flag_pairs;
 
-    for (sptr<tanner::vertex_t> check : tanner_graph.get_checks()) {
-        std::vector<sptr<tanner::vertex_t>> _support = tanner_graph.get_neighbors(check);
+    for (sptr<tanner::vertex_t> check : tanner_graph->get_checks()) {
+        std::vector<sptr<tanner::vertex_t>> _support = tanner_graph->get_neighbors(check);
         // Get raw vertices.
-        sptr<raw_vertex_t> rpq = raw_connection_network.v_tanner_raw_map.at(check);
+        sptr<raw_vertex_t> rpq = raw_connection_network->v_tanner_raw_map.at(check);
         std::vector<sptr<raw_vertex_t>> support;
         for (sptr<tanner::vertex_t> tx : _support) {
-            sptr<raw_vertex_t> rx = raw_connection_network.v_tanner_raw_map.at(tx);
+            sptr<raw_vertex_t> rx = raw_connection_network->v_tanner_raw_map.at(tx);
             support.push_back(rx);
         }
 
@@ -315,7 +313,7 @@ edge_build_outer_loop_start:
         for (auto& fp : flags) {
             sptr<raw_vertex_t> rv1 = fp.first,
                                 rv2 = fp.second;
-            sptr<raw_vertex_t> rfq = raw_connection_network.add_flag(rv1, rv2, rpq);
+            sptr<raw_vertex_t> rfq = raw_connection_network->add_flag(rv1, rv2, rpq);
             // Update flag_pair_to_flag_roles
             flag_pairs_to_flag_roles[fp].insert(std::make_pair(rpq, rfq));
         }
@@ -330,7 +328,7 @@ edge_build_outer_loop_start:
                             pv2 = role_to_phys[rv2];
         // Make a separate physical qubit for the X and Z flags.
         for (int i = 0; i < 2; i++) {
-            sptr<phys_vertex_t> pfq = make_vertex();
+            sptr<phys_vertex_t> pfq = make_and_add_vertex();
             std::set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv1, pv2};
             for (auto& p2 : role_set) {
                 sptr<raw_vertex_t> rpq = p2.first,
@@ -356,10 +354,8 @@ edge_build_outer_loop_start:
                 }
             }
             // Add edges for pfq.
-            add_vertex(pfq);
             for (sptr<phys_vertex_t> x : qubits_connected_to_pfq) {
-                sptr<phys_edge_t> pe = make_edge(pfq, x);
-                add_edge(pe);
+                make_and_add_edge(pfq, x);
             }
         }
     }
@@ -382,7 +378,7 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                     return get_degree(a) > get_degree(b);
                 });
 
-        sptr<phys_vertex_t> pprx = make_vertex();
+        sptr<phys_vertex_t> pprx = make_and_add_vertex();
         // Let k = slack_violation. Then the top k+1 neighbors will
         // be serviced by the proxy.
         std::vector<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
@@ -408,9 +404,9 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                     if (rv->qubit_type == raw_vertex_t::type::flag && rx->qubit_type == raw_vertex_t::type::data) {
                         continue;
                     }
-                    sptr<raw_edge_t> re = raw_connection_network.get_edge(rv, rx);
+                    sptr<raw_edge_t> re = raw_connection_network->get_edge(rv, rx);
                     if (re == nullptr) continue;
-                    sptr<raw_vertex_t> rprx = raw_connection_network.add_proxy(re);
+                    sptr<raw_vertex_t> rprx = raw_connection_network->add_proxy(re);
 
                     // Get cycle of role (which is just the max of the cycles of rv and rx).
                     size_t cycle = std::max(pv->cycle_role_map.at(rv), px->cycle_role_map.at(rx));
@@ -430,10 +426,9 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
             std::cerr << "[ add_connectivity_reducing_proxies ] found proxy " << print_v(pprx) << " with no roles\n";
             exit(1);
         }
-        add_vertex(pprx);
         // Update the physical connectivity on our side.
         for (sptr<phys_vertex_t> x : share_an_edge_with_pprx) {
-            add_edge(make_edge(pprx, x));
+            make_and_add_edge(pprx, x);
         }
         mod = true;
     }
@@ -442,7 +437,7 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
 
 bool
 PhysicalNetwork::contract_small_degree_qubits() {
-    raw_connection_network.disable_memoization();
+    raw_connection_network->disable_memoization();
 
     bool mod = false;
     for (sptr<phys_vertex_t> pv : get_vertices()) {
@@ -482,7 +477,7 @@ PhysicalNetwork::contract_small_degree_qubits() {
 
             delete_vertex(pv);
             if (!contains(px1, px2)) {
-                add_edge(make_edge(px1, px2));
+                make_and_add_edge(px1, px2);
             }
         }
         mod = true;
@@ -495,15 +490,15 @@ PhysicalNetwork::reallocate_edges() {
     // Top-down: trickle down the edges as much as possible.
     bool mod = false;
     for (size_t k = get_thickness()-1; k > 0; k--) {
-        ProcessorLayer& curr = processor_layers[k];
-        ProcessorLayer& next = processor_layers[k-1];
+        uptr<ProcessorLayer>& curr = processor_layers[k],
+                            & next = processor_layers[k-1];
         // Get a sorted list of edges in curr, sorted from least to greatest
         // by their max_endpoint_degree in next.
-        auto edge_list = curr.get_edges();
+        auto edge_list = curr->get_edges();
         std::sort(edge_list.begin(), edge_list.end(),
                 [&] (auto e, auto f)
                 {
-                    return next.get_max_endpoint_degree(e) < next.get_max_endpoint_degree(f);
+                    return next->get_max_endpoint_degree(e) < next->get_max_endpoint_degree(f);
                 });
         // Now, try to put as many edges into next.
         for (sptr<phys_edge_t> e : edge_list) {
@@ -513,7 +508,7 @@ PhysicalNetwork::reallocate_edges() {
     // Now, everything will have changed. Remove any layers with no edges.
     // A property of this function is that only the last layers should have no edges. So,
     // removing layers is rather straightforward:
-    while (processor_layers.back().m() == 0 && processor_layers.size() > 1) {
+    while (processor_layers.back()->m() == 0 && processor_layers.size() > 1) {
         processor_layers.pop_back();
     }
     return mod;
@@ -533,8 +528,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     // We will use the concept of an operator tree.
     // 
     // The lowest level of the tree corresponds to the observables of the code.
-    TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
-    auto obs_list = tanner_graph.get_obs(is_x_error);
+    auto obs_list = tanner_graph->get_obs(is_x_error);
 
     // We will only examine a single level of the tree at any time to avoid high memory overheads of
     // loading the entire tree.
@@ -546,14 +540,14 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     typedef std::tuple<std::set<sptr<raw_vertex_t>>, stim::simd_bits<SIMD_WIDTH>> quop_t;
     std::vector<quop_t> curr_operator_tree_level;
 
-    const size_t HASH_SIZE = obs_list.size() + tanner_graph.get_checks().size()/2;
+    const size_t HASH_SIZE = obs_list.size() + tanner_graph->get_checks().size()/2;
     const size_t HASH_STABILIZER_OFFSET = obs_list.size();
     // Populate the lowest level with the observables.
     size_t min_observable_size = std::numeric_limits<size_t>::max();
     for (size_t i = 0; i < obs_list.size(); i++) {
         std::set<sptr<raw_vertex_t>> obs;
         for (sptr<tanner::vertex_t> x : obs_list[i]) {
-            obs.insert(raw_connection_network.v_tanner_raw_map.at(x));
+            obs.insert(raw_connection_network->v_tanner_raw_map.at(x));
         }
         min_observable_size = std::min(min_observable_size, obs.size());
 
@@ -564,14 +558,14 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     }
     // Get relevant checks.
     std::vector<quop_t> checks;
-    auto _checks = is_x_error ? tanner_graph.get_vertices_by_type(tanner::vertex_t::type::xparity)
-                                : tanner_graph.get_vertices_by_type(tanner::vertex_t::type::zparity);
+    auto _checks = is_x_error ? tanner_graph->get_vertices_by_type(tanner::vertex_t::type::xparity)
+                                : tanner_graph->get_vertices_by_type(tanner::vertex_t::type::zparity);
     for (size_t i = 0; i < _checks.size(); i++) {
         sptr<tanner::vertex_t> tpq = _checks[i];
         // Get the support of the check.
         std::set<sptr<raw_vertex_t>> stabilizer;
-        for (sptr<tanner::vertex_t> tx : tanner_graph.get_neighbors(tpq)) {
-            stabilizer.insert(raw_connection_network.v_tanner_raw_map.at(tx));
+        for (sptr<tanner::vertex_t> tx : tanner_graph->get_neighbors(tpq)) {
+            stabilizer.insert(raw_connection_network->v_tanner_raw_map.at(tx));
         }
         stim::simd_bits<SIMD_WIDTH> h(HASH_SIZE);
         h[HASH_STABILIZER_OFFSET + i] = 1;
@@ -648,7 +642,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 
 bool
 PhysicalNetwork::recompute_cycle_role_maps() {
-    raw_connection_network.disable_memoization();
+    raw_connection_network->disable_memoization();
     // Here, we want to enforce that for each check, each physical qubit has at most one role for that
     // check.
     //
@@ -658,23 +652,23 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         std::set<sptr<raw_vertex_t>> deleted_vertices;
         for (sptr<raw_vertex_t> r1 : pv->role_set) {
             bool r1_is_x_flag = r1->qubit_type == raw_vertex_t::type::flag
-                                    && raw_connection_network.x_flag_set.count(r1);
+                                    && raw_connection_network->x_flag_set.count(r1);
             for (sptr<raw_vertex_t> r2 : pv->role_set) {
                 if (r1 <= r2) continue;
                 // If r1 is deleted during a test_and_merge, break.
                 if (deleted_vertices.count(r1)) break;
                 if (deleted_vertices.count(r2)) continue;
                 bool r2_is_x_flag = r2->qubit_type == raw_vertex_t::type::flag
-                                        && raw_connection_network.x_flag_set.count(r2);
+                                        && raw_connection_network->x_flag_set.count(r2);
                 bool r1_r2_are_same_flag =
                     (r1->qubit_type == raw_vertex_t::type::flag && r2->qubit_type == raw_vertex_t::type::flag)
                     &&
-                    (raw_connection_network.x_flag_set.count(r1) == raw_connection_network.x_flag_set.count(r2));
+                    (raw_connection_network->x_flag_set.count(r1) == raw_connection_network->x_flag_set.count(r2));
                 // Try the merge.
-                if (raw_connection_network.are_in_same_support(r1, r2) != nullptr
+                if (raw_connection_network->are_in_same_support(r1, r2) != nullptr
                     || r1_r2_are_same_flag)
                 {
-                    auto deleted = raw_connection_network.merge(r1, r2);
+                    auto deleted = raw_connection_network->merge(r1, r2);
                     if (deleted != nullptr) {
                         deleted_vertices.insert(deleted);
                     }
@@ -703,21 +697,16 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         std::vector<conflict_t> conflicts;
     };
 
-    TannerGraph& tanner_graph = raw_connection_network.tanner_graph;
-
     Graph<int_v_t, int_e_t> interaction_graph;
     size_t _id = 0;
-    for (sptr<tanner::vertex_t> tpq : tanner_graph.get_checks()) {
-        sptr<raw_vertex_t> rpq = raw_connection_network.v_tanner_raw_map.at(tpq);
+    for (sptr<tanner::vertex_t> tpq : tanner_graph->get_checks()) {
+        sptr<raw_vertex_t> rpq = raw_connection_network->v_tanner_raw_map.at(tpq);
         // Make interaction graph vertex.
-        sptr<int_v_t> iv = interaction_graph.make_vertex();
-        iv->id = _id++;
+        sptr<int_v_t> iv = interaction_graph.make_and_add_vertex(_id++);
         iv->check = rpq;
         // Get all qubits involved in check.
-        RawNetwork::parity_support_t& supp = raw_connection_network.get_support(rpq);
+        RawNetwork::parity_support_t& supp = raw_connection_network->get_support(rpq);
         iv->support = supp.all;
-
-        interaction_graph.add_vertex(iv);
     }
     // Now, compute interaction graph edges.
     for (size_t i = 0; i < _id; i++) {
@@ -726,7 +715,6 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             sptr<int_v_t> iw = interaction_graph.get_vertex(j);
 
             sptr<int_e_t> ie = interaction_graph.make_edge(iv, iw);
-            ie->is_undirected = true;
             for (sptr<raw_vertex_t> rx : iv->support) {
                 if (rx->qubit_type == raw_vertex_t::type::data) continue;
 
@@ -769,7 +757,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                 if (!role_to_phys.count(rv) || role_to_phys[rv] == nullptr) {
                     std::cerr << "Role does not exist: " << print_v(rv) << "\n"
                         << "\tcontaining check: " << print_v(iv->check) << "\n"
-                        << "\traw_net contains role: " << raw_connection_network.contains(rv) << std::endl;
+                        << "\traw_net contains role: " << raw_connection_network->contains(rv) << std::endl;
                     exit(1);
                 }
                 sptr<phys_vertex_t> pv = role_to_phys[rv];

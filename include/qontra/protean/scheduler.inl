@@ -55,18 +55,18 @@ Scheduler::try_and_push_back_cx_operands(
 
 inline RawNetwork::parity_support_t&
 Scheduler::get_support(sptr<net::raw_vertex_t> v) {
-    return net_p->raw_connection_network.get_support(v);
+    return network->raw_connection_network->get_support(v);
 }
 
 inline int64_t
 Scheduler::qu(sptr<net::raw_vertex_t> rv) {
-    sptr<net::phys_vertex_t> pv = net_p->role_to_phys.at(rv);
+    sptr<net::phys_vertex_t> pv = network->role_to_phys.at(rv);
     return static_cast<int64_t>(pv->id);
 }
 
 inline bool
 Scheduler::test_and_set_qubit(sptr<net::raw_vertex_t> rv) {
-    sptr<net::phys_vertex_t> pv = net_p->role_to_phys.at(rv);
+    sptr<net::phys_vertex_t> pv = network->role_to_phys.at(rv);
     if (!active_role_map.count(pv) || active_role_map.at(pv) == nullptr) {
         active_role_map[pv] = rv;
         return true;
@@ -79,7 +79,7 @@ Scheduler::test_and_set_qubit(sptr<net::raw_vertex_t> rv) {
 
 inline bool
 Scheduler::release_qubit(sptr<net::raw_vertex_t> rv) {
-    sptr<net::phys_vertex_t> pv = net_p->role_to_phys.at(rv);
+    sptr<net::phys_vertex_t> pv = network->role_to_phys.at(rv);
     if (active_role_map.at(pv) == rv) {
         active_role_map[pv] = nullptr;
         return true;
@@ -96,7 +96,7 @@ Scheduler::test_and_set_exit_on_fail(sptr<net::raw_vertex_t> rv, std::string cal
 
 inline void
 Scheduler::print_test_and_set_debug_and_exit(sptr<net::raw_vertex_t> rv, std::string caller) {
-    sptr<net::phys_vertex_t> pv = net_p->role_to_phys.at(rv);
+    sptr<net::phys_vertex_t> pv = network->role_to_phys.at(rv);
     std::cerr << "[ " << caller << " ] qubit " << graph::print_v(rv)
         << " failed to acquire " << graph::print_v(pv)
         << " from " << graph::print_v(active_role_map.at(pv))

@@ -18,7 +18,6 @@ namespace protean {
 void
 add_node_to_render_graph(
         Agraph_t* gr,
-        PhysicalNetwork& net,
         sptr<net::phys_vertex_t> pv,
         render_config_t config) 
 {
@@ -45,7 +44,6 @@ add_node_to_render_graph(
 void
 add_edge_to_render_graph(
         Agraph_t* gr, 
-        PhysicalNetwork& network,
         sptr<net::phys_edge_t> pe,
         render_config_t config)
 {
@@ -69,18 +67,18 @@ add_edge_to_render_graph(
 }
 
 void
-render_network(std::string output_file, PhysicalNetwork& network, render_config_t config) {
+render_network(std::string output_file, PhysicalNetwork* network, render_config_t config) {
     GVC_t* gvc = gvContext();
 
     Agraph_t* gr = cxx_agopen("processor", Agundirected, NULL);
-    // Create a node for each vertex in network.
-    for (sptr<net::phys_vertex_t> pv : network.get_vertices()) {
-        add_node_to_render_graph(gr, network, pv, config);
+    // Create a node for each vertex in network->
+    for (sptr<net::phys_vertex_t> pv : network->get_vertices()) {
+        add_node_to_render_graph(gr, pv, config);
     }
     // Create edges. Here, we will label the edges by the roles that have 
     // the edge.
-    for (sptr<net::phys_edge_t> pe : network.get_edges()) {
-        add_edge_to_render_graph(gr, network, pe, config);
+    for (sptr<net::phys_edge_t> pe : network->get_edges()) {
+        add_edge_to_render_graph(gr, pe, config);
     }
     // Get output_file extension.
     const char* filename = output_file.c_str();
@@ -97,40 +95,40 @@ void
 render_network_by_check(
         std::string output_folder,
         std::string ext,
-        PhysicalNetwork& network,
+        PhysicalNetwork* network,
         render_config_t config) 
 {
     GVC_t* gvc = gvContext();
 
-    RawNetwork raw_net = network.get_raw_connection_network();
-    for (sptr<net::raw_vertex_t> rpq : raw_net.get_vertices()) {
+    uptr<RawNetwork>& raw_network = network->get_raw_connection_network();
+    for (sptr<net::raw_vertex_t> rpq : raw_network->get_vertices()) {
         if (rpq->qubit_type != net::raw_vertex_t::type::xparity
                 && rpq->qubit_type != net::raw_vertex_t::type::zparity)
         {
             continue;
         }
-        auto& support = raw_net.get_support(rpq);
+        auto& support = raw_network->get_support(rpq);
         // Draw all qubits in the support. In case any of them share physical qubits, track what
         // physical qubits have been drawn.
         Agraph_t* gr = cxx_agopen("processor", Agundirected, NULL);
 
         std::set<sptr<net::phys_vertex_t>> visited;
         for (sptr<net::raw_vertex_t> rv : support.all) {
-            sptr<net::phys_vertex_t> pv = network.get_physical_qubit_for(rv);
+            sptr<net::phys_vertex_t> pv = network->get_physical_qubit_for(rv);
             if (visited.count(pv)) continue;
 
-            add_node_to_render_graph(gr, network, pv, config);
+            add_node_to_render_graph(gr, pv, config);
         }
 
         for (sptr<net::raw_vertex_t> rv : support.all) {
-            sptr<net::phys_vertex_t> pv = network.get_physical_qubit_for(rv);
+            sptr<net::phys_vertex_t> pv = network->get_physical_qubit_for(rv);
             for (sptr<net::raw_vertex_t> rw : support.all) {
-                sptr<net::phys_vertex_t> pw = network.get_physical_qubit_for(rw);
+                sptr<net::phys_vertex_t> pw = network->get_physical_qubit_for(rw);
                 if (pv <= pw) continue;
-                sptr<net::phys_edge_t> pe = network.get_edge(pv, pw);
+                sptr<net::phys_edge_t> pe = network->get_edge(pv, pw);
                 if (pe == nullptr) continue;
 
-                add_edge_to_render_graph(gr, network, pe, config);
+                add_edge_to_render_graph(gr, pe, config);
             }
         }
         // Write to file.
@@ -147,7 +145,7 @@ render_network_by_check(
 }
 
 Plane
-place_network(PhysicalNetwork& network, placement_config_t config) {
+place_network(PhysicalNetwork* network, placement_config_t config) {
     // Build the LP.
     LP mgr;
     lp_add_variables(mgr, network, config);
@@ -171,7 +169,7 @@ place_network(PhysicalNetwork& network, placement_config_t config) {
     }
     // Form layout from the LP results.
     Plane layout;
-    for (sptr<net::phys_vertex_t> v : network.get_vertices()) {
+    for (sptr<net::phys_vertex_t> v : network->get_vertices()) {
         coord_t<2> p{ mgr.get_value(get_x(v)), mgr.get_value(get_y(v)) };
         layout.put(v, p);
     }
