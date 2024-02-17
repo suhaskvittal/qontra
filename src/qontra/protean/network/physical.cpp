@@ -280,6 +280,7 @@ edge_build_outer_loop_start:
     }
     std::array<flag_pair_set_t, 2> flag_pair_sets{x_flags, z_flags};
     size_t flags_removed = 0;
+    /*
     for (size_t i = 0; i < 2; i++) {
         flag_pair_set_t& flags = flag_pair_sets[i];
         stim::simd_bits<SIMD_WIDTH> indicator_bits = do_flags_protect_weight_two_error(flags, i==0);
@@ -296,6 +297,7 @@ edge_build_outer_loop_start:
             k++;
         }
     }
+    */
     std::cout << "[ status ] removed flags = " << flags_removed << std::endl;
     // First, we will create flags for each parity qubit. This ignores the case where (q1, q2)
     // is a flag in two different parity qubits. However, note we are only interested in establishing

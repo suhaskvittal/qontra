@@ -19,6 +19,8 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
 
     load_syndrome(syndrome);
 
+    if (detectors.empty()) return { 0.0, corr, {} };
+
     timer.clk_start();
     std::vector<Decoder::assign_t> assignments = compute_matching();
     fp_t t = static_cast<fp_t>(timer.clk_end());

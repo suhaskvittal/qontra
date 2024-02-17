@@ -30,49 +30,66 @@ int main(int argc, char* argv[]) {
     CmdParser pp(argc, argv);
     std::string HELP = 
         "usage: ./memory --qes <file> --out <file>\n"
-        "\toptional: --s <shots, default=1e6> --p <error-rate, default=1e-3>\n";
+        "optional:\n"
+        "\t--s <shots, default=1e6>\n"
+        "\t--pmin <error-rate, default=1e-3>\n"
+        "\t--pmax <error-rate, default=1e-3>\n"
+        "\t--steps <# of p, default=1>\n";
 
     std::string qes_file;
     std::string output_file;
 
     uint64_t    shots = 1'000'000;
-    fp_t        p = 1e-3;
+    fp_t        pmin = 1e-3,
+                pmax = 1e-3;
+    uint64_t    steps = 1;
 
     pp.get("qes", qes_file, true);
     pp.get("out", output_file, true);
 
     pp.get("s", shots);
-    pp.get("p", p);
+    pp.get("pmin", pmin);
+    pp.get("pmax", pmax);
+    pp.get("steps", steps);
 
-    // Load model from file and run memory experiment.
-    DetailedStimCircuit circuit = make_circuit(qes_file, p);
-    uptr<Decoder> dec;
-    dec = std::make_unique<MWPMDecoder>(circuit);
-    
+    qes::Program<> program = qes::from_file(qes_file);
 
-    memory_config_t config;
-    config.shots = shots;
-    auto res = memory_experiment(dec.get(), config);
+    fp_t p = pmin;
+    while (p <= 1.1*pmax) {
+        // Load model from file and run memory experiment.
+        DetailedStimCircuit circuit = make_circuit(qes_file, p);
+        uptr<Decoder> dec;
+        if (circuit.count_observables() > 1) {
+            dec = std::make_unique<MWPMDecoder>(circuit);
+        } else {
+            dec = std::make_unique<PyMatching>(circuit);
+        }
 
-    // Write result to file.
-    if (world_rank == 0) {
-        bool write_header = false;
-        if (!file_exists(get_parent_directory(output_file.c_str()))) {
-            safe_create_directory(get_parent_directory(output_file.c_str()));
-            write_header = true;
+        memory_config_t config;
+        config.shots = shots;
+        auto res = memory_experiment(dec.get(), config);
+
+        // Write result to file.
+        if (world_rank == 0) {
+            bool write_header = false;
+            if (!file_exists(get_parent_directory(output_file.c_str()))) {
+                safe_create_directory(get_parent_directory(output_file.c_str()));
+                write_header = true;
+            }
+            std::ofstream fout(output_file, std::ios::app);
+            if (write_header) {
+                fout << "qes file,physical error rate,shots,logical error rate" << std::endl;
+            }
+            fout << get_basename(qes_file) << ","
+                << p << ","
+                << shots << ","
+                << res.logical_error_rate;
+            for (fp_t x : res.logical_error_rate_by_obs) {
+                fout << "," << x;
+            }
+            fout << std::endl;
         }
-        std::ofstream fout(output_file, std::ios::app);
-        if (write_header) {
-            fout << "qes file,physical error rate,shots,logical error rate" << std::endl;
-        }
-        fout << get_basename(qes_file) << ","
-            << p << ","
-            << shots << ","
-            << res.logical_error_rate;
-        for (fp_t x : res.logical_error_rate_by_obs) {
-            fout << "," << x;
-        }
-        fout << std::endl;
+        p = pow(M_E, log(p) + (log(pmax)-log(pmin))/(steps-1));
     }
     MPI_Finalize();
     return 0;
