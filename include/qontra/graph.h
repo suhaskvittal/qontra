@@ -51,25 +51,8 @@ template <class V=void, class E> std::string    print_e(sptr<E>);
 template <class V, class E>
 class Graph {
 public:
-    Graph(void)
-        :vertices(),
-        edges(),
-        adjacency_matrix(),
-        adjacency_lists(),
-        r_adjacency_lists(),
-        id_to_vertex(),
-        graph_has_changed(false)
-    {}
-
-    Graph(const Graph& other)
-        :vertices(other.vertices), 
-        edges(other.edges),
-        adjacency_matrix(other.adjacency_matrix),
-        adjacency_lists(other.adjacency_lists),
-        r_adjacency_lists(other.r_adjacency_lists),
-        id_to_vertex(other.id_to_vertex),
-        graph_has_changed(other.graph_has_changed)
-    {}
+    Graph(void) = default;
+    Graph(Graph&& other) = default;
 
     virtual void    change_id(sptr<V>, uint64_t to);
     virtual void    manual_update_id(sptr<V>, uint64_t old_id, uint64_t new_id);

@@ -62,42 +62,12 @@ print_id(uint64_t id) {
 
 }   // tanner
 
-#define __TannerGraphParent graph::Graph<tanner::vertex_t, tanner::edge_t>
-
-class TannerGraph;
-
-namespace io {
-
-// Function for io callback.
-//
-// In a tanner graph description file, each line should be of the form:
-//          <X/Z><check-id>,<data-qubit-1>,<data-qubit-2>,...
-
-void update_tanner_graph(TannerGraph&, std::string); // Callback for io function.
-
-}   // io
-
-class TannerGraph : public __TannerGraphParent {
+class TannerGraph : public Graph<tanner::vertex_t, tanner::edge_t> {
 public:
     typedef std::vector<sptr<tanner::vertex_t>>  obs_t;
 
-    TannerGraph(void)
-        :__TannerGraphParent(), 
-        data_qubits(),
-        xparity_checks(),
-        zparity_checks(),
-        x_obs_list(),
-        z_obs_list()
-    {}
-
-    TannerGraph(const TannerGraph& other)
-        :__TannerGraphParent(other),
-        data_qubits(other.data_qubits),
-        xparity_checks(other.xparity_checks),
-        zparity_checks(other.zparity_checks),
-        x_obs_list(other.x_obs_list),
-        z_obs_list(other.z_obs_list)
-    {}
+    TannerGraph(void) = default;
+    TannerGraph(TannerGraph&& other) = default;
 
     bool add_vertex(sptr<tanner::vertex_t> v) override {
         if (!__TannerGraphParent::add_vertex(v))  return false;
@@ -169,6 +139,17 @@ print_v(sptr<tanner::vertex_t> v) {
     }
     return type_prefix + std::to_string(v->id & tanner::VERTEX_ID_NUMBER_MASK);
 }
+
+namespace io {
+
+// Function for io callback.
+//
+// In a tanner graph description file, each line should be of the form:
+//          <X/Z><check-id>,<data-qubit-1>,<data-qubit-2>,...
+
+void update_tanner_graph(TannerGraph&, std::string); // Callback for io function.
+
+}   // io
 
 }   // graph
 }   // qontra

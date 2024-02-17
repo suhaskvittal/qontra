@@ -36,7 +36,7 @@ public:
     HyperGraph(void)
         :vertices(),
         edges(),
-        incidence_graph(),
+        incidence_graph(std::make_unique<IncidenceGraph>()),
         incidence_object_map(),
         adjacency_lists(),
         adjacency_mult_map(),
@@ -47,19 +47,7 @@ public:
         max_order(0)
     {}
 
-    HyperGraph(const HyperGraph& other)
-        :vertices(other.vertices),
-        edges(other.edges),
-        incidence_graph(other.incidence_graph),
-        incidence_object_map(other.incidence_object_map),
-        adjacency_lists(other.adjacency_lists),
-        adjacency_mult_map(other.adjacency_mult_map),
-        id_to_vertex(other.id_to_vertex),
-        graph_has_changed(other.graph_has_changed),
-        mean_degree(other.mean_degree),
-        max_degree(other.max_degree),
-        max_order(other.max_order)
-    {}
+    HyperGraph(HyperGraph&& other) = default;
     
     virtual void    change_id(sptr<V>, uint64_t to);
     virtual void    manual_update_id(sptr<V>, uint64_t old_id, uint64_t new_id);
@@ -116,13 +104,16 @@ public:
 protected:
     virtual bool    update_state(void);
 
-    template <class PTR>
-    sptr<base::vertex_t> get_incidence_vertex(PTR) const;
+    template <class PTR> sptr<base::vertex_t> add_incidence_vertex(PTR);
+    template <class PTR> sptr<base::vertex_t> get_incidence_vertex(PTR) const;
+
+    sptr<V>     get_vertex_from_incidence_vertex(sptr<base::vertex_t>) const;
+    sptr<HE>    get_edge_from_incidence_vertex(sptr<base::vertex_t>) const;
 
     std::vector<sptr<V>>    vertices;
     std::vector<sptr<HE>>   edges;
 
-    IncidenceGraph incidence_graph;
+    uptr<IncidenceGraph> incidence_graph;
     std::map<sptr<base::vertex_t>, sptr<void>> incidence_object_map;
     std::map<sptr<V>, std::vector<sptr<V>>> adjacency_lists;
     vtils::TwoLevelMap<sptr<V>, sptr<V>, size_t> adjacency_mult_map;

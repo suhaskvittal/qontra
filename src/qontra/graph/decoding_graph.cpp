@@ -65,7 +65,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     auto ef =
         [&] (fp_t p, std::vector<uint64_t> detectors, std::set<uint64_t> frames)
         {
-            if (p == 0 || dets.size() == 0) return;
+            if (p == 0) return;
             // Remove all flags from the detectors.
             std::vector<uint64_t> flags;
             for (auto it = detectors.begin(); it != detectors.end(); ) {
@@ -76,17 +76,19 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                     it++;
                 }
             }
+            if (detectors.size() == 0) return;
             // If it is less than the expected number of flips, then add
             // boundaries.
-            if (dets.size() < flips_per_error) {
+            if (detectors.size() < flips_per_error) {
                 if (number_of_colors == 0) {
                     uint64_t b = get_color_boundary_index(COLOR_ANY);
                     detectors.push_back(b);
                 } else {
-                    std::set<int> colors_in_detectors;
+                    std::vector<int> colors_in_detectors;
                     for (uint64_t d : detectors) {
                         colors_in_detectors.push_back(circuit.detector_color_map.at(d));
                     }
+                    std::vector<uint64_t> boundary_indices;
                     for (int c : get_complementary_colors_to(colors_in_detectors, number_of_colors)) {
                         boundary_indices.push_back(get_color_boundary_index(c));
                     }
@@ -99,7 +101,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 }
             }
             // If there is an overflow, print out debug info and exit.
-            if (dets.size() > flips_per_error) {
+            if (detectors.size() > flips_per_error) {
                 std::cerr << "[ DecodingGraph ] found error flipping detectors [";
                 for (uint64_t d : detectors) std::cerr << " " << d;
                 std::cerr << " ] and flags [";
@@ -123,27 +125,27 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                     p = p*(1-r) + r*(1-p);
                 }
             } else {
-                e = this->make_vertex(vlist);
+                e = this->make_edge(vlist);
             }
             e->probability = p;
             e->frames = frames;
             // If this is a flag edge, do not add it to the graph. Instead, add
             // it to the flag_edge_map.
             if (flags.empty()) {
-                this->add_vertex(e);
+                this->add_edge(e);
             } else {
                 for (uint64_t f : flags) {
                     this->flag_edge_map[f].insert(e);
                 }
             }
         };
-    uint64_t detector_offset = 0;
+    size_t detector_offset = 0;
     read_detector_error_model(dem, 1, detector_offset, ef, df);
 }
 
 void
-DecodingGraph::dijkstra(int c1, int c2, sptr<vertex_t> from) {
-    if (c1 > c2) return dijkstra(c2, c1, from);
+DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
+    if (c1 > c2) return dijkstra_(c2, c1, from);
     auto c1_c2 = std::make_pair(c1, c2);
     
     auto& dgr_map = flags_are_active ? flagged_dijkstra_graph_map : dijkstra_graph_map;
@@ -179,7 +181,7 @@ DecodingGraph::dijkstra(int c1, int c2, sptr<vertex_t> from) {
             ec.probability *= e->probability;
             ec.weight += compute_weight(e->probability);
             ec.path.push_back(curr);
-            if (is_boundary(curr)) {
+            if (curr->is_boundary_vertex) {
                 ec.runs_through_boundary = true;
                 ec.boundary_vertices.push_back(curr);
             }
@@ -193,7 +195,7 @@ DecodingGraph::dijkstra(int c1, int c2, sptr<vertex_t> from) {
         // Some last updates (adding from).
         ec.length++;
         ec.path.push_back(from);
-        if (is_boundary(from)) {
+        if (from->is_boundary_vertex) {
             ec.runs_through_boundary = true;
             ec.boundary_vertices.push_back(from);
         }
@@ -215,7 +217,7 @@ DecodingGraph::dijkstra(int c1, int c2, sptr<vertex_t> from) {
 void
 DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     // We need to build a suitable graph for Dijkstra's:
-    uptr<Graph<vertex_t, edge_t>> dgr = std::make_unique();
+    uptr<Graph<vertex_t, edge_t>> dgr = std::make_unique<Graph<vertex_t, edge_t>>();
     // Populate dgr.
     for (sptr<vertex_t> v : get_vertices()) {
         if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
@@ -230,12 +232,12 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
         for (sptr<hyperedge_t> he : flag_edge_map[fd]) {
             if (visited_flag_edges.count(he)) continue;
 
-            fp_t p = he->error_probability;
+            fp_t p = he->probability;
             for (size_t i = 0; i < he->get_order(); i++) {
-                sptr<vertex_t> v = he[i];
+                sptr<vertex_t> v = he->get<vertex_t>(i);
                 if (!dgr->contains(v)) continue;
                 for (size_t j = i+1; j < he->get_order(); j++) {
-                    sptr<vertex_t> w = he[j];
+                    sptr<vertex_t> w = he->get<vertex_t>(j);
                     if (!dgr->contains(w)) continue;
                     // Make edge if it does not exist. Update probability.
                     sptr<edge_t> e = dgr->get_edge(v, w);
@@ -267,7 +269,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
         }
     }
     // Now the graph is done.
-    auto c1_c2 = std::make_pair(c1, c2),
+    auto c1_c2 = std::make_pair(c1, c2);
     if (flags_are_active) {
         flagged_dijkstra_graph_map[c1_c2] = std::move(dgr);
     } else {

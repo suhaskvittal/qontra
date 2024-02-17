@@ -10,7 +10,7 @@ namespace graph {
 
 inline sptr<decoding::vertex_t>
 DecodingGraph::get_boundary_vertex(int color) {
-    uint64_t db = get_color_boundary_index(c);
+    uint64_t db = get_color_boundary_index(color);
     return get_vertex(db);
 }
 
@@ -34,9 +34,9 @@ DecodingGraph::get(int c1, int c2, sptr<decoding::vertex_t> v1, sptr<decoding::v
     update_state();
     if (c1 > c2) std::swap(c1, c2);
     auto c1_c2 = std::make_pair(c1, c2);
-    auto& dm_map = flags_are_active ? flagged_distance_matrix_map : distance_matrix_map;
+    auto& dm_map = flags_are_active ? flagged_distance_matrix_map[c1_c2] : distance_matrix_map[c1_c2];
     if (!dm_map.count(v1)) {
-        dijkstra(c1, c2, v1);
+        dijkstra_(c1, c2, v1);
     }
     return dm_map[v1][v2];
 }
@@ -56,7 +56,7 @@ DecodingGraph::get_complementary_boundaries_to(CONTAINER vlist) {
 inline void
 DecodingGraph::activate_flags(const std::vector<uint64_t>& all_detectors) {
     deactivate_flags();
-    for (uint64_t d : detectors) {
+    for (uint64_t d : all_detectors) {
         if (flag_detectors.count(d)) active_flags.push_back(d);
     }
     flags_are_active = !active_flags.empty();
@@ -84,7 +84,7 @@ DecodingGraph::get_expected_errors() {
 
 inline bool
 DecodingGraph::update_state() {
-    if (!Graph::update_state()) return false;
+    if (!HyperGraph::update_state()) return false;
     dijkstra_graph_map.clear();
     distance_matrix_map.clear();
     build_error_polynomial();

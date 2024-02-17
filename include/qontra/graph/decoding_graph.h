@@ -56,10 +56,8 @@ typedef Graph<decoding::vertex_t, decoding::edge_t> DijkstraGraph;
 
 class DecodingGraph : public HyperGraph<decoding::vertex_t, decoding::hyperedge_t> {
 public:
-    DecodingGraph(void);
-    DecodingGraph(const DecodingGraph&);
-
     DecodingGraph(const DetailedStimCircuit&, size_t flips_per_error);
+    DecodingGraph(DecodingGraph&&) = default;
 
     sptr<decoding::vertex_t>    get_boundary_vertex(int color);
 
@@ -81,7 +79,7 @@ public:
 protected:
     bool    update_state(void) override;
 private:
-    void    dijkstra(int, int, sptr<decoding::vertex_t> from);
+    void    dijkstra_(int, int, sptr<decoding::vertex_t> from);
     void    make_dijkstra_graph(int, int);
     void    build_error_polynomial(void);
 
@@ -105,7 +103,7 @@ private:
 };
 
 template <class CONTAINER>
-std::vector<int> get_complementary_colors_to(CONTAINER);
+std::vector<int> get_complementary_colors_to(CONTAINER, int number_of_colors);
 
 uint64_t    get_color_boundary_index(int);
 fp_t        compute_weight(fp_t probability);
@@ -125,5 +123,7 @@ void read_detector_error_model(
 
 }   // graph
 }   // qontra
+
+#include "decoding_graph.inl"
 
 #endif  // QONTRA_DECODING_GRAPH_h
