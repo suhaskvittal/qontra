@@ -44,6 +44,14 @@ Scheduler::try_and_push_back_cx_operands(
     if (!additional_test(rx, ry)) return false;
     int64_t qx = qu(rx),
             qy = qu(ry);
+    // Check if there is a physical edge between qx and qy.
+    sptr<net::phys_vertex_t> px = network->get_vertex(qx),
+                             py = network->get_vertex(qy);
+    if (!network->contains(px, py)) {
+        std::cerr << "[ try_and_push_back_cx_operands ] attempted to do CX(" << qx << ", " << qy << ") when"
+            " no coupling exists." << std::endl;
+        exit(1);
+    }
     if (in_use.count(qx) || in_use.count(qy)) return false;
     if (reverse_cx_dir) std::swap(qx, qy);
     

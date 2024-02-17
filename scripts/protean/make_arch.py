@@ -29,7 +29,7 @@ else:
     version_list = [
         ('1', 'ral.rlb.rcr', 4),
         ('2', 'fla.ral.rlb.rcr', 4),
-        ('3', 'fla.ral(con.ral,prx.ral)+rlb.rcr', 4),
+        ('3', 'fla.ral(con.ral.prx.ral)+rlb.rcr', 4),
         ('4', 'fla.ral(con.ral.prx.ral)+rlb.rcr', 3),
     ]
 
@@ -42,7 +42,7 @@ for (version, pass_string, max_conn) in version_list:
                 cd Release
                 mkdir -p %s
                 mkdir -p %s
-                ./protean --tanner %s --out %s --passes "%s" --s-rounds %s --render %s --max-conn %d
+                ./protean --tanner %s --out %s --passes "%s" --s-rounds %s --render %s --max-conn %d -v
               ''' % (output_folder,
                      render_folder,
                      tanner_graph_file,

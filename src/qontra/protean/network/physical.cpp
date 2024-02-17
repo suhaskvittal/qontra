@@ -280,7 +280,6 @@ edge_build_outer_loop_start:
     }
     std::array<flag_pair_set_t, 2> flag_pair_sets{x_flags, z_flags};
     size_t flags_removed = 0;
-    /*
     for (size_t i = 0; i < 2; i++) {
         flag_pair_set_t& flags = flag_pair_sets[i];
         stim::simd_bits<SIMD_WIDTH> indicator_bits = do_flags_protect_weight_two_error(flags, i==0);
@@ -297,7 +296,6 @@ edge_build_outer_loop_start:
             k++;
         }
     }
-    */
     std::cout << "[ status ] removed flags = " << flags_removed << std::endl;
     // First, we will create flags for each parity qubit. This ignores the case where (q1, q2)
     // is a flag in two different parity qubits. However, note we are only interested in establishing
@@ -366,12 +364,15 @@ edge_build_outer_loop_start:
 
 bool
 PhysicalNetwork::add_connectivity_reducing_proxies() {
+    std::cout << "[ status ] qubits = " << n() 
+        << ", max connectivity = " << get_max_degree()
+        << ", mean connectivity = " << get_mean_degree() << std::endl;
     bool mod = false;
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         const size_t dg = get_degree(pv);
         if (dg <= config.max_connectivity) continue;
 
-        size_t slack_violation = dg - config.max_connectivity;
+        int slack_violation = dg - config.max_connectivity;
         std::vector<sptr<phys_vertex_t>> adj = get_neighbors(pv);
         // Also sort neighbors by degree.
         std::sort(adj.begin(), adj.end(),
@@ -384,6 +385,8 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         // Let k = slack_violation. Then the top k+1 neighbors will
         // be serviced by the proxy.
         std::vector<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
+        std::vector<sptr<phys_edge_t>> deleted_edges;
+        slack_violation++;
         // Rules for adding proxies:
         //  (1) pv is a data qubit.
         //      --> anything goes.
@@ -395,7 +398,7 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         //      flag and data qubits affects fault-tolerance guarantees.
         //  (4) pv is a proxy
         //      --> anything goes.
-        for (size_t i = 0; i < std::min(slack_violation+1, adj.size()); i++) {
+        for (size_t i = 0; i < adj.size() && slack_violation > 0; i++) {
             sptr<phys_vertex_t> px = adj[i];
             // Now, for each role in pv and px, add a proxy in the raw_connection_network.
             // Each added proxy will be a role for pprx.
@@ -403,9 +406,12 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
             for (sptr<raw_vertex_t> rv : pv->role_set) {
                 for (sptr<raw_vertex_t> rx : px->role_set) {
                     // Enforce proxy addition rules.
-                    if (rv->qubit_type == raw_vertex_t::type::flag && rx->qubit_type == raw_vertex_t::type::data) {
+                    /*
+                    if (rv->qubit_type == raw_vertex_t::type::flag && rx->qubit_type == raw_vertex_t::type::data
+                        || rx->qubit_type == raw_vertex_t::type::data && r) {
                         continue;
                     }
+                    */
                     sptr<raw_edge_t> re = raw_connection_network->get_edge(rv, rx);
                     if (re == nullptr) continue;
                     sptr<raw_vertex_t> rprx = raw_connection_network->add_proxy(re);
@@ -421,18 +427,25 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                 share_an_edge_with_pprx.push_back(px);
                 // Delete px's edge with pv.
                 sptr<phys_edge_t> pe = get_edge(pv, px);
-                delete_edge(pe);
+                deleted_edges.push_back(pe);
+                slack_violation--;
             }
         }
-        if (pprx->role_set.empty()) {
-            std::cerr << "[ add_connectivity_reducing_proxies ] found proxy " << print_v(pprx) << " with no roles\n";
+        // Update the physical connectivity on our side.
+        if (share_an_edge_with_pprx.size() > 2) {
+            std::cout << "\tadded proxy with connectivity " << share_an_edge_with_pprx.size()
+                << ", remaining slack violation: " << slack_violation << std::endl;
+            for (sptr<phys_edge_t> _pe : deleted_edges) {
+                delete_edge(_pe);
+            }
+            for (sptr<phys_vertex_t> x : share_an_edge_with_pprx) {
+                make_and_add_edge(pprx, x);
+            }
+            mod = true;
+        } else {
+            std::cerr << "TODO: handle proxy delete!" << std::endl;
             exit(1);
         }
-        // Update the physical connectivity on our side.
-        for (sptr<phys_vertex_t> x : share_an_edge_with_pprx) {
-            make_and_add_edge(pprx, x);
-        }
-        mod = true;
     }
     return mod;
 }
@@ -449,13 +462,12 @@ PhysicalNetwork::contract_small_degree_qubits() {
         if (dg > 2) continue;
         
         if (dg == 0) {
-            // God forbid, I can't think of a case like this, so I'm printing out the
-            // qubit.
+            // God forbid, I can't think of a case like this, so I'm exiting.
             std::cerr << "[ warning ] found qubit with zero degree: " << print_v(pv) << "\n";
             std::cerr << "\troles =";
             for (auto r : pv->role_set) std::cerr << " " << print_v(r);
             std::cerr << std::endl;
-            delete_vertex(pv);
+            exit(1);
         } else if (dg == 1) {
             sptr<phys_vertex_t> px = get_neighbors(pv)[0];
             // If px is a data qubit, do not proceed.
@@ -653,15 +665,11 @@ PhysicalNetwork::recompute_cycle_role_maps() {
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         std::set<sptr<raw_vertex_t>> deleted_vertices;
         for (sptr<raw_vertex_t> r1 : pv->role_set) {
-            bool r1_is_x_flag = r1->qubit_type == raw_vertex_t::type::flag
-                                    && raw_connection_network->x_flag_set.count(r1);
             for (sptr<raw_vertex_t> r2 : pv->role_set) {
                 if (r1 <= r2) continue;
                 // If r1 is deleted during a test_and_merge, break.
                 if (deleted_vertices.count(r1)) break;
                 if (deleted_vertices.count(r2)) continue;
-                bool r2_is_x_flag = r2->qubit_type == raw_vertex_t::type::flag
-                                        && raw_connection_network->x_flag_set.count(r2);
                 bool r1_r2_are_same_flag =
                     (r1->qubit_type == raw_vertex_t::type::flag && r2->qubit_type == raw_vertex_t::type::flag)
                     &&

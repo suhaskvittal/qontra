@@ -10,6 +10,8 @@
 
 #include <math.h>
 
+static const uint32_t STIM_INSTRUCTION_LEN_LIMIT = 64;
+
 namespace qontra {
 
 inline std::vector<uint32_t>
