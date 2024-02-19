@@ -101,11 +101,9 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 }
             }
             // If there is an overflow, print out debug info and exit.
-            if (detectors.size() > flips_per_error) {
-                std::cerr << "[ DecodingGraph ] found error flipping detectors [";
+            if (detectors.size() > flips_per_error && flags.empty()) {
+                std::cerr << "[ DecodingGraph ] found flagless error flipping detectors [";
                 for (uint64_t d : detectors) std::cerr << " " << d;
-                std::cerr << " ] and flags [";
-                for (uint64_t d : flags) std::cerr << " " << d;
                 std::cerr << " ] which had more than " << flips_per_error << " flips." << std::endl;
                 exit(1);
             }
@@ -256,6 +254,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             visited_flag_edges.insert(he);
         }
     }
+    std::cout << "renormalization factor: " << renorm_factor << "\n";
     // Now handle other edges.
     for (sptr<vertex_t> v : dgr->get_vertices()) {
         for (sptr<vertex_t> w : dgr->get_vertices()) {
