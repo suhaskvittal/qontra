@@ -15,7 +15,7 @@ RestrictionDecoder::insert_incident_vertices(
 {
     for (const vpair_t& e : edge_set) {
         sptr<graph::decoding::vertex_t> v = e.first,
-                                 w = e.second;
+                                         w = e.second;
         if (v->color == color) vertex_set.insert(v);
         if (w->color == color) vertex_set.insert(w);
     }
@@ -30,7 +30,7 @@ RestrictionDecoder::insert_incident_vertices(
     for (const auto& p : edge_map) {
         const vpair_t& e = p.first;
         sptr<graph::decoding::vertex_t> v = e.first,
-                                 w = e.second;
+                                        w = e.second;
         if (v->color == color) vertex_set.insert(v);
         if (w->color == color) vertex_set.insert(w);
     }

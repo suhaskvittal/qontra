@@ -17,7 +17,7 @@ namespace qontra {
 namespace graph {
 
 const int COLOR_ANY = -1;
-const uint64_t BOUNDARY_FLAG = std::numeric_limits<uint64_t>::max();
+const uint64_t BOUNDARY_FLAG = std::numeric_limits<uint32_t>::max();
 
 namespace decoding {
 
@@ -59,6 +59,8 @@ public:
     DecodingGraph(const DetailedStimCircuit&, size_t flips_per_error);
     DecodingGraph(DecodingGraph&&) = default;
 
+    sptr<decoding::vertex_t>    make_vertex(uint64_t) const override;
+
     sptr<decoding::vertex_t>    get_boundary_vertex(int color);
 
     error_chain_t   get(uint64_t, uint64_t);
@@ -79,6 +81,8 @@ public:
 protected:
     bool    update_state(void) override;
 private:
+    sptr<decoding::vertex_t>    make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
+
     void    dijkstra_(int, int, sptr<decoding::vertex_t> from);
     void    make_dijkstra_graph(int, int);
     void    build_error_polynomial(void);

@@ -3,6 +3,8 @@
  *  date:   21 January 2024
  * */
 
+#define MEMORY_DEBUG
+
 #include <qontra/decoder/pymatching.h>
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
@@ -58,7 +60,7 @@ int main(int argc, char* argv[]) {
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
         // Load model from file and run memory experiment.
-        DetailedStimCircuit circuit = make_circuit(qes_file, p);
+        DetailedStimCircuit circuit = make_circuit(qes_file, p, true);
         uptr<Decoder> dec;
         if (circuit.count_observables() > 1) {
             dec = std::make_unique<RestrictionDecoder>(circuit);

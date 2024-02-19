@@ -113,7 +113,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
             std::vector<sptr<vertex_t>> vlist;
             for (uint64_t d : detectors) {
                 if (!this->contains(d)) {
-                    vlist.push_back(this->make_and_add_vertex(d));
+                    vlist.push_back(make_and_add_vertex_(d, circuit));
                 } else {
                     vlist.push_back(this->get_vertex(d));
                 }

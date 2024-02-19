@@ -17,6 +17,24 @@ vertex_t::get_base() {
 
 }   // decoding
 
+template <> inline std::string
+print_v<decoding::vertex_t>(sptr<decoding::vertex_t> v) {
+    if (v == nullptr) return "_";
+    std::string s;
+    s += v->is_boundary_vertex ? "B" : std::to_string(v->id);
+    if (v->color != COLOR_ANY) {
+        s += "(c=" + std::to_string(v->color) + ")";
+    }
+    return s;
+}
+
+inline sptr<decoding::vertex_t>
+DecodingGraph::make_vertex(uint64_t id) const {
+    sptr<decoding::vertex_t> v = HyperGraph::make_vertex(id);
+    v->base = v;
+    return v;
+}
+
 inline sptr<decoding::vertex_t>
 DecodingGraph::get_boundary_vertex(int color) {
     uint64_t db = get_color_boundary_index(color);
@@ -99,6 +117,22 @@ DecodingGraph::update_state() {
     return true;
 }
 
+inline sptr<decoding::vertex_t>
+DecodingGraph::make_and_add_vertex_(uint64_t d, const DetailedStimCircuit& circuit) {
+    sptr<decoding::vertex_t> x = make_and_add_vertex(d);
+    if (circuit.detector_color_map.count(d)) {
+        x->color = circuit.detector_color_map.at(d);
+    }
+    if (circuit.detector_base_map.count(d)) {
+        uint64_t bd = circuit.detector_base_map.at(d);
+        if (d != bd && !this->contains(bd)) {
+            sptr<decoding::vertex_t> _x = make_and_add_vertex_(bd, circuit);
+            x->base = _x;
+        }
+    }
+    return x;
+}
+
 inline std::vector<int>
 get_complementary_colors_to(std::vector<int> clist, int number_of_colors) {
     std::set<int> clist_set(clist.begin(), clist.end());
@@ -111,7 +145,7 @@ get_complementary_colors_to(std::vector<int> clist, int number_of_colors) {
 
 inline uint64_t
 get_color_boundary_index(int color) {
-    return BOUNDARY_FLAG | (static_cast<uint64_t>(color+1) << 32);
+    return BOUNDARY_FLAG | (static_cast<uint64_t>(color+1) << 48);
 }
 
 inline fp_t
@@ -141,9 +175,9 @@ read_detector_error_model(
                 fp_t p = static_cast<fp_t>(inst.arg_data[0]);
                 for (stim::DemTarget t : inst.target_data) {
                     if (t.is_relative_detector_id()) {
-                        detectors.push_back(static_cast<uint64_t>(t.data + detector_offset));
+                        detectors.push_back(t.val() + detector_offset);
                     } else if (t.is_observable_id()) {
-                        frames.insert(static_cast<uint64_t>(t.data));
+                        frames.insert(t.val());
                     } else {
                         // This is just a separator, so call ef.
                         ef(p, detectors, frames);
@@ -156,8 +190,7 @@ read_detector_error_model(
                 detector_offset += static_cast<uint64_t>(inst.target_data[0].data);
             } else if (type == stim::DemInstructionType::DEM_DETECTOR) {
                 for (stim::DemTarget t : inst.target_data) {
-                    uint64_t d = static_cast<uint64_t>(t.data) + detector_offset;
-                    df(d);
+                    df(t.val() + detector_offset);
                 }
             }
         }

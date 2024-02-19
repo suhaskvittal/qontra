@@ -3,6 +3,8 @@
  *  date:   16 February 2024
  * */
 
+#define MEMORY_DEBUG
+
 #include "qontra/decoder/matching_base.h"
 
 #include <PerfectMatching.h>
@@ -17,10 +19,19 @@ MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int 
     detectors.clear();
     flags.clear();
     // Track the number of detectors of each color.
+#ifdef MEMORY_DEBUG
+    std::cout << "Detectors";
+    if (c1 != COLOR_ANY) std::cout << "(" << c1 << ", " << c2 << ")";
+    std::cout << ":";
+#endif
+
     size_t n_of_c1 = 0,
            n_of_c2 = 0;
     for (uint64_t d : all_dets) {
         if (circuit.flag_detectors.count(d)) {
+#ifdef MEMORY_DEBUG
+            std::cout << " " << d;
+#endif
             flags.push_back(d);
         } else {
             if (c1 != COLOR_ANY) {
@@ -33,18 +44,35 @@ MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int 
                 }
             }
             detectors.push_back(d);
+#ifdef MEMORY_DEBUG
+            std::cout << " " << d;
+            if (circuit.flag_detectors.count(d)) std::cout << "[F]";
+            if (c1 != COLOR_ANY) std::cout << "[c=" << circuit.detector_color_map[d] << "]";
+#endif
         }
     }
     if (detectors.size() & 1) {
         if (c1 == COLOR_ANY) {
             detectors.push_back(get_color_boundary_index(COLOR_ANY));
+#ifdef MEMORY_DEBUG
+            std::cout << " B";
+#endif
         } else if (n_of_c1 & 1) {
             // Push back a boundary of color c2.
             detectors.push_back(get_color_boundary_index(c2));
+#ifdef MEMORY_DEBUG
+            std::cout << " B" << c2;
+#endif
         } else {
             detectors.push_back(get_color_boundary_index(c1));
+#ifdef MEMORY_DEBUG
+            std::cout << " B" << c1;
+#endif
         }
     }
+#ifdef MEMORY_DEBUG
+    std::cout << std::endl;
+#endif
     // Activate flag edges in decoding_graph.
     decoding_graph->activate_flags(flags);
 }
@@ -84,13 +112,13 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
                 auto v = ec.path.at(i);
                 uint64_t d = v->id;
                 part.push_back(d);
-                all_entries_are_boundaries |= !(v->is_boundary_vertex);
+                all_entries_are_boundaries &= v->is_boundary_vertex;
                 if (v->is_boundary_vertex) {
                     if (!all_entries_are_boundaries) {
                         // Add the endpoints as an assignment.
                         assign_arr.emplace_back(part[0], part.back());
                     }
-                    part.clear();
+                    part = { d };
                     all_entries_are_boundaries = true;
                 }
             }

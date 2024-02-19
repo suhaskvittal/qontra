@@ -52,7 +52,10 @@ DetailedStimCircuit::from_qes(
 {
     DetailedStimCircuit circuit;
 
+    std::set<int> all_colors;
+
     std::vector<uint64_t> all_qubits;
+    get_number_of_qubits(program, all_qubits);
 
     fp_t elapsed_time = 0.0;
     size_t meas_ctr = 0;
@@ -66,7 +69,7 @@ DetailedStimCircuit::from_qes(
         // Check if we need to inject a timing error.
         if (has_timing_error) {
             if (fix_timing_error_as_depolarizing_error >= 0.0) {
-                circuit.safe_append_ua("DEPOLARIZE1", v32(qubits), fix_timing_error_as_depolarizing_error);
+                circuit.safe_append_ua("DEPOLARIZE1", v32(all_qubits), fix_timing_error_as_depolarizing_error);
             } else {
                 for (size_t i = 0; i < qubits.size(); i++) {
                     fp_t t1 = timing.t1.at(qubits[i]),
@@ -121,6 +124,7 @@ DetailedStimCircuit::from_qes(
             }
             if (inst.has_property("color")) {
                 color_id = static_cast<int>(inst.get_property<int64_t>("color"));
+                all_colors.insert(color_id);
                 circuit.detector_color_map[detection_event] = color_id;
             }
             if (inst.has_annotation("flag")) {
@@ -168,6 +172,7 @@ DetailedStimCircuit::from_qes(
             elapsed_time += get_max_latency(inst, timing);
         }
     }
+    circuit.number_of_colors_in_circuit = all_colors.size();
     return circuit;
 }
 

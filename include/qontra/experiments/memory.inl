@@ -26,6 +26,8 @@ make_circuit(qes::Program<> program, fp_t p, bool fix_timing_error_as_p) {
     et.e_g2q = 0.0;
     et.e_idle = 0.0;
     et.e_g1q = 0.0;
+    et.e_m1w0 = 0.0;
+    et.e_m0w1 = 0.0;
 
     ErrorTable errors;
     TimeTable timing;
@@ -62,8 +64,21 @@ memory_experiment(Decoder* dec, memory_config_t config, PROLOGUE p_cb, EPILOGUE 
         if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
             return;
         }
+#ifdef MEMORY_DEBUG
+        std::cout << "--------------------------------------" << std::endl;
+#endif
         // Decode syndrome
         auto res = dec->decode_error(syndrome); 
+#ifdef MEMORY_DEBUG
+        if (payload.observables != res.corr) {
+            std::cout << "is logical error!" << std::endl;
+            std::cout << "\texpected: ";
+            for (size_t i = 0; i < n_obs; i++) std::cout << payload.observables[i]+0;
+            std::cout << std::endl << "\treceived: ";
+            for (size_t i = 0; i < n_obs; i++) std::cout << res.corr[i]+0;
+            std::cout << std::endl;
+        }
+#endif
         logical_errors[0] += (bool) (payload.observables != res.corr);
         t_sum += res.exec_time;
         t_sqr_sum += sqr(res.exec_time);
