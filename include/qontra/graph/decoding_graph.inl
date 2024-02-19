@@ -8,6 +8,15 @@
 namespace qontra {
 namespace graph {
 
+namespace decoding {
+
+inline sptr<vertex_t>
+vertex_t::get_base() {
+    return base;
+}
+
+}   // decoding
+
 inline sptr<decoding::vertex_t>
 DecodingGraph::get_boundary_vertex(int color) {
     uint64_t db = get_color_boundary_index(color);

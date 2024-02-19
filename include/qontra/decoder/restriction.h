@@ -23,7 +23,9 @@ public:
         int color;
     };
 
-    RestrictionDecoder(const DetailedStimCircuit&);
+    RestrictionDecoder(const DetailedStimCircuit& circuit)
+        :MatchingBase(circuit, 3)
+    {}
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 protected:
@@ -59,5 +61,7 @@ void intersect_with_boundary(
 
 
 }   // qontra
+
+#include "restriction.inl"
 
 #endif  // DECODER_RESTRICTION_h

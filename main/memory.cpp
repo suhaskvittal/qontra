@@ -5,6 +5,7 @@
 
 #include <qontra/decoder/pymatching.h>
 #include <qontra/decoder/mwpm.h>
+#include <qontra/decoder/restriction.h>
 #include <qontra/experiments.h>
 #include <qontra/experiments/memory.h>
 #include <qontra/ext/stim.h>
@@ -60,9 +61,9 @@ int main(int argc, char* argv[]) {
         DetailedStimCircuit circuit = make_circuit(qes_file, p);
         uptr<Decoder> dec;
         if (circuit.count_observables() > 1) {
-            dec = std::make_unique<MWPMDecoder>(circuit);
+            dec = std::make_unique<RestrictionDecoder>(circuit);
         } else {
-            dec = std::make_unique<PyMatching>(circuit);
+            dec = std::make_unique<RestrictionDecoder>(circuit);
         }
 
         memory_config_t config;
