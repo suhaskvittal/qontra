@@ -66,8 +66,8 @@ public:
     error_chain_t   get(int c1, int c2, uint64_t, uint64_t);
     error_chain_t   get(int c1, int c2, sptr<decoding::vertex_t>, sptr<decoding::vertex_t>);
 
-    template <class CONTAINER>
-    std::vector<sptr<decoding::vertex_t>> get_complementary_boundaries_to(CONTAINER);
+    std::vector<sptr<decoding::vertex_t>>
+        get_complementary_boundaries_to(std::vector<sptr<decoding::vertex_t>>);
     
     void    activate_flags(const std::vector<uint64_t>& all_detectors);
     void    deactivate_flags(void);
@@ -102,8 +102,7 @@ private:
     bool flags_are_active;
 };
 
-template <class CONTAINER>
-std::vector<int> get_complementary_colors_to(CONTAINER, int number_of_colors);
+std::vector<int> get_complementary_colors_to(std::vector<int>, int number_of_colors);
 
 uint64_t    get_color_boundary_index(int);
 fp_t        compute_weight(fp_t probability);

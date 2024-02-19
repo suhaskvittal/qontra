@@ -292,11 +292,11 @@ HyperGraph<V, HE>::get_neighbors(sptr<V> v) const {
 template <class V, class HE> inline std::vector<sptr<V>>
 HyperGraph<V, HE>::get_common_neighbors(std::vector<sptr<V>> vlist) const {
     if (vlist.empty()) return {};
-    sptr<V> common = get_neighbors(vlist.at(0));
+    auto common = get_neighbors(vlist.at(0));
     for (size_t i = 1; i < vlist.size(); i++) {
         for (auto it = common.begin(); it != common.end(); ) {
-            if (!share_hyperedge(vlist.at(i), *it)) it = common.erase(it);
-            else                                    it++;
+            if (!share_hyperedge({vlist.at(i), *it})) it = common.erase(it);
+            else                                      it++;
         }
     }
     return common;

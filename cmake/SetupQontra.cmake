@@ -12,6 +12,7 @@ set(QONTRA_FILES
     # Decoders
     src/qontra/decoder/mwpm.cpp
     src/qontra/decoder/matching_base.cpp
+    src/qontra/decoder/restriction.cpp
     # Graphs
     src/qontra/graph/decoding_graph.cpp 
     src/qontra/graph/tanner_graph.cpp

@@ -8,11 +8,14 @@
 #include <vtils/set_algebra.h>
 #include <vtils/utility.h>
 
+#include <initializer_list>
+
 const int COLOR_RED = 0;
 
 namespace qontra {
 
 using namespace graph;
+using namespace decoding;
 
 template <class SETLIKE> inline size_t
 locally_matches(SETLIKE s1, const std::set<vpair_t>& s2, sptr<vertex_t> v) {
@@ -28,11 +31,11 @@ inline void
 update_best_boundary(
         int intersection,
         fp_t& best_p,
-        std::set<pair_t>& best_boundary,
-        stim::simd_bits_range_ref best_corr,
+        std::set<vpair_t>& best_boundary,
+        stim::simd_bits_range_ref<SIMD_WIDTH> best_corr,
         fp_t& p,
-        std::set<pair_t>& boundary,
-        stim::simd_bits_range_ref corr)
+        std::set<vpair_t>& boundary,
+        stim::simd_bits_range_ref<SIMD_WIDTH> corr)
 {
     if (intersection > 0 && p > best_p) {
         best_p = p;
@@ -45,10 +48,10 @@ update_best_boundary(
 inline void
 select_best_boundary(
         std::map<vpair_t, size_t>& incidence_map,
-        std::set<pair_t>& best_boundary,
-        stim::simd_bits_range_ref best_corr,
-        std::set<pair_t>& boundary,
-        stim::simd_bits_range_ref corr)
+        std::set<vpair_t>& best_boundary,
+        stim::simd_bits_range_ref<SIMD_WIDTH> best_corr,
+        std::set<vpair_t>& boundary,
+        stim::simd_bits_range_ref<SIMD_WIDTH> corr)
 {
     for (vpair_t e : boundary) {
         if ((--incidence_map[e]) == 0) incidence_map.erase(e);
@@ -60,7 +63,8 @@ select_best_boundary(
 void
 remove_widowed_edges(std::map<vpair_t, size_t>& incidence_map) {
     std::map<sptr<vertex_t>, size_t> vertex_inc_map;
-    for (const vpair_t& e : incidence_map) {
+    for (auto& p : incidence_map) {
+        const vpair_t& e = p.first;
         sptr<vertex_t> v1 = e.first,
                        v2 = e.second;
         vertex_inc_map[v1]++;
@@ -69,7 +73,7 @@ remove_widowed_edges(std::map<vpair_t, size_t>& incidence_map) {
     // Remove any pairs of vertices where both endpoints only have a single
     // incidence.
     for (auto it = incidence_map.begin(); it != incidence_map.end(); ) {
-        vpair_t e = *it;
+        vpair_t e = it->first;
         sptr<vertex_t> v1 = e.first,
                        v2 = e.second;
         if (vertex_inc_map.at(v1) == 1 && vertex_inc_map.at(v2) == 1) {
@@ -81,7 +85,7 @@ remove_widowed_edges(std::map<vpair_t, size_t>& incidence_map) {
 }
 
 Decoder::result_t
-RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
+RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     const size_t n_obs = circuit.count_observables();
     stim::simd_bits<SIMD_WIDTH> corr(n_obs);
 
@@ -114,7 +118,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
             sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                            w = decoding_graph->get_vertex(std::get<1>(m));
             std::set<vpair_t> tmp =
-                std::vector<sptr<V>>(in_cc_map, v, w, color, std::get<2>(m), std::get<3>(m));
+                insert_error_chain_into(in_cc_map, v, w, color, std::get<2>(m), std::get<3>(m));
             vtils::insert_range(edge_set, tmp);
         }
         component_edge_sets.emplace_back(edge_set, color);
@@ -124,7 +128,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref syndrome) {
         if (in_cc_assignments.count(m)) continue;
         sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                        w = decoding_graph->get_vertex(std::get<1>(m));
-        std::vector<sptr<V>>(not_cc_map, v, w, COLOR_RED, std::get<2>(m), std::get<3>(m));
+        insert_error_chain_into(not_cc_map, v, w, COLOR_RED, std::get<2>(m), std::get<3>(m));
     }
 
     if (in_cc_map.size() && not_cc_map.size()) {
@@ -164,7 +168,7 @@ r_compute_correction:
             stim::simd_bits<SIMD_WIDTH> local_corr(n_obs);
             fp_t pr = 1.0;
 
-            uint64_t ii = j;
+            uint64_t ii = i;
             for (auto it = faces.begin(); it != faces.end() && ii; it++) {
                 if (ii & 1) {
                     intersect_with_boundary(boundary, local_corr, pr, *it, v);
@@ -188,7 +192,7 @@ r_compute_correction:
                     in_cc_map, best_boundary, best_corr, best_cc_boundary, best_cc_corr);
         } else {
             select_best_boundary(
-                    not_cc_map, best_no_cc_boundary, best_no_corr, best_no_cc_boundary, best_no_cc_corr);
+                    not_cc_map, best_no_cc_boundary, best_no_cc_corr, best_no_cc_boundary, best_no_cc_corr);
             }
         corr ^= best_corr;
     }
@@ -239,9 +243,9 @@ RestrictionDecoder::compute_connected_components(
                  dw = std::get<1>(m);
         sptr<vertex_t> v = decoding_graph->get_vertex(dv),
                        w = decoding_graph->get_vertex(dw);
-        if (!cgr->contains(v)) cgr.add_vertex(v);
-        if (!cgr->contains(w)) cgr.add_vertex(w);
-        sptr<e_t> e = cgr->make_and_add_vertex(v, w);
+        if (!cgr->contains(v)) cgr->add_vertex(v);
+        if (!cgr->contains(w)) cgr->add_vertex(w);
+        sptr<e_t> e = cgr->make_and_add_edge(v, w);
         e->c1 = std::get<2>(m);
         e->c2 = std::get<3>(m);
     }
@@ -269,7 +273,7 @@ RestrictionDecoder::compute_connected_components(
         sptr<vertex_t> v = dfs.back();
         dfs.pop_back();
         // Make sure we are fine to continue.
-        sptr<e_t> e = incoming_edge_map[e];
+        sptr<e_t> e = incoming_edge_map[v];
         if (!cgr->contains(prev_edge_map[e])) {
             continue;
         }
@@ -285,7 +289,9 @@ RestrictionDecoder::compute_connected_components(
                 // Delete the edge from cgr.
                 cgr->delete_edge(curr);
             }
-            int cc_color = get_complementary_boundaries_to({v, vrb})[0]->color;
+            std::initializer_list<sptr<vertex_t>> blist{v, vrb};
+            int cc_color =
+                decoding_graph->get_complementary_boundaries_to(blist)[0]->color;
             components.push_back({m_in_cc, cc_color});
             continue;
         }
@@ -306,8 +312,8 @@ RestrictionDecoder::compute_connected_components(
     return components;
 }
 
-void
-RestrictionDecoder::std::vector<sptr<V>> insert_error_chain_into(
+std::set<vpair_t>
+RestrictionDecoder::insert_error_chain_into(
         std::map<vpair_t, size_t>& incidence_map,
         sptr<vertex_t> src,
         sptr<vertex_t> dst,
@@ -326,25 +332,25 @@ RestrictionDecoder::std::vector<sptr<V>> insert_error_chain_into(
                        fw = w->get_base();
         if (fv == fw) continue;
         // Check if fv and fw share an edge.
-        if (!decoding_graph->share_hyperedge(fv, fw)) {
+        if (!decoding_graph->share_hyperedge({fv, fw})) {
             // Then perhaps there is a CX edge. To account for this, add the path between
             // fv and fw.
-            std::vector<sptr<V>>(incidence_map, fv, fw, component_color, c1, c2);
+            insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2);
         } else {
             // Make sure that their colors are not equal. Otherwise, get a common neighbor
             // of fv and fw which has a different color (call this fu). 
             // Add (fv, fu) and (fu, fw) instead.
             if (fv->color == fw->color) {
                 sptr<vertex_t> fu = nullptr;
-                for (sptr<vertex_t> x : decoding_graph->get_common_neighbors(v, w)) {
-                    sptr<vertex_t> fx = u->get_base();
+                for (sptr<vertex_t> x : decoding_graph->get_common_neighbors({v, w})) {
+                    sptr<vertex_t> fx = x->get_base();
                     if (fv->color == fx->color) continue;
                     fu = fx;
                     break;
                 }
                 if (fu == nullptr) {
                     // This should not happen: exit.
-                    std::cerr << "[ std::vector<sptr<V>> ] could not find common vertex between "
+                    std::cerr << "[ insert_error_chain_into ] could not find common vertex between "
                         << print_v(v) << "(" << print_v(fv) << ") and "
                         << print_v(w) << "(" << print_v(fw) << ")" << std::endl;
                     exit(1);
@@ -359,6 +365,9 @@ RestrictionDecoder::std::vector<sptr<V>> insert_error_chain_into(
             }
         }
     }
+    std::set<vpair_t> edge_set;
+    for (auto& p : incidence_map) edge_set.insert(p.first);
+    return edge_set;
 }
 
 std::set<sptr<hyperedge_t>>
@@ -384,7 +393,7 @@ RestrictionDecoder::get_faces(sptr<vertex_t> v) {
         if (do_not_add) continue;
         sptr<hyperedge_t> fe = decoding_graph->get_edge(flat_vlist);
         if (fe != nullptr) {
-            faces.push_back(fe);
+            faces.insert(fe);
         }
     }
     return faces;

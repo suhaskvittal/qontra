@@ -41,11 +41,10 @@ DecodingGraph::get(int c1, int c2, sptr<decoding::vertex_t> v1, sptr<decoding::v
     return dm_map[v1][v2];
 }
 
-template <class CONTAINER> std::vector<sptr<decoding::vertex_t>>
-DecodingGraph::get_complementary_boundaries_to(CONTAINER vlist) {
-    std::set<int> colors_in_vlist(vlist.begin(), vlist.end());
-    for (sptr<decoding::vertex_t> v : vlist) colors_in_vlist.insert(v->color);
-
+inline std::vector<sptr<decoding::vertex_t>>
+DecodingGraph::get_complementary_boundaries_to(std::vector<sptr<decoding::vertex_t>> vlist) {
+    std::vector<int> colors_in_vlist;
+    for (sptr<decoding::vertex_t> v : vlist) colors_in_vlist.push_back(v->color);
     std::vector<sptr<decoding::vertex_t>> boundary_list;
     for (int c : get_complementary_colors_to(colors_in_vlist, number_of_colors)) {
         boundary_list.push_back(get_boundary_vertex(c));
@@ -91,8 +90,8 @@ DecodingGraph::update_state() {
     return true;
 }
 
-template <class CONTAINER> inline std::vector<int>
-get_complementary_colors_to(CONTAINER clist, int number_of_colors) {
+inline std::vector<int>
+get_complementary_colors_to(std::vector<int> clist, int number_of_colors) {
     std::set<int> clist_set(clist.begin(), clist.end());
     std::vector<int> compl_list;
     for (int c = 0; c < number_of_colors; c++) {

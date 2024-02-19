@@ -7,12 +7,12 @@ namespace qontra {
 
 inline void
 RestrictionDecoder::insert_incident_vertices(
-        std::set<decoding::vertex_t>& vertex_set,
+        std::set<graph::decoding::vertex_t>& vertex_set,
         const std::set<vpair_t>& edge_set,
         int color)
 {
     for (const vpair_t& e : edge_set) {
-        sptr<decoding::vertex_t> v = e.first,
+        sptr<graph::decoding::vertex_t> v = e.first,
                                  w = e.second;
         if (v->color == color) vertex_set.insert(v);
         if (w->color == color) vertex_set.insert(w);
@@ -21,13 +21,13 @@ RestrictionDecoder::insert_incident_vertices(
 
 inline void
 RestrictionDecoder::insert_incident_vertices(
-        std::set<decoding::vertex_t>& vertex_set,
+        std::set<sptr<graph::decoding::vertex_t>>& vertex_set,
         const std::map<vpair_t, size_t>& edge_map,
         int color)
 {
     for (const auto& p : edge_set) {
         const vpair_t& e = p.first;
-        sptr<decoding::vertex_t> v = e.first,
+        sptr<graph::decoding::vertex_t> v = e.first,
                                  w = e.second;
         if (v->color == color) vertex_set.insert(v);
         if (w->color == color) vertex_set.insert(w);
@@ -44,14 +44,14 @@ intersect_with_boundary(
             std::set<vpair_t>& boundary,
             stim::simd_bits_range_ref<SIMD_WIDTH> corr,
             fp_t& probability,
-            sptr<decoding::hyperedge_t> e,
-            sptr<decoding::vertex_t> v)
+            sptr<graph::decoding::hyperedge_t> e,
+            sptr<graph::decoding::vertex_t> v)
 {
     // Get edges of the hyperedge.
     for (size_t j = 0; j < e->get_order(); j++) {
-        auto x = e->get<decoding::vertex_t>(j);
+        auto x = e->get<graph::decoding::vertex_t>(j);
         for (size_t k = j+1; k < e->get_order(); k++) {
-            auto y = e->get<decoding::vertex_t>(k);
+            auto y = e->get<graph::decoding::vertex_t>(k);
             // Make sure that one of x or y is v.
             if (x != v && y != v) continue;
             vpair_t xy = make_vpair(x, y);
