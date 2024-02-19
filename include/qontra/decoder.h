@@ -22,16 +22,7 @@ std::vector<uint64_t> get_nonzero_detectors_(T, uint64_t number_of_detectors);
 
 class Decoder {
 public: 
-    // The decoder uses the passed in circuit for decoding. It should
-    // be a memory experiment circuit for X rounds.
-    Decoder(const DetailedStimCircuit& circ)
-        :circuit(circ)
-    {}
-
-    virtual ~Decoder() {}
-
     typedef std::tuple<uint64_t, uint64_t> assign_t;
-
     struct result_t {
         fp_t exec_time = 0.0;
         stim::simd_bits<SIMD_WIDTH> corr = stim::simd_bits<>(1);
@@ -39,8 +30,13 @@ public:
         std::vector<assign_t>   error_assignments;
     };
 
-    virtual result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) =0;
+    // The decoder uses the passed in circuit for decoding. It should
+    // be a memory experiment circuit for X rounds.
+    Decoder(const DetailedStimCircuit& circ)
+        :circuit(circ)
+    {}
 
+    virtual result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) =0;
     DetailedStimCircuit get_circuit(void);
 protected:
     template <class T>
