@@ -26,6 +26,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     active_flags(),
     flag_edge_map(),
     flag_detectors(circuit.flag_detectors),
+    flag_ownership_map(),
     flags_are_active(false)
 {
     stim::DetectorErrorModel dem =
@@ -79,7 +80,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
             if (detectors.size() == 0) return;
             // If it is less than the expected number of flips, then add
             // boundaries.
-            if (detectors.size() < flips_per_error) {
+            if (detectors.size() < flips_per_error && flags.empty()) {
                 if (number_of_colors == 0) {
                     uint64_t b = get_color_boundary_index(COLOR_ANY);
                     detectors.push_back(b);
@@ -100,13 +101,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                     }
                 }
             }
-            // If there is an overflow, print out debug info and exit.
-            if (detectors.size() > flips_per_error && flags.empty()) {
-                std::cerr << "[ DecodingGraph ] found flagless error flipping detectors [";
-                for (uint64_t d : detectors) std::cerr << " " << d;
-                std::cerr << " ] which had more than " << flips_per_error << " flips." << std::endl;
-                exit(1);
-            }
+            if (detectors.size() <= 1) return;
             // Create hyperedge now.
             std::vector<sptr<vertex_t>> vlist;
             for (uint64_t d : detectors) {
@@ -139,6 +134,11 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
         };
     size_t detector_offset = 0;
     read_detector_error_model(dem, 1, detector_offset, ef, df);
+    // Setup flag ownership map.
+    for (uint64_t f : flag_detectors) {
+        sptr<vertex_t> v = get_vertex(circuit.flag_owner_map.at(f));
+        flag_ownership_map[f] = v;
+    }
 }
 
 void
@@ -229,8 +229,9 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     // Now, add edges to the graph.
     // First handle flag edges.
     std::set<sptr<hyperedge_t>> visited_flag_edges;
-    fp_t renorm_factor = 1.0;
+    std::map<sptr<vertex_t>, std::tuple<fp_t, size_t>> flag_owner_renorm_map;
     for (uint64_t fd : active_flags) {
+        sptr<vertex_t> fowner = flag_ownership_map[fd];
         for (sptr<hyperedge_t> he : flag_edge_map[fd]) {
             if (visited_flag_edges.count(he)) continue;
 
@@ -250,11 +251,16 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                     r = (1-r)*p + (1-p)*r;
                 }
             }
-            renorm_factor *= p;
+            std::get<0>(flag_owner_renorm_map[fowner]) += p;
+            std::get<1>(flag_owner_renorm_map[fowner])++;
             visited_flag_edges.insert(he);
         }
     }
-    std::cout << "renormalization factor: " << renorm_factor << "\n";
+    // Compute the renormalization factor.
+    fp_t renorm_factor = 1.0;
+    for (auto& p : flag_owner_renorm_map) {
+        renorm_factor *= std::get<0>(p.second) / static_cast<fp_t>(std::get<1>(p.second));
+    }
     // Now handle other edges.
     for (sptr<vertex_t> v : dgr->get_vertices()) {
         for (sptr<vertex_t> w : dgr->get_vertices()) {
@@ -268,7 +274,8 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 fp_t r = he->probability;
                 p = (1-p)*r + (1-r)*p;
             }
-            e->probability = renorm_factor*p;
+            p *= renorm_factor;
+            e->probability = (1-e->probability)*p + (1-p)*e->probability;
         }
     }
     // Now the graph is done.

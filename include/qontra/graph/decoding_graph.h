@@ -103,6 +103,7 @@ private:
 
     std::map<uint64_t, std::set<sptr<decoding::hyperedge_t>>> flag_edge_map;
     std::set<uint64_t> flag_detectors;
+    std::map<uint64_t, sptr<decoding::vertex_t>> flag_ownership_map;
     bool flags_are_active;
 };
 

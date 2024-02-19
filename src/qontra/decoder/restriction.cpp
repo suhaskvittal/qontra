@@ -100,6 +100,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             }
         }
     }
+    decoding_graph->deactivate_flags();
     // Compute connected components.
     std::vector<component_t> components = compute_connected_components(matchings);
     // Identify all edges inside a connected component (and which component it is), and

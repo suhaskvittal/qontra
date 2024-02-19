@@ -129,6 +129,8 @@ DetailedStimCircuit::from_qes(
             }
             if (inst.has_annotation("flag")) {
                 circuit.flag_detectors.insert(detection_event);
+                uint64_t owner = inst.get_property<int64_t>("owner");
+                circuit.flag_owner_map[detection_event] = owner;
             }
             // Append instruction
             const std::vector<double> coord{

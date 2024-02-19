@@ -43,6 +43,7 @@ struct DetailedStimCircuit : public stim::Circuit {
     std::map<uint64_t, uint64_t>    detector_base_map;
     std::map<uint64_t, int>         detector_color_map;
     std::set<uint64_t>              flag_detectors;
+    std::map<uint64_t, uint64_t>    flag_owner_map;
 };
 
 // Extension of stim::simd_bits_range_ref for_each_word function.
