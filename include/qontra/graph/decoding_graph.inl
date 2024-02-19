@@ -128,6 +128,8 @@ DecodingGraph::make_and_add_vertex_(uint64_t d, const DetailedStimCircuit& circu
         if (d != bd && !this->contains(bd)) {
             sptr<decoding::vertex_t> _x = make_and_add_vertex_(bd, circuit);
             x->base = _x;
+        } else {
+            x->base = this->get_vertex(bd);
         }
     }
     return x;
@@ -165,8 +167,8 @@ read_detector_error_model(
         for (stim::DemInstruction inst : dem.instructions) {
             stim::DemInstructionType type = inst.type;
             if (type == stim::DemInstructionType::DEM_REPEAT_BLOCK) {
-                size_t n_rep = static_cast<size_t>(inst.target_data[0].data);
-                stim::DetectorErrorModel blk = dem.blocks[inst.target_data[1].data];
+                size_t n_rep = static_cast<size_t>(inst.target_data[0].val());
+                stim::DetectorErrorModel blk = dem.blocks[inst.target_data[1].val()];
                 read_detector_error_model(blk, n_rep, detector_offset, ef, df);
             } else if (type == stim::DemInstructionType::DEM_ERROR) {
                 std::vector<uint64_t> detectors;
@@ -187,7 +189,7 @@ read_detector_error_model(
                 }
                 ef(p, detectors, frames);
             } else if (type == stim::DemInstructionType::DEM_SHIFT_DETECTORS) {
-                detector_offset += static_cast<uint64_t>(inst.target_data[0].data);
+                detector_offset += inst.target_data[0].val();
             } else if (type == stim::DemInstructionType::DEM_DETECTOR) {
                 for (stim::DemTarget t : inst.target_data) {
                     df(t.val() + detector_offset);

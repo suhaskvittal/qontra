@@ -3,8 +3,6 @@
  *  date:   16 February 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include "qontra/decoder/matching_base.h"
 
 #include <PerfectMatching.h>
@@ -100,9 +98,9 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
     std::vector<Decoder::assign_t> assign_arr;
     for (size_t i = 0; i < n; i++) {
         size_t j = pm.GetMatch(i);
-        if (i > j) continue;
         uint64_t di = detectors.at(i),
                  dj = detectors.at(j);
+        if (di > dj) continue;
         error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
         if (split_thru_boundary_match && ec.runs_through_boundary) {
             // Partition path between di and dj with boundaries.
@@ -116,7 +114,10 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
                 if (v->is_boundary_vertex) {
                     if (!all_entries_are_boundaries) {
                         // Add the endpoints as an assignment.
-                        assign_arr.emplace_back(part[0], part.back());
+                        uint64_t id1 = part[0],
+                                    id2 = part.back();
+                        if (id1 > id2) std::swap(id1, id2);
+                        assign_arr.emplace_back(id1, id2);
                     }
                     part = { d };
                     all_entries_are_boundaries = true;
@@ -124,7 +125,10 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
             }
             // Add the remaining part as an assignment.
             if (!all_entries_are_boundaries) {
-                assign_arr.emplace_back(part[0], part.back());
+                uint64_t id1 = part[0],
+                            id2 = part.back();
+                if (id1 > id2) std::swap(id1, id2);
+                assign_arr.emplace_back(id1, id2);
             }
         } else {
             assign_arr.emplace_back(di, dj);

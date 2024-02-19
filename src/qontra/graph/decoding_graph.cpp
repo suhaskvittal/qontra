@@ -31,11 +31,11 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     stim::DetectorErrorModel dem =
         stim::ErrorAnalyzer::circuit_to_detector_error_model(
                 circuit,
-                true,   // decompose errors
+                false,  // decompose errors
                 true,   // fold loops
                 false,  // allow gauge detectors (non-deterministic detectors)
-                1.0,    // approx disjoint errors threshold
-                true,   // ignore decomposition failures
+                0.0,    // approx disjoint errors threshold
+                false,  // ignore decomposition failures
                 false
             );
     // Create boundaries first.

@@ -3,10 +3,9 @@
  *  date:   21 January 2024
  * */
 
-#define MEMORY_DEBUG
-
-#include <qontra/decoder/pymatching.h>
+#include <qontra/decoder/chromobius.h>
 #include <qontra/decoder/mwpm.h>
+#include <qontra/decoder/pymatching.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/experiments.h>
 #include <qontra/experiments/memory.h>

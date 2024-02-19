@@ -3,8 +3,6 @@
  *  date:   17 February 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include "qontra/decoder/restriction.h"
 
 #include <vtils/set_algebra.h>
@@ -66,6 +64,9 @@ remove_widowed_edges(std::map<vpair_t, size_t>& incidence_map) {
         sptr<vertex_t> v1 = e.first,
                        v2 = e.second;
         if (vertex_inc_map.at(v1) == 1 && vertex_inc_map.at(v2) == 1) {
+#ifdef MEMORY_DEBUG
+            std::cout << "removing widowed edge " << print_v(v1) << ", " << print_v(v2) << std::endl;
+#endif
             it = incidence_map.erase(it);
         } else {
             it++;
@@ -119,7 +120,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                            w = decoding_graph->get_vertex(std::get<1>(m));
 #ifdef MEMORY_DEBUG
-            std::cout << "\t" << print_v(v) << " <---> " << print_v(w) << " on RL(" << std::get<2>(m) << "," << std::get<3>(m) << ")" << std::endl;
+            std::cout << "\t" << print_v(v) << " <---> " << print_v(w) << " on RL(" << std::get<2>(m) << "," << std::get<3>(m) << "), component color = " << color << std::endl;
 #endif
             std::set<vpair_t> tmp =
                 insert_error_chain_into(in_cc_map, v, w, color, std::get<2>(m), std::get<3>(m));
@@ -135,13 +136,14 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         if (in_cc_assignments.count(m)) continue;
         sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                        w = decoding_graph->get_vertex(std::get<1>(m));
+        if (std::get<2>(m) != COLOR_RED && std::get<3>(m) != COLOR_RED) continue;
 #ifdef MEMORY_DEBUG
             std::cout << "\t" << print_v(v) << " <---> " << print_v(w) << " on RL(" << std::get<2>(m) << "," << std::get<3>(m) << ")" << std::endl;
 #endif
         insert_error_chain_into(not_cc_map, v, w, COLOR_RED, std::get<2>(m), std::get<3>(m));
     }
 
-    if (in_cc_map.size() && not_cc_map.size()) {
+    if (in_cc_map.empty() && not_cc_map.empty()) {
         return { 0, corr };
     }
     // Here, we will iterate multiple times and try to match faces as much as possible.
@@ -161,18 +163,32 @@ r_compute_correction:
     std::set<sptr<vertex_t>> all_incident(not_cc_incident);
     vtils::insert_range(all_incident, in_cc_incident);
 #ifdef MEMORY_DEBUG
-    std::cout << "Incident vertices: "
-        << not_cc_incident.size() << ", "
-        << in_cc_incident.size() << ", "
-        << all_incident.size() << std::endl;
+    std::cout << "Remaining edges:" << std::endl << "\tIn CC:";
+    for (auto& es : component_edge_sets) {
+        for (vpair_t e : es.first) {
+            std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
+        }
+        std::cout << "(" << es.second << ")";
+    }
+    std::cout << std::endl << "\tNot CC:";
+    for (auto& p : not_cc_map) {
+        vpair_t e = p.first;
+        std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
+    }
+    std::cout << std::endl;
 #endif
 
     for (sptr<vertex_t> v : all_incident) {
         std::set<sptr<hyperedge_t>> faces = get_faces(v);
         const size_t nf = faces.size();
+        if (nf > 16) {
+            std::cerr << "[ RestrictionDecoder ] found vertex " << print_v(v)
+                << " with too many faces: " << nf << std::endl;
+            exit(1);
+        }
         const uint64_t enf = 1L << nf;
 #ifdef MEMORY_DEBUG
-        std::cout << "Faces (nf = " << nf << "):" << std::endl;
+        std::cout << "Faces for " << print_v(v) << " (nf = " << nf << "):" << std::endl;
         for (auto f : faces) {
             std::cout << "\t<";
             for (size_t j = 0; j < f->get_order(); j++) {
@@ -215,17 +231,35 @@ r_compute_correction:
             update_best_boundary(
                 int_not_cc, best_prob_no_cc, best_no_cc_boundary, best_no_cc_corr, pr, boundary, local_corr);
         }
+#ifdef MEMORY_DEBUG
+        std::cout << "\tboundary edges:";
+#endif
         if (best_prob_cc > best_prob_no_cc) {
             corr ^= best_cc_corr;
+            for (const vpair_t& e : best_cc_boundary) {
+                if ((--in_cc_map[e]) == 0) in_cc_map.erase(e);
+#ifdef MEMORY_DEBUG
+                std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
+#endif
+            }
         } else {
             corr ^= best_no_cc_corr;
+            for (const vpair_t& e : best_no_cc_boundary) {
+                if ((--not_cc_map[e]) == 0) not_cc_map.erase(e);
+#ifdef MEMORY_DEBUG
+                std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
+#endif
+            }
         }
+#ifdef MEMORY_DEBUG
+        std::cout << std::endl;
+#endif
     }
     // Remove any widowed edges, as these can cause the decoder to loop infinitely.
     remove_widowed_edges(in_cc_map);
     remove_widowed_edges(not_cc_map);
-    if (in_cc_map.size() > 1 && not_cc_map.size() > 1) {
-        if (tries < 100) {
+    if (in_cc_map.size() > 1 || not_cc_map.size() > 1) {
+        if (tries < 10) {
             tries++;
             goto r_compute_correction;
         } else {
@@ -237,7 +271,6 @@ r_compute_correction:
             std::cerr << " ]" << std::endl
                     << "\tEdges remaining in CC: " << in_cc_map.size() << std::endl
                     << "\tEdges remaining out of CC: " << not_cc_map.size() << std::endl;
-            exit(1);
         }
     }
     // Otherwise, we are done.
@@ -253,10 +286,6 @@ RestrictionDecoder::compute_connected_components(
     //      to the boundary, or matches that go through a boundary).
     //  (2) Non-boundary vertices are only connected to R-1 vertices (at most),
     //      where R is the number of restricted lattices.
-    //
-    // We can identify connected components via DFS from the red boundary.
-    //
-    // Create a graph so we can launch this DFS.
     struct e_t : base::edge_t {
         int c1;
         int c2;
@@ -279,75 +308,42 @@ RestrictionDecoder::compute_connected_components(
     // no connected components.
     sptr<vertex_t> vrb = decoding_graph->get_boundary_vertex(COLOR_RED);
     if (!cgr->contains(vrb)) return {};
-    // Now, we will perform a DFS from vrb. This is a weird DFS in that:
-    // vertices are NOT marked as visited. Instead, traversal will mark
-    // edges on the graph. Once a boundary is hit, the marked edges will
-    // be deleted. Any branches stemming from the deleted edges will also
-    // be ignored.
-    //
-    // prev_edge_map keeps track of the previous edge in the traversal.
-    // incoming_edge_map tracks what edge visited a vertex most recently in
-    // the DFS.
     std::vector<component_t> components;
-
-    std::map<sptr<e_t>, sptr<e_t>> prev_edge_map;
-    std::map<sptr<vertex_t>, sptr<e_t>> incoming_edge_map;
-
-    std::vector<sptr<vertex_t>> dfs{vrb};
-    incoming_edge_map[vrb] = nullptr;
-    while (dfs.size()) {
-        sptr<vertex_t> v = dfs.back();
-        dfs.pop_back();
-#ifdef MEMORY_DEBUG
-        std::cout << "traversing to " << print_v(v) << std::endl;
-#endif
-        // Make sure we are fine to continue.
-        sptr<e_t> e = incoming_edge_map[v];
-        if (e != nullptr && prev_edge_map[e] != nullptr && !cgr->contains(prev_edge_map[e])) {
-            continue;
-        }
-        // If v is a boundary vertex, stop and identify the connected component.
-        if (v->is_boundary_vertex && e != nullptr) {
-            std::vector<assign_t> m_in_cc;
-            sptr<e_t> curr = e;
-            while (curr != nullptr) {
-                sptr<vertex_t> x = e->get_source<vertex_t>(),
-                                y = e->get_target<vertex_t>();
-                m_in_cc.emplace_back(x->id, y->id, e->c1, e->c2);
-                // Delete the edge from cgr.
-                cgr->delete_edge(curr);
-                curr = prev_edge_map[curr];
+    std::set<sptr<vertex_t>> skip_set;
+    for (sptr<vertex_t> v : cgr->get_neighbors(vrb)) {
+        if (skip_set.count(v)) continue;
+        sptr<e_t> e = cgr->get_edge(v, vrb);
+        std::vector<assign_t> assign_list{ std::make_tuple(v->id, vrb->id, e->c1, e->c2) };
+        
+        std::map<sptr<vertex_t>, sptr<vertex_t>> prev;
+        prev[v] = vrb;
+        sptr<vertex_t> curr = v;
+        while (!curr->is_boundary_vertex) {
+            // Compute next neighbor (should only be one).
+            sptr<vertex_t> next = nullptr;
+            for (sptr<vertex_t> w : cgr->get_neighbors(curr)) {
+                if (w != prev[curr]) next = w;
             }
-            std::initializer_list<sptr<vertex_t>> blist{v, vrb};
-            int cc_color =
-                decoding_graph->get_complementary_boundaries_to(blist)[0]->color;
-            components.push_back({m_in_cc, cc_color});
-            continue;
-        }
-        // Visit neighbors (not in incoming edge).
-#ifdef MEMORY_DEBUG
-        std::cout << "\tneighbors:";
-#endif
-        for (sptr<vertex_t> w : cgr->get_neighbors(v)) {
-            if (e != nullptr &&
-                (e->get_source<vertex_t>() == w || e->get_target<vertex_t>() == w)) 
-            {
-                continue;
+            if (next == nullptr) break;
+            sptr<e_t> _e = cgr->get_edge(curr, next);
+            uint64_t id1 = curr->id,
+                     id2 = next->id;
+            if (id1 > id2) {
+                std::swap(id1, id2);
             }
-            if (incoming_edge_map[w] != nullptr && cgr->contains(incoming_edge_map[w])) {
-                continue;
-            }
-            dfs.push_back(w);
-            sptr<e_t> _e = cgr->get_edge(v, w);
-            incoming_edge_map[w] = _e;
-            prev_edge_map[_e] = e;
-#ifdef MEMORY_DEBUG
-            std::cout << " " << print_v(w);
-#endif
+            assign_list.emplace_back(id1, id2, _e->c1, _e->c2);
+            prev[next] = curr;
+            curr = next;
         }
-#ifdef MEMORY_DEBUG
-        std::cout << std::endl;
-#endif
+        // If curr is a boundary, then we have discovered a connected component.
+        if (curr->is_boundary_vertex) {
+            // Note that if ended up at vrb anyways, we need to mark prev[curr] (prev[vrb])
+            // to be skipped to avoid double counting.
+            if (curr == vrb) skip_set.insert(prev[curr]);
+            int cc_color = get_complementary_colors_to(
+                                {vrb->color, curr->color}, decoding_graph->number_of_colors)[0];
+            components.push_back({assign_list, cc_color});
+        }
     }
     return components;
 }
@@ -368,12 +364,11 @@ RestrictionDecoder::insert_error_chain_into(
         if (v->is_boundary_vertex && w->is_boundary_vertex) continue;
         if (v->color != component_color && w->color != component_color) continue;
 #ifdef MEMORY_DEBUG
-        std::cout << "\t\t" << print_v(v) << " , " << print_v(w);
+        std::cout << "\t\t" << print_v(v) << " , " << print_v(w) << " are added as:";
 #endif
         // Flatten v and w.
         sptr<vertex_t> fv = v->get_base(),
                        fw = w->get_base();
-        std::cout << " --> " << print_v(fv) << " , " << print_v(fw) << std::endl;
         if (fv == fw) continue;
         // Check if fv and fw share an edge.
         if (!decoding_graph->share_hyperedge({fv, fw})) {
@@ -399,11 +394,20 @@ RestrictionDecoder::insert_error_chain_into(
                         << print_v(w) << "(" << print_v(fw) << ")" << std::endl;
                     exit(1);
                 }
+#ifdef MEMORY_DEBUG
+                std::cout << " [ " << print_v(fv) << ", "
+                        << print_v(fu) << ", "
+                        << print_v(fw) << " ]" << std::endl;
+#endif
                 vpair_t e1 = make_vpair(fv, fu),
                         e2 = make_vpair(fu, fw);
                 incidence_map[e1]++;
                 incidence_map[e2]++;
             } else {
+#ifdef MEMORY_DEBUG
+                std::cout << " [ " << print_v(fv) << ", "
+                        << print_v(fw) << " ]" << std::endl;
+#endif
                 vpair_t e = make_vpair(fv, fw);
                 incidence_map[e]++;
             }
@@ -425,14 +429,16 @@ RestrictionDecoder::get_faces(sptr<vertex_t> v) {
         bool do_not_add = false;
         for (size_t i = 0; i < e->get_order(); i++) {
             sptr<vertex_t> x = e->get<vertex_t>(i);
-            if (colors_in_face.count(x->color)
-                || std::find(flat_vlist.begin(), flat_vlist.end(), x) != flat_vlist.end()) 
-            {
+            sptr<vertex_t> fx = x->get_base();
+            if (std::find(flat_vlist.begin(), flat_vlist.end(), fx) != flat_vlist.end()) {
+                continue;
+            }
+            if (colors_in_face.count(fx->color)) {
                 do_not_add = true;
                 break;
             }
-            flat_vlist.push_back(x->get_base());
-            colors_in_face.insert(x->color);
+            flat_vlist.push_back(fx);
+            colors_in_face.insert(fx->color);
         }
         if (do_not_add) continue;
         sptr<hyperedge_t> fe = decoding_graph->get_edge(flat_vlist);
