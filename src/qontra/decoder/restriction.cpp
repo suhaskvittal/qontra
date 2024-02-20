@@ -324,15 +324,12 @@ RestrictionDecoder::insert_error_chain_into(
         // Add (fv, fu) and (fu, fw) instead.
         if (!decoding_graph->share_hyperedge({fv, fw})) {
             sptr<vertex_t> fu = nullptr;
-            std::cout << "common:";
             for (sptr<vertex_t> x : decoding_graph->get_common_neighbors({fv, fw})) {
                 sptr<vertex_t> fx = x->get_base();
-                std::cout << " " << print_v(fx);
                 if (fx->color != c1 && fx->color != c2) continue;
                 fu = fx;
                 break;
             }
-            std::cout << "\n";
             if (fu == nullptr) {
                 // When this happens, just find a path in the non-flagged graph to use.
                 insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2, true);

@@ -44,7 +44,6 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
     // Add edges:
     std::map<uint64_t, uint64_t> boundary_pref_map;
 
-    std::cout << "\tWeights:" << std::endl;
     for (size_t i = 0; i < n; i++) {
         uint64_t di = detectors.at(i);
         for (size_t j = i+1; j < n; j++) {
@@ -59,16 +58,13 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
                               ec2 = decoding_graph->get(c1, c2, di, b2);
                 boundary_pref_map[di] = ec1.weight < ec2.weight ? b1 : b2;
                 w = std::min(ec1.weight, ec2.weight);
-                std::cout << "\t\t" << di << ", " << boundary_pref_map[di] << " = ";
             } else {
                 error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
                 w = ec.weight;
                 // Quantize the weight.
-                std::cout << "\t\t" << di << ", " << dj << " = ";
             }
             uint32_t iw = w > 1000.0 ? 1'000'000 : static_cast<uint32_t>(1000 * w);
             pm.AddEdge(i, j, iw);
-            std::cout << iw << std::endl;
         }
     }
     pm.Solve();
