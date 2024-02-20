@@ -64,9 +64,6 @@ remove_widowed_edges(std::map<vpair_t, size_t>& incidence_map) {
         sptr<vertex_t> v1 = e.first,
                        v2 = e.second;
         if (vertex_inc_map.at(v1) == 1 && vertex_inc_map.at(v2) == 1) {
-#ifdef MEMORY_DEBUG
-            std::cout << "removing widowed edge " << print_v(v1) << ", " << print_v(v2) << std::endl;
-#endif
             it = incidence_map.erase(it);
         } else {
             it++;
@@ -89,18 +86,11 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
             load_syndrome(syndrome, c1, c2);
             std::vector<Decoder::assign_t> _matchings = compute_matching(c1, c2, true);
-#ifdef MEMORY_DEBUG
-            std::cout << "\tMatchings:" << std::endl;
-#endif
             for (Decoder::assign_t x : _matchings) {
-#ifdef MEMORY_DEBUG
-                std::cout << "\t\t" << std::get<0>(x) << " <---> " << std::get<1>(x) << std::endl;
-#endif
                 matchings.push_back(cast_assign(x, c1, c2));
             }
         }
     }
-    decoding_graph->deactivate_flags();
     // Compute connected components.
     std::vector<component_t> components = compute_connected_components(matchings);
     // Identify all edges inside a connected component (and which component it is), and
@@ -110,9 +100,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     std::vector<std::pair<std::set<vpair_t>, int>> component_edge_sets;
     // Track all matches that are in a component.
     std::set<assign_t> in_cc_assignments;
-#ifdef MEMORY_DEBUG
-    std::cout << "In components:" << std::endl;
-#endif
     for (const component_t& cc : components) {
         int color = cc.color;
         std::set<vpair_t> edge_set;
@@ -120,9 +107,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             in_cc_assignments.insert(m);
             sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                            w = decoding_graph->get_vertex(std::get<1>(m));
-#ifdef MEMORY_DEBUG
-            std::cout << "\t" << print_v(v) << " <---> " << print_v(w) << " on RL(" << std::get<2>(m) << "," << std::get<3>(m) << "), component color = " << color << std::endl;
-#endif
             std::set<vpair_t> tmp =
                 insert_error_chain_into(in_cc_map, v, w, color, std::get<2>(m), std::get<3>(m));
             vtils::insert_range(edge_set, tmp);
@@ -130,17 +114,11 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         component_edge_sets.emplace_back(edge_set, color);
     }
     // Do not_cc now.
-#ifdef MEMORY_DEBUG
-    std::cout << "Not in any component:" << std::endl;
-#endif
     for (const assign_t& m : matchings) {
         if (in_cc_assignments.count(m)) continue;
         sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                        w = decoding_graph->get_vertex(std::get<1>(m));
         if (std::get<2>(m) != COLOR_RED && std::get<3>(m) != COLOR_RED) continue;
-#ifdef MEMORY_DEBUG
-            std::cout << "\t" << print_v(v) << " <---> " << print_v(w) << " on RL(" << std::get<2>(m) << "," << std::get<3>(m) << ")" << std::endl;
-#endif
         insert_error_chain_into(not_cc_map, v, w, COLOR_RED, std::get<2>(m), std::get<3>(m));
     }
 
@@ -163,21 +141,6 @@ r_compute_correction:
     }
     std::set<sptr<vertex_t>> all_incident(not_cc_incident);
     vtils::insert_range(all_incident, in_cc_incident);
-#ifdef MEMORY_DEBUG
-    std::cout << "Remaining edges:" << std::endl << "\tIn CC:";
-    for (auto& es : component_edge_sets) {
-        for (vpair_t e : es.first) {
-            std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
-        }
-        std::cout << "(" << es.second << ")";
-    }
-    std::cout << std::endl << "\tNot CC:";
-    for (auto& p : not_cc_map) {
-        vpair_t e = p.first;
-        std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
-    }
-    std::cout << std::endl;
-#endif
 
     for (sptr<vertex_t> v : all_incident) {
         std::set<sptr<hyperedge_t>> faces = get_faces(v);
@@ -188,20 +151,6 @@ r_compute_correction:
             exit(1);
         }
         const uint64_t enf = 1L << nf;
-#ifdef MEMORY_DEBUG
-        std::cout << "Faces for " << print_v(v) << " (nf = " << nf << "):" << std::endl;
-        for (auto f : faces) {
-            std::cout << "\t<";
-            for (size_t j = 0; j < f->get_order(); j++) {
-                std::cout << " " << print_v(f->get<vertex_t>(j));
-            }
-            std::cout << " >, corr =";
-            for (uint64_t fr : f->frames) {
-                std::cout << " " << fr;
-            }
-            std::cout << std::endl;
-        }
-#endif
         // Track intersections with connected components and outside of
         // connected components.
         std::set<vpair_t> best_cc_boundary,
@@ -232,29 +181,17 @@ r_compute_correction:
             update_best_boundary(
                 int_not_cc, best_prob_no_cc, best_no_cc_boundary, best_no_cc_corr, pr, boundary, local_corr);
         }
-#ifdef MEMORY_DEBUG
-        std::cout << "\tboundary edges:";
-#endif
         if (best_prob_cc > best_prob_no_cc) {
             corr ^= best_cc_corr;
             for (const vpair_t& e : best_cc_boundary) {
                 if ((--in_cc_map[e]) == 0) in_cc_map.erase(e);
-#ifdef MEMORY_DEBUG
-                std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
-#endif
             }
         } else {
             corr ^= best_no_cc_corr;
             for (const vpair_t& e : best_no_cc_boundary) {
                 if ((--not_cc_map[e]) == 0) not_cc_map.erase(e);
-#ifdef MEMORY_DEBUG
-                std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
-#endif
             }
         }
-#ifdef MEMORY_DEBUG
-        std::cout << std::endl;
-#endif
     }
     // Remove any widowed edges, as these can cause the decoder to loop infinitely.
     remove_widowed_edges(in_cc_map);
@@ -270,8 +207,17 @@ r_compute_correction:
             std::cerr << " ] and F[";
             for (uint64_t f : _flags) std::cerr << " " << f;
             std::cerr << " ]" << std::endl
-                    << "\tEdges remaining in CC: " << in_cc_map.size() << std::endl
-                    << "\tEdges remaining out of CC: " << not_cc_map.size() << std::endl;
+                    << "\tEdges remaining in CC:";
+            for (auto& p : in_cc_map) {
+                vpair_t e = p.first;
+                std::cerr << " " << print_v(e.first) << "," << print_v(e.second);
+            }
+            std::cerr << std::endl << "\tEdges remaining out of CC:";
+            for (auto& p : not_cc_map) {
+                vpair_t e = p.first;
+                std::cerr << " " << print_v(e.first) << "," << print_v(e.second);
+            }
+            std::cerr << std::endl;
         }
     }
     // Otherwise, we are done.
@@ -356,62 +302,49 @@ RestrictionDecoder::insert_error_chain_into(
         sptr<vertex_t> dst,
         int component_color,
         int c1,
-        int c2)
+        int c2,
+        bool force_unflagged)
 {
-    error_chain_t ec = decoding_graph->get(c1, c2, src, dst);
+    error_chain_t ec = decoding_graph->get(c1, c2, src, dst, force_unflagged);
     for (size_t i = 1; i < ec.path.size(); i++) {
         sptr<vertex_t> v = ec.path.at(i-1),
                        w = ec.path.at(i);
-        if (v->is_boundary_vertex && w->is_boundary_vertex) continue;
-        if (v->color != component_color && w->color != component_color) continue;
-#ifdef MEMORY_DEBUG
-        std::cout << "\t\t" << print_v(v) << " , " << print_v(w) << " are added as:";
-#endif
+        if (v->is_boundary_vertex && w->is_boundary_vertex) { 
+            continue;
+        }
+        if (v->color != component_color && w->color != component_color) {
+            continue;
+        }
         // Flatten v and w.
         sptr<vertex_t> fv = v->get_base(),
                        fw = w->get_base();
         if (fv == fw) continue;
-        // Check if fv and fw share an edge.
+        // Make sure that their colors are not equal. Otherwise, get a common neighbor
+        // of fv and fw which has a different color (call this fu). 
+        // Add (fv, fu) and (fu, fw) instead.
         if (!decoding_graph->share_hyperedge({fv, fw})) {
-            // Then perhaps there is a CX edge. To account for this, add the path between
-            // fv and fw.
-            insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2);
-        } else {
-            // Make sure that their colors are not equal. Otherwise, get a common neighbor
-            // of fv and fw which has a different color (call this fu). 
-            // Add (fv, fu) and (fu, fw) instead.
-            if (fv->color == fw->color) {
-                sptr<vertex_t> fu = nullptr;
-                for (sptr<vertex_t> x : decoding_graph->get_common_neighbors({v, w})) {
-                    sptr<vertex_t> fx = x->get_base();
-                    if (fv->color == fx->color) continue;
-                    fu = fx;
-                    break;
-                }
-                if (fu == nullptr) {
-                    // This should not happen: exit.
-                    std::cerr << "[ insert_error_chain_into ] could not find common vertex between "
-                        << print_v(v) << "(" << print_v(fv) << ") and "
-                        << print_v(w) << "(" << print_v(fw) << ")" << std::endl;
-                    exit(1);
-                }
-#ifdef MEMORY_DEBUG
-                std::cout << " [ " << print_v(fv) << ", "
-                        << print_v(fu) << ", "
-                        << print_v(fw) << " ]" << std::endl;
-#endif
+            sptr<vertex_t> fu = nullptr;
+            std::cout << "common:";
+            for (sptr<vertex_t> x : decoding_graph->get_common_neighbors({fv, fw})) {
+                sptr<vertex_t> fx = x->get_base();
+                std::cout << " " << print_v(fx);
+                if (fx->color != c1 && fx->color != c2) continue;
+                fu = fx;
+                break;
+            }
+            std::cout << "\n";
+            if (fu == nullptr) {
+                // When this happens, just find a path in the non-flagged graph to use.
+                insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2, true);
+            } else {
                 vpair_t e1 = make_vpair(fv, fu),
                         e2 = make_vpair(fu, fw);
                 incidence_map[e1]++;
                 incidence_map[e2]++;
-            } else {
-#ifdef MEMORY_DEBUG
-                std::cout << " [ " << print_v(fv) << ", "
-                        << print_v(fw) << " ]" << std::endl;
-#endif
-                vpair_t e = make_vpair(fv, fw);
-                incidence_map[e]++;
             }
+        } else {
+            vpair_t e = make_vpair(fv, fw);
+            incidence_map[e]++;
         }
     }
     std::set<vpair_t> edge_set;

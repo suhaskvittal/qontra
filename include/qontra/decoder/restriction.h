@@ -38,7 +38,8 @@ protected:
                         sptr<graph::decoding::vertex_t>,
                         int component_color,
                         int matching_color_1,
-                        int matching_color_2);
+                        int matching_color_2,
+                        bool force_unflagged=false);
 
     void insert_incident_vertices(
             std::set<sptr<graph::decoding::vertex_t>>&, const std::set<vpair_t>&, int);

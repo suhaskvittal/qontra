@@ -63,10 +63,10 @@ public:
 
     sptr<decoding::vertex_t>    get_boundary_vertex(int color);
 
-    error_chain_t   get(uint64_t, uint64_t);
-    error_chain_t   get(sptr<decoding::vertex_t>, sptr<decoding::vertex_t>);
-    error_chain_t   get(int c1, int c2, uint64_t, uint64_t);
-    error_chain_t   get(int c1, int c2, sptr<decoding::vertex_t>, sptr<decoding::vertex_t>);
+    error_chain_t get(uint64_t, uint64_t, bool force_unflagged=false);
+    error_chain_t get(sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
+    error_chain_t get(int c1, int c2, uint64_t, uint64_t, bool force_unflagged=false);
+    error_chain_t get(int c1, int c2, sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
 
     std::vector<sptr<decoding::vertex_t>>
         get_complementary_boundaries_to(std::vector<sptr<decoding::vertex_t>>);

@@ -17,60 +17,19 @@ MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int 
     detectors.clear();
     flags.clear();
     // Track the number of detectors of each color.
-#ifdef MEMORY_DEBUG
-    std::cout << "Detectors";
-    if (c1 != COLOR_ANY) std::cout << "(" << c1 << ", " << c2 << ")";
-    std::cout << ":";
-#endif
-
-    size_t n_of_c1 = 0,
-           n_of_c2 = 0;
     for (uint64_t d : all_dets) {
         if (circuit.flag_detectors.count(d)) {
-#ifdef MEMORY_DEBUG
-            std::cout << " " << d;
-#endif
             flags.push_back(d);
         } else {
-            if (c1 != COLOR_ANY) {
-                if (circuit.detector_color_map[d] == c1) {
-                    n_of_c1++;
-                } else if (circuit.detector_color_map[d] == c2) {
-                    n_of_c2++;
-                } else {
-                    continue;
-                }
+            if (c1 != COLOR_ANY && circuit.detector_color_map[d] != c1 && circuit.detector_color_map[d] != c2) {
+                continue;
             }
             detectors.push_back(d);
-#ifdef MEMORY_DEBUG
-            std::cout << " " << d;
-            if (circuit.flag_detectors.count(d)) std::cout << "[F]";
-            if (c1 != COLOR_ANY) std::cout << "[c=" << circuit.detector_color_map[d] << "]";
-#endif
         }
     }
     if (detectors.size() & 1) {
-        if (c1 == COLOR_ANY) {
-            detectors.push_back(get_color_boundary_index(COLOR_ANY));
-#ifdef MEMORY_DEBUG
-            std::cout << " B";
-#endif
-        } else if (n_of_c1 & 1) {
-            // Push back a boundary of color c2.
-            detectors.push_back(get_color_boundary_index(c2));
-#ifdef MEMORY_DEBUG
-            std::cout << " B" << c2;
-#endif
-        } else {
-            detectors.push_back(get_color_boundary_index(c1));
-#ifdef MEMORY_DEBUG
-            std::cout << " B" << c1;
-#endif
-        }
+        detectors.push_back(get_color_boundary_index(COLOR_ANY));
     }
-#ifdef MEMORY_DEBUG
-    std::cout << std::endl;
-#endif
     // Activate flag edges in decoding_graph.
     decoding_graph->activate_flags(flags);
 }
@@ -83,24 +42,47 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
     PerfectMatching pm(n, m);
     pm.options.verbose = false;
     // Add edges:
+    std::map<uint64_t, uint64_t> boundary_pref_map;
+
+    std::cout << "\tWeights:" << std::endl;
     for (size_t i = 0; i < n; i++) {
         uint64_t di = detectors.at(i);
         for (size_t j = i+1; j < n; j++) {
             uint64_t dj = detectors.at(j);
-            error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
-            // Quantize the weight.
-            uint32_t iw = ec.weight > 1000.0 ? 1'000'000 : static_cast<uint32_t>(1000 * ec.weight);
+
+            fp_t w;
+            if (dj == get_color_boundary_index(COLOR_ANY) && c1 != COLOR_ANY) {
+                // We need to identify the best boundary for di and use that.
+                uint64_t b1 = get_color_boundary_index(c1),
+                         b2 = get_color_boundary_index(c2);
+                error_chain_t ec1 = decoding_graph->get(c1, c2, di, b1),
+                              ec2 = decoding_graph->get(c1, c2, di, b2);
+                boundary_pref_map[di] = ec1.weight < ec2.weight ? b1 : b2;
+                w = std::min(ec1.weight, ec2.weight);
+                std::cout << "\t\t" << di << ", " << boundary_pref_map[di] << " = ";
+            } else {
+                error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
+                w = ec.weight;
+                // Quantize the weight.
+                std::cout << "\t\t" << di << ", " << dj << " = ";
+            }
+            uint32_t iw = w > 1000.0 ? 1'000'000 : static_cast<uint32_t>(1000 * w);
             pm.AddEdge(i, j, iw);
+            std::cout << iw << std::endl;
         }
     }
     pm.Solve();
-    // Return assignments.
+    // Return assignments. Deactivate flags to avoid using flag edges.
     std::vector<Decoder::assign_t> assign_arr;
     for (size_t i = 0; i < n; i++) {
         size_t j = pm.GetMatch(i);
         uint64_t di = detectors.at(i),
                  dj = detectors.at(j);
         if (di > dj) continue;
+        // Replace the boundary if necessary.
+        if (dj == get_color_boundary_index(COLOR_ANY) && c1 != COLOR_ANY) {
+            dj = boundary_pref_map[di];
+        }
         error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
         if (split_thru_boundary_match && ec.runs_through_boundary) {
             // Partition path between di and dj with boundaries.

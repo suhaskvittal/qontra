@@ -236,6 +236,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             if (visited_flag_edges.count(he)) continue;
 
             fp_t p = he->probability;
+            bool any_flag_edge = false;
             for (size_t i = 0; i < he->get_order(); i++) {
                 sptr<vertex_t> v = he->get<vertex_t>(i);
                 if (!dgr->contains(v)) continue;
@@ -249,11 +250,13 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                     }
                     fp_t& r = e->probability;
                     r = (1-r)*p + (1-p)*r;
+                    any_flag_edge = true;
                 }
             }
-            std::get<0>(flag_owner_renorm_map[fowner]) += p;
-            std::get<1>(flag_owner_renorm_map[fowner])++;
-            visited_flag_edges.insert(he);
+            if (any_flag_edge) {
+                std::get<0>(flag_owner_renorm_map[fowner]) += p;
+                std::get<1>(flag_owner_renorm_map[fowner])++;
+            }
         }
     }
     // Compute the renormalization factor.

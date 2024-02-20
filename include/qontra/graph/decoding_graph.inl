@@ -42,26 +42,27 @@ DecodingGraph::get_boundary_vertex(int color) {
 }
 
 inline error_chain_t
-DecodingGraph::get(uint64_t d1, uint64_t d2) {
-    return get(get_vertex(d1), get_vertex(d2));
+DecodingGraph::get(uint64_t d1, uint64_t d2, bool force_unflagged) {
+    return get(get_vertex(d1), get_vertex(d2), force_unflagged);
 }
 
 inline error_chain_t
-DecodingGraph::get(sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2) {
-    return get(COLOR_ANY, COLOR_ANY, v1, v2);
+DecodingGraph::get(sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2, bool force_unflagged) {
+    return get(COLOR_ANY, COLOR_ANY, v1, v2, force_unflagged);
 }
 
 inline error_chain_t
-DecodingGraph::get(int c1, int c2, uint64_t d1, uint64_t d2) {
-    return get(c1, c2, get_vertex(d1), get_vertex(d2));
+DecodingGraph::get(int c1, int c2, uint64_t d1, uint64_t d2, bool force_unflagged) {
+    return get(c1, c2, get_vertex(d1), get_vertex(d2), force_unflagged);
 }
 
 inline error_chain_t
-DecodingGraph::get(int c1, int c2, sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2) {
+DecodingGraph::get(int c1, int c2, sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2, bool force_unflagged) {
     update_state();
     if (c1 > c2) std::swap(c1, c2);
     auto c1_c2 = std::make_pair(c1, c2);
-    auto& dm_map = flags_are_active ? flagged_distance_matrix_map[c1_c2] : distance_matrix_map[c1_c2];
+    auto& dm_map = flags_are_active && !force_unflagged 
+                    ? flagged_distance_matrix_map[c1_c2] : distance_matrix_map[c1_c2];
     if (!dm_map.count(v1)) {
         dijkstra_(c1, c2, v1);
     }
