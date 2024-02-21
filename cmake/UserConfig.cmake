@@ -6,7 +6,7 @@
 set(CPLEX_HOME "/Applications/CPLEX_Studio2211") # for MacOS
 set(GRAPHVIZ_INSTALL_DIR "/opt/homebrew/opt/graphviz")
 
-set(COMPILE_NEURAL_DECODER OFF)
+set(COMPILE_NEURAL_DECODER ON)
 set(MLPACK_INCLUDE_DIRS "/Users/svittal/Documents/research/qon/pkgs/mlpack/include")
 
 set(COMPILE_PYMATCHING ON)

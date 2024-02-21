@@ -3,10 +3,9 @@
  *  date:   21 January 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include <qontra/decoder/chromobius.h>
 #include <qontra/decoder/mwpm.h>
+#include <qontra/decoder/neural_assisted.h>
 #include <qontra/decoder/pymatching.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/experiments.h>
@@ -58,20 +57,32 @@ int main(int argc, char* argv[]) {
 
     qes::Program<> program = qes::from_file(qes_file);
 
+    DetailedStimCircuit _circuit = make_circuit(qes_file, pmax, true);
+
+    RestrictionDecoder base(_circuit);
+    NeuralAssistedDecoder dec(_circuit, &base);
+
+    using namespace mlpack;
+    dec.model.Add<Linear>(256);
+    dec.model.Add<TanH>();
+    dec.model.Add<Linear>(64);
+    dec.model.Add<TanH>();
+    dec.model.Add<Linear>(_circuit.count_observables());
+    dec.model.Add<TanH>();
+
+    dec.config.max_epochs = 1000;
+
+    dec.train(500'000);
+
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
         // Load model from file and run memory experiment.
         DetailedStimCircuit circuit = make_circuit(qes_file, p, true);
-        uptr<Decoder> dec;
-        if (circuit.count_observables() > 1) {
-            dec = std::make_unique<RestrictionDecoder>(circuit);
-        } else {
-            dec = std::make_unique<RestrictionDecoder>(circuit);
-        }
+        dec.set_circuit(circuit);
 
         memory_config_t config;
         config.shots = shots;
-        auto res = memory_experiment(dec.get(), config);
+        auto res = memory_experiment(&dec, config);
 
         // Write result to file.
         if (world_rank == 0) {

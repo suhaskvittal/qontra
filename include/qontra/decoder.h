@@ -38,6 +38,7 @@ public:
 
     virtual result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) =0;
     DetailedStimCircuit get_circuit(void);
+    void set_circuit(const DetailedStimCircuit&);
 protected:
     template <class T>
     std::vector<uint64_t> get_nonzero_detectors(T syndrome);

@@ -33,6 +33,11 @@ Decoder::get_circuit() {
     return circuit;
 }
 
+inline void
+Decoder::set_circuit(const DetailedStimCircuit& circ) {
+    circuit = circ;
+}
+
 template <class T> inline std::vector<uint64_t>
 Decoder::get_nonzero_detectors(T syndrome) {
     return get_nonzero_detectors_(syndrome, circuit.count_detectors());

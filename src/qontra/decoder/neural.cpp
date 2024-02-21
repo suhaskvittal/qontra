@@ -10,7 +10,7 @@ namespace qontra {
 
 static const uint64_t PER_HW_LIMIT = 100'000;
 
-NeuralDecoder::NeuralDecoder(DetailedStimCircuit circuit)
+NeuralDecoder::NeuralDecoder(const DetailedStimCircuit& circuit)
     :Decoder(circuit),
     model(),
     training_circuit(circuit)
@@ -87,38 +87,6 @@ NeuralDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
         corr
     };
     return res;
-}
-
-FragmentedNeuralDecoder::FragmentedNeuralDecoder(DetailedStimCircuit circuit)
-    :NeuralDecoder(circuit),
-    backing_decoders(circuit.count_observables())
-{
-    std::vector<DetailedStimCircuit> circuits = isolate_observables(circuit);
-    for (size_t i = 0; i < backing_decoders.size(); i++) {
-        backing_decoders[i] = std::make_unique<NeuralDecoder>(circuits[i]);
-    }
-}
-
-std::vector<DetailedStimCircuit>
-isolate_observables(DetailedStimCircuit circuit) {
-    std::vector<DetailedStimCircuit> arr(circuit.count_observables(), DetailedStimCircuit());
-    circuit.for_each_operation(
-            [&] (const stim::CircuitInstruction& inst)
-            {
-                if (inst.gate_type == stim::GateType::OBSERVABLE_INCLUDE) {
-                    for (size_t i = 0; i < arr.size(); i++) {
-                        double _tmp = 0;
-                        stim::CircuitInstruction
-                            new_obs_inst(inst.gate_type, stim::SpanRef(&_tmp), inst.targets);
-                        arr[i].safe_append(new_obs_inst);
-                    }
-                } else {
-                    for (size_t i = 0; i < arr.size(); i++) {
-                        arr[i].safe_append(inst);
-                    }
-                }
-            });
-    return arr;
 }
 
 }   // qontra
