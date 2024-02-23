@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
 
     dec.config.max_epochs = 1000;
 
-    dec.train(500'000);
+    dec.train(1'000'000);
 
     fp_t p = pmin;
     while (p <= 1.1*pmax) {

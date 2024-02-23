@@ -130,6 +130,11 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 for (uint64_t f : flags) {
                     this->flag_edge_map[f].insert(e);
                 }
+                if (e->frames.size() > 0) {
+                    std::cerr << "Flag edge [";
+                    for (uint64_t d : detectors) std::cout << " " << d;
+                    std::cerr << " ] affects pauli frames." << std::endl;
+                }
             }
         };
     size_t detector_offset = 0;
