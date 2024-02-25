@@ -57,7 +57,7 @@ public:
     virtual bool    contains(sptr<V>) const;
     virtual bool    contains(sptr<HE>) const;
 
-    virtual bool    contains(std::vector<sptr<void>>) const;
+    virtual bool    contains_(std::vector<sptr<void>>) const;
     virtual bool    contains(std::vector<sptr<V>>) const;
 
     virtual sptr<V>     make_vertex(void) const;
@@ -71,6 +71,7 @@ public:
     virtual sptr<HE>    make_and_add_edge(std::vector<sptr<V>>);
 
     virtual sptr<V>     get_vertex(uint64_t) const;
+    virtual sptr<HE>    get_edge_(std::vector<sptr<void>>) const;
     virtual sptr<HE>    get_edge(std::vector<sptr<V>>) const;
     virtual sptr<HE>    get_edge(std::vector<uint64_t>) const;
     

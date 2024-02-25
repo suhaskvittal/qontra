@@ -66,7 +66,7 @@ HyperGraph<V, HE>::contains(sptr<HE> e) const {
 }
 
 template <class V, class HE> inline bool
-HyperGraph<V, HE>::contains(std::vector<sptr<void>> vlist) const {
+HyperGraph<V, HE>::contains_(std::vector<sptr<void>> vlist) const {
     std::vector<sptr<V>> _vlist(vlist.size());
     for (size_t i = 0; i < vlist.size(); i++) {
         _vlist[i] = std::reinterpret_pointer_cast<V>(vlist[i]);
@@ -117,7 +117,7 @@ HyperGraph<V, HE>::add_vertex(sptr<V> v) {
 
 template <class V, class HE> bool
 HyperGraph<V, HE>::add_edge(sptr<HE> e) {
-    if (!is_edge_valid(e) || contains(e->endpoints)) {
+    if (!is_edge_valid(e) || contains_(e->endpoints)) {
         return false;
     }
     edges.push_back(e);
@@ -160,6 +160,15 @@ HyperGraph<V, HE>::make_and_add_edge(std::vector<sptr<V>> vlist) {
 template <class V, class HE> inline sptr<V>
 HyperGraph<V, HE>::get_vertex(uint64_t id) const {
     return id_to_vertex.at(id);
+}
+
+template <class V, class HE> inline sptr<HE>
+HyperGraph<V, HE>::get_edge_(std::vector<sptr<void>> vlist) const {
+    std::vector<sptr<V>> _vlist(vlist.size());
+    for (size_t i = 0; i < vlist.size(); i++) {
+        _vlist[i] = std::reinterpret_pointer_cast<V>(vlist[i]);
+    }
+    return get_edge(_vlist);
 }
 
 template <class V, class HE>  inline sptr<HE>

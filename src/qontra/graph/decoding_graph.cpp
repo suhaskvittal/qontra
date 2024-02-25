@@ -136,10 +136,27 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     size_t detector_offset = 0;
     read_detector_error_model(dem, 1, detector_offset, ef, df);
     // Setup flag ownership map.
+    /*
     for (uint64_t f : flag_detectors) {
         sptr<vertex_t> v = get_vertex(circuit.flag_owner_map.at(f));
         flag_ownership_map[f] = v;
+        for (auto e : flag_edge_map[f]) {
+            if (contains_(e->endpoints)) {
+                auto _e = get_edge_(e->endpoints);
+                std::cerr << "flag edge [";
+                for (size_t i = 0; i < e->get_order(); i++) {
+                    std::cerr << " " << print_v(e->get<vertex_t>(i));
+                }
+                std::cerr << " ] for flag " << f << " has identical normal edge" << std::endl;
+                std::cerr << "\tedges are the same: " << (e == _e) << std::endl;
+                std::cerr << "\tframes are the same: " << (e->frames == _e->frames) << std::endl;
+                std::cerr << "\tframes:";
+                for (uint64_t _f : e->frames) std::cerr << " " << _f;
+                std::cerr << std::endl;
+            }
+        }
     }
+    */
 }
 
 void
@@ -266,6 +283,14 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
         }
     }
     // Compute the renormalization factor.
+    if (flag_owner_renorm_map.empty()) {
+        // Then, there really is no reason to make a separate graph. Deactivate flags and return.
+        deactivate_flags();
+        if (!dijkstra_graph_map.count(std::make_pair(c1, c2))) {
+            make_dijkstra_graph(c1, c2);
+        }
+        return;
+    }
     fp_t renorm_factor = 1.0;
     for (auto& p : flag_owner_renorm_map) {
         renorm_factor *= std::get<0>(p.second) / static_cast<fp_t>(std::get<1>(p.second));

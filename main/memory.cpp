@@ -59,6 +59,7 @@ int main(int argc, char* argv[]) {
 
     DetailedStimCircuit _circuit = make_circuit(qes_file, pmax, true);
 
+    /*
     RestrictionDecoder base(_circuit);
     NeuralAssistedDecoder dec(_circuit, &base);
 
@@ -73,7 +74,8 @@ int main(int argc, char* argv[]) {
     dec.config.max_epochs = 1000;
 
     dec.train(1'000'000);
-//  RestrictionDecoder dec(_circuit);
+    */
+    RestrictionDecoder dec(_circuit);
 
     fp_t p = pmin;
     while (p <= 1.1*pmax) {

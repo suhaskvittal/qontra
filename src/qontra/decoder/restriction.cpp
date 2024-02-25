@@ -145,9 +145,16 @@ r_compute_correction:
     for (sptr<vertex_t> v : all_incident) {
         std::set<sptr<hyperedge_t>> faces = get_faces(v);
         const size_t nf = faces.size();
-        if (nf > 16) {
+        if (nf > 20) {
             std::cerr << "[ RestrictionDecoder ] found vertex " << print_v(v)
                 << " with too many faces: " << nf << std::endl;
+            for (sptr<hyperedge_t> e : faces) {
+                std::cerr << "\t<";
+                for (size_t i = 0; i < e->get_order(); i++) {
+                    std::cerr << " " << print_v(e->get<vertex_t>(i));
+                }
+                std::cerr << " >" << std::endl;
+            }
             exit(1);
         }
         const uint64_t enf = 1L << nf;
