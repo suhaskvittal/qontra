@@ -130,11 +130,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 for (uint64_t f : flags) {
                     this->flag_edge_map[f].insert(e);
                 }
-                if (e->frames.size() > 0) {
-                    std::cerr << "Flag edge [";
-                    for (uint64_t d : detectors) std::cout << " " << d;
-                    std::cerr << " ] affects pauli frames." << std::endl;
-                }
+                e->flags = std::set<uint64_t>(flags.begin(), flags.end());
             }
         };
     size_t detector_offset = 0;
@@ -233,12 +229,17 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     }
     // Now, add edges to the graph.
     // First handle flag edges.
-    std::set<sptr<hyperedge_t>> visited_flag_edges;
+    std::map<sptr<hyperedge_t>, std::set<uint64_t>> remaining_flags_map;
     std::map<sptr<vertex_t>, std::tuple<fp_t, size_t>> flag_owner_renorm_map;
     for (uint64_t fd : active_flags) {
         sptr<vertex_t> fowner = flag_ownership_map[fd];
         for (sptr<hyperedge_t> he : flag_edge_map[fd]) {
-            if (visited_flag_edges.count(he)) continue;
+            // We will only consider he once all of its flags are found.
+            if (!remaining_flags_map.count(he)) {
+                remaining_flags_map[he] = he->flags;
+            }
+            remaining_flags_map[he].erase(fd);
+            if (remaining_flags_map[he].size()) continue;
 
             fp_t p = he->probability;
             bool any_flag_edge = false;

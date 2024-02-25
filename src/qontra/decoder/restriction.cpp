@@ -327,6 +327,7 @@ RestrictionDecoder::insert_error_chain_into(
             for (sptr<vertex_t> x : decoding_graph->get_common_neighbors({fv, fw})) {
                 sptr<vertex_t> fx = x->get_base();
                 if (fx->color != c1 && fx->color != c2) continue;
+                if (fx == fv || fx == fw) continue;
                 fu = fx;
                 break;
             }
