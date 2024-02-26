@@ -89,7 +89,7 @@ public:
     std::vector<sptr<V>>    get_incoming(sptr<V>) const;
     std::vector<sptr<V>>    get_outgoing(sptr<V>) const;
 
-    template <class CONTAINER> std::vector<sptr<V>> get_common_neighbors(CONTAINER) const;
+    std::vector<sptr<V>> get_common_neighbors(std::vector<sptr<V>>) const;
 
     size_t  get_degree(sptr<V>) const;
     size_t  get_indegree(sptr<V>) const;

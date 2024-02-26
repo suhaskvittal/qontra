@@ -15,7 +15,7 @@ arch_folder_prefix = '../data/protean/%s' % code
 
 # Version list syntax:
 #   (version-string, pass-string, max-connectivity)
-if '--use-jid' in argv:
+if '-use-jid' in argv:
     version_list = [
         ('1', 'ral.rlb.rcr', 4),
         ('2.1', 'fla.ral.rlb.rcr', 4),
@@ -32,6 +32,7 @@ else:
         ('3', 'fla.ral(con.ral.prx.ral)+rlb.rcr', 4),
         ('4', 'fla.ral(con.ral.prx.ral)+rlb.rcr', 3),
     ]
+color_opt = '-color-checks' if '-color-checks' in argv else ''
 
 for (version, pass_string, max_conn) in version_list:
     output_folder = '%s/v%s' % (arch_folder_prefix, version)
@@ -42,7 +43,7 @@ for (version, pass_string, max_conn) in version_list:
                 cd Release
                 mkdir -p %s
                 mkdir -p %s
-                ./protean --tanner %s --out %s --passes "%s" --s-rounds %s --render %s --max-conn %d -v
+                ./protean %s %s --passes "%s" --s-rounds %s --render %s --max-conn %d %s
               ''' % (output_folder,
                      render_folder,
                      tanner_graph_file,
@@ -50,6 +51,7 @@ for (version, pass_string, max_conn) in version_list:
                      pass_string,
                      rounds,
                      render_folder,
-                     max_conn)
+                     max_conn,
+                     color_opt)
     print(protean_cmd)
     os.system(protean_cmd)

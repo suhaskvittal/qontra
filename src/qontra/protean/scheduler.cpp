@@ -403,7 +403,11 @@ PhysicalNetwork::make_schedule() {
     // Syndrome Extraction:
     qes::Program<> round = scheduler.run();
 
-    const size_t n_mt = scheduler.get_measurement_ctr();
+    // Count number of measurements and events per round.
+    size_t n_mt = scheduler.get_measurement_ctr();
+    size_t n_et = 0;
+    for (const auto& inst : round) n_et += (inst.get_name() == "event");
+
     size_t event_ctr = 0;
     size_t meas_ctr_offset = 0;
     for (size_t r = 0; r < config.rounds; r++) {
@@ -421,6 +425,13 @@ PhysicalNetwork::make_schedule() {
                 if (r > 0) operands.push_back(mt - n_mt);
                 safe_emplace_back(program, "event", operands);
                 program.back().put(print_v(rv));
+                // Add any colors if available.
+                if (check_color_map.count(rv)) {
+                    program.back().put("color", check_color_map.at(rv));
+                }
+                // Add the base vertex as well, which is just the corresponding detector in the second round.
+                int64_t base = (event_ctr % n_et) + (config.rounds > 1)*n_et;
+                program.back().put("base", base);
                 event_ctr++;
             } else {
                 // Make detection events for the flag qubits.

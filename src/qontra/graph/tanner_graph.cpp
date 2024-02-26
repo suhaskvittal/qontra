@@ -5,10 +5,32 @@
 
 #include "qontra/graph/tanner_graph.h"
 
+#include "qontra/graph/algorithms/coloring.h"
+
 namespace qontra {
 namespace graph {
 
 using namespace tanner;
+
+int
+TannerGraph::update_check_color_map(std::map<sptr<vertex_t>, int>& check_color_map, bool use_x_checks) const {
+    const std::vector<sptr<vertex_t>>& checks = use_x_checks ? xparity_checks : zparity_checks;
+    // Create an interaction graph for these checks.
+    uptr<Graph<vertex_t, base::edge_t>> gr = std::make_unique<Graph<vertex_t, base::edge_t>>();
+    for (sptr<vertex_t> v : checks) gr->add_vertex(v);
+    // Add edges if two vertices share neighbors in the Tanner graph.
+    for (size_t i = 0; i < checks.size(); i++) {
+        sptr<vertex_t> v = checks.at(i);
+        for (size_t j = i+1; j < checks.size(); j++) {
+            sptr<vertex_t> w = checks.at(j);
+            if (get_common_neighbors({v, w}).size()) {
+                gr->make_and_add_edge(v, w);
+            }
+        }
+    }
+    int max_color = k_coloring_greedy(gr.get(), check_color_map);
+    return max_color;
+}
 
 namespace io {
 

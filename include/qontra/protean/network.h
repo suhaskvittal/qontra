@@ -175,8 +175,6 @@ public:
     PhysicalNetwork(graph::TannerGraph*);
     PhysicalNetwork(PhysicalNetwork&&) = default;
     
-    static PhysicalNetwork from_folder(std::string);
-
     // All of the graph modification functions need to be updated to handle planarity.
     // Note that deletes only free up spots on the processor bulk. Only adding edges
     // requires checking for planarity.
@@ -191,37 +189,29 @@ public:
     // function returns true. Otherwise, it returns false.
     bool test_and_move_edge_down(sptr<net::phys_edge_t>); 
 
+    // Assigns colors to the checks greedily. This is used for memory experiments of color
+    // codes.
+    void assign_colors_to_checks(void);
+
     size_t  get_thickness(void);
     size_t  get_bulk_degree(sptr<net::phys_vertex_t>);
 
-    // Optimizations:
+    graph::TannerGraph* get_tanner_graph(void);
+    uptr<RawNetwork>&   get_raw_connection_network(void);
+
+    sptr<net::phys_vertex_t> get_physical_qubit_for(sptr<net::raw_vertex_t>);
+
+    // There are the passes for Protean. Each pass returns true if some change was made.
     //
-    //  join_qubits_with_identical_support
-    //      -- merges qubits connected to the same data qubits (i.e. as in the color code).
-    //  join_qubits_with_partial_support
-    //      -- similar to above, but requires that the adjacency list is a strict subset.
-    //  make_flags
-    //      -- creates flag qubits and fault-tolerant circuits.
-    //      -- PRECONDITION: data qubits are still connected directly to parity qubits.
-    //  add_connectivity_reducing_proxies
-    //      -- creates proxy qubits wherever the connectivity of a qubit is too high.
-    //      -- proxies are not guaranteed to be fault-tolerant when connected to data qubits,
-    //          so only use them after adding flag qubits.
-    //  contract_small_degree_qubits
-    //      -- contracts qubits (that are non-data!!!) that are connected to at most two neighbors,
-    //          as this contraction does not create new connectivity violations.
-    //  reallocate_edges
-    //      -- attempts to move edges down processor layers, and deletes any empty layers
-    //  relabel_qubits
-    //      -- this is more of a convenience pass
-    //      -- It may be that we can have missing ids during execution due to modifications. This
-    //          pass fixes that. Recommended to run at the END of compilation.
-    //
-    //  All passes return true if some modification was made,
+    // Combines physical qubits with identical connectivity (i.e. seen in color codes).
     bool join_qubits_with_identical_support(void);
+    // Same as above, but when the neighbors of one are a strict subset of another.
     bool join_qubits_with_partial_support(void);
+    // Adds flag qubits to the architecture.
     bool make_flags(void);
+    // Reduces connectivity by adding proxy qubits.
     bool add_connectivity_reducing_proxies(void);
+    // Removes qubits with degree-1 or degree-2 connectivity.
     bool contract_small_degree_qubits(void);
     // Try and place out-of-plane edges into the processor bulk, and deletes any
     // empty processor layers.
@@ -234,11 +224,6 @@ public:
     bool relabel_qubits(void);
     // Computes the syndrome extraction schedule for the existing layout.
     qes::Program<> make_schedule(void);
-
-    graph::TannerGraph* get_tanner_graph(void);
-    uptr<RawNetwork>&   get_raw_connection_network(void);
-
-    sptr<net::phys_vertex_t>    get_physical_qubit_for(sptr<net::raw_vertex_t>);
 
     // IO:
     void    write_stats_file(std::string);
@@ -277,17 +262,18 @@ private:
     // The reason tanner_graph is a raw pointer whereas raw_connection_network is a unique ptr
     // is that tanner_graph is supplied by the user. The user may choose to allocate it on the stack.
     graph::TannerGraph* tanner_graph;
+
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
     uptr<RawNetwork> raw_connection_network;
     std::map<sptr<net::raw_vertex_t>, sptr<net::phys_vertex_t>> role_to_phys;
+
     // processor_layers contains the physical placement of edges in the processor. processor_layers[0]
     // always corresponds to the processor bulk (lowest layer), and other layers are the TSV layers.
     std::vector<uptr<ProcessorLayer>> processor_layers;
+
     // Other tracking structures:
-    //
-    // Tracks the heights of TSV edges for each vertex.
-    std::map<sptr<net::phys_vertex_t>, std::set<size_t>> occupied_tsvs;
+    std::map<sptr<net::raw_vertex_t>, int> check_color_map;
     
     uint64_t id_ctr;
 

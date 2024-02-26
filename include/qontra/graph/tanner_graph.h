@@ -89,10 +89,16 @@ public:
     std::vector<sptr<tanner::vertex_t>> get_vertices_by_type(tanner::vertex_t::type) const;
     std::vector<sptr<tanner::vertex_t>> get_checks(void) const;
 
+    // Sets the map reference to the color map. Returns the max color used.
+    int compute_check_color_map(std::map<sptr<tanner::vertex_t>, int>&) const;
+
     std::vector<obs_t> get_obs(bool get_x_obs) const;
 private:
     std::vector<sptr<tanner::vertex_t>>& get_vertices_by_type_(tanner::vertex_t::type);
-        
+
+    // This is a helper function for compute_check_color_map.
+    int update_check_color_map(std::map<sptr<tanner::vertex_t>, int>&, bool use_x_checks) const;
+
     std::vector<sptr<tanner::vertex_t>>  data_qubits;
     std::vector<sptr<tanner::vertex_t>>  xparity_checks;
     std::vector<sptr<tanner::vertex_t>>  zparity_checks;

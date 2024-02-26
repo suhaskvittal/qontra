@@ -18,20 +18,18 @@ using namespace graph;
 using namespace protean;
 
 int main(int argc, char* argv[]) {
-    vtils::CmdParser pp(argc, argv);
+    vtils::CmdParser pp(argc, argv, 2);
 
-    std::string tanner_graph_file;
+    std::string tanner_graph_file(argv[1]);
+    std::string data_output_folder(argv[2]);
+
     std::string render_output_folder;
-    std::string data_output_folder;
 
     std::string pass_string = "Jid.Ral.Fla.Ral.Jpa.Ral.(Prx.Con.Jpa.Ral)+.Rlb.";
     std::string layout_engine = "neato";
 
     uint64_t schedule_rounds = 3;
     uint64_t max_connectivity = 4;
-
-    pp.get("tanner", tanner_graph_file, true);
-    pp.get("out", data_output_folder, true);
 
     pp.get("render", render_output_folder);
     pp.get("passes", pass_string);
@@ -63,6 +61,12 @@ int main(int argc, char* argv[]) {
             << "Mean Degree = " << network.get_mean_degree() << "\n"
             << "Max Degree = " << network.get_max_degree() << "\n"
             << "Thickness = " << network.get_thickness() << "\n";
+
+    if (pp.option_set("color-checks")) {
+        std::cout << "coloring checks...\n";
+        network.assign_colors_to_checks();
+    }
+
     // Write data to output folder:
     write_network_to_folder(data_output_folder, &network);
 #ifdef GRAPHVIZ_ENABLED

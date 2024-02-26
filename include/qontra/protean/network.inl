@@ -249,6 +249,20 @@ PhysicalNetwork::test_and_move_edge_down(sptr<net::phys_edge_t> e) {
     }
 }
 
+inline void
+PhysicalNetwork::assign_colors_to_checks() {
+    std::map<sptr<graph::tanner::vertex_t>, int> tanner_color_map;
+    int max_color = tanner_graph->compute_check_color_map(tanner_color_map);
+    if (max_color != 2) {
+        std::cerr << "Expected 3-coloring of tanner graph, got " << (max_color+1) << "-coloring." << std::endl;
+        exit(1);
+    }
+    for (auto& p : tanner_color_map) {
+        sptr<net::raw_vertex_t> rv = raw_connection_network->v_tanner_raw_map.at(p.first);
+        check_color_map[rv] = p.second;
+    }
+}
+
 inline size_t
 PhysicalNetwork::get_thickness() {
     return processor_layers.size();

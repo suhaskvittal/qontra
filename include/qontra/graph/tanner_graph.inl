@@ -61,6 +61,13 @@ TannerGraph::get_vertices_by_type_(tanner::vertex_t::type t) {
     else return zparity_checks;
 }
 
+inline int
+TannerGraph::compute_check_color_map(std::map<sptr<tanner::vertex_t>, int>& color_map) const {
+    int max_color_z = update_check_color_map(color_map, false);
+    int max_color_x = update_check_color_map(color_map, true);
+    return std::max(max_color_x, max_color_z);
+}
+
 template <> inline std::string
 print_v(sptr<tanner::vertex_t> v) {
     std::string type_prefix;

@@ -290,10 +290,8 @@ Graph<V, E>::get_outgoing(sptr<V> v) const {
     return adjacency_lists.at(v);
 }
 
-template <class V, class E>
-template <class CONTAINER>
-inline std::vector<sptr<V>>
-Graph<V, E>::get_common_neighbors(CONTAINER vlist) const {
+template <class V, class E> inline std::vector<sptr<V>>
+Graph<V, E>::get_common_neighbors(std::vector<sptr<V>> vlist) const {
     if (vlist.empty()) return {};
     std::vector<sptr<V>> common = get_neighbors(vlist[0]);
 

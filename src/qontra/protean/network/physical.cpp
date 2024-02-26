@@ -5,6 +5,8 @@
 
 #include "qontra/protean/network.h"
 
+#include <qontra/graph/algorithms/coloring.h>
+
 #include <vtils/set_algebra.h>
 #include <vtils/utility.h>
 
@@ -37,7 +39,7 @@ PhysicalNetwork::PhysicalNetwork(TannerGraph* tgr)
     // Planarity tracking:
     processor_layers(),
     // Other tracking:
-    occupied_tsvs(),
+    check_color_map(),
     // Other variables:
     id_ctr(0)
 {
@@ -433,8 +435,6 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         }
         // Update the physical connectivity on our side.
         if (share_an_edge_with_pprx.size() > 2) {
-            std::cout << "\tadded proxy with connectivity " << share_an_edge_with_pprx.size()
-                << ", remaining slack violation: " << slack_violation << std::endl;
             for (sptr<phys_edge_t> _pe : deleted_edges) {
                 delete_edge(_pe);
             }
@@ -707,12 +707,12 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         std::vector<conflict_t> conflicts;
     };
 
-    Graph<int_v_t, int_e_t> interaction_graph;
+    uptr<Graph<int_v_t, int_e_t>> interaction_graph = std::make_unique<Graph<int_v_t, int_e_t>>();
     size_t _id = 0;
     for (sptr<tanner::vertex_t> tpq : tanner_graph->get_checks()) {
         sptr<raw_vertex_t> rpq = raw_connection_network->v_tanner_raw_map.at(tpq);
         // Make interaction graph vertex.
-        sptr<int_v_t> iv = interaction_graph.make_and_add_vertex(_id++);
+        sptr<int_v_t> iv = interaction_graph->make_and_add_vertex(_id++);
         iv->check = rpq;
         // Get all qubits involved in check.
         RawNetwork::parity_support_t& supp = raw_connection_network->get_support(rpq);
@@ -720,11 +720,11 @@ PhysicalNetwork::recompute_cycle_role_maps() {
     }
     // Now, compute interaction graph edges.
     for (size_t i = 0; i < _id; i++) {
-        sptr<int_v_t> iv = interaction_graph.get_vertex(i);
+        sptr<int_v_t> iv = interaction_graph->get_vertex(i);
         for (size_t j = i+1; j < _id; j++) {
-            sptr<int_v_t> iw = interaction_graph.get_vertex(j);
+            sptr<int_v_t> iw = interaction_graph->get_vertex(j);
 
-            sptr<int_e_t> ie = interaction_graph.make_edge(iv, iw);
+            sptr<int_e_t> ie = interaction_graph->make_edge(iv, iw);
             for (sptr<raw_vertex_t> rx : iv->support) {
                 if (rx->qubit_type == raw_vertex_t::type::data) continue;
 
@@ -735,13 +735,36 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                     if (px == py) ie->conflicts.emplace_back(rx, ry, px);
                 }
             }
-            if (ie->conflicts.size()) interaction_graph.add_edge(ie);
+            if (ie->conflicts.size()) interaction_graph->add_edge(ie);
         }
     }
     // Clear all the cycle role maps for each physical qubit.
     for (sptr<phys_vertex_t> pv : get_vertices()) pv->clear_roles();
-    // Now, pack the roles. The idea here is for each iteration, schedule checks
-    // that have no conflicts with each other.
+    // Color the interaction graph.
+    std::map<sptr<int_v_t>, int> color_map;
+    size_t cycles = static_cast<size_t>(k_coloring_rlf(interaction_graph.get(), color_map));
+    for (size_t c = 0; c <= cycles; c++) {
+        for (sptr<int_v_t> iv : interaction_graph->get_vertices()) {
+            if (color_map[iv] != c) continue;
+            for (sptr<raw_vertex_t> rv : iv->support) {
+                if (!role_to_phys.count(rv) || role_to_phys[rv] == nullptr) {
+                    std::cerr << "Role does not exist: " << print_v(rv) << "\n"
+                        << "\tcontaining check: " << print_v(iv->check) << "\n"
+                        << "\traw_net contains role: " << raw_connection_network->contains(rv) << std::endl;
+                    exit(1);
+                }
+                sptr<phys_vertex_t> pv = role_to_phys[rv];
+                if (!pv->role_set.count(rv)) {
+                    if (rv->qubit_type == raw_vertex_t::type::data) {
+                        pv->push_back_role(rv, 0);
+                    } else {
+                        pv->push_back_role(rv, c);
+                    }
+                }
+            }
+        }
+    }
+    /*
     auto remaining_checks = interaction_graph.get_vertices();
     size_t cycle = 0;
     while (remaining_checks.size()) {
@@ -782,6 +805,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         }
         cycle++;
     }
+    */
     return true;
 }
 

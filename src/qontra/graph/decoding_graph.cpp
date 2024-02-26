@@ -282,15 +282,6 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             }
         }
     }
-    // Compute the renormalization factor.
-    if (flag_owner_renorm_map.empty()) {
-        // Then, there really is no reason to make a separate graph. Deactivate flags and return.
-        deactivate_flags();
-        if (!dijkstra_graph_map.count(std::make_pair(c1, c2))) {
-            make_dijkstra_graph(c1, c2);
-        }
-        return;
-    }
     fp_t renorm_factor = 1.0;
     for (auto& p : flag_owner_renorm_map) {
         renorm_factor *= std::get<0>(p.second) / static_cast<fp_t>(std::get<1>(p.second));

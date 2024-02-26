@@ -9,7 +9,7 @@ namespace qontra {
 namespace graph {
 
 template <class V, class E> std::set<sptr<V>>
-mis_approx_greedy(Graph<V, E>* graph) {
+mis_greedy(Graph<V, E>* graph) {
     std::vector<sptr<V>> vertices = graph->get_vertices();
     std::set<sptr<V>> marked;
 
