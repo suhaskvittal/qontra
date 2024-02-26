@@ -23,12 +23,6 @@ make_circuit(qes::Program<> program, fp_t p, bool fix_timing_error_as_p) {
     et.e_idle *= 0.1;
     et = et * (1000*p);
 
-//  et.e_g2q = 0.0;
-    et.e_idle = 0.0;
-//  et.e_g1q = 0.0;
-//  et.e_m1w0 = 0.0;
-//  et.e_m0w1 = 0.0;
-
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);

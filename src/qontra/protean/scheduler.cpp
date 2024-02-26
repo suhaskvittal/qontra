@@ -281,6 +281,10 @@ Scheduler::compute_schedules() {
     // Now, compute schedule using LPs:
     std::map<sptr<raw_vertex_t>, std::vector<std::tuple<size_t, sptr<raw_vertex_t>>>>
         existing_cnot_times;
+    TwoLevelMap<sptr<raw_vertex_t>, sptr<raw_vertex_t>, size_t>
+        sch_time_map;
+
+    auto& fam = raw_network->flag_assignment_map;
     for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
         auto& support = get_support(rpq);
         // Make the LP:
@@ -295,13 +299,18 @@ Scheduler::compute_schedules() {
         // Add uniqueness constraints.
         for (sptr<raw_vertex_t> rx : support.data) {
             lp_var_t x = LP.get_var(rx);
-            sptr<raw_vertex_t> rx_rsq =
-                raw_network->flag_assignment_map[rpq].count(rx) ? raw_network->flag_assignment_map[rpq][rx] : rpq;
+            sptr<raw_vertex_t> rx_rsq = fam[rpq].count(rx) ? fam[rpq][rx] : rpq;
+            if (sch_map.count(rx_rsq)) {
+                // Then rx has been scheduled already. We can skip adding constraints
+                // for this variable.
+                lp_constr_t con(x, sch_time_map[rx_rsq][rx], lp_constr_t::direction::eq);
+                LP.add_constraint(con);
+                continue;
+            }
             for (sptr<raw_vertex_t> ry : support.data) {
                 if (rx >= ry) continue;
                 lp_var_t y = LP.get_var(ry);
-                sptr<raw_vertex_t> ry_rsq =
-                    raw_network->flag_assignment_map[rpq].count(ry) ? raw_network->flag_assignment_map[rpq][ry] : rpq;
+                sptr<raw_vertex_t> ry_rsq = fam[rpq].count(ry) ? fam[rpq][ry] : rpq;
                 // Only add the following constraint if rx and ry both interact
                 // with rpq or the same flag.
                 if (rx_rsq == ry_rsq) {
@@ -311,19 +320,26 @@ Scheduler::compute_schedules() {
             }
         }
         // Add stabilizer constraints:
-        std::map<sptr<raw_vertex_t>, lp_expr_t> ind_sum_map;
+        // We will require commutation on a flag granularity.
+        TwoLevelMap<sptr<raw_vertex_t>, sptr<raw_vertex_t>, lp_expr_t> ind_sum_map;
+        TwoLevelMap<sptr<raw_vertex_t>, sptr<raw_vertex_t>, size_t> ind_ctr_map;
         for (sptr<raw_vertex_t> rdq : support.data) {
             lp_var_t x = LP.get_var(rdq);
+
+            sptr<raw_vertex_t> rsq = fam[rpq].count(rdq) ? fam[rpq][rdq] : rpq;
             for (auto& tt : existing_cnot_times[rdq]) {
                 size_t t = std::get<0>(tt);
                 sptr<raw_vertex_t> owner = std::get<1>(tt);
-                // Add conflict constraint.
-                lp_constr_t con1(x, t, lp_constr_t::direction::neq);
-                LP.add_constraint(con1);
+                sptr<raw_vertex_t> _rsq = fam[owner].count(rdq) ? fam[owner][rdq] : owner;
+                // Add conflict constraint if owner and rpq are not using the same flag.
+                if (rsq != _rsq) {
+                    lp_constr_t con1(x, t, lp_constr_t::direction::neq);
+                    LP.add_constraint(con1);
+                }
                 // if is_x_check != tt_from_x, then we need to add commutation
                 // constraints.
                 if (rpq->qubit_type == owner->qubit_type) continue;
-                lp_expr_t& ind_sum = ind_sum_map[owner];
+                lp_expr_t& ind_sum = ind_sum_map[_rsq][rsq];
 
                 const double M = 100'000;
                 lp_var_t y = LP.add_slack_var(0, 1, lp_var_t::bounds::both, lp_var_t::domain::binary);
@@ -334,14 +350,34 @@ Scheduler::compute_schedules() {
                 LP.add_constraint(con3);
 
                 ind_sum += y;
+                ind_ctr_map[_rsq][rsq]++;
+                // We have added the constraint for _rsq and rsq. But now we need to add it
+                // for owner and rpq if _rsq != owner or rsq != rpq.
+                if (_rsq != owner) {
+                    ind_sum_map[owner][rsq] += y;
+                    ind_ctr_map[owner][rsq]++;
+                    if (rsq != rpq) {
+                        ind_sum_map[owner][rpq] += y;
+                        ind_ctr_map[owner][rpq]++;
+                    }
+                }
+                if (rsq != rpq) {
+                    ind_sum_map[_rsq][rpq] += y;
+                    ind_ctr_map[_rsq][rpq]++;
+                }
             }
         }
-        for (auto& p : ind_sum_map) {
-            // Constrain ind_sum to be even.
-            lp_expr_t& ind_sum = p.second;
-            lp_var_t y = LP.add_slack_var(0, 0, lp_var_t::bounds::lower, lp_var_t::domain::integer);
-            lp_constr_t con(ind_sum, 2*y, lp_constr_t::direction::eq);
-            LP.add_constraint(con);
+        for (auto& p1 : ind_sum_map) {
+            for (auto& p2 : p1.second) {
+                lp_expr_t& ind_sum = p2.second;
+                if (ind_ctr_map[p1.first][p2.first] & 1) {
+                    continue;
+                }
+                // Constrain ind_sum to be even.
+                lp_var_t y = LP.add_slack_var(0, 0, lp_var_t::bounds::lower, lp_var_t::domain::integer);
+                lp_constr_t con(ind_sum, 2*y, lp_constr_t::direction::eq);
+                LP.add_constraint(con);
+            }
         }
         // Now, solve the LP.
         LP.build(max_of_all, false);
@@ -356,6 +392,12 @@ Scheduler::compute_schedules() {
                 for (auto tt : existing_cnot_times[rdq]) {
                     std::cerr << " " << std::get<0>(tt) << "(" << print_v(std::get<1>(tt)) << ")";
                 }
+                if (fam[rpq].count(rdq)) {
+                    sptr<raw_vertex_t> rsq = fam[rpq][rdq];
+                    if (sch_map.count(rsq)) {
+                        std::cerr << " | fixed to be " << sch_time_map[rsq][rdq];
+                    }
+                }
                 std::cerr << std::endl;
             }
             std::cerr << "possible problems:" << std::endl
@@ -364,14 +406,14 @@ Scheduler::compute_schedules() {
             exit(1);
         }
         for (sptr<raw_vertex_t> rdq : support.data) {
-            sptr<raw_vertex_t> rsq = 
-                raw_network->flag_assignment_map[rpq].count(rdq) ? raw_network->flag_assignment_map[rpq][rdq] : rpq;
+            sptr<raw_vertex_t> rsq = fam[rpq].count(rdq) ? fam[rpq][rdq] : rpq;
             size_t t = static_cast<size_t>(round(LP.get_value(rdq)));
             existing_cnot_times[rdq].emplace_back(t, rpq);
             if (!sch_map.count(rsq)) {
                 sch_map[rsq] = std::vector<sptr<raw_vertex_t>>(upper_bound, nullptr);
             }
             sch_map[rsq][t-1] = rdq;
+            tlm_put(sch_time_map, rsq, rdq, t);
         }
     }
     return sch_map;
