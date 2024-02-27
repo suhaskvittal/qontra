@@ -118,6 +118,7 @@ Scheduler::build_body(qes::Program<>& program) {
             // Make sure rsq is valid.
             test_and_set_exit_on_fail(rsq, "build_body");
             // Now get the k-th data qubit.
+            if (k >= sch.size()) continue;
             sptr<raw_vertex_t> rdq = sch.at(k);
             if (rdq == nullptr) continue;
             sptr<raw_vertex_t> common_rpq = raw_network->are_in_same_support(rdq, rsq);
@@ -314,8 +315,14 @@ Scheduler::compute_schedules() {
                 // Only add the following constraint if rx and ry both interact
                 // with rpq or the same flag.
                 if (rx_rsq == ry_rsq) {
-                    lp_constr_t con(x, y, lp_constr_t::direction::neq);
-                    LP.add_constraint(con);
+                    lp_constr_t con1(x, y, lp_constr_t::direction::neq);
+                    LP.add_constraint(con1);
+                    if (rx_rsq->qubit_type == raw_vertex_t::type::flag) {
+                        lp_constr_t con2(x-y, 1, lp_constr_t::direction::le),
+                                    con3(x-y, -1, lp_constr_t::direction::ge);
+                        LP.add_constraint(con2);
+                        LP.add_constraint(con3);
+                    }
                 }
             }
         }
@@ -448,7 +455,24 @@ PhysicalNetwork::make_schedule() {
     // Count number of measurements and events per round.
     size_t n_mt = scheduler.get_measurement_ctr();
     size_t n_et = 0;
-    for (const auto& inst : round) n_et += (inst.get_name() == "event");
+    // The number of events = # of checks of the memory type + # of flags of the opposite memory type.
+    for (sptr<raw_vertex_t> rv : raw_connection_network->get_vertices()) {
+        if (rv->qubit_type == raw_vertex_t::type::xparity) {
+            if (config.is_memory_x) {
+                n_et++;
+            } else {
+                n_et += raw_connection_network->flag_ownership_map[rv].size();
+            }
+        } else if (rv->qubit_type == raw_vertex_t::type::zparity && !config.is_memory_x) {
+            if (!config.is_memory_x) {
+                n_et++;
+            } else {
+                n_et += raw_connection_network->flag_ownership_map[rv].size();
+            }
+        }
+    }
+
+    std::cout << "n_et = " << n_et << std::endl;
 
     size_t event_ctr = 0;
     size_t meas_ctr_offset = 0;
@@ -472,7 +496,8 @@ PhysicalNetwork::make_schedule() {
                     program.back().put("color", check_color_map.at(rv));
                 }
                 // Add the base vertex as well, which is just the corresponding detector in the second round.
-                int64_t base = (event_ctr % n_et) + (config.rounds > 1)*n_et;
+                int64_t base = (event_ctr % n_et);
+                if (config.rounds > 1) base += n_et;
                 program.back().put("base", base);
                 event_ctr++;
             } else {
@@ -509,6 +534,11 @@ PhysicalNetwork::make_schedule() {
         }
         safe_emplace_back(program, "event", operands);
         program.back().put(print_v(rv));
+        if (check_color_map.count(rv)) {
+            program.back().put("color", check_color_map.at(rv));
+        }
+        int64_t base = (event_ctr % n_et) + (config.rounds > 1)*n_et;
+        program.back().put("base", base);
         event_ctr++;
     }
     auto obs_list = tanner_graph->get_obs(config.is_memory_x);

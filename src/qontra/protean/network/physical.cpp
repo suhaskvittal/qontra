@@ -676,7 +676,8 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                     (raw_connection_network->x_flag_set.count(r1) == raw_connection_network->x_flag_set.count(r2));
                 // Try the merge.
                 if (raw_connection_network->are_in_same_support(r1, r2) != nullptr
-                    || r1_r2_are_same_flag)
+//                  || r1_r2_are_same_flag)
+                )
                 {
                     auto deleted = raw_connection_network->merge(r1, r2);
                     if (deleted != nullptr) {
@@ -764,48 +765,6 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             }
         }
     }
-    /*
-    auto remaining_checks = interaction_graph.get_vertices();
-    size_t cycle = 0;
-    while (remaining_checks.size()) {
-        std::vector<sptr<int_v_t>> checks_this_cycle;
-        for (auto it = remaining_checks.begin(); it != remaining_checks.end(); ) {
-            bool any_conflict = false;
-            sptr<int_v_t> iv = *it;
-            for (sptr<int_v_t> iw : checks_this_cycle) {
-                if (interaction_graph.contains(iv, iw)) {
-                    any_conflict = true;
-                    break;
-                }
-            }
-            if (any_conflict) {
-                it++;
-            } else {
-                checks_this_cycle.push_back(iv);
-                it = remaining_checks.erase(it);
-            }
-        }
-        for (sptr<int_v_t> iv : checks_this_cycle) {
-            for (sptr<raw_vertex_t> rv : iv->support) {
-                if (!role_to_phys.count(rv) || role_to_phys[rv] == nullptr) {
-                    std::cerr << "Role does not exist: " << print_v(rv) << "\n"
-                        << "\tcontaining check: " << print_v(iv->check) << "\n"
-                        << "\traw_net contains role: " << raw_connection_network->contains(rv) << std::endl;
-                    exit(1);
-                }
-                sptr<phys_vertex_t> pv = role_to_phys[rv];
-                if (!pv->role_set.count(rv)) {
-                    if (rv->qubit_type == raw_vertex_t::type::data) {
-                        pv->push_back_role(rv, 0);
-                    } else {
-                        pv->push_back_role(rv, cycle);
-                    }
-                }
-            }
-        }
-        cycle++;
-    }
-    */
     return true;
 }
 

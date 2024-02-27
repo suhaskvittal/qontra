@@ -189,6 +189,7 @@ public:
     // function returns true. Otherwise, it returns false.
     bool test_and_move_edge_down(sptr<net::phys_edge_t>); 
 
+    void load_colors_from_file(std::string);
     // Assigns colors to the checks greedily. This is used for memory experiments of color
     // codes.
     void assign_colors_to_checks(void);

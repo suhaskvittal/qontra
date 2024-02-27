@@ -329,7 +329,7 @@ RestrictionDecoder::insert_error_chain_into(
         // Make sure that their colors are not equal. Otherwise, get a common neighbor
         // of fv and fw which has a different color (call this fu). 
         // Add (fv, fu) and (fu, fw) instead.
-        if (!decoding_graph->share_hyperedge({fv, fw})) {
+        if (!decoding_graph->share_hyperedge({fv, fw}) || fv->color == fw->color) {
             sptr<vertex_t> fu = nullptr;
             for (sptr<vertex_t> x : decoding_graph->get_common_neighbors({fv, fw})) {
                 sptr<vertex_t> fx = x->get_base();

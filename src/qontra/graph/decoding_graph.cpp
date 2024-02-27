@@ -227,7 +227,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     std::map<sptr<hyperedge_t>, std::set<uint64_t>> remaining_flags_map;
     std::map<sptr<vertex_t>, std::tuple<fp_t, size_t>> flag_owner_renorm_map;
 
-    fp_t renorm_factor = 1.0;
+    fp_t renorm_factor = 0.0;
     size_t n_flags_used = 0;
     for (uint64_t fd : active_flags) {
         for (sptr<hyperedge_t> he : flag_edge_map[fd]) {
@@ -262,7 +262,11 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             }
         }
     }
-    renorm_factor /= static_cast<fp_t>(n_flags_used);
+    if (n_flags_used == 0) {
+        renorm_factor = 1.0;
+    } else {
+        renorm_factor /= static_cast<fp_t>(n_flags_used);
+    }
     // Now handle other edges.
     for (sptr<vertex_t> v : dgr->get_vertices()) {
         for (sptr<vertex_t> w : dgr->get_vertices()) {

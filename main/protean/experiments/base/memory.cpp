@@ -31,7 +31,11 @@ int main(int argc, char* argv[]) {
 
     std::string protean_folder(argv[1]);
     std::string qes_file = protean_folder + "/ext.qes";
-    std::string output_file = protean_folder + "/output/basic_memory.csv";
+    std::string output_file = protean_folder + "/basic_memory.csv";
+
+    if (world_rank == 0) {
+        std::cout << "reading " << qes_file << ", writing to " << output_file << std::endl;
+    }
 
     std::string decoder_name;
 
@@ -49,11 +53,9 @@ int main(int argc, char* argv[]) {
 
     G_BASE_SEED = 1000;
 
-    std::cout << "Reading program...\n";
     qes::Program<> program = qes::from_file(qes_file);
     DetailedStimCircuit _circuit = make_circuit(program, pmax);
 
-    std::cout << "Making decoder...\n";
     uptr<Decoder> dec = nullptr;
     if (decoder_name == "mwpm") {
         dec = std::make_unique<MWPMDecoder>(_circuit);
@@ -65,7 +67,6 @@ int main(int argc, char* argv[]) {
 
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
-        std::cout << "Running on p = " << p << "\n";
         // Load model from file and run memory experiment.
         DetailedStimCircuit circuit = make_circuit(program, p);
         dec->set_circuit(circuit);
@@ -76,6 +77,7 @@ int main(int argc, char* argv[]) {
 
         // Write result to file.
         if (world_rank == 0) {
+            std::cout << "[ pr_base_memory ] Writing p = " << p << std::endl;
             bool write_header = !file_exists(output_file);
             if (!file_exists(get_parent_directory(output_file.c_str()))) {
                 safe_create_directory(get_parent_directory(output_file.c_str()));

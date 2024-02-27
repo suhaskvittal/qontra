@@ -24,6 +24,7 @@ int main(int argc, char* argv[]) {
     std::string data_output_folder(argv[2]);
 
     std::string render_output_folder;
+    std::string coloring_file;
 
     std::string pass_string = "Jid.Ral.Fla.Ral.Jpa.Ral.(Prx.Con.Jpa.Ral)+.Rlb.";
     std::string layout_engine = "neato";
@@ -32,6 +33,7 @@ int main(int argc, char* argv[]) {
     uint64_t max_connectivity = 4;
 
     pp.get("render", render_output_folder);
+    pp.get("colors", coloring_file);
     pp.get("passes", pass_string);
     pp.get("layout", layout_engine);
     
