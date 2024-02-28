@@ -27,15 +27,16 @@ target_link_libraries(protean PRIVATE libprotean)
 target_compile_definitions(protean PRIVATE GRAPHVIZ_ENABLED)
 
 if (COMPILE_PROTEAN_EXPERIMENTS)
-#   add_executable(pr_nn_data main/protean/experiments/nn/data.cpp)
-#   add_executable(pr_nn_train main/protean/experiments/nn/train.cpp)
-#   add_executable(pr_nn_memory main/protean/experiments/nn/memory.cpp)
-
     add_executable(pr_base_memory main/protean/experiments/base/memory.cpp)
-
-#   target_link_libraries(pr_nn_data PRIVATE libprotean)
-#   target_link_libraries(pr_nn_train PRIVATE libprotean)
-#   target_link_libraries(pr_nn_memory PRIVATE libprotean)
-
     target_link_libraries(pr_base_memory PRIVATE libprotean)
+
+    if (COMPILE_NEURAL_DECODER)
+        add_executable(pr_nn_data main/protean/experiments/nn/data.cpp)
+        add_executable(pr_nn_train main/protean/experiments/nn/train.cpp)
+        add_executable(pr_nn_memory main/protean/experiments/nn/memory.cpp)
+
+        target_link_libraries(pr_nn_data PRIVATE libprotean)
+        target_link_libraries(pr_nn_train PRIVATE libprotean)
+        target_link_libraries(pr_nn_memory PRIVATE libprotean)
+    endif()
 endif()

@@ -1,5 +1,4 @@
-/*
- *  author: Suhas Vittal
+/* author: Suhas Vittal
  *  date:   17 February 2024
  * */
 
@@ -76,10 +75,18 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     const size_t n_obs = circuit.count_observables();
     stim::simd_bits<SIMD_WIDTH> corr(n_obs);
 
+
     load_syndrome(syndrome);
     auto _detectors = std::move(detectors);
     auto _flags = std::move(flags);
     if (_detectors.empty()) return { 0.0, corr };
+
+    std::cout << "syndrome: D[";
+    for (uint64_t d : _detectors) std::cout << " " << d;
+    std::cout << " ], F[";
+    for (uint64_t f : _flags) std::cout << " " << f;
+    std::cout << " ]" << std::endl;
+
     // Compute the MWPM for each restricted lattice.
     std::vector<assign_t> matchings;
     for (int c1 = 0; c1 < decoding_graph->number_of_colors; c1++) {
@@ -204,7 +211,7 @@ r_compute_correction:
     remove_widowed_edges(in_cc_map);
     remove_widowed_edges(not_cc_map);
     if (in_cc_map.size() > 1 || not_cc_map.size() > 1) {
-        if (tries < 11) {
+        if (tries < 31) {
             tries++;
             goto r_compute_correction;
         } else {

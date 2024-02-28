@@ -484,6 +484,7 @@ PhysicalNetwork::make_schedule() {
     for (size_t r = 0; r < config.rounds; r++) {
         push_back_range(program, round);
         // Build detection events.
+        // First do the check events.
         for (sptr<raw_vertex_t> rv : raw_connection_network->get_vertices()) {
             bool is_x_check = (rv->qubit_type == raw_vertex_t::type::xparity);
             bool is_z_check = (rv->qubit_type == raw_vertex_t::type::zparity);
@@ -505,7 +506,14 @@ PhysicalNetwork::make_schedule() {
                 if (config.rounds > 1) base += n_et;
                 program.back().put("base", base);
                 event_ctr++;
-            } else {
+            } 
+        }
+        // Now do the flags.
+        for (sptr<raw_vertex_t> rv : raw_connection_network->get_vertices()) {
+            bool is_x_check = (rv->qubit_type == raw_vertex_t::type::xparity);
+            bool is_z_check = (rv->qubit_type == raw_vertex_t::type::zparity);
+            if (!is_z_check && !is_x_check) continue;
+            if (is_x_check != config.is_memory_x) {
                 // Make detection events for the flag qubits.
                 for (sptr<raw_vertex_t> rfq : raw_connection_network->flag_ownership_map[rv]) {
                     const size_t mt = scheduler.get_measurement_time(rfq) + meas_ctr_offset;

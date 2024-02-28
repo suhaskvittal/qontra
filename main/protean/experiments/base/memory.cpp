@@ -3,6 +3,8 @@
  *  date:   21 January 2024
  * */
 
+#define MEMORY_DEBUG
+
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/experiments.h>
@@ -31,7 +33,7 @@ int main(int argc, char* argv[]) {
 
     std::string protean_folder(argv[1]);
     std::string qes_file = protean_folder + "/ext.qes";
-    std::string output_file = protean_folder + "/basic_memory.csv";
+    std::string output_file = protean_folder + "/output/basic_memory.csv";
 
     if (world_rank == 0) {
         std::cout << "reading " << qes_file << ", writing to " << output_file << std::endl;

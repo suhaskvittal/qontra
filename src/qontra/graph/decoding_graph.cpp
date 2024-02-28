@@ -101,7 +101,14 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                     }
                 }
             }
-            if (detectors.size() <= 1) return;
+            if (detectors.size() <= 1) {
+                std::cerr << "[ DecodingGraph ] skipping over hyperedge: [";
+                for (uint64_t d : detectors) std::cerr << " " << d;
+                std::cerr << " ], F[";
+                for (uint64_t f : flags) std::cerr << " " << f;
+                std::cerr << " ]" << std::endl;
+                return;
+            }
             /*
             if (flags.empty() && detectors.size() > flips_per_error) {
                 std::cerr << "[ DecodingGraph ] skipping over hyperedge: [";
@@ -140,7 +147,6 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 std::cout << " ], F[";
                 for (uint64_t f : flags) std::cout << " " << f;
                 std::cout << " ]" << std::endl;
-
                 for (uint64_t f : flags) {
                     this->flag_edge_map[f].insert(e);
                 }

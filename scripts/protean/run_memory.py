@@ -17,8 +17,9 @@ shots = 100000
 
 cmd_1 = r'''
         cd Release
+        mkdir -p %s/output
         mpirun -np %d ./pr_base_memory %s --decoder %s --s %d
-        ''' % (n_proc, folder, decoder, shots)
+        ''' % (folder, n_proc, folder, decoder, shots)
 cmd_2 = r'''
         cd Release
         mkdir -p %s/nn/data
@@ -34,7 +35,7 @@ cmd_4 = r'''
         mpirun -np %d ./pr_nn_memory %s --decoder %s --s %d
         ''' % (folder, n_proc, folder, decoder, shots)
 
-for cmd in [cmd_2, cmd_3, cmd_4]:
+for cmd in [cmd_1, cmd_2, cmd_3, cmd_4]:
     print('----------------------------')
     print(cmd)
     os.system(cmd)
