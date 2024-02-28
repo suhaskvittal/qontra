@@ -102,6 +102,12 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 }
             }
             if (detectors.size() <= 1) return;
+            if (flags.empty() && detectors.size() > flips_per_error) {
+                std::cerr << "[ DecodingGraph ] skipping over hyperedge: [";
+                for (uint64_t d : detectors) std::cerr << " " << d;
+                std::cerr << " ]" << std::endl;
+                return;
+            }
             // Create hyperedge now.
             std::vector<sptr<vertex_t>> vlist;
             for (uint64_t d : detectors) {

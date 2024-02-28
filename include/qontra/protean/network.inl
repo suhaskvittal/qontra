@@ -260,7 +260,6 @@ PhysicalNetwork::assign_colors_to_checks() {
     for (auto& p : tanner_color_map) {
         sptr<net::raw_vertex_t> rv = raw_connection_network->v_tanner_raw_map.at(p.first);
         check_color_map[rv] = p.second;
-        std::cout << graph::print_v(rv) << " has color " << p.second << std::endl;
     }
 }
 

@@ -676,8 +676,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                     (raw_connection_network->x_flag_set.count(r1) == raw_connection_network->x_flag_set.count(r2));
                 // Try the merge.
                 if (raw_connection_network->are_in_same_support(r1, r2) != nullptr
-//                  || r1_r2_are_same_flag)
-                )
+                    || r1_r2_are_same_flag)
                 {
                     auto deleted = raw_connection_network->merge(r1, r2);
                     if (deleted != nullptr) {

@@ -61,9 +61,8 @@ Scheduler::run() {
         std::cout << "====== CYCLE " << cycle << " ======" << std::endl;
         std::cout << "Checks this cycle:";
 
-        size_t k = program.size();
-
         checks_this_cycle.clear();
+        std::set<int64_t> r_operands;
         for (sptr<raw_vertex_t> rv : raw_network->get_vertices()) {
             if (rv->qubit_type == raw_vertex_t::type::xparity
                 || rv->qubit_type == raw_vertex_t::type::zparity)
@@ -74,10 +73,19 @@ Scheduler::run() {
                     checks_this_cycle.push_back(rv);
 
                     std::cout << " " << print_v(rv);
+
+                    // Reset all parity, flags, and proxies associated with this qubit.
+                    r_operands.insert(qu(rv));
+                    auto& support = raw_network->get_support(rv);
+                    for (sptr<raw_vertex_t> rx : support.flags) {
+                        r_operands.insert(qu(rx));
+                    }
                 }
             }
         }
         std::cout << std::endl;
+
+        safe_emplace_back(program, "reset", std::vector<int64_t>(r_operands.begin(), r_operands.end()));
 
         if (checks_this_cycle.empty()) break;
         build_preparation(program);
@@ -88,11 +96,8 @@ Scheduler::run() {
             finished_checks.insert(rpq);
         }
         cycle++;
-        // Inject timing error on first instruction of this cycle.
-        if (k < program.size()) {
-            program[k].put("timing_error");
-        }
     }
+    program[0].put("timing_error");
     return program;
 }
 
@@ -151,12 +156,9 @@ Scheduler::build_teardown(qes::Program<>& program) {
             r_operands.push_back(qu(rfq));
             release_qubit(rfq);
         }
-        for (sptr<raw_vertex_t> rprx : support.proxies) {
-            r_operands.push_back(qu(rprx));
-        }
     }
     safe_emplace_back(program, "measure", m_operands);
-    safe_emplace_back(program, "reset", r_operands);
+//  safe_emplace_back(program, "reset", r_operands);
 }
 
 void
@@ -213,6 +215,7 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
     while (true) {
         std::set<int64_t> in_use;
         std::vector<int64_t> cx_operands;
+        std::vector<int64_t> r_operands;
         for (size_t i = 0; i < cx_arr.size(); i++) {
             const auto& path = path_arr[i];
             size_t& k = k_arr[i];
@@ -261,11 +264,13 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
             sptr<raw_vertex_t> rx = path.at(k-1);
             if (rx->qubit_type == raw_vertex_t::type::proxy) {
                 proxies_in_use.erase(rx);
+                r_operands.push_back(qu(rx));
             }
             k++;
         }
         if (cx_operands.empty()) break;
         safe_emplace_back(program, "cx", cx_operands);
+        safe_emplace_back(program, "reset", r_operands);
     }
 }
 
@@ -537,7 +542,8 @@ PhysicalNetwork::make_schedule() {
         if (check_color_map.count(rv)) {
             program.back().put("color", check_color_map.at(rv));
         }
-        int64_t base = (event_ctr % n_et) + (config.rounds > 1)*n_et;
+        int64_t base = (event_ctr % n_et);
+        if (config.rounds > 1) base += n_et;
         program.back().put("base", base);
         event_ctr++;
     }

@@ -71,6 +71,7 @@ int main(int argc, char* argv[]) {
             for (uint64_t f : circuit.flag_detectors) {
                 nf += syndrome[f];
             }
+            if (nf == 0) return;
             size_t hw = syndrome.popcnt();
             if (G_FILTER_OUT_SYNDROMES && hw - nf <= G_FILTERING_HAMMING_WEIGHT) {
                 return;
@@ -89,6 +90,8 @@ int main(int argc, char* argv[]) {
             }
             s++;
         });
+    data_matrix.reshape(n_flags+n_obs, s);
+    labels.reshape(n_obs, s);
     // Write the matrices to a file.
     std::string data_file = training_data_folder + "/data." + std::to_string(world_rank) + ".bin";
     std::string labels_file = training_data_folder + "/labels." + std::to_string(world_rank) + ".bin";

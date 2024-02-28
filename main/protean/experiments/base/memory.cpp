@@ -54,7 +54,7 @@ int main(int argc, char* argv[]) {
     G_BASE_SEED = 1000;
 
     qes::Program<> program = qes::from_file(qes_file);
-    DetailedStimCircuit _circuit = make_circuit(program, pmax);
+    DetailedStimCircuit _circuit = make_circuit(program, pmax, true);
 
     uptr<Decoder> dec = nullptr;
     if (decoder_name == "mwpm") {
@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
         // Load model from file and run memory experiment.
-        DetailedStimCircuit circuit = make_circuit(program, p);
+        DetailedStimCircuit circuit = make_circuit(program, p, true);
         dec->set_circuit(circuit);
 
         memory_config_t config;

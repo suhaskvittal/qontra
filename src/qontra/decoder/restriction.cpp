@@ -204,7 +204,7 @@ r_compute_correction:
     remove_widowed_edges(in_cc_map);
     remove_widowed_edges(not_cc_map);
     if (in_cc_map.size() > 1 || not_cc_map.size() > 1) {
-        if (tries < 10) {
+        if (tries < 11) {
             tries++;
             goto r_compute_correction;
         } else {
@@ -225,6 +225,19 @@ r_compute_correction:
                 std::cerr << " " << print_v(e.first) << "," << print_v(e.second);
             }
             std::cerr << std::endl;
+            std::cerr << "Faces for incident vertices:" << std::endl;
+            for (sptr<vertex_t> v : all_incident) {
+                std::set<sptr<hyperedge_t>> faces = get_faces(v);
+                const size_t nf = faces.size();
+                std::cerr << "\t" << print_v(v) << " (nf = " << nf << "):" << std::endl;
+                for (sptr<hyperedge_t> e : faces) {
+                    std::cerr << "\t\t<";
+                    for (size_t i = 0; i < e->get_order(); i++) {
+                        std::cerr << " " << print_v(e->get<vertex_t>(i));
+                    }
+                    std::cerr << " >" << std::endl;
+                }
+            }
         }
     }
     // Otherwise, we are done.
@@ -329,7 +342,7 @@ RestrictionDecoder::insert_error_chain_into(
         // Make sure that their colors are not equal. Otherwise, get a common neighbor
         // of fv and fw which has a different color (call this fu). 
         // Add (fv, fu) and (fu, fw) instead.
-        if (!decoding_graph->share_hyperedge({fv, fw}) || fv->color == fw->color) {
+        if (!decoding_graph->share_hyperedge({fv, fw})) {
             sptr<vertex_t> fu = nullptr;
             for (sptr<vertex_t> x : decoding_graph->get_common_neighbors({fv, fw})) {
                 sptr<vertex_t> fx = x->get_base();
