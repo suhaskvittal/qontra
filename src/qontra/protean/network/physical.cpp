@@ -281,6 +281,7 @@ edge_build_outer_loop_start:
         }
     }
     std::array<flag_pair_set_t, 2> flag_pair_sets{x_flags, z_flags};
+    /*
     size_t flags_removed = 0;
     for (size_t i = 0; i < 2; i++) {
         flag_pair_set_t& flags = flag_pair_sets[i];
@@ -299,6 +300,7 @@ edge_build_outer_loop_start:
         }
     }
     std::cout << "[ status ] removed flags = " << flags_removed << std::endl;
+    */
     // First, we will create flags for each parity qubit. This ignores the case where (q1, q2)
     // is a flag in two different parity qubits. However, note we are only interested in establishing
     // roles here. These common roles will eventually be compacted into one flag.

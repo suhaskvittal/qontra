@@ -80,15 +80,18 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 
     auto _detectors = std::move(detectors);
     auto _flags = std::move(flags);
-    if (_detectors.empty()) return { 0.0, corr };
 
-    /*
     std::cout << "syndrome: D[";
     for (uint64_t d : _detectors) std::cout << " " << d;
     std::cout << " ], F[";
     for (uint64_t f : _flags) std::cout << " " << f;
     std::cout << " ]" << std::endl;
-    */
+
+    std::cout << "init corr: ";
+    for (size_t i = 0; i < n_obs; i++) std::cout << (corr[i]+0);
+    std::cout << std::endl;
+
+    if (_detectors.empty()) return { 0.0, corr };
 
     // Compute the MWPM for each restricted lattice.
     std::vector<assign_t> matchings;
@@ -96,8 +99,12 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
             load_syndrome(syndrome, c1, c2);
             std::vector<Decoder::assign_t> _matchings = compute_matching(c1, c2, true);
+
+            std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
             for (Decoder::assign_t x : _matchings) {
                 matchings.push_back(cast_assign(x, c1, c2));
+
+                std::cout << "\t" << std::get<0>(x) << " <---> " << std::get<1>(x) << std::endl;
             }
         }
     }

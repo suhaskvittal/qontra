@@ -141,13 +141,13 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
             if (flags.empty()) {
                 this->add_edge(e);
             } else {
-                /*
                 std::cout << "Flag edge: D[";
                 for (uint64_t d : detectors) std::cout << " " << d;
                 std::cout << " ], F[";
                 for (uint64_t f : flags) std::cout << " " << f;
-                std::cout << " ]" << std::endl;
-                */
+                std::cout << " ], frames:";
+                for (uint64_t fr : e->frames) std::cout << " " << fr;
+                std::cout << std::endl;
 
                 for (uint64_t f : flags) {
                     if (detectors.size() == 1) {
