@@ -13,7 +13,7 @@ namespace graph {
 
 class EdgeClass {
 public:
-    static std::map<sptr<decoding::hyperedge_t>, uptr<EdgeClass>>
+    std::vector<uptr<EdgeClass>>
         from_edges(const std::vector<sptr<decoding::hyperedge_t>>&);
 
     void add_vertex(sptr<decoding::vertex_t>);
@@ -21,11 +21,13 @@ public:
     sptr<decoding::hyperedge_t> get_representative(void) const;
     std::vector<sptr<decoding::hyperedge_t>> get_edges(void) const;
 private:
-    EdgeClass(sptr<decoding::hyperedge_t>, const std::vector<sptr<decoding::hyperedge_t>>&);
+    EdgeClass(sptr<decoding::hyperedge_t>, std::vector<sptr<decoding::hyperedge_t>>);
 
     sptr<decoding::hyperedge_t> rep;
     std::vector<sptr<decoding::hyperedge_t>> edges;
 };
+
+bool are_in_same_class(sptr<decoding::hyperedge_t>, sptr<decoding::hyperedge_t>);
 
 }   // graph
 }   // qontra
