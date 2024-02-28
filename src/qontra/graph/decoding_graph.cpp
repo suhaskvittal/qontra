@@ -57,6 +57,9 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
         sptr<hyperedge_t> e = make_and_add_edge(boundary_vertices);
         e->probability = 1.0;
     }
+    // Do not add edges to the graph immediately. First, we will collect all of them, and then
+    // analyze the edges and add them accordingly (see resolve_edges).
+    std::vector<sptr<hyperedge_t>> tentative_edges;
     auto df = 
         [&] (uint64_t d)
         {
@@ -77,46 +80,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 }
             }
             if (detectors.size() == 0) return;
-            // If it is less than the expected number of flips, then add
-            // boundaries.
-            if (detectors.size() < flips_per_error && flags.empty()) {
-                if (number_of_colors == 0) {
-                    uint64_t b = get_color_boundary_index(COLOR_ANY);
-                    detectors.push_back(b);
-                } else {
-                    std::vector<int> colors_in_detectors;
-                    for (uint64_t d : detectors) {
-                        colors_in_detectors.push_back(circuit.detector_color_map.at(d));
-                    }
-                    std::vector<uint64_t> boundary_indices;
-                    for (int c : get_complementary_colors_to(colors_in_detectors, number_of_colors)) {
-                        boundary_indices.push_back(get_color_boundary_index(c));
-                    }
-                    // If boundary_indices.size() + dets.size() overflows, it's
-                    // just best to leave dets as is (likely a measurement
-                    // error).
-                    if (boundary_indices.size() + detectors.size() == flips_per_error) {
-                        vtils::push_back_range(detectors, boundary_indices);
-                    }
-                }
-            }
-            if (detectors.size() <= 1 && flags.empty()) {
-                std::cerr << "[ DecodingGraph ] skipping over hyperedge: [";
-                for (uint64_t d : detectors) std::cerr << " " << d;
-                std::cerr << " ], F[";
-                for (uint64_t f : flags) std::cerr << " " << f;
-                std::cerr << " ]" << std::endl;
-                return;
-            }
-            /*
-            if (flags.empty() && detectors.size() > flips_per_error) {
-                std::cerr << "[ DecodingGraph ] skipping over hyperedge: [";
-                for (uint64_t d : detectors) std::cerr << " " << d;
-                std::cerr << " ]" << std::endl;
-                return;
-            }
-            */
-            // Create hyperedge now.
+
             std::vector<sptr<vertex_t>> vlist;
             for (uint64_t d : detectors) {
                 if (!this->contains(d)) {
@@ -125,42 +89,16 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                     vlist.push_back(this->get_vertex(d));
                 }
             }
-            sptr<hyperedge_t> e = this->get_edge(vlist);
-            if (e != nullptr) {
-                fp_t r = e->probability;
-                if (frames == e->frames) {
-                    p = p*(1-r) + r*(1-p);
-                }
-            } else {
-                e = this->make_edge(vlist);
-            }
+            sptr<hyperedge_t> e = make_edge(vlist);
             e->probability = p;
             e->frames = frames;
-            // If this is a flag edge, do not add it to the graph. Instead, add
-            // it to the flag_edge_map.
-            if (flags.empty()) {
-                this->add_edge(e);
-            } else {
-                std::cout << "Flag edge: D[";
-                for (uint64_t d : detectors) std::cout << " " << d;
-                std::cout << " ], F[";
-                for (uint64_t f : flags) std::cout << " " << f;
-                std::cout << " ], frames:";
-                for (uint64_t fr : e->frames) std::cout << " " << fr;
-                std::cout << std::endl;
-
-                for (uint64_t f : flags) {
-                    if (detectors.size() == 1) {
-                        this->flag_singleton_map[f].insert(e);
-                    } else {
-                        this->flag_edge_map[f].insert(e);
-                    }
-                }
-                e->flags = std::set<uint64_t>(flags.begin(), flags.end());
-            }
+            e->flags = std::set<uint64_t>(flags.begin(), flags.end());
+            tentative_edges.push_back(e);
         };
     size_t detector_offset = 0;
     read_detector_error_model(dem, 1, detector_offset, ef, df);
+
+    resolve_edges(tentative_edges);
 }
 
 sptr<vertex_t>
@@ -179,6 +117,10 @@ DecodingGraph::make_and_add_vertex_(uint64_t d, const DetailedStimCircuit& circu
         }
     }
     return x;
+}
+
+void
+DecodingGraph::resolve_edges(std::vector<sptr<hyperedge_t>>& edge_list) {
 }
 
 std::vector<sptr<hyperedge_t>>

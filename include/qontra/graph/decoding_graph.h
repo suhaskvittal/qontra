@@ -52,7 +52,6 @@ struct error_chain_t {
 };
 
 typedef std::vector<fp_t> poly_t;
-
 typedef Graph<decoding::vertex_t, decoding::edge_t> DijkstraGraph;
 
 class DecodingGraph : public HyperGraph<decoding::vertex_t, decoding::hyperedge_t> {
@@ -77,7 +76,6 @@ public:
     void    deactivate_flags(void);
 
     std::vector<sptr<decoding::hyperedge_t>> get_flag_edges(void);
-    std::vector<sptr<decoding::hyperedge_t>> get_flag_singletons(void);
 
     poly_t  get_error_polynomial(void);
     fp_t    get_expected_errors(void);
@@ -88,8 +86,7 @@ protected:
 private:
     sptr<decoding::vertex_t>    make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
 
-    std::vector<sptr<decoding::hyperedge_t>>
-        get_flags_from_map(const std::map<uint64_t, std::set<sptr<decoding::hyperedge_t>>>&);
+    void    resolve_edges(std::vector<sptr<decoding::hyperedge_t>>&);
 
     void    dijkstra_(int, int, sptr<decoding::vertex_t> from);
     void    make_dijkstra_graph(int, int);
@@ -110,7 +107,6 @@ private:
     std::vector<uint64_t> active_flags;
 
     std::set<uint64_t> flag_detectors;
-    std::map<uint64_t, std::set<sptr<decoding::hyperedge_t>>> flag_singleton_map;
     std::map<uint64_t, std::set<sptr<decoding::hyperedge_t>>> flag_edge_map;
     bool flags_are_active;
 };
