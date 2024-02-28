@@ -10,9 +10,20 @@
 namespace qontra {
 
 using namespace graph;
+using namespace decoding;
+
+MatchingBase::MatchingBase(const DetailedStimCircuit& circuit, int flips_per_error)
+    :Decoder(circuit),
+    base_corr(circuit.count_observables()),
+    decoding_graph(std::make_unique<DecodingGraph>(circuit, flips_per_error)),
+    detectors(),
+    flags()
+{}
 
 void
 MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int c1, int c2) {
+    base_corr.clear();
+
     std::vector<uint64_t> all_dets = get_nonzero_detectors(syndrome);
     detectors.clear();
     flags.clear();
@@ -27,11 +38,22 @@ MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int 
             detectors.push_back(d);
         }
     }
+    // Activate flag edges in decoding_graph.
+    decoding_graph->activate_flags(flags);
+    // Check for any flag singletons. If any exist, remove any detectors associated with the singleton.
+    if (flags.size()) {
+        for (sptr<hyperedge_t> e : decoding_graph->get_flag_singletons()) {
+            uint64_t d = e->get<vertex_t>(0)->id;
+            auto it = std::find(detectors.begin(), detectors.end(), d);
+            if (it != detectors.end()) {
+                detectors.erase(it);
+                for (uint64_t fr : e->frames) base_corr[fr] ^= 1;
+            }
+        }
+    }
     if (detectors.size() & 1) {
         detectors.push_back(get_color_boundary_index(COLOR_ANY));
     }
-    // Activate flag edges in decoding_graph.
-    decoding_graph->activate_flags(flags);
 }
 
 std::vector<Decoder::assign_t>

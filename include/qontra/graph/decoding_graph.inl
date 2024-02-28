@@ -118,22 +118,14 @@ DecodingGraph::update_state() {
     return true;
 }
 
-inline sptr<decoding::vertex_t>
-DecodingGraph::make_and_add_vertex_(uint64_t d, const DetailedStimCircuit& circuit) {
-    sptr<decoding::vertex_t> x = make_and_add_vertex(d);
-    if (circuit.detector_color_map.count(d)) {
-        x->color = circuit.detector_color_map.at(d);
-    }
-    if (circuit.detector_base_map.count(d)) {
-        uint64_t bd = circuit.detector_base_map.at(d);
-        if (d != bd && !this->contains(bd)) {
-            sptr<decoding::vertex_t> _x = make_and_add_vertex_(bd, circuit);
-            x->base = _x;
-        } else {
-            x->base = this->get_vertex(bd);
-        }
-    }
-    return x;
+inline std::vector<sptr<decoding::hyperedge_t>>
+DecodingGraph::get_flag_edges() {
+    return get_flags_from_map(flag_edge_map);
+}
+
+inline std::vector<sptr<decoding::hyperedge_t>>
+DecodingGraph::get_flag_singletons() {
+    return get_flags_from_map(flag_singleton_map);
 }
 
 inline std::vector<int>

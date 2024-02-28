@@ -13,18 +13,15 @@ namespace qontra {
 
 class MatchingBase : public Decoder {
 public:
-    MatchingBase(const DetailedStimCircuit& circuit, int flips_per_error)
-        :Decoder(circuit),
-        decoding_graph(std::make_unique<graph::DecodingGraph>(circuit, flips_per_error)),
-        detectors(),
-        flags()
-    {}
+    MatchingBase(const DetailedStimCircuit&, int flips_per_error);
 
     void load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH>, int=graph::COLOR_ANY, int=graph::COLOR_ANY);
 
     std::vector<Decoder::assign_t>
         compute_matching(int=graph::COLOR_ANY, int=graph::COLOR_ANY, bool split_thru_boundary_match=false);
 protected:
+    stim::simd_bits<SIMD_WIDTH> base_corr;
+
     uptr<graph::DecodingGraph> decoding_graph;
 
     std::vector<uint64_t>   detectors;

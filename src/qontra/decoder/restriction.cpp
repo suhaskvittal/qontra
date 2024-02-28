@@ -75,17 +75,20 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     const size_t n_obs = circuit.count_observables();
     stim::simd_bits<SIMD_WIDTH> corr(n_obs);
 
-
     load_syndrome(syndrome);
+    corr ^= base_corr;
+
     auto _detectors = std::move(detectors);
     auto _flags = std::move(flags);
     if (_detectors.empty()) return { 0.0, corr };
 
+    /*
     std::cout << "syndrome: D[";
     for (uint64_t d : _detectors) std::cout << " " << d;
     std::cout << " ], F[";
     for (uint64_t f : _flags) std::cout << " " << f;
     std::cout << " ]" << std::endl;
+    */
 
     // Compute the MWPM for each restricted lattice.
     std::vector<assign_t> matchings;

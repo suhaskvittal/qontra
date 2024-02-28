@@ -26,7 +26,6 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     active_flags(),
     flag_edge_map(),
     flag_detectors(circuit.flag_detectors),
-    flag_ownership_map(),
     flags_are_active(false)
 {
     stim::DetectorErrorModel dem =
@@ -101,7 +100,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                     }
                 }
             }
-            if (detectors.size() <= 1) {
+            if (detectors.size() <= 1 && flags.empty()) {
                 std::cerr << "[ DecodingGraph ] skipping over hyperedge: [";
                 for (uint64_t d : detectors) std::cerr << " " << d;
                 std::cerr << " ], F[";
@@ -142,19 +141,68 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
             if (flags.empty()) {
                 this->add_edge(e);
             } else {
+                /*
                 std::cout << "Flag edge: D[";
                 for (uint64_t d : detectors) std::cout << " " << d;
                 std::cout << " ], F[";
                 for (uint64_t f : flags) std::cout << " " << f;
                 std::cout << " ]" << std::endl;
+                */
+
                 for (uint64_t f : flags) {
-                    this->flag_edge_map[f].insert(e);
+                    if (detectors.size() == 1) {
+                        this->flag_singleton_map[f].insert(e);
+                    } else {
+                        this->flag_edge_map[f].insert(e);
+                    }
                 }
                 e->flags = std::set<uint64_t>(flags.begin(), flags.end());
             }
         };
     size_t detector_offset = 0;
     read_detector_error_model(dem, 1, detector_offset, ef, df);
+}
+
+sptr<vertex_t>
+DecodingGraph::make_and_add_vertex_(uint64_t d, const DetailedStimCircuit& circuit) {
+    sptr<vertex_t> x = make_and_add_vertex(d);
+    if (circuit.detector_color_map.count(d)) {
+        x->color = circuit.detector_color_map.at(d);
+    }
+    if (circuit.detector_base_map.count(d)) {
+        uint64_t bd = circuit.detector_base_map.at(d);
+        if (d != bd && !this->contains(bd)) {
+            sptr<vertex_t> _x = make_and_add_vertex_(bd, circuit);
+            x->base = _x;
+        } else {
+            x->base = this->get_vertex(bd);
+        }
+    }
+    return x;
+}
+
+std::vector<sptr<hyperedge_t>>
+DecodingGraph::get_flags_from_map(
+        const std::map<uint64_t, std::set<sptr<hyperedge_t>>>& flag_map)
+{
+    std::map<sptr<hyperedge_t>, std::set<uint64_t>> remaining_flags_map;
+    // edge_list should only contain edges such that all flags associated with
+    // the flag edge are present in the flag detectors.
+    std::vector<sptr<hyperedge_t>> edge_list;
+    for (uint64_t fd : active_flags) {
+        if (!flag_map.count(fd)) continue;
+        for (sptr<hyperedge_t> he : flag_map.at(fd)) {
+            // We will only consider he once all of its flags are found.
+            if (!remaining_flags_map.count(he)) {
+                remaining_flags_map[he] = he->flags;
+            }
+            remaining_flags_map[he].erase(fd);
+            if (remaining_flags_map[he].empty()) {
+                edge_list.push_back(he);
+            }
+        }
+    }
+    return edge_list;
 }
 
 void
@@ -244,40 +292,28 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     }
     // Now, add edges to the graph.
     // First handle flag edges.
-    std::map<sptr<hyperedge_t>, std::set<uint64_t>> remaining_flags_map;
-    std::map<sptr<vertex_t>, std::tuple<fp_t, size_t>> flag_owner_renorm_map;
-
     fp_t renorm_factor = 1.0;
-    for (uint64_t fd : active_flags) {
-        for (sptr<hyperedge_t> he : flag_edge_map[fd]) {
-            // We will only consider he once all of its flags are found.
-            if (!remaining_flags_map.count(he)) {
-                remaining_flags_map[he] = he->flags;
-            }
-            remaining_flags_map[he].erase(fd);
-            if (remaining_flags_map[he].size()) continue;
-
-            fp_t p = he->probability;
-            bool any_flag_edge = false;
-            for (size_t i = 0; i < he->get_order(); i++) {
-                sptr<vertex_t> v = he->get<vertex_t>(i);
-                if (!dgr->contains(v)) continue;
-                for (size_t j = i+1; j < he->get_order(); j++) {
-                    sptr<vertex_t> w = he->get<vertex_t>(j);
-                    if (!dgr->contains(w)) continue;
-                    // Make edge if it does not exist. Update probability.
-                    sptr<edge_t> e = dgr->get_edge(v, w);
-                    if (e == nullptr) {
-                        e = dgr->make_and_add_edge(v, w);
-                    }
-                    fp_t& r = e->probability;
-                    r = (1-r)*p + (1-p)*r;
-                    any_flag_edge = true;
+    for (sptr<hyperedge_t> he : get_flag_edges()) {
+        fp_t p = he->probability;
+        bool any_flag_edge = false;
+        for (size_t i = 0; i < he->get_order(); i++) {
+            sptr<vertex_t> v = he->get<vertex_t>(i);
+            if (!dgr->contains(v)) continue;
+            for (size_t j = i+1; j < he->get_order(); j++) {
+                sptr<vertex_t> w = he->get<vertex_t>(j);
+                if (!dgr->contains(w)) continue;
+                // Make edge if it does not exist. Update probability.
+                sptr<edge_t> e = dgr->get_edge(v, w);
+                if (e == nullptr) {
+                    e = dgr->make_and_add_edge(v, w);
                 }
+                fp_t& r = e->probability;
+                r = (1-r)*p + (1-p)*r;
+                any_flag_edge = true;
             }
-            if (any_flag_edge) {
-                renorm_factor *= p;
-            }
+        }
+        if (any_flag_edge) {
+            renorm_factor *= p;
         }
     }
     // Now handle other edges.

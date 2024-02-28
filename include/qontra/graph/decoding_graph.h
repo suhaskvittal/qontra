@@ -67,13 +67,17 @@ public:
     error_chain_t get(uint64_t, uint64_t, bool force_unflagged=false);
     error_chain_t get(sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
     error_chain_t get(int c1, int c2, uint64_t, uint64_t, bool force_unflagged=false);
-    error_chain_t get(int c1, int c2, sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
+    error_chain_t get(
+            int c1, int c2, sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
 
     std::vector<sptr<decoding::vertex_t>>
         get_complementary_boundaries_to(std::vector<sptr<decoding::vertex_t>>);
     
     void    activate_flags(const std::vector<uint64_t>& all_detectors);
     void    deactivate_flags(void);
+
+    std::vector<sptr<decoding::hyperedge_t>> get_flag_edges(void);
+    std::vector<sptr<decoding::hyperedge_t>> get_flag_singletons(void);
 
     poly_t  get_error_polynomial(void);
     fp_t    get_expected_errors(void);
@@ -83,6 +87,9 @@ protected:
     bool    update_state(void) override;
 private:
     sptr<decoding::vertex_t>    make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
+
+    std::vector<sptr<decoding::hyperedge_t>>
+        get_flags_from_map(const std::map<uint64_t, std::set<sptr<decoding::hyperedge_t>>>&);
 
     void    dijkstra_(int, int, sptr<decoding::vertex_t> from);
     void    make_dijkstra_graph(int, int);
@@ -102,9 +109,9 @@ private:
 
     std::vector<uint64_t> active_flags;
 
-    std::map<uint64_t, std::set<sptr<decoding::hyperedge_t>>> flag_edge_map;
     std::set<uint64_t> flag_detectors;
-    std::map<uint64_t, sptr<decoding::vertex_t>> flag_ownership_map;
+    std::map<uint64_t, std::set<sptr<decoding::hyperedge_t>>> flag_singleton_map;
+    std::map<uint64_t, std::set<sptr<decoding::hyperedge_t>>> flag_edge_map;
     bool flags_are_active;
 };
 
