@@ -62,18 +62,18 @@ memory_experiment(Decoder* dec, memory_config_t config, PROLOGUE p_cb, EPILOGUE 
             return;
         }
 #ifdef MEMORY_DEBUG
-        std::cout << "--------------------------------------" << std::endl;
+        std::cerr << "--------------------------------------" << std::endl;
 #endif
         // Decode syndrome
         auto res = dec->decode_error(syndrome); 
 #ifdef MEMORY_DEBUG
         if (payload.observables != res.corr) {
-            std::cout << "is logical error!" << std::endl;
-            std::cout << "\texpected: ";
-            for (size_t i = 0; i < n_obs; i++) std::cout << payload.observables[i]+0;
-            std::cout << std::endl << "\treceived: ";
-            for (size_t i = 0; i < n_obs; i++) std::cout << res.corr[i]+0;
-            std::cout << std::endl;
+            std::cerr << "is logical error!" << std::endl;
+            std::cerr << "\texpected: ";
+            for (size_t i = 0; i < n_obs; i++) std::cerr << payload.observables[i]+0;
+            std::cerr << std::endl << "\treceived: ";
+            for (size_t i = 0; i < n_obs; i++) std::cerr << res.corr[i]+0;
+            std::cerr << std::endl;
         }
 #endif
         logical_errors[0] += (bool) (payload.observables != res.corr);

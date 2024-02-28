@@ -102,12 +102,14 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 }
             }
             if (detectors.size() <= 1) return;
+            /*
             if (flags.empty() && detectors.size() > flips_per_error) {
                 std::cerr << "[ DecodingGraph ] skipping over hyperedge: [";
                 for (uint64_t d : detectors) std::cerr << " " << d;
                 std::cerr << " ]" << std::endl;
                 return;
             }
+            */
             // Create hyperedge now.
             std::vector<sptr<vertex_t>> vlist;
             for (uint64_t d : detectors) {
@@ -133,6 +135,12 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
             if (flags.empty()) {
                 this->add_edge(e);
             } else {
+                std::cout << "Flag edge: D[";
+                for (uint64_t d : detectors) std::cout << " " << d;
+                std::cout << " ], F[";
+                for (uint64_t f : flags) std::cout << " " << f;
+                std::cout << " ]" << std::endl;
+
                 for (uint64_t f : flags) {
                     this->flag_edge_map[f].insert(e);
                 }
@@ -233,8 +241,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     std::map<sptr<hyperedge_t>, std::set<uint64_t>> remaining_flags_map;
     std::map<sptr<vertex_t>, std::tuple<fp_t, size_t>> flag_owner_renorm_map;
 
-    fp_t renorm_factor = 0.0;
-    size_t n_flags_used = 0;
+    fp_t renorm_factor = 1.0;
     for (uint64_t fd : active_flags) {
         for (sptr<hyperedge_t> he : flag_edge_map[fd]) {
             // We will only consider he once all of its flags are found.
@@ -263,15 +270,9 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 }
             }
             if (any_flag_edge) {
-                renorm_factor += p;
-                n_flags_used++;
+                renorm_factor *= p;
             }
         }
-    }
-    if (n_flags_used == 0) {
-        renorm_factor = 1.0;
-    } else {
-        renorm_factor /= static_cast<fp_t>(n_flags_used);
     }
     // Now handle other edges.
     for (sptr<vertex_t> v : dgr->get_vertices()) {

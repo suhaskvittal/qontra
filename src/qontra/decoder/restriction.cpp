@@ -130,14 +130,14 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 r_compute_correction:
     std::set<sptr<vertex_t>> not_cc_incident,
                              in_cc_incident;
-    insert_incident_vertices(not_cc_incident, not_cc_map, COLOR_RED);
+    insert_incident_vertices(not_cc_incident, not_cc_map, (COLOR_RED + tries/5) % 3);
     for (auto& es : component_edge_sets) {
         // Remove any deleted edges from the edge set.
         for (auto it = es.first.begin(); it != es.first.end(); ) {
             if (!in_cc_map.count(*it))  it = es.first.erase(it);
             else                        it++;
         }
-        insert_incident_vertices(in_cc_incident, es.first, es.second);
+        insert_incident_vertices(in_cc_incident, es.first, (es.second + tries/5) % 3);
     }
     std::set<sptr<vertex_t>> all_incident(not_cc_incident);
     vtils::insert_range(all_incident, in_cc_incident);

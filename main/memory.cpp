@@ -5,7 +5,6 @@
 
 #include <qontra/decoder/chromobius.h>
 #include <qontra/decoder/mwpm.h>
-#include <qontra/decoder/neural_assisted.h>
 #include <qontra/decoder/pymatching.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/experiments.h>
