@@ -13,6 +13,7 @@ namespace graph {
 
 class EdgeClass {
 public:
+    EdgeClass() = default;
     EdgeClass(sptr<decoding::hyperedge_t>);
     EdgeClass(const EdgeClass&) = default;
 

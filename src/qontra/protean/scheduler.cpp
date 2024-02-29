@@ -520,6 +520,9 @@ PhysicalNetwork::make_schedule() {
                     safe_emplace_back(program, "event", std::vector<uint64_t>{event_ctr, mt});
                     program.back().put(print_v(rfq));
                     program.back().put("flag");
+                    int64_t base = (event_ctr % n_et);
+                    if (config.rounds > 1) base += n_et;
+                    program.back().put("base", base);
                     event_ctr++;
                 }
             }

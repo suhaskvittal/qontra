@@ -54,7 +54,6 @@ MatchingBase::load_syndrome(
         decoding_graph->activate_flags(flags);
         flag_edges = decoding_graph->get_flag_edges();
 
-        /*
         std::cout << "Flag edges:" << std::endl;
         for (sptr<hyperedge_t> e : flag_edges) {
             std::cout << "\tD[";
@@ -71,7 +70,6 @@ MatchingBase::load_syndrome(
             }
             std::cout << std::endl;
         }
-        */
     }
 }
 

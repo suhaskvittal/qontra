@@ -78,6 +78,13 @@ DecodingGraph::deactivate_flags() {
 }
 
 inline sptr<decoding::hyperedge_t>
+DecodingGraph::get_best_edge_from_class_of(sptr<decoding::hyperedge_t> e) {
+    const EdgeClass& c = edge_class_map.at(e);
+    sptr<decoding::hyperedge_t> _e = get_best_flag_edge(c.get_edges());
+    return _e == nullptr ? e : _e;
+}
+
+inline sptr<decoding::hyperedge_t>
 DecodingGraph::get_best_nod_edge(bool exact_match) {
     sptr<decoding::hyperedge_t> e = get_best_flag_edge(nod_edges);
     if (e == nullptr || (exact_match && e->flags.size() != active_flags.size())) return nullptr;
