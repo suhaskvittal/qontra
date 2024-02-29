@@ -23,7 +23,7 @@ cmd_1 = r'''
 cmd_2 = r'''
         cd Release
         mkdir -p %s/nn/data
-        mpirun -np %d ./pr_nn_data %s --decoder %s --s %d
+        mpirun -np %d ./pr_nn_data %s --decoder %s --s %d --p 5e-4
         ''' % (folder, n_proc, folder, decoder, 10*shots)
 cmd_3 = r'''
         cd Release
@@ -35,7 +35,7 @@ cmd_4 = r'''
         mpirun -np %d ./pr_nn_memory %s --decoder %s --s %d
         ''' % (folder, n_proc, folder, decoder, shots)
 
-for cmd in [cmd_2, cmd_3, cmd_4]:
+for cmd in [cmd_1]:
     print('----------------------------')
     print(cmd)
     os.system(cmd)
