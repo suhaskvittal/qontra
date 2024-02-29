@@ -118,16 +118,6 @@ DecodingGraph::update_state() {
     return true;
 }
 
-inline std::vector<sptr<decoding::hyperedge_t>>
-DecodingGraph::get_flag_edges() {
-    return get_flags_from_map(flag_edge_map);
-}
-
-inline std::vector<sptr<decoding::hyperedge_t>>
-DecodingGraph::get_flag_singletons() {
-    return get_flags_from_map(flag_singleton_map);
-}
-
 inline std::vector<int>
 get_complementary_colors_to(std::vector<int> clist, int number_of_colors) {
     std::set<int> clist_set(clist.begin(), clist.end());

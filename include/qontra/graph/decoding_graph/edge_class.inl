@@ -24,8 +24,8 @@ EdgeClass::get_edges() const {
 }
 
 inline bool
-are_in_same_class(sptr<hyperedge_t> x, sptr<hyperedge_t> y) {
-    return x->detectors == y->detectors;
+are_in_same_class(sptr<decoding::hyperedge_t> x, sptr<decoding::hyperedge_t> y) {
+    return x->endpoints == y->endpoints;
 }
 
 }   // graph

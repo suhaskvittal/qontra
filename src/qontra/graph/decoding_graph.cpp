@@ -4,6 +4,7 @@
  * */
 
 #include "qontra/graph/decoding_graph.h"
+#include "qontra/graph/decoding_graph/edge_class.h"
 
 #include <vtils/utility.h>
 
@@ -98,7 +99,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     size_t detector_offset = 0;
     read_detector_error_model(dem, 1, detector_offset, ef, df);
 
-    resolve_edges(tentative_edges);
+    resolve_edges(tentative_edges, flips_per_error);
 }
 
 sptr<vertex_t>
@@ -125,25 +126,53 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
     // Go through and add boundaries to any edges if necessary.
     for (EdgeClass& c : classes) {
         // Add boundaries based on whether or not the representative is a flag edge.
-        if (c.rep->flags.empty()) {
-            if (c.rep->detectors.size() < flips_per_error) { 
+        sptr<hyperedge_t> rep = c.get_representative();
+        if (rep->flags.empty()) {
+            if (rep->get_order() < flips_per_error) { 
                 std::vector<sptr<vertex_t>> boundary_list = 
-                    get_complementary_boundaries_to(c.rep->get<vertex_t>());
-                if (boundary_list.size() + c.rep->detectors.size() == flips_per_error) {
+                    get_complementary_boundaries_to(rep->get<vertex_t>());
+                if (boundary_list.size() + rep->get_order() == flips_per_error) {
                     for (sptr<vertex_t> vb : boundary_list) c.add_vertex(vb);
                 }
             }
         } else {
             // Here, we operate under the assumption that the representative edge is a two qubit error
             // that will flip two detectors.
-            if (c.rep->detectors.size() == 1) {
+            if (rep->get_order() == 1) {
                 // We have a single detector that must be linked to a boundary. We can just link to the
                 // boundary of the same color.
-                int c = c.rep->get<vertex_t>(0)->color;
-                c.add_vertex(get_boundary_vertex(c));
+                int color = rep->get<vertex_t>(0)->color;
+                c.add_vertex(get_boundary_vertex(color));
             }
         }
-        for (sptr<hyperedge_t> e : c.rep->edges) safe_add_edge(e);
+
+        std::cout << "\nEquivalence class of D[";
+        for (size_t i = 0; i < rep->get_order(); i++) {
+            std::cout << " " << print_v(rep->get<vertex_t>(i));
+        }
+        std::cout << " ], F[";
+        for (uint64_t f : rep->flags) {
+            std::cout << " " << f;
+        }
+        std::cout << " ]" << std::endl;
+
+        for (sptr<hyperedge_t> e : c.get_edges()) {
+            std::cout << "\tD[";
+            for (size_t i = 0; i < e->get_order(); i++) {
+                std::cout << " " << print_v(e->get<vertex_t>(i));
+            }
+            std::cout << " ], F[";
+            for (uint64_t f : e->flags) {
+                std::cout << " " << f;
+            }
+            std::cout << " ], frames:";
+            for (uint64_t fr : e->frames) {
+                std::cout << " " << fr;
+            }
+            std::cout << std::endl;
+
+            safe_add_edge(e);
+        }
     }
 }
 
@@ -151,7 +180,7 @@ void
 DecodingGraph::safe_add_edge(sptr<hyperedge_t> e) {
     if (e->flags.empty()) {
         // Then check if the edge already exists in the graph.
-        sptr<hyperedge_t> _e = get_edge(e->endpoints);
+        sptr<hyperedge_t> _e = get_edge(e->get<vertex_t>());
         if (_e == nullptr) {
             add_edge(e);
         } else {
@@ -169,16 +198,13 @@ DecodingGraph::safe_add_edge(sptr<hyperedge_t> e) {
 }
 
 std::vector<sptr<hyperedge_t>>
-DecodingGraph::get_flags_from_map(
-        const std::map<uint64_t, std::set<sptr<hyperedge_t>>>& flag_map)
-{
+DecodingGraph::get_flag_edges() {
     std::map<sptr<hyperedge_t>, std::set<uint64_t>> remaining_flags_map;
     // edge_list should only contain edges such that all flags associated with
     // the flag edge are present in the flag detectors.
     std::vector<sptr<hyperedge_t>> edge_list;
     for (uint64_t fd : active_flags) {
-        if (!flag_map.count(fd)) continue;
-        for (sptr<hyperedge_t> he : flag_map.at(fd)) {
+        for (sptr<hyperedge_t> he : flag_edge_map.at(fd)) {
             // We will only consider he once all of its flags are found.
             if (!remaining_flags_map.count(he)) {
                 remaining_flags_map[he] = he->flags;

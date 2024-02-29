@@ -85,7 +85,7 @@ protected:
 private:
     sptr<decoding::vertex_t>    make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
 
-    void resolve_edges(const std::vector<sptr<decoding::hyperedge_t>>&);
+    void resolve_edges(const std::vector<sptr<decoding::hyperedge_t>>&, size_t flips_per_error);
     void safe_add_edge(sptr<decoding::hyperedge_t>);
 
     void dijkstra_(int, int, sptr<decoding::vertex_t> from);

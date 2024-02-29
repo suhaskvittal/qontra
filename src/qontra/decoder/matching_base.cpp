@@ -14,19 +14,18 @@ using namespace decoding;
 
 MatchingBase::MatchingBase(const DetailedStimCircuit& circuit, int flips_per_error)
     :Decoder(circuit),
-    base_corr(circuit.count_observables()),
     decoding_graph(std::make_unique<DecodingGraph>(circuit, flips_per_error)),
     detectors(),
-    flags()
+    flags(),
+    flag_edges()
 {}
 
 void
 MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int c1, int c2) {
-    base_corr.clear();
-
     std::vector<uint64_t> all_dets = get_nonzero_detectors(syndrome);
     detectors.clear();
     flags.clear();
+    flag_edges.clear();
     // Track the number of detectors of each color.
     for (uint64_t d : all_dets) {
         if (circuit.flag_detectors.count(d)) {
@@ -38,21 +37,28 @@ MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int 
             detectors.push_back(d);
         }
     }
-    // Activate flag edges in decoding_graph.
-    decoding_graph->activate_flags(flags);
-    // Check for any flag singletons. If any exist, remove any detectors associated with the singleton.
-    if (flags.size()) {
-        for (sptr<hyperedge_t> e : decoding_graph->get_flag_singletons()) {
-            uint64_t d = e->get<vertex_t>(0)->id;
-            auto it = std::find(detectors.begin(), detectors.end(), d);
-            if (it != detectors.end()) {
-                detectors.erase(it);
-                for (uint64_t fr : e->frames) base_corr[fr] ^= 1;
-            }
-        }
-    }
     if (detectors.size() & 1) {
         detectors.push_back(get_color_boundary_index(COLOR_ANY));
+    }
+    // Activate flag edges in decoding_graph.
+    decoding_graph->activate_flags(flags);
+    flag_edges = decoding_graph->get_flag_edges();
+
+    std::cout << "Flag edges:" << std::endl;
+    for (sptr<hyperedge_t> e : flag_edges) {
+        std::cout << "\tD[";
+        for (size_t i = 0; i < e->get_order(); i++) {
+            std::cout << " " << print_v(e->get<vertex_t>(i));
+        }
+        std::cout << " ], F[";
+        for (uint64_t f : e->flags) {
+            std::cout << " " << f;
+        }
+        std::cout << " ], frames:";
+        for (uint64_t fr : e->frames) {
+            std::cout << " " << fr;
+        }
+        std::cout << std::endl;
     }
 }
 
@@ -135,6 +141,24 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
         }
     }
     return assign_arr;
+}
+
+sptr<hyperedge_t>
+MatchingBase::get_flag_edge_for(std::vector<sptr<vertex_t>> vlist) {
+    for (sptr<hyperedge_t> e : flag_edges) {
+        if (e->get_order() != vlist.size()) continue;
+
+        bool all_match = true;
+        for (size_t i = 0; i < e->get_order(); i++) {
+            sptr<vertex_t> v = e->get<vertex_t>(i);
+            if (std::find(vlist.begin(), vlist.end(), v) == vlist.end()) {
+                all_match = false;
+                break;
+            }
+        }
+        if (all_match) return e;
+    }
+    return nullptr;
 }
 
 }   // qontra

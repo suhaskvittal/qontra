@@ -19,13 +19,16 @@ public:
 
     std::vector<Decoder::assign_t>
         compute_matching(int=graph::COLOR_ANY, int=graph::COLOR_ANY, bool split_thru_boundary_match=false);
-protected:
-    stim::simd_bits<SIMD_WIDTH> base_corr;
 
+    sptr<graph::decoding::hyperedge_t>
+        get_flag_edge_for(std::vector<sptr<graph::decoding::vertex_t>>);
+protected:
     uptr<graph::DecodingGraph> decoding_graph;
 
     std::vector<uint64_t>   detectors;
     std::vector<uint64_t>   flags;
+private:
+    std::vector<sptr<graph::decoding::hyperedge_t>> flag_edges;
 };
 
 }   // qontra

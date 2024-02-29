@@ -13,7 +13,9 @@ namespace graph {
 
 class EdgeClass {
 public:
-    std::vector<EdgeClass>
+    EdgeClass(sptr<decoding::hyperedge_t>);
+
+    static std::vector<EdgeClass>
         from_edges(const std::vector<sptr<decoding::hyperedge_t>>&);
 
     void add_vertex(sptr<decoding::vertex_t>);
@@ -21,8 +23,6 @@ public:
     sptr<decoding::hyperedge_t> get_representative(void) const;
     std::vector<sptr<decoding::hyperedge_t>> get_edges(void) const;
 private:
-    EdgeClass(sptr<decoding::hyperedge_t>, std::vector<sptr<decoding::hyperedge_t>>);
-
     sptr<decoding::hyperedge_t> rep;
     std::vector<sptr<decoding::hyperedge_t>> edges;
 };

@@ -10,7 +10,9 @@ namespace base {
 
 template <class V> inline std::vector<sptr<V>>
 hyperedge_t::get() const {
-    return std::vector<sptr<V>>(endpoints.begin(), endpoints.end());
+    std::vector<sptr<V>> vlist;
+    for (sptr<void> v : endpoints) vlist.push_back(std::reinterpret_pointer_cast<V>(v));
+    return vlist;
 }
 
 template <class V> inline sptr<V>

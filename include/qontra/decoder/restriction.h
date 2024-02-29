@@ -39,7 +39,8 @@ protected:
                         int component_color,
                         int matching_color_1,
                         int matching_color_2,
-                        bool force_unflagged=false);
+                        bool force_unflagged,
+                        stim::simd_bits_range_ref<SIMD_WIDTH>);
 
     void insert_incident_vertices(
             std::set<sptr<graph::decoding::vertex_t>>&, const std::set<vpair_t>&, int);

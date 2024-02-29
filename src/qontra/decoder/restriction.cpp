@@ -76,22 +76,17 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     stim::simd_bits<SIMD_WIDTH> corr(n_obs);
 
     load_syndrome(syndrome);
-    corr ^= base_corr;
 
     auto _detectors = std::move(detectors);
     auto _flags = std::move(flags);
+
+    if (_detectors.empty()) return { 0.0, corr };
 
     std::cout << "syndrome: D[";
     for (uint64_t d : _detectors) std::cout << " " << d;
     std::cout << " ], F[";
     for (uint64_t f : _flags) std::cout << " " << f;
     std::cout << " ]" << std::endl;
-
-    std::cout << "init corr: ";
-    for (size_t i = 0; i < n_obs; i++) std::cout << (corr[i]+0);
-    std::cout << std::endl;
-
-    if (_detectors.empty()) return { 0.0, corr };
 
     // Compute the MWPM for each restricted lattice.
     std::vector<assign_t> matchings;
@@ -125,7 +120,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                            w = decoding_graph->get_vertex(std::get<1>(m));
             std::set<vpair_t> tmp =
-                insert_error_chain_into(in_cc_map, v, w, color, std::get<2>(m), std::get<3>(m));
+                insert_error_chain_into(in_cc_map, v, w, color, std::get<2>(m), std::get<3>(m), false, corr);
             vtils::insert_range(edge_set, tmp);
         }
         component_edge_sets.emplace_back(edge_set, color);
@@ -136,7 +131,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                        w = decoding_graph->get_vertex(std::get<1>(m));
         if (std::get<2>(m) != COLOR_RED && std::get<3>(m) != COLOR_RED) continue;
-        insert_error_chain_into(not_cc_map, v, w, COLOR_RED, std::get<2>(m), std::get<3>(m));
+        insert_error_chain_into(not_cc_map, v, w, COLOR_RED, std::get<2>(m), std::get<3>(m), false, corr);
     }
 
     if (in_cc_map.empty() && not_cc_map.empty()) {
@@ -340,7 +335,8 @@ RestrictionDecoder::insert_error_chain_into(
         int component_color,
         int c1,
         int c2,
-        bool force_unflagged)
+        bool force_unflagged,
+        stim::simd_bits_range_ref<SIMD_WIDTH> corr)
 {
     error_chain_t ec = decoding_graph->get(c1, c2, src, dst, force_unflagged);
     for (size_t i = 1; i < ec.path.size(); i++) {
@@ -349,7 +345,10 @@ RestrictionDecoder::insert_error_chain_into(
         if (v->is_boundary_vertex && w->is_boundary_vertex) { 
             continue;
         }
-        if (v->color != component_color && w->color != component_color) {
+        // Update the correction as this maybe a flag edge.
+        sptr<hyperedge_t> e = get_flag_edge_for({v, w});
+        if (e != nullptr) {
+            for (uint64_t fr : e->frames) corr[fr] ^= 1;
             continue;
         }
         // Flatten v and w.
@@ -365,12 +364,18 @@ RestrictionDecoder::insert_error_chain_into(
                 sptr<vertex_t> fx = x->get_base();
                 if (fx->color != c1 && fx->color != c2) continue;
                 if (fx == fv || fx == fw) continue;
+                if (fv->color != component_color 
+                        && fw->color != component_color
+                        && fx->color != component_color)
+                {
+                    continue;
+                }
                 fu = fx;
                 break;
             }
             if (fu == nullptr) {
                 // When this happens, just find a path in the non-flagged graph to use.
-                insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2, true);
+                insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2, true, corr);
             } else {
                 vpair_t e1 = make_vpair(fv, fu),
                         e2 = make_vpair(fu, fw);
@@ -378,6 +383,9 @@ RestrictionDecoder::insert_error_chain_into(
                 incidence_map[e2]++;
             }
         } else {
+            if (fv->color != component_color && fw->color != component_color) {
+                continue;
+            }
             vpair_t e = make_vpair(fv, fw);
             incidence_map[e]++;
         }

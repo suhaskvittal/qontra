@@ -15,6 +15,7 @@ set(QONTRA_FILES
     src/qontra/decoder/restriction.cpp
     # Graphs
     src/qontra/graph/decoding_graph.cpp 
+    src/qontra/graph/decoding_graph/edge_class.cpp
     src/qontra/graph/tanner_graph.cpp
     # Simulators
     src/qontra/sim/base/frame_sim.cpp

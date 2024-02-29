@@ -10,9 +10,9 @@ namespace graph {
 
 using namespace decoding;
 
-EdgeClass::EdgeClass(sptr<hyperedge_t> v, std::vector<sptr<hyperedge_t>> elist)
+EdgeClass::EdgeClass(sptr<hyperedge_t> v)
     :rep(v),
-    edges(elist)
+    edges({v})
 {}
 
 std::vector<EdgeClass>
@@ -31,7 +31,7 @@ EdgeClass::from_edges(const std::vector<sptr<hyperedge_t>>& edges) {
         }
         if (found_eq_class) continue;
         // Make a new equivalence class.
-        eqs.emplace_back(e, {e});
+        eqs.emplace_back(e);
     }
     // Now, go back through each equivalence class and update the representatives.
     for (EdgeClass& c : eqs) {
