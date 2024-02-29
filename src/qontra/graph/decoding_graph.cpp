@@ -28,6 +28,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     active_flags(),
     flag_detectors(circuit.flag_detectors),
     edge_classes(),
+    flag_class_map(),
     edge_class_map(),
     nod_edges(),
     flags_are_active(false)
@@ -84,11 +85,13 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 }
             }
             if (detectors.size() == 0) {
+                /*
                 std::cout << "Detectorless event: F[";
                 for (uint64_t f : flags) std::cout << " " << f;
                 std::cout << " ], frames =";
                 for (uint64_t fr : frames) std::cout << " " << fr;
                 std::cout << ", prob = " << p << std::endl;
+                */
 
                 sptr<hyperedge_t> e = this->make_edge({});
                 e->flags = std::set<uint64_t>(flags.begin(), flags.end());
@@ -118,6 +121,34 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     resolve_edges(tentative_edges, flips_per_error);
 }
 
+sptr<hyperedge_t>
+DecodingGraph::get_base_edge(sptr<hyperedge_t> e) {
+    if (!edge_class_map.count(e)) {
+        return e;
+    }
+    // We want to (1) get the representative of e's class, (2) flatten the rep,
+    // and (3) get the class of the flattened rep. Then, we will search the class
+    // for an edge with identical frames to e and an identical number of flags to e.
+    const EdgeClass& c = edge_class_map.at(e);
+    sptr<hyperedge_t> rep = c.get_representative();
+    // Cannot flatten an edge represented by a flag edge.
+    if (rep->flags.size()) return e;
+
+    std::vector<sptr<vertex_t>> vlist;
+    for (size_t i = 0; i < rep->get_order(); i++) {
+        vlist.push_back(rep->get<vertex_t>(i)->get_base());
+    }
+    sptr<hyperedge_t> frep = get_edge(vlist);
+    const EdgeClass& fc = edge_class_map.at(frep);
+    for (sptr<hyperedge_t> fe : fc.get_edges()) {
+        if (fe->flags.size() == e->flags.size() && fe->frames == e->frames) {
+            return fe;
+        }
+    }
+    // Could not flatten this.
+    return e;
+}
+
 std::vector<sptr<hyperedge_t>>
 DecodingGraph::get_flag_edges() {
     // Select one flag edge from each equivalence class that has the most in common
@@ -130,6 +161,21 @@ DecodingGraph::get_flag_edges() {
         }
     }
     return edge_list;
+}
+
+std::map<sptr<hyperedge_t>, sptr<hyperedge_t>>
+DecodingGraph::get_best_rep_map() {
+    std::map<sptr<hyperedge_t>, sptr<hyperedge_t>> rep_map;
+    for (uint64_t f : active_flags) {
+        for (const EdgeClass& c : flag_class_map[f]) {
+            sptr<hyperedge_t> best_e = get_best_flag_edge(c.get_edges());
+            if (best_e == nullptr) {
+                best_e = c.get_representative();
+            }
+            rep_map[c.get_representative()] = best_e;
+        }
+    }
+    return rep_map;
 }
 
 sptr<vertex_t>
@@ -176,6 +222,7 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
             }
         }
 
+        /*
         std::cout << "\nEquivalence class of D[";
         for (size_t i = 0; i < rep->get_order(); i++) {
             std::cout << " " << print_v(rep->get<vertex_t>(i));
@@ -185,8 +232,10 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
             std::cout << " " << f;
         }
         std::cout << " ]" << std::endl;
+        */
 
         // Update any edge probabilities.
+        std::set<uint64_t> all_flags;
         for (sptr<hyperedge_t> e : c.get_edges()) {
             if (e->flags.size() && rep->flags.empty()) {
                 // Increase the probability of this edge, as it is also a non flag edge.
@@ -204,8 +253,10 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
                     add_edge(e);
                 }
             }
+            vtils::insert_range(all_flags, e->flags);
             edge_class_map[e] = c;
 
+            /*
             std::cout << "\tD[";
             for (size_t i = 0; i < e->get_order(); i++) {
                 std::cout << " " << print_v(e->get<vertex_t>(i));
@@ -219,8 +270,12 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
                 std::cout << " " << fr;
             }
             std::cout << ", prob = " << e->probability <<  std::endl;
+            */
         }
         edge_classes.push_back(c);
+        for (uint64_t f : all_flags) {
+            flag_class_map[f].push_back(c);
+        }
     }
 }
 
@@ -357,7 +412,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
         }
     }
 
-    std::cout << "renorm factor: " << renorm_factor << std::endl;
+//  std::cout << "renorm factor: " << renorm_factor << std::endl;
 
     // Now handle other edges.
     for (sptr<vertex_t> v : dgr->get_vertices()) {

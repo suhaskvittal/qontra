@@ -81,11 +81,13 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     auto _detectors = detectors;
     auto _flags = flags;
 
+    /*
     std::cout << "syndrome: D[";
     for (uint64_t d : _detectors) std::cout << " " << d;
     std::cout << " ], F[";
     for (uint64_t f : _flags) std::cout << " " << f;
     std::cout << " ]" << std::endl;
+    */
 
     if (_detectors.empty()) return ret_no_detectors();
 
@@ -98,11 +100,11 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             load_syndrome(syndrome, c1, c2, false);
             std::vector<Decoder::assign_t> _matchings = compute_matching(c1, c2, true);
 
-            std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
+//          std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
             for (Decoder::assign_t x : _matchings) {
                 matchings.push_back(cast_assign(x, c1, c2));
 
-                std::cout << "\t" << std::get<0>(x) << " <---> " << std::get<1>(x) << std::endl;
+//              std::cout << "\t" << std::get<0>(x) << " <---> " << std::get<1>(x) << std::endl;
             }
         }
     }
@@ -155,11 +157,13 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     }
 
     for (sptr<hyperedge_t> e : triggered_flag_edges) {
+        /*
         std::cout << "Applying correction for edge D[";
         for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v);
         std::cout << ", frames =";
         for (uint64_t fr : e->frames) std::cout << " " << fr;
         std::cout << std::endl;
+        */
 
         for (uint64_t fr : e->frames) corr[fr] ^= 1;
     }
@@ -167,12 +171,9 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     if (in_cc_map.empty() && not_cc_map.empty()) {
         return { 0, corr };
     }
-    // Note that now, all edges have been flattened. We should also flatten the flags
-    // for when we get the incident faces.
-    for (uint64_t& f : flags) {
-        f = circuit.detector_base_map.at(f);
-    }
-    decoding_graph->activate_flags(flags);
+
+    auto best_rep_map = decoding_graph->get_best_rep_map();
+    best_rep_map = flatten_edge_map(best_rep_map);
 
     // Here, we will iterate multiple times and try to match faces as much as possible.
     size_t tries = 0;
@@ -192,7 +193,7 @@ r_compute_correction:
     vtils::insert_range(all_incident, in_cc_incident);
 
     for (sptr<vertex_t> v : all_incident) {
-        std::set<sptr<hyperedge_t>> faces = get_faces(v);
+        std::set<sptr<hyperedge_t>> faces = get_faces(v, best_rep_map);
         const size_t nf = faces.size();
         if (nf > 20) {
             std::cerr << "[ RestrictionDecoder ] found vertex " << print_v(v)
@@ -206,6 +207,19 @@ r_compute_correction:
             }
             exit(1);
         }
+        /*
+        std::cout << "faces for " << print_v(v) << ":" << std::endl;
+        for (sptr<hyperedge_t> e : faces) {
+            std::cout << "\t<";
+            for (size_t i = 0; i < e->get_order(); i++) {
+                std::cout << " " << print_v(e->get<vertex_t>(i));
+            }
+            std::cout << " >, frames:";
+            for (uint64_t fr : e->frames) std::cout << " " << fr;
+            std::cout << std::endl;
+        }
+        */
+
         const uint64_t enf = 1L << nf;
         // Track intersections with connected components and outside of
         // connected components.
@@ -276,7 +290,7 @@ r_compute_correction:
             std::cerr << std::endl;
             std::cerr << "Faces for incident vertices:" << std::endl;
             for (sptr<vertex_t> v : all_incident) {
-                std::set<sptr<hyperedge_t>> faces = get_faces(v);
+                std::set<sptr<hyperedge_t>> faces = get_faces(v, best_rep_map);
                 const size_t nf = faces.size();
                 std::cerr << "\t" << print_v(v) << " (nf = " << nf << "):" << std::endl;
                 for (sptr<hyperedge_t> e : faces) {
@@ -377,11 +391,13 @@ RestrictionDecoder::insert_error_chain_into(
 {
     error_chain_t ec = decoding_graph->get(c1, c2, src, dst, force_unflagged);
 
+    /*
     std::cout << "error chain btwn " << print_v(src) << " and " << print_v(dst) << ":";
     for (sptr<vertex_t> x : ec.path) {
         std::cout << " " << print_v(x);
     }
     std::cout << std::endl;
+    */
 
     for (size_t i = 1; i < ec.path.size(); i++) {
         sptr<vertex_t> v = ec.path.at(i-1),
@@ -440,8 +456,19 @@ RestrictionDecoder::insert_error_chain_into(
     return edge_set;
 }
 
+std::map<sptr<hyperedge_t>, sptr<hyperedge_t>>
+RestrictionDecoder::flatten_edge_map(const std::map<sptr<hyperedge_t>, sptr<hyperedge_t>>& edge_map) {
+    std::map<sptr<hyperedge_t>, sptr<hyperedge_t>> flat_edge_map;
+    for (const auto& p : edge_map) {
+        sptr<hyperedge_t> x = decoding_graph->get_base_edge(p.first),
+                          y = decoding_graph->get_base_edge(p.second);
+        flat_edge_map[x] = y;
+    }
+    return flat_edge_map;
+}
+
 std::set<sptr<hyperedge_t>>
-RestrictionDecoder::get_faces(sptr<vertex_t> v) {
+RestrictionDecoder::get_faces(sptr<vertex_t> v, const std::map<sptr<hyperedge_t>, sptr<hyperedge_t>>& best_rep_map) {
     std::set<sptr<hyperedge_t>> faces;
     // Here, we will flatten the faces themselves. We require that
     // each face has different colors.
@@ -465,7 +492,7 @@ RestrictionDecoder::get_faces(sptr<vertex_t> v) {
         if (do_not_add) continue;
         sptr<hyperedge_t> fe = decoding_graph->get_edge(flat_vlist);
         if (fe != nullptr) {
-            fe = decoding_graph->get_best_edge_from_class_of(fe);
+            if (best_rep_map.count(fe)) fe = best_rep_map.at(fe);
             faces.insert(fe);
         }
     }

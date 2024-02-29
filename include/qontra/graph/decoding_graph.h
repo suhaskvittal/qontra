@@ -36,7 +36,6 @@ public:
     DecodingGraph(DecodingGraph&&) = default;
 
     sptr<decoding::vertex_t> make_vertex(uint64_t) const override;
-    sptr<decoding::vertex_t> get_boundary_vertex(int color);
 
     error_chain_t get(uint64_t, uint64_t, bool force_unflagged=false);
     error_chain_t get(sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
@@ -50,10 +49,16 @@ public:
     void    activate_flags(const std::vector<uint64_t>& all_detectors);
     void    deactivate_flags(void);
 
+    sptr<decoding::vertex_t> get_boundary_vertex(int color);
+    sptr<decoding::hyperedge_t> get_base_edge(sptr<decoding::hyperedge_t>);
+
     std::vector<sptr<decoding::hyperedge_t>> get_flag_edges(void);
 
     sptr<decoding::hyperedge_t> get_best_edge_from_class_of(sptr<decoding::hyperedge_t>);
     sptr<decoding::hyperedge_t> get_best_nod_edge(bool require_exact_match=false);
+
+    std::map<sptr<decoding::hyperedge_t>, sptr<decoding::hyperedge_t>>
+        get_best_rep_map(void);
 
     poly_t  get_error_polynomial(void);
     fp_t    get_expected_errors(void);
@@ -88,6 +93,9 @@ private:
     std::set<uint64_t> flag_detectors;
     std::vector<EdgeClass> edge_classes;
 
+    // Maps flags to classes that have associated flag edges.
+    std::map<uint64_t, std::vector<EdgeClass>> flag_class_map;
+    // Maps edges to their containing class.
     std::map<sptr<decoding::hyperedge_t>, EdgeClass> edge_class_map;
     // nod_edges = no detector edges. These are unique flag edges that should be used when
     // flags are active, but no detectors are observed.

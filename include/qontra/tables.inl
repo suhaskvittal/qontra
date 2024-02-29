@@ -16,7 +16,6 @@ ErrorTable::operator=(const ErrorTable& other) {
     m0w1 = other.m0w1;
     op2q_leakage_injection = other.op2q_leakage_injection;
     op2q_leakage_transport = other.op2q_leakage_transport;
-    op2q_crosstalk = other.op2q_crosstalk;
     return *this;
 }
 
@@ -29,19 +28,29 @@ TimeTable::operator=(const TimeTable& other) {
     return *this;
 }
 
-namespace tables {
-
-inline ErrorAndTiming&
-ErrorAndTiming::operator*=(fp_t x) {
-    e_g1q *= x;
-    e_g2q *= x;
-    e_m1w0 *= x;
-    e_m0w1 *= x;
-    e_idle *= x;
-    t1 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
-    t2 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
-    return *this;
+inline ErrorTable
+operator*(ErrorTable t, fp_t x) {
+    t *= x; 
+    return t;
 }
+
+inline ErrorTable
+operator*(fp_t x, ErrorTable t) {
+    return t*x;
+}
+
+inline TimeTable
+operator*(TimeTable t, fp_t x) {
+    t *= x;
+    return t;
+}
+
+inline TimeTable
+operator*(fp_t x, TimeTable t) {
+    return t*x;
+}
+
+namespace tables {
 
 inline ErrorAndTiming
 operator*(ErrorAndTiming et, fp_t x) {

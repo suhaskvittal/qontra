@@ -281,7 +281,6 @@ edge_build_outer_loop_start:
         }
     }
     std::array<flag_pair_set_t, 2> flag_pair_sets{x_flags, z_flags};
-    /*
     size_t flags_removed = 0;
     for (size_t i = 0; i < 2; i++) {
         flag_pair_set_t& flags = flag_pair_sets[i];
@@ -300,7 +299,6 @@ edge_build_outer_loop_start:
         }
     }
     std::cout << "[ status ] removed flags = " << flags_removed << std::endl;
-    */
     // First, we will create flags for each parity qubit. This ignores the case where (q1, q2)
     // is a flag in two different parity qubits. However, note we are only interested in establishing
     // roles here. These common roles will eventually be compacted into one flag.
@@ -598,7 +596,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
             auto op_hash = std::get<1>(op);
 
             size_t k = 0;
-            if (op_qubits.size() == min_observable_size) {
+            if (op_qubits.size() <= 2*min_observable_size) {
                 for (auto pair : flag_pairs) {
                     sptr<raw_vertex_t> v1 = pair.first,
                                         v2 = pair.second;
@@ -732,7 +730,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
 
                 sptr<phys_vertex_t> px = role_to_phys[rx];
                 for (sptr<raw_vertex_t> ry : iw->support) {
-                    if (rx == ry) continue;
+                    if (rx == ry && !rx->is_check()) continue;
                     sptr<phys_vertex_t> py = role_to_phys[ry];
                     if (px == py) ie->conflicts.emplace_back(rx, ry, px);
                 }

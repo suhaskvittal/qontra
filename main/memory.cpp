@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
     int world_rank = 0, world_size = 1;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-    CmdParser pp(argc, argv);
+    CmdParser pp(argc, argv, 2);
     std::string HELP = 
         "usage: ./memory --qes <file> --out <file>\n"
         "optional:\n"
@@ -38,16 +38,13 @@ int main(int argc, char* argv[]) {
         "\t--pmax <error-rate, default=1e-3>\n"
         "\t--steps <# of p, default=1>\n";
 
-    std::string qes_file;
-    std::string output_file;
+    std::string qes_file(argv[1]);
+    std::string output_file(argv[2]);
 
     uint64_t    shots = 1'000'000;
     fp_t        pmin = 1e-3,
                 pmax = 1e-3;
     uint64_t    steps = 1;
-
-    pp.get("qes", qes_file, true);
-    pp.get("out", output_file, true);
 
     pp.get("s", shots);
     pp.get("pmin", pmin);
@@ -58,22 +55,6 @@ int main(int argc, char* argv[]) {
 
     DetailedStimCircuit _circuit = make_circuit(qes_file, pmax, true);
 
-    /*
-    RestrictionDecoder base(_circuit);
-    NeuralAssistedDecoder dec(_circuit, &base);
-
-    using namespace mlpack;
-    dec.model.Add<Linear>(256);
-    dec.model.Add<TanH>();
-    dec.model.Add<Linear>(64);
-    dec.model.Add<TanH>();
-    dec.model.Add<Linear>(_circuit.count_observables());
-    dec.model.Add<TanH>();
-
-    dec.config.max_epochs = 1000;
-
-    dec.train(1'000'000);
-    */
     RestrictionDecoder dec(_circuit);
 
     fp_t p = pmin;

@@ -3,13 +3,13 @@
  *  date:   21 January 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
+#include <qontra/ext/stim.h>
+
+#include <qontra/protean/experiments.h>
 #include <qontra/experiments.h>
 #include <qontra/experiments/memory.h>
-#include <qontra/ext/stim.h>
 
 #include <vtils/cmd_parse.h>
 #include <vtils/filesystem.h>
@@ -20,6 +20,7 @@
 #include <mpi.h>
 
 using namespace qontra;
+using namespace protean;
 using namespace vtils;
 
 int main(int argc, char* argv[]) {
@@ -33,6 +34,7 @@ int main(int argc, char* argv[]) {
 
     std::string protean_folder(argv[1]);
     std::string qes_file = protean_folder + "/ext.qes";
+    std::string coupling_file = protean_folder + "/coupling_graph.txt";
     std::string output_file = protean_folder + "/output/basic_memory.csv";
 
     if (world_rank == 0) {
@@ -55,14 +57,27 @@ int main(int argc, char* argv[]) {
 
     G_BASE_SEED = 1000;
 
+    // Initialize error and timing tables.
     qes::Program<> program = qes::from_file(qes_file);
-    DetailedStimCircuit _circuit = make_circuit(program, pmax, true);
+    ErrorTable errors;
+    TimeTable timing;
+    make_error_and_timing_from_coupling_graph(coupling_file, errors, timing);
+
+    ErrorTable errors_base = errors * 1e-3;
+    TimeTable timing_base = timing * 1e-3;
+
+    DetailedStimCircuit base_circuit = 
+        DetailedStimCircuit::from_qes(program, errors_base, timing_base);
+
+    if (world_rank == 0) {
+        std::cout << base_circuit << std::endl;
+    }
 
     uptr<Decoder> dec = nullptr;
     if (decoder_name == "mwpm") {
-        dec = std::make_unique<MWPMDecoder>(_circuit);
+        dec = std::make_unique<MWPMDecoder>(base_circuit);
     } else if (decoder_name == "restriction") {
-        dec = std::make_unique<RestrictionDecoder>(_circuit);
+        dec = std::make_unique<RestrictionDecoder>(base_circuit);
     } else {
         std::cerr << "Unsupported decoder type: " << decoder_name << std::endl;
     }
@@ -70,7 +85,10 @@ int main(int argc, char* argv[]) {
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
         // Load model from file and run memory experiment.
-        DetailedStimCircuit circuit = make_circuit(program, p, true);
+        ErrorTable _errors = errors * p;
+        TimeTable _timing = timing * p;
+        DetailedStimCircuit circuit = 
+            DetailedStimCircuit::from_qes(program, _errors, _timing);
         dec->set_circuit(circuit);
 
         memory_config_t config;
@@ -86,11 +104,12 @@ int main(int argc, char* argv[]) {
             }
             std::ofstream fout(output_file, std::ios::app);
             if (write_header) {
-                fout << "physical error rate,shots,logical error rate" << std::endl;
+                fout << "physical error rate,shots,logical error rate,word error rate" << std::endl;
             }
             fout << p << ","
                 << shots << ","
-                << res.logical_error_rate;
+                << res.logical_error_rate << ","
+                << res.logical_error_rate / static_cast<fp_t>(circuit.count_observables());
             fout << std::endl;
         }
         p = pow(M_E, log(p) + (log(pmax)-log(pmin))/(steps-1));

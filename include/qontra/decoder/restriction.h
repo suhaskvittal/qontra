@@ -42,12 +42,17 @@ protected:
                         bool force_unflagged,
                         std::set<sptr<graph::decoding::hyperedge_t>>& triggered_flag_edges);
 
+    std::map<sptr<graph::decoding::hyperedge_t>, sptr<graph::decoding::hyperedge_t>>
+        flatten_edge_map(const std::map<sptr<graph::decoding::hyperedge_t>, sptr<graph::decoding::hyperedge_t>>&);
+
     void insert_incident_vertices(
             std::set<sptr<graph::decoding::vertex_t>>&, const std::set<vpair_t>&, int);
     void insert_incident_vertices(
             std::set<sptr<graph::decoding::vertex_t>>&, const std::map<vpair_t, size_t>&, int);
 
-    std::set<sptr<graph::decoding::hyperedge_t>> get_faces(sptr<graph::decoding::vertex_t>);
+    std::set<sptr<graph::decoding::hyperedge_t>> get_faces(
+            sptr<graph::decoding::vertex_t>, 
+            const std::map<sptr<graph::decoding::hyperedge_t>, sptr<graph::decoding::hyperedge_t>>& best_rep_map);
 };
 
 

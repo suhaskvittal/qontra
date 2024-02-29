@@ -20,30 +20,39 @@
 namespace qontra {
 namespace protean {
 
+struct cx_t {
+    sptr<net::raw_vertex_t> src;
+    sptr<net::raw_vertex_t> dst;
+    bool is_for_x_check;
+};
+
+struct event_t {
+    sptr<net::raw_vertex_t> owner;
+    std::vector<int64_t> m_operands;
+    bool is_cross_round;
+    bool is_memory_x;
+};
+
 // The Scheduler class is dedicated to building the syndrome extraction
 // schedule.
 class Scheduler {
 public:
+    // source, target, is_for_x_check
     Scheduler(PhysicalNetwork*);
 
-    qes::Program<>  run(void);
+    qes::Program<> run(size_t rounds, bool is_memory_x);
+    qes::Program<> make_round(void);
 
     void build_preparation(qes::Program<>&);
     void build_body(qes::Program<>&);
     void build_teardown(qes::Program<>&);
-
-    size_t  get_measurement_ctr(void);
-    size_t  get_measurement_time(sptr<net::raw_vertex_t>);
-    std::map<sptr<net::raw_vertex_t>, size_t>   get_meas_ctr_map(void);
 private:
-    // source, target, is_for_x_check
-    typedef std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>> cx_t;
-
     void prep_tear_h_gates(qes::Program<>&);
     void prep_tear_cx_gates(qes::Program<>&);
 
     void schedule_cx_along_path(const std::vector<cx_t>&, qes::Program<>&);
     void push_back_measurement(std::vector<int64_t>&, sptr<net::raw_vertex_t>);
+    void declare_event_for_qubit(sptr<net::raw_vertex_t>);
 
     std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
         compute_schedules(void);
@@ -66,14 +75,11 @@ private:
     void test_and_set_exit_on_fail(sptr<net::raw_vertex_t>, std::string caller);
     void print_test_and_set_debug_and_exit(sptr<net::raw_vertex_t>, std::string caller);
 
-    std::map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>>
-        active_role_map;
-    std::vector<sptr<net::raw_vertex_t>>
-        checks_this_cycle;
-
-    std::map<sptr<net::raw_vertex_t>, size_t>
-        meas_ctr_map;
-        
+    std::map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>> active_role_map;
+    std::vector<sptr<net::raw_vertex_t>> checks_this_cycle;
+    std::map<sptr<net::raw_vertex_t>, size_t> meas_ctr_map;
+    std::vector<event_t> event_queue;
+    
     size_t cycle;
     size_t mctr;
 

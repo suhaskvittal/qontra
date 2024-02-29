@@ -26,6 +26,8 @@ namespace net {
 struct raw_vertex_t : graph::base::vertex_t {
     enum class type { data, xparity, zparity, flag, proxy };
     type qubit_type;
+
+    bool is_check(void);
 };
 
 struct raw_edge_t : graph::base::edge_t {};

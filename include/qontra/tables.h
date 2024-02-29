@@ -18,11 +18,12 @@ namespace qontra {
 
 class ErrorTable {
 public:
-    ErrorTable();
-    ErrorTable(const ErrorTable&);
-    ErrorTable(ErrorTable&&);
+    ErrorTable() = default;
+    ErrorTable(const ErrorTable&) = default;
+    ErrorTable(ErrorTable&&) = default;
 
     ErrorTable& operator=(const ErrorTable&);
+    ErrorTable& operator*=(fp_t);
 
     vtils::TwoLevelMap<std::string, uint64_t, fp_t> op1q;
     vtils::TwoLevelMap<std::string, std::pair<uint64_t, uint64_t>, fp_t> op2q;
@@ -37,23 +38,28 @@ public:
         op2q_leakage_injection;
     vtils::TwoLevelMap<std::string, std::pair<uint64_t, uint64_t>, fp_t> 
         op2q_leakage_transport;
-    vtils::TwoLevelMap<std::string, std::pair<uint64_t, uint64_t>, fp_t> 
-        op2q_crosstalk;
 };
 
 class TimeTable {  // Units are in nanoseconds.
 public:
-    TimeTable();
-    TimeTable(const TimeTable&);
-    TimeTable(TimeTable&&);
+    TimeTable() = default;
+    TimeTable(const TimeTable&) = default;
+    TimeTable(TimeTable&&) = default;
 
     TimeTable& operator=(const TimeTable&);
+    TimeTable& operator*=(fp_t);
 
     vtils::TwoLevelMap<std::string, uint64_t, fp_t> op1q;
     vtils::TwoLevelMap<std::string, std::pair<uint64_t, uint64_t>, fp_t> op2q;
     std::map<uint64_t, fp_t> t1;
     std::map<uint64_t, fp_t> t2;
 };
+
+ErrorTable operator*(ErrorTable, fp_t);
+ErrorTable operator*(fp_t, ErrorTable);
+
+TimeTable operator*(TimeTable, fp_t);
+TimeTable operator*(fp_t, TimeTable);
 
 namespace tables {
 
@@ -69,7 +75,7 @@ struct ErrorAndTiming {
     fp_t t1 = 1000e3;
     fp_t t2 = 500e3;
 
-    ErrorAndTiming& operator*=(fp_t x);
+    ErrorAndTiming& operator*=(fp_t);
 };
 
 ErrorAndTiming  operator*(ErrorAndTiming et, fp_t x);

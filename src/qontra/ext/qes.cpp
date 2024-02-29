@@ -68,17 +68,35 @@ get_latency(const qes::Instruction<>& inst, const TimeTable& timing) {
     }
 
     std::vector<double> latency;
+    const std::string name = inst.get_name();
     if (is_2q_gate(inst)) {
+        if (!timing.op2q.count(name)) {
+            std::cerr << "[ get_latency ] no latencies listed for " << name << std::endl;
+        }
         for (size_t i = 0; i < qubits.size(); i += 2) {
             uint64_t q1 = qubits[i],
                      q2 = qubits[i+1];
-            double t = vtils::tlm_at(timing.op2q, inst.get_name(), std::make_pair(q1, q2));
+            auto q1_q2 = std::make_pair(q1, q2);
+            if (!timing.op2q.at(name).count(q1_q2)) {
+                std::cerr << "[ get_latency ] no latency found for "
+                    << name << "(" << q1 << ", " << q2 << ")" << std::endl;
+                exit(1);
+            }
+            double t = vtils::tlm_at(timing.op2q, name, q1_q2);
             latency.push_back(t);
         }
     } else {
+        if (!timing.op1q.count(name)) {
+            std::cerr << "[ get_latency ] no latencies listed for " << name << std::endl;
+        }
         for (size_t i = 0; i < qubits.size(); i++) {
             uint64_t q = qubits[i];
-            double t = vtils::tlm_at(timing.op1q, inst.get_name(), q);
+            if (!timing.op1q.at(name).count(q)) {
+                std::cerr << "[ get_latency ] no latency found for "
+                    << name << "(" << q << ")" << std::endl;
+                exit(1);
+            }
+            double t = vtils::tlm_at(timing.op1q, name, q);
             latency.push_back(t);
         }
     }

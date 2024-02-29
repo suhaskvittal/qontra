@@ -39,6 +39,11 @@ namespace protean {
 
 namespace net {
 
+inline bool
+raw_vertex_t::is_check() {
+    return qubit_type == raw_vertex_t::type::xparity || qubit_type == raw_vertex_t::type::zparity;
+}
+
 inline void
 phys_vertex_t::consume(sptr<phys_vertex_t> other) {
     for (auto& pair : other->cycle_role_map) {

@@ -10,61 +10,52 @@
 
 namespace qontra {
 
-ErrorTable::ErrorTable()
-    :op1q(),
-    op2q(),
-    idling(),
-    m1w0(),
-    m0w1(),
-    op2q_leakage_injection(),
-    op2q_leakage_transport(),
-    op2q_crosstalk()
-{}
+template <class K> inline void
+inplace_mul(std::map<K, fp_t>& m, fp_t x) {
+    for (auto& [k, p] : m) {
+        p *= x;
+    }
+}
 
-ErrorTable::ErrorTable(const ErrorTable& other)
-    :op1q(other.op1q),
-    op2q(other.op2q),
-    idling(other.idling),
-    m1w0(other.m1w0),
-    m0w1(other.m0w1),
-    op2q_leakage_injection(other.op2q_leakage_injection),
-    op2q_leakage_transport(other.op2q_leakage_injection),
-    op2q_crosstalk(other.op2q_leakage_injection)
-{}
+template <class K> inline void
+inplace_mul(vtils::TwoLevelMap<std::string, K, fp_t>& m, fp_t x) {
+    for (auto& [s, _m] : m) {
+        inplace_mul(_m, x);
+    }
+}
 
-ErrorTable::ErrorTable(ErrorTable&& other)
-    :op1q(std::move(other.op1q)),
-    op2q(std::move(other.op2q)),
-    idling(std::move(other.idling)),
-    m1w0(std::move(other.m1w0)),
-    m0w1(std::move(other.m0w1)),
-    op2q_leakage_injection(std::move(other.op2q_leakage_injection)),
-    op2q_leakage_transport(std::move(other.op2q_leakage_injection)),
-    op2q_crosstalk(std::move(other.op2q_leakage_injection))
-{}
+ErrorTable&
+ErrorTable::operator*=(fp_t x) {
+    inplace_mul(op1q, x);
+    inplace_mul(op2q, x);
+    inplace_mul(idling, x);
+    inplace_mul(m1w0, x);
+    inplace_mul(m0w1, x);
+    inplace_mul(op2q_leakage_injection, x);
+    inplace_mul(op2q_leakage_transport, x);
+    return *this;
+}
 
-TimeTable::TimeTable()
-    :op1q(),
-    op2q(),
-    t1(),
-    t2()
-{}
-
-TimeTable::TimeTable(const TimeTable& other)
-    :op1q(other.op1q),
-    op2q(other.op2q),
-    t1(other.t1),
-    t2(other.t2)
-{}
-
-TimeTable::TimeTable(TimeTable&& other)
-    :op1q(std::move(other.op1q)),
-    op2q(std::move(other.op2q)),
-    t1(std::move(other.t1)),
-    t2(std::move(other.t2))
-{}
+TimeTable&
+TimeTable::operator*=(fp_t x) {
+    inplace_mul(t1, x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x);
+    inplace_mul(t2, x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x);
+    return *this;
+}
 
 namespace tables {
+
+ErrorAndTiming&
+ErrorAndTiming::operator*=(fp_t x) {
+    e_g1q *= x;
+    e_g2q *= x;
+    e_m1w0 *= x;
+    e_m0w1 *= x;
+    e_idle *= x;
+    t1 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
+    t2 *= x <= 1e-12 ? std::numeric_limits<fp_t>::max() : 1.0/x;
+    return *this;
+}
 
 inline void
 set_all_1q(uint64_t n_qubits, fp_t value, std::map<uint64_t, fp_t>& row) {

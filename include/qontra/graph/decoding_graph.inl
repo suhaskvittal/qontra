@@ -79,6 +79,9 @@ DecodingGraph::deactivate_flags() {
 
 inline sptr<decoding::hyperedge_t>
 DecodingGraph::get_best_edge_from_class_of(sptr<decoding::hyperedge_t> e) {
+    if (!edge_class_map.count(e)) {
+        return e;
+    }
     const EdgeClass& c = edge_class_map.at(e);
     sptr<decoding::hyperedge_t> _e = get_best_flag_edge(c.get_edges());
     return _e == nullptr ? e : _e;

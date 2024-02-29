@@ -4,16 +4,15 @@ from sys import argv
 
 code = argv[1]
 decoder = argv[2]
+shots = int(argv[3])
 
-n_proc = int(argv[3])
+n_proc = int(argv[4])
 
 folder = '../data/protean/%s' % code
 
 if decoder != 'mwpm' and decoder != 'restriction':
     print('Decoder should be one of \"mwpm\" or \"restriction\".')
     exit()
-
-shots = 100000
 
 cmd_1 = r'''
         cd Release

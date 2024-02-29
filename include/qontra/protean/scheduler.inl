@@ -8,28 +8,23 @@
 namespace qontra {
 namespace protean {
 
-inline size_t
-Scheduler::get_measurement_ctr() {
-    return mctr;
-}
-
-inline size_t
-Scheduler::get_measurement_time(sptr<net::raw_vertex_t> rv) {
-    return meas_ctr_map.at(rv);
-}
-
-inline std::map<sptr<net::raw_vertex_t>, size_t>
-Scheduler::get_meas_ctr_map() {
-    return meas_ctr_map;
-}
-
 inline void
 Scheduler::push_back_measurement(std::vector<int64_t>& operands, sptr<net::raw_vertex_t> rv) {
     meas_ctr_map[rv] = mctr++;
     operands.push_back(qu(rv));
 }
 
-template <class FUNC> inline bool
+inline void
+Scheduler::declare_event_for_qubit(sptr<net::raw_vertex_t> rv) {
+    int64_t m = meas_ctr_map.at(rv);
+    bool is_cross_round = rv->is_check();
+    bool is_memory_x = (rv->qubit_type == net::raw_vertex_t::type::xparity)
+                        || (rv->qubit_type == net::raw_vertex_t::type::flag 
+                                && !raw_network->x_flag_set.count(rv));
+    event_queue.push_back({rv, {m}, is_cross_round, is_memory_x});
+}
+
+template <class FUNC> bool
 Scheduler::try_and_push_back_cx_operands(
         std::vector<int64_t>& cx_operands,
         std::set<int64_t>& in_use,
@@ -40,7 +35,7 @@ Scheduler::try_and_push_back_cx_operands(
 {
     if (k >= path.size()) return false;
     sptr<net::raw_vertex_t> rx = path.at(k-1),
-                        ry = path.at(k);
+                            ry = path.at(k);
     if (!additional_test(rx, ry)) return false;
     int64_t qx = qu(rx),
             qy = qu(ry);
@@ -49,7 +44,7 @@ Scheduler::try_and_push_back_cx_operands(
                              py = network->get_vertex(qy);
     if (!network->contains(px, py)) {
         std::cerr << "[ try_and_push_back_cx_operands ] attempted to do CX(" << qx << ", " << qy << ") when"
-            " no coupling exists." << std::endl;
+            << " no coupling exists." << std::endl;
         exit(1);
     }
     if (in_use.count(qx) || in_use.count(qy)) return false;

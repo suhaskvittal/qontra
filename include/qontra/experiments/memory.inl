@@ -23,9 +23,6 @@ make_circuit(qes::Program<> program, fp_t p, bool fix_timing_error_as_p) {
     et.e_idle *= 0.1;
     et = et * (1000*p);
 
-    et.e_g2q = 0.0;
-    et.e_idle = 0.0;
-
     ErrorTable errors;
     TimeTable timing;
     tables::populate(n, errors, timing, et);
@@ -58,7 +55,7 @@ memory_experiment(Decoder* dec, memory_config_t config, PROLOGUE p_cb, EPILOGUE 
         hw_sqr_sum += sqr(hw);
         hw_max.scalar_replace_if_better_extrema(hw);
 
-        if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
+        if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT && obs.popcnt() == 0) {
             return;
         }
 #ifdef MEMORY_DEBUG
