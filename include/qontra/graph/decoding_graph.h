@@ -6,40 +6,16 @@
 #ifndef QONTRA_DECODING_GRAPH_h
 #define QONTRA_DECODING_GRAPH_h
 
+#include "qontra/graph/decoding_graph/edge_class.h"
+#include "qontra/graph/decoding_graph/structures.h"
+
 #include "qontra/ext/stim.h"
-#include "qontra/hypergraph.h"
 #include "qontra/graph/algorithms/distance.h"
 
-#include <limits>
 #include <utility>
 
 namespace qontra {
 namespace graph {
-
-const int COLOR_ANY = -1;
-const uint64_t BOUNDARY_FLAG = std::numeric_limits<uint32_t>::max();
-
-namespace decoding {
-
-struct vertex_t : base::vertex_t {
-    int             color = COLOR_ANY;
-    sptr<vertex_t>  base = nullptr;
-    bool            is_boundary_vertex = false;
-
-    sptr<vertex_t> get_base(void);
-};
-
-struct edge_t : base::edge_t {
-    fp_t probability;
-};
-
-struct hyperedge_t : base::hyperedge_t {
-    fp_t                probability;
-    std::set<uint64_t>  flags;
-    std::set<uint64_t>  frames;
-};
-
-}   // decoding
 
 struct error_chain_t {
     size_t  length = 0;
@@ -86,7 +62,6 @@ private:
     sptr<decoding::vertex_t>    make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
 
     void resolve_edges(const std::vector<sptr<decoding::hyperedge_t>>&, size_t flips_per_error);
-    void safe_add_edge(sptr<decoding::hyperedge_t>);
 
     void dijkstra_(int, int, sptr<decoding::vertex_t> from);
     void make_dijkstra_graph(int, int);
@@ -104,10 +79,9 @@ private:
     std::map<std::pair<int, int>, DistanceMatrix<decoding::vertex_t, error_chain_t>>
         flagged_distance_matrix_map;
 
-    std::vector<uint64_t> active_flags;
-
+    std::set<uint64_t> active_flags;
     std::set<uint64_t> flag_detectors;
-    std::map<uint64_t, std::set<sptr<decoding::hyperedge_t>>> flag_edge_map;
+    std::vector<EdgeClass> edge_classes;
     bool flags_are_active;
 };
 

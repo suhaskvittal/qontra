@@ -21,15 +21,24 @@ MatchingBase::MatchingBase(const DetailedStimCircuit& circuit, int flips_per_err
 {}
 
 void
-MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int c1, int c2) {
+MatchingBase::load_syndrome(
+        stim::simd_bits_range_ref<SIMD_WIDTH> syndrome,
+        int c1,
+        int c2,
+        bool recompute_flags) 
+{
     std::vector<uint64_t> all_dets = get_nonzero_detectors(syndrome);
     detectors.clear();
-    flags.clear();
-    flag_edges.clear();
+    if (recompute_flags) {
+        flags.clear();
+        flag_edges.clear();
+    }
     // Track the number of detectors of each color.
     for (uint64_t d : all_dets) {
         if (circuit.flag_detectors.count(d)) {
-            flags.push_back(d);
+            if (recompute_flags) {
+                flags.push_back(d);
+            }
         } else {
             if (c1 != COLOR_ANY && circuit.detector_color_map[d] != c1 && circuit.detector_color_map[d] != c2) {
                 continue;
@@ -41,27 +50,27 @@ MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int 
         detectors.push_back(get_color_boundary_index(COLOR_ANY));
     }
     // Activate flag edges in decoding_graph.
-    decoding_graph->activate_flags(flags);
-    flag_edges = decoding_graph->get_flag_edges();
+    if (recompute_flags) {
+        decoding_graph->activate_flags(flags);
+        flag_edges = decoding_graph->get_flag_edges();
 
-    /*
-    std::cout << "Flag edges:" << std::endl;
-    for (sptr<hyperedge_t> e : flag_edges) {
-        std::cout << "\tD[";
-        for (size_t i = 0; i < e->get_order(); i++) {
-            std::cout << " " << print_v(e->get<vertex_t>(i));
+        std::cout << "Flag edges:" << std::endl;
+        for (sptr<hyperedge_t> e : flag_edges) {
+            std::cout << "\tD[";
+            for (size_t i = 0; i < e->get_order(); i++) {
+                std::cout << " " << print_v(e->get<vertex_t>(i));
+            }
+            std::cout << " ], F[";
+            for (uint64_t f : e->flags) {
+                std::cout << " " << f;
+            }
+            std::cout << " ], frames:";
+            for (uint64_t fr : e->frames) {
+                std::cout << " " << fr;
+            }
+            std::cout << std::endl;
         }
-        std::cout << " ], F[";
-        for (uint64_t f : e->flags) {
-            std::cout << " " << f;
-        }
-        std::cout << " ], frames:";
-        for (uint64_t fr : e->frames) {
-            std::cout << " " << fr;
-        }
-        std::cout << std::endl;
     }
-    */
 }
 
 std::vector<Decoder::assign_t>

@@ -6,6 +6,7 @@
 #include "qontra/graph/decoding_graph.h"
 #include "qontra/graph/decoding_graph/edge_class.h"
 
+#include <vtils/set_algebra.h>
 #include <vtils/utility.h>
 
 #include <initializer_list>
@@ -25,7 +26,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     distance_matrix_map(),
     flagged_distance_matrix_map(),
     active_flags(),
-    flag_edge_map(),
+    edge_classes(),
     flag_detectors(circuit.flag_detectors),
     flags_are_active(false)
 {
@@ -163,10 +164,23 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
         }
         std::cout << " ]" << std::endl;
 
+        // Update any edge probabilities.
         for (sptr<hyperedge_t> e : c.get_edges()) {
             if (e->flags.size() && rep->flags.empty()) {
                 // Increase the probability of this edge, as it is also a non flag edge.
                 e->probability += rep->probability;
+            } else if (e->flags.empty()) {
+                // Check if a similar edge already exists. If so, update that.
+                sptr<hyperedge_t> _e = get_edge(e->get<vertex_t>());
+                if (_e != nullptr) {
+                    fp_t& p1 = e->probability,
+                        & p2 = _e->probability;
+                    if (e->frames == _e->frames) {
+                        p2 = (1-p1)*p2 + (1-p2)*p1;
+                    }
+                } else {
+                    add_edge(e);
+                }
             }
 
             std::cout << "\tD[";
@@ -182,49 +196,30 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
                 std::cout << " " << fr;
             }
             std::cout << ", prob = " << e->probability <<  std::endl;
-
-            safe_add_edge(e);
         }
-    }
-}
-
-void
-DecodingGraph::safe_add_edge(sptr<hyperedge_t> e) {
-    if (e->flags.empty()) {
-        // Then check if the edge already exists in the graph.
-        sptr<hyperedge_t> _e = get_edge(e->get<vertex_t>());
-        if (_e == nullptr) {
-            add_edge(e);
-        } else {
-            if (e->frames == _e->frames) {
-                fp_t& p1 = e->probability,
-                    & p2 = _e->probability;
-                p2 = (1-p1)*p2 + (1-p2)*p1;
-            }
-        }
-    } else {
-        for (uint64_t f : e->flags) {
-            flag_edge_map[f].insert(e);
-        }
+        edge_classes.push_back(c);
     }
 }
 
 std::vector<sptr<hyperedge_t>>
 DecodingGraph::get_flag_edges() {
-    std::map<sptr<hyperedge_t>, std::set<uint64_t>> remaining_flags_map;
-    // edge_list should only contain edges such that all flags associated with
-    // the flag edge are present in the flag detectors.
+    // Select one flag edge from each equivalence class that has the most in common
+    // with the active flags.
     std::vector<sptr<hyperedge_t>> edge_list;
-    for (uint64_t fd : active_flags) {
-        for (sptr<hyperedge_t> he : flag_edge_map.at(fd)) {
-            // We will only consider he once all of its flags are found.
-            if (!remaining_flags_map.count(he)) {
-                remaining_flags_map[he] = he->flags;
+    for (EdgeClass& c : edge_classes) {
+        sptr<hyperedge_t> best_edge = nullptr;
+        size_t best_nf = 0;
+
+        for (sptr<hyperedge_t> e : c.get_edges()) {
+            std::set<uint64_t> flag_intersect = e->flags * active_flags;
+            const size_t nf = flag_intersect.size();
+            if (flag_intersect.size() == e->flags.size() && nf > best_nf) {
+                best_edge = e;
+                best_nf = nf;
             }
-            remaining_flags_map[he].erase(fd);
-            if (remaining_flags_map[he].empty()) {
-                edge_list.push_back(he);
-            }
+        }
+        if (best_edge != nullptr) {
+            edge_list.push_back(best_edge);
         }
     }
     return edge_list;

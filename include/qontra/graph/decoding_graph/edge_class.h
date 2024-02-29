@@ -6,7 +6,7 @@
 #ifndef QONTRA_DECODING_GRAPH_EDGE_CLASS_h
 #define QONTRA_DECODING_GRAPH_EDGE_CLASS_h
 
-#include "qontra/graph/decoding_graph.h"
+#include "qontra/graph/decoding_graph/structures.h"
 
 namespace qontra {
 namespace graph {
@@ -14,6 +14,7 @@ namespace graph {
 class EdgeClass {
 public:
     EdgeClass(sptr<decoding::hyperedge_t>);
+    EdgeClass(const EdgeClass&) = default;
 
     static std::vector<EdgeClass>
         from_edges(const std::vector<sptr<decoding::hyperedge_t>>&);

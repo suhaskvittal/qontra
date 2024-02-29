@@ -8,26 +8,6 @@
 namespace qontra {
 namespace graph {
 
-namespace decoding {
-
-inline sptr<vertex_t>
-vertex_t::get_base() {
-    return base;
-}
-
-}   // decoding
-
-template <> inline std::string
-print_v<decoding::vertex_t>(sptr<decoding::vertex_t> v) {
-    if (v == nullptr) return "_";
-    std::string s;
-    s += v->is_boundary_vertex ? "B" : std::to_string(v->id);
-    if (v->color != COLOR_ANY) {
-        s += "(c=" + std::to_string(v->color) + ")";
-    }
-    return s;
-}
-
 inline sptr<decoding::vertex_t>
 DecodingGraph::make_vertex(uint64_t id) const {
     sptr<decoding::vertex_t> v = HyperGraph::make_vertex(id);
@@ -84,7 +64,7 @@ inline void
 DecodingGraph::activate_flags(const std::vector<uint64_t>& all_detectors) {
     deactivate_flags();
     for (uint64_t d : all_detectors) {
-        if (flag_detectors.count(d)) active_flags.push_back(d);
+        if (flag_detectors.count(d)) active_flags.insert(d);
     }
     flags_are_active = !active_flags.empty();
 }

@@ -15,7 +15,11 @@ class MatchingBase : public Decoder {
 public:
     MatchingBase(const DetailedStimCircuit&, int flips_per_error);
 
-    void load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH>, int=graph::COLOR_ANY, int=graph::COLOR_ANY);
+    void load_syndrome(
+            stim::simd_bits_range_ref<SIMD_WIDTH>,
+            int=graph::COLOR_ANY,
+            int=graph::COLOR_ANY,
+            bool recompute_flags=true);
 
     std::vector<Decoder::assign_t>
         compute_matching(int=graph::COLOR_ANY, int=graph::COLOR_ANY, bool split_thru_boundary_match=false);
