@@ -120,7 +120,52 @@ DecodingGraph::make_and_add_vertex_(uint64_t d, const DetailedStimCircuit& circu
 }
 
 void
-DecodingGraph::resolve_edges(std::vector<sptr<hyperedge_t>>& edge_list) {
+DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, size_t flips_per_error) {
+    std::vector<EdgeClass> classes = EdgeClass::from_edges(edge_list);
+    // Go through and add boundaries to any edges if necessary.
+    for (EdgeClass& c : classes) {
+        // Add boundaries based on whether or not the representative is a flag edge.
+        if (c.rep->flags.empty()) {
+            if (c.rep->detectors.size() < flips_per_error) { 
+                std::vector<sptr<vertex_t>> boundary_list = 
+                    get_complementary_boundaries_to(c.rep->get<vertex_t>());
+                if (boundary_list.size() + c.rep->detectors.size() == flips_per_error) {
+                    for (sptr<vertex_t> vb : boundary_list) c.add_vertex(vb);
+                }
+            }
+        } else {
+            // Here, we operate under the assumption that the representative edge is a two qubit error
+            // that will flip two detectors.
+            if (c.rep->detectors.size() == 1) {
+                // We have a single detector that must be linked to a boundary. We can just link to the
+                // boundary of the same color.
+                int c = c.rep->get<vertex_t>(0)->color;
+                c.add_vertex(get_boundary_vertex(c));
+            }
+        }
+        for (sptr<hyperedge_t> e : c.rep->edges) safe_add_edge(e);
+    }
+}
+
+void
+DecodingGraph::safe_add_edge(sptr<hyperedge_t> e) {
+    if (e->flags.empty()) {
+        // Then check if the edge already exists in the graph.
+        sptr<hyperedge_t> _e = get_edge(e->endpoints);
+        if (_e == nullptr) {
+            add_edge(e);
+        } else {
+            if (e->frames == _e->frames) {
+                fp_t& p1 = e->probability,
+                    & p2 = _e->probability;
+                p2 = (1-p1)*p2 + (1-p2)*p1;
+            }
+        }
+    } else {
+        for (uint64_t f : e->flags) {
+            flag_edge_map[f].insert(e);
+        }
+    }
 }
 
 std::vector<sptr<hyperedge_t>>

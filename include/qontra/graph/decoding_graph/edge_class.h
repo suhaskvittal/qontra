@@ -13,7 +13,7 @@ namespace graph {
 
 class EdgeClass {
 public:
-    std::vector<uptr<EdgeClass>>
+    std::vector<EdgeClass>
         from_edges(const std::vector<sptr<decoding::hyperedge_t>>&);
 
     void add_vertex(sptr<decoding::vertex_t>);

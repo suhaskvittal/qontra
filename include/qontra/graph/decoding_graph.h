@@ -59,9 +59,8 @@ public:
     DecodingGraph(const DetailedStimCircuit&, size_t flips_per_error);
     DecodingGraph(DecodingGraph&&) = default;
 
-    sptr<decoding::vertex_t>    make_vertex(uint64_t) const override;
-
-    sptr<decoding::vertex_t>    get_boundary_vertex(int color);
+    sptr<decoding::vertex_t> make_vertex(uint64_t) const override;
+    sptr<decoding::vertex_t> get_boundary_vertex(int color);
 
     error_chain_t get(uint64_t, uint64_t, bool force_unflagged=false);
     error_chain_t get(sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
@@ -86,11 +85,12 @@ protected:
 private:
     sptr<decoding::vertex_t>    make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
 
-    void    resolve_edges(std::vector<sptr<decoding::hyperedge_t>>&);
+    void resolve_edges(const std::vector<sptr<decoding::hyperedge_t>>&);
+    void safe_add_edge(sptr<decoding::hyperedge_t>);
 
-    void    dijkstra_(int, int, sptr<decoding::vertex_t> from);
-    void    make_dijkstra_graph(int, int);
-    void    build_error_polynomial(void);
+    void dijkstra_(int, int, sptr<decoding::vertex_t> from);
+    void make_dijkstra_graph(int, int);
+    void build_error_polynomial(void);
 
     poly_t  error_polynomial;
     fp_t    expected_errors;

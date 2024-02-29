@@ -23,5 +23,10 @@ EdgeClass::get_edges() const {
     return edges;
 }
 
+inline bool
+are_in_same_class(sptr<hyperedge_t> x, sptr<hyperedge_t> y) {
+    return x->detectors == y->detectors;
+}
+
 }   // graph
 }   // qontra
