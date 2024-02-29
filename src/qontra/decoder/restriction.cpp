@@ -78,16 +78,20 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 
     load_syndrome(syndrome);
 
-    auto _detectors = std::move(detectors);
-    auto _flags = std::move(flags);
+    auto _detectors = detectors;
+    auto _flags = flags;
 
+    /*
     std::cout << "syndrome: D[";
     for (uint64_t d : _detectors) std::cout << " " << d;
     std::cout << " ], F[";
     for (uint64_t f : _flags) std::cout << " " << f;
     std::cout << " ]" << std::endl;
+    */
 
-    if (_detectors.empty()) return { 0.0, corr };
+    if (_detectors.empty()) return ret_no_detectors();
+
+    corr ^= get_base_corr();
 
     // Compute the MWPM for each restricted lattice.
     std::vector<assign_t> matchings;
@@ -96,11 +100,11 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             load_syndrome(syndrome, c1, c2, false);
             std::vector<Decoder::assign_t> _matchings = compute_matching(c1, c2, true);
 
-            std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
+//          std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
             for (Decoder::assign_t x : _matchings) {
                 matchings.push_back(cast_assign(x, c1, c2));
 
-                std::cout << "\t" << std::get<0>(x) << " <---> " << std::get<1>(x) << std::endl;
+//              std::cout << "\t" << std::get<0>(x) << " <---> " << std::get<1>(x) << std::endl;
             }
         }
     }
@@ -153,11 +157,13 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     }
 
     for (sptr<hyperedge_t> e : triggered_flag_edges) {
+        /*
         std::cout << "Applying correction for edge D[";
         for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v);
         std::cout << ", frames =";
         for (uint64_t fr : e->frames) std::cout << " " << fr;
         std::cout << std::endl;
+        */
         for (uint64_t fr : e->frames) corr[fr] ^= 1;
     }
 
@@ -367,11 +373,13 @@ RestrictionDecoder::insert_error_chain_into(
 {
     error_chain_t ec = decoding_graph->get(c1, c2, src, dst, force_unflagged);
 
+    /*
     std::cout << "error chain btwn " << print_v(src) << " and " << print_v(dst) << ":";
     for (sptr<vertex_t> x : ec.path) {
         std::cout << " " << print_v(x);
     }
     std::cout << std::endl;
+    */
 
     for (size_t i = 1; i < ec.path.size(); i++) {
         sptr<vertex_t> v = ec.path.at(i-1),

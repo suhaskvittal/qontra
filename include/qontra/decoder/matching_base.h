@@ -21,6 +21,9 @@ public:
             int=graph::COLOR_ANY,
             bool recompute_flags=true);
 
+    stim::simd_bits<SIMD_WIDTH> get_base_corr(void);
+    Decoder::result_t ret_no_detectors(void);
+
     std::vector<Decoder::assign_t>
         compute_matching(int=graph::COLOR_ANY, int=graph::COLOR_ANY, bool split_thru_boundary_match=false);
 

@@ -51,6 +51,7 @@ public:
     void    deactivate_flags(void);
 
     std::vector<sptr<decoding::hyperedge_t>> get_flag_edges(void);
+    sptr<decoding::hyperedge_t> get_best_nod_edge(bool require_exact_match=false);
 
     poly_t  get_error_polynomial(void);
     fp_t    get_expected_errors(void);
@@ -62,6 +63,8 @@ private:
     sptr<decoding::vertex_t>    make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
 
     void resolve_edges(const std::vector<sptr<decoding::hyperedge_t>>&, size_t flips_per_error);
+
+    sptr<decoding::hyperedge_t> get_best_flag_edge(std::vector<sptr<decoding::hyperedge_t>>);
 
     void dijkstra_(int, int, sptr<decoding::vertex_t> from);
     void make_dijkstra_graph(int, int);
@@ -82,6 +85,9 @@ private:
     std::set<uint64_t> active_flags;
     std::set<uint64_t> flag_detectors;
     std::vector<EdgeClass> edge_classes;
+    // nod_edges = no detector edges. These are unique flag edges that should be used when
+    // flags are active, but no detectors are observed.
+    std::vector<sptr<decoding::hyperedge_t>> nod_edges;
     bool flags_are_active;
 };
 

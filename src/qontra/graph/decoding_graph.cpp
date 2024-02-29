@@ -28,6 +28,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     active_flags(),
     edge_classes(),
     flag_detectors(circuit.flag_detectors),
+    nod_edges(),
     flags_are_active(false)
 {
     stim::DetectorErrorModel dem =
@@ -82,11 +83,19 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 }
             }
             if (detectors.size() == 0) {
+                /*
                 std::cout << "Detectorless event: F[";
                 for (uint64_t f : flags) std::cout << " " << f;
                 std::cout << " ], frames =";
                 for (uint64_t fr : frames) std::cout << " " << fr;
                 std::cout << ", prob = " << p << std::endl;
+                */
+
+                sptr<hyperedge_t> e = this->make_edge({});
+                e->flags = std::set<uint64_t>(flags.begin(), flags.end());
+                e->frames = frames;
+                e->probability = p;
+                nod_edges.push_back(e);
                 return;
             }
 
@@ -108,6 +117,20 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     read_detector_error_model(dem, 1, detector_offset, ef, df);
 
     resolve_edges(tentative_edges, flips_per_error);
+}
+
+std::vector<sptr<hyperedge_t>>
+DecodingGraph::get_flag_edges() {
+    // Select one flag edge from each equivalence class that has the most in common
+    // with the active flags.
+    std::vector<sptr<hyperedge_t>> edge_list;
+    for (EdgeClass& c : edge_classes) {
+        sptr<hyperedge_t> best_edge = get_best_flag_edge(c.get_edges());
+        if (best_edge != nullptr) {
+            edge_list.push_back(best_edge);
+        }
+    }
+    return edge_list;
 }
 
 sptr<vertex_t>
@@ -154,6 +177,7 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
             }
         }
 
+        /*
         std::cout << "\nEquivalence class of D[";
         for (size_t i = 0; i < rep->get_order(); i++) {
             std::cout << " " << print_v(rep->get<vertex_t>(i));
@@ -163,6 +187,7 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
             std::cout << " " << f;
         }
         std::cout << " ]" << std::endl;
+        */
 
         // Update any edge probabilities.
         for (sptr<hyperedge_t> e : c.get_edges()) {
@@ -183,6 +208,7 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
                 }
             }
 
+            /*
             std::cout << "\tD[";
             for (size_t i = 0; i < e->get_order(); i++) {
                 std::cout << " " << print_v(e->get<vertex_t>(i));
@@ -196,33 +222,29 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
                 std::cout << " " << fr;
             }
             std::cout << ", prob = " << e->probability <<  std::endl;
+            */
         }
         edge_classes.push_back(c);
     }
 }
 
-std::vector<sptr<hyperedge_t>>
-DecodingGraph::get_flag_edges() {
-    // Select one flag edge from each equivalence class that has the most in common
-    // with the active flags.
-    std::vector<sptr<hyperedge_t>> edge_list;
-    for (EdgeClass& c : edge_classes) {
-        sptr<hyperedge_t> best_edge = nullptr;
-        size_t best_nf = 0;
+sptr<hyperedge_t>
+DecodingGraph::get_best_flag_edge(std::vector<sptr<hyperedge_t>> edge_list) {
+    sptr<hyperedge_t> best_edge = nullptr;
+    size_t best_nf = 0;
+    fp_t best_p = 0.0;
 
-        for (sptr<hyperedge_t> e : c.get_edges()) {
-            std::set<uint64_t> flag_intersect = e->flags * active_flags;
-            const size_t nf = flag_intersect.size();
-            if (flag_intersect.size() == e->flags.size() && nf > best_nf) {
-                best_edge = e;
-                best_nf = nf;
-            }
-        }
-        if (best_edge != nullptr) {
-            edge_list.push_back(best_edge);
+    for (sptr<hyperedge_t> e : edge_list) {
+        std::set<uint64_t> flag_intersect = e->flags * active_flags;
+        const size_t nf = flag_intersect.size();
+        const fp_t p = e->probability;
+        if (nf == e->flags.size() && nf > best_nf) {
+            best_edge = e;
+            best_nf = nf;
+            best_p = p;
         }
     }
-    return edge_list;
+    return best_edge;
 }
 
 void
@@ -337,7 +359,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
         }
     }
 
-    std::cout << "renorm factor: " << renorm_factor << std::endl;
+//  std::cout << "renorm factor: " << renorm_factor << std::endl;
 
     // Now handle other edges.
     for (sptr<vertex_t> v : dgr->get_vertices()) {

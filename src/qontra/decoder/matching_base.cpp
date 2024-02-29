@@ -54,6 +54,7 @@ MatchingBase::load_syndrome(
         decoding_graph->activate_flags(flags);
         flag_edges = decoding_graph->get_flag_edges();
 
+        /*
         std::cout << "Flag edges:" << std::endl;
         for (sptr<hyperedge_t> e : flag_edges) {
             std::cout << "\tD[";
@@ -70,7 +71,28 @@ MatchingBase::load_syndrome(
             }
             std::cout << std::endl;
         }
+        */
     }
+}
+
+stim::simd_bits<SIMD_WIDTH>
+MatchingBase::get_base_corr() {
+    stim::simd_bits<SIMD_WIDTH> corr(circuit.count_observables());
+    if (flags.empty()) {
+        return corr;
+    }
+    // Otherwise, get a no-detector edge. If such an edge exists, then return the
+    // corresponding correction.
+    sptr<hyperedge_t> e = decoding_graph->get_best_nod_edge(detectors.size());
+    if (e != nullptr) {
+        for (uint64_t fr : e->frames) corr[fr] ^= 1;
+    }
+    return corr;
+}
+
+Decoder::result_t
+MatchingBase::ret_no_detectors() {
+    return { 0.0, get_base_corr() };
 }
 
 std::vector<Decoder::assign_t>

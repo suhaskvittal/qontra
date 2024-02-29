@@ -77,6 +77,13 @@ DecodingGraph::deactivate_flags() {
     flags_are_active = false;
 }
 
+inline sptr<decoding::hyperedge_t>
+DecodingGraph::get_best_nod_edge(bool exact_match) {
+    sptr<decoding::hyperedge_t> e = get_best_flag_edge(nod_edges);
+    if (e == nullptr || (exact_match && e->flags.size() != active_flags.size())) return nullptr;
+    return e;
+}
+
 inline poly_t
 DecodingGraph::get_error_polynomial() {
     update_state();
