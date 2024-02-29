@@ -80,7 +80,14 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                     it++;
                 }
             }
-            if (detectors.size() == 0) return;
+            if (detectors.size() == 0) {
+                std::cout << "Detectorless event: F[";
+                for (uint64_t f : flags) std::cout << " " << f;
+                std::cout << " ], frames =";
+                for (uint64_t fr : frames) std::cout << " " << fr;
+                std::cout << ", prob = " << p << std::endl;
+                return;
+            }
 
             std::vector<sptr<vertex_t>> vlist;
             for (uint64_t d : detectors) {
@@ -157,6 +164,11 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
         std::cout << " ]" << std::endl;
 
         for (sptr<hyperedge_t> e : c.get_edges()) {
+            if (e->flags.size() && rep->flags.empty()) {
+                // Increase the probability of this edge, as it is also a non flag edge.
+                e->probability += rep->probability;
+            }
+
             std::cout << "\tD[";
             for (size_t i = 0; i < e->get_order(); i++) {
                 std::cout << " " << print_v(e->get<vertex_t>(i));
@@ -169,7 +181,7 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
             for (uint64_t fr : e->frames) {
                 std::cout << " " << fr;
             }
-            std::cout << std::endl;
+            std::cout << ", prob = " << e->probability <<  std::endl;
 
             safe_add_edge(e);
         }
@@ -329,21 +341,28 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             renorm_factor *= p;
         }
     }
+
+    std::cout << "renorm factor: " << renorm_factor << std::endl;
+
     // Now handle other edges.
     for (sptr<vertex_t> v : dgr->get_vertices()) {
         for (sptr<vertex_t> w : dgr->get_vertices()) {
-            if (v == w) continue;
+            if (v <= w) continue;
             sptr<edge_t> e = dgr->get_edge(v, w);
             if (e == nullptr) {
                 e = dgr->make_and_add_edge(v, w);
             }
-            fp_t p = 0.0;
-            for (sptr<hyperedge_t> he : get_common_hyperedges({v, w})) {
-                fp_t r = he->probability;
-                p = (1-p)*r + (1-r)*p;
+            if (v->is_boundary_vertex && w->is_boundary_vertex) {
+                e->probability = 1.0;
+            } else {
+                fp_t p = 0.0;
+                for (sptr<hyperedge_t> he : get_common_hyperedges({v, w})) {
+                    fp_t r = he->probability;
+                    p = (1-p)*r + (1-r)*p;
+                }
+                p *= renorm_factor;
+                e->probability = (1-e->probability)*p + (1-p)*e->probability;
             }
-            p *= renorm_factor;
-            e->probability = (1-e->probability)*p + (1-p)*e->probability;
         }
     }
     // Now the graph is done.

@@ -110,6 +110,8 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     // counter for the number of times an edge appears in a connected component.
     std::map<vpair_t, size_t> in_cc_map, not_cc_map;
     std::vector<std::pair<std::set<vpair_t>, int>> component_edge_sets;
+    // Track all triggered flag edges (need these to update the correction)
+    std::set<sptr<hyperedge_t>> triggered_flag_edges;
     // Track all matches that are in a component.
     std::set<assign_t> in_cc_assignments;
     for (const component_t& cc : components) {
@@ -119,8 +121,15 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             in_cc_assignments.insert(m);
             sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                            w = decoding_graph->get_vertex(std::get<1>(m));
-            std::set<vpair_t> tmp =
-                insert_error_chain_into(in_cc_map, v, w, color, std::get<2>(m), std::get<3>(m), false, corr);
+            std::set<vpair_t> tmp = insert_error_chain_into(
+                                        in_cc_map,
+                                        v,
+                                        w,
+                                        color,
+                                        std::get<2>(m),
+                                        std::get<3>(m),
+                                        false,
+                                        triggered_flag_edges);
             vtils::insert_range(edge_set, tmp);
         }
         component_edge_sets.emplace_back(edge_set, color);
@@ -131,7 +140,24 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         sptr<vertex_t> v = decoding_graph->get_vertex(std::get<0>(m)),
                        w = decoding_graph->get_vertex(std::get<1>(m));
         if (std::get<2>(m) != COLOR_RED && std::get<3>(m) != COLOR_RED) continue;
-        insert_error_chain_into(not_cc_map, v, w, COLOR_RED, std::get<2>(m), std::get<3>(m), false, corr);
+        insert_error_chain_into(
+                not_cc_map,
+                v,
+                w,
+                COLOR_RED,
+                std::get<2>(m),
+                std::get<3>(m),
+                false,
+                triggered_flag_edges);
+    }
+
+    for (sptr<hyperedge_t> e : triggered_flag_edges) {
+        std::cout << "Applying correction for edge D[";
+        for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v);
+        std::cout << ", frames =";
+        for (uint64_t fr : e->frames) std::cout << " " << fr;
+        std::cout << std::endl;
+        for (uint64_t fr : e->frames) corr[fr] ^= 1;
     }
 
     if (in_cc_map.empty() && not_cc_map.empty()) {
@@ -336,9 +362,16 @@ RestrictionDecoder::insert_error_chain_into(
         int c1,
         int c2,
         bool force_unflagged,
-        stim::simd_bits_range_ref<SIMD_WIDTH> corr)
+        std::set<sptr<hyperedge_t>>& triggered_flag_edges)
 {
     error_chain_t ec = decoding_graph->get(c1, c2, src, dst, force_unflagged);
+
+    std::cout << "error chain btwn " << print_v(src) << " and " << print_v(dst) << ":";
+    for (sptr<vertex_t> x : ec.path) {
+        std::cout << " " << print_v(x);
+    }
+    std::cout << std::endl;
+
     for (size_t i = 1; i < ec.path.size(); i++) {
         sptr<vertex_t> v = ec.path.at(i-1),
                        w = ec.path.at(i);
@@ -348,7 +381,7 @@ RestrictionDecoder::insert_error_chain_into(
         // Update the correction as this maybe a flag edge.
         sptr<hyperedge_t> e = get_flag_edge_for({v, w});
         if (e != nullptr) {
-            for (uint64_t fr : e->frames) corr[fr] ^= 1;
+            triggered_flag_edges.insert(e);
             continue;
         }
         // Flatten v and w.
@@ -375,7 +408,8 @@ RestrictionDecoder::insert_error_chain_into(
             }
             if (fu == nullptr) {
                 // When this happens, just find a path in the non-flagged graph to use.
-                insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2, true, corr);
+                insert_error_chain_into(
+                        incidence_map, fv, fw, component_color, c1, c2, true, triggered_flag_edges);
             } else {
                 vpair_t e1 = make_vpair(fv, fu),
                         e2 = make_vpair(fu, fw);

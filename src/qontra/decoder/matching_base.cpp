@@ -44,6 +44,7 @@ MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int 
     decoding_graph->activate_flags(flags);
     flag_edges = decoding_graph->get_flag_edges();
 
+    /*
     std::cout << "Flag edges:" << std::endl;
     for (sptr<hyperedge_t> e : flag_edges) {
         std::cout << "\tD[";
@@ -60,6 +61,7 @@ MatchingBase::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int 
         }
         std::cout << std::endl;
     }
+    */
 }
 
 std::vector<Decoder::assign_t>
