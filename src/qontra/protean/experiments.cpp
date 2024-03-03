@@ -74,7 +74,7 @@ make_error_and_timing_from_coupling_graph(std::string coupling_file, ErrorTable&
 
         errors.op1q["h"][q] = 0.1;
         errors.op1q["reset"][q] = 0.1;
-        errors.idling[q] = 0.0;//0.1;
+        errors.idling[q] = 0.1;
         errors.m1w0[q] = 1.0;
         errors.m0w1[q] = 1.0;
 
@@ -90,7 +90,7 @@ make_error_and_timing_from_coupling_graph(std::string coupling_file, ErrorTable&
                         w = e->get_target<vertex_t>();
         const uint64_t q1 = v->id,
                          q2 = w->id;
-        fp_t cxp = 0.0;//get_cx_error(gr, e);
+        fp_t cxp = get_cx_error(gr, e);
         // Populate table.
         auto q1_q2 = std::make_pair(q1, q2),
              q2_q1 = std::make_pair(q2, q1);

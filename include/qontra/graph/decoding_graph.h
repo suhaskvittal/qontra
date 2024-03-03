@@ -37,6 +37,8 @@ public:
 
     sptr<decoding::vertex_t> make_vertex(uint64_t) const override;
 
+    sptr<decoding::hyperedge_t> get_best_shared_edge(std::vector<sptr<decoding::vertex_t>>);
+
     error_chain_t get(uint64_t, uint64_t, bool force_unflagged=false);
     error_chain_t get(sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
     error_chain_t get(int c1, int c2, uint64_t, uint64_t, bool force_unflagged=false);

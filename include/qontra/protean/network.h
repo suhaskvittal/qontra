@@ -240,8 +240,13 @@ public:
         size_t max_connectivity = 4;
         size_t max_thickness = 1;   // 0 = means only processor bulk, n = n TSV layers.
 
+        // Scheduler settings.
         size_t  rounds = 1;
         bool    is_memory_x = false;
+
+        // Optimization settings.
+        bool    force_xz_flag_merge = false;
+        bool    enable_flag_reduction = false;
     } config;
 private:
     // Determines if a proposed flag (represented by the two raw vertices -- these are data qubits)

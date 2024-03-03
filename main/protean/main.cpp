@@ -23,8 +23,7 @@ int main(int argc, char* argv[]) {
     std::string tanner_graph_file(argv[1]);
     std::string data_output_folder(argv[2]);
 
-    std::string render_output_folder;
-    std::string coloring_file;
+    std::string render_output_folder = data_output_folder + "/render";
 
     std::string pass_string = "Jid.Ral.Fla.Ral.Jpa.Ral.(Prx.Con.Jpa.Ral)+.Rlb.";
     std::string layout_engine = "neato";
@@ -32,8 +31,6 @@ int main(int argc, char* argv[]) {
     uint64_t schedule_rounds = 3;
     uint64_t max_connectivity = 4;
 
-    pp.get("render", render_output_folder);
-    pp.get("colors", coloring_file);
     pp.get("passes", pass_string);
     pp.get("layout", layout_engine);
     
@@ -48,9 +45,11 @@ int main(int argc, char* argv[]) {
     // Make Network:
     TannerGraph tanner_graph = create_graph_from_file<TannerGraph>(tanner_graph_file, io::update_tanner_graph);
     PhysicalNetwork network(&tanner_graph);
+
     network.config.max_connectivity = static_cast<size_t>(max_connectivity);
     network.config.rounds = static_cast<size_t>(schedule_rounds);
     network.config.is_memory_x = schedule_is_mx;
+    network.config.force_xz_flag_merge = pp.option_set("flag-jid");
 
     std::cout << "Data Qubits = " 
             << tanner_graph.get_vertices_by_type(tanner::vertex_t::type::data).size() << "\n"

@@ -78,12 +78,7 @@ HyperGraph<V, HE>::contains_(std::vector<sptr<void>> vlist) const {
 
 template <class V, class HE> inline bool
 HyperGraph<V, HE>::contains(std::vector<sptr<V>> vlist) const {
-    std::vector<sptr<base::vertex_t>> inc_vlist;
-    for (size_t i = 0; i < vlist.size(); i++) {
-        inc_vlist.push_back(get_incidence_vertex(vlist.at(i)));
-    }
-    std::vector<sptr<base::vertex_t>> common = incidence_graph->get_common_neighbors(inc_vlist);
-    return common.size() == 1 && incidence_graph->get_degree(common[0]) == vlist.size();
+    return get_edge(vlist) != nullptr;
 }
 
 template <class V, class HE> inline sptr<V>
@@ -182,8 +177,12 @@ HyperGraph<V, HE>::get_edge(std::vector<sptr<V>> vlist) const {
         inc_vlist.push_back(iv_v);
     }
     std::vector<sptr<base::vertex_t>> common = incidence_graph->get_common_neighbors(inc_vlist);
-    return common.size() == 1 && incidence_graph->get_degree(common[0]) == vlist.size()
-            ? get_edge_from_incidence_vertex(common[0]) : nullptr;
+    for (sptr<base::vertex_t> _e : common) {
+        if (incidence_graph->get_degree(_e) == vlist.size()) {
+            return get_edge_from_incidence_vertex(_e);
+        }
+    }
+    return nullptr;
 }
 
 template <class V, class HE> inline sptr<HE>

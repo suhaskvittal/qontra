@@ -19,6 +19,17 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
 
     load_syndrome(syndrome);
 
+    auto _detectors = detectors;
+    auto _flags = flags;
+
+    /*
+    std::cout << "syndrome: D[";
+    for (uint64_t d : _detectors) std::cout << " " << d;
+    std::cout << " ], F[";
+    for (uint64_t f : _flags) std::cout << " " << f;
+    std::cout << " ]" << std::endl;
+    */
+
     if (detectors.empty()) return ret_no_detectors();
 
     corr ^= get_base_corr();
@@ -35,7 +46,14 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
             sptr<vertex_t> vi = ec.path[i-1],
                             vj = ec.path[i];
             sptr<hyperedge_t> e = decoding_graph->get_edge({vi, vj}); 
-            if (e == nullptr) continue;
+            if (e == nullptr) {
+                // First try and get the flag edge.
+                e = get_flag_edge_for({vi, vj});
+            }
+            // If it is still not found, then just declare an error and move on.
+            if (e == nullptr) {
+                continue;
+            }
             e = decoding_graph->get_best_edge_from_class_of(e);
             for (uint64_t f : e->frames) corr[f] ^= 1;
         }

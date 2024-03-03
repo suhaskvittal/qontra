@@ -122,6 +122,21 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
 }
 
 sptr<hyperedge_t>
+DecodingGraph::get_best_shared_edge(std::vector<sptr<vertex_t>> vlist) {
+    auto common = get_common_hyperedges(vlist);
+    if (common.empty()) return nullptr;
+    if (common.size() == 1) return common[0];
+    // Choose hyperedge with lowest order. Break ties with probability.
+    auto it = std::min_element(common.begin(), common.end(),
+                [] (sptr<hyperedge_t> x, sptr<hyperedge_t> y)
+                {
+                    return (x->get_order() < y->get_order())
+                        || (x->get_order() == y->get_order() && x->probability > y->probability);
+                });
+    return *it;
+}
+
+sptr<hyperedge_t>
 DecodingGraph::get_base_edge(sptr<hyperedge_t> e) {
     if (!edge_class_map.count(e)) {
         return e;
@@ -205,10 +220,17 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
         sptr<hyperedge_t> rep = c.get_representative();
         if (rep->flags.empty()) {
             if (rep->get_order() < flips_per_error) { 
-                std::vector<sptr<vertex_t>> boundary_list = 
-                    get_complementary_boundaries_to(rep->get<vertex_t>());
-                if (boundary_list.size() + rep->get_order() == flips_per_error) {
-                    for (sptr<vertex_t> vb : boundary_list) c.add_vertex(vb);
+                if (number_of_colors == 0) {
+                    if (rep->get_order() + 1 == flips_per_error) {
+                        sptr<vertex_t> vb = get_boundary_vertex(COLOR_ANY);
+                        c.add_vertex(vb);
+                    }
+                } else {
+                    std::vector<sptr<vertex_t>> boundary_list = 
+                        get_complementary_boundaries_to(rep->get<vertex_t>());
+                    if (boundary_list.size() + rep->get_order() == flips_per_error) {
+                        for (sptr<vertex_t> vb : boundary_list) c.add_vertex(vb);
+                    }
                 }
             }
         } else {
