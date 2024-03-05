@@ -48,6 +48,7 @@ int main(int argc, char* argv[]) {
     network.config.max_connectivity = static_cast<size_t>(max_connectivity);
     network.config.rounds = static_cast<size_t>(schedule_rounds);
     network.config.force_xz_flag_merge = pp.option_set("flag-jid");
+    network.config.enable_flag_reduction = pp.option_set("flag-reduce");
 
     std::cout << "Data Qubits = " 
             << tanner_graph.get_vertices_by_type(tanner::vertex_t::type::data).size() << "\n"

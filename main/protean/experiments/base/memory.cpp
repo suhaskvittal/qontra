@@ -36,7 +36,9 @@ int main(int argc, char* argv[]) {
     std::string qes_file = pp.option_set("mx") ? 
                                 protean_folder + "/memory_x.qes" : protean_folder + "/memory_z.qes";
     std::string coupling_file = protean_folder + "/coupling_graph.txt";
-    std::string output_file = protean_folder + "/output/basic_memory.csv";
+    std::string output_file = pp.option_set("mx") ?
+                                protean_folder + "/output/basic_memory_x.csv"
+                                : protean_folder + "/output/basic_memory_z.csv";
 
     if (world_rank == 0) {
         std::cout << "reading " << qes_file << ", writing to " << output_file << std::endl;

@@ -41,8 +41,7 @@ for (version, pass_string, max_conn, other_opt) in version_list:
                         --passes "{pass_string}"\
                         --s-rounds {rounds}\
                         --max-conn {max_conn}\
-                        {color_opt}\
-                        {other_opt}
+                        {color_opt} {other_opt}
               '''
     print(protean_cmd)
     os.system(protean_cmd)

@@ -16,11 +16,13 @@ if decoder != 'mwpm' and decoder != 'restriction':
 
 for version in ['v1', 'v3.2', 'v4.2']:
     folder = f'../data/protean/{code}/{version}'
-    cmd = fr'''
-            cd Release
-            mkdir -p {folder}/output
-            mpirun -np {n_proc} ./pr_base_memory {folder} --decoder {decoder} --s {shots} {fix_error_opt}
-            '''
-    print('----------------------------')
-    print(cmd)
-    os.system(cmd)
+    for mem_flag in ['', '-mx']:
+        cmd = fr'''
+                cd Release
+                mkdir -p {folder}/output
+                mpirun -np {n_proc} ./pr_base_memory {folder} --decoder {decoder} --s {shots}\
+                        {fix_error_opt} {mem_flag}
+                '''
+        print('----------------------------')
+        print(cmd)
+        os.system(cmd)

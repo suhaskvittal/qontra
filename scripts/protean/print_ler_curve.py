@@ -40,8 +40,9 @@ if code == 'rsc':
 else:
     for version in ['v1', 'v2.1', 'v2.2', 'v3.1', 'v3.2', 'v4.1', 'v4.2']:
         folder = f'data/protean/{code}/{version}'
-        data_file = f'{folder}/output/basic_memory.csv'
-        if not os.path.exists(data_file):
-            continue
-        # Read the data from the file.
-        read_data_file(data_file, version)
+        for m in ['x', 'z']:
+            data_file = f'{folder}/output/basic_memory_{m}.csv'
+            if not os.path.exists(data_file):
+                continue
+            # Read the data from the file.
+            read_data_file(data_file, f'{version}, {m}')
