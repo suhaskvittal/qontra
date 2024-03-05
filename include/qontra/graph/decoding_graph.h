@@ -55,12 +55,13 @@ public:
     sptr<decoding::hyperedge_t> get_base_edge(sptr<decoding::hyperedge_t>);
 
     std::vector<sptr<decoding::hyperedge_t>> get_flag_edges(void);
+    std::vector<sptr<decoding::hyperedge_t>> get_all_edges(void);
 
     sptr<decoding::hyperedge_t> get_best_edge_from_class_of(sptr<decoding::hyperedge_t>);
     sptr<decoding::hyperedge_t> get_best_nod_edge(bool require_exact_match=false);
 
-    std::map<sptr<decoding::hyperedge_t>, sptr<decoding::hyperedge_t>>
-        get_best_rep_map(void);
+    std::map<sptr<decoding::hyperedge_t>, sptr<decoding::hyperedge_t>> get_best_rep_map(void);
+    EdgeClass get_edge_class(sptr<decoding::hyperedge_t>);
 
     poly_t  get_error_polynomial(void);
     fp_t    get_expected_errors(void);
@@ -102,6 +103,7 @@ private:
     // nod_edges = no detector edges. These are unique flag edges that should be used when
     // flags are active, but no detectors are observed.
     std::vector<sptr<decoding::hyperedge_t>> nod_edges;
+    std::vector<sptr<decoding::hyperedge_t>> all_edges;
     bool flags_are_active;
 };
 

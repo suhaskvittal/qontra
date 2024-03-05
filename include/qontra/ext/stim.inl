@@ -28,6 +28,9 @@ DetailedStimCircuit::apply_errors(
         std::vector<fp_t> errors,
         bool is_2q) 
 {
+    if (is_2q && name == "DEPOLARIZE1") {
+        name = "DEPOLARIZE2";
+    }
     for (size_t i = 0; i < errors.size(); i++) {
         if (is_2q) {
             safe_append_ua(name, 

@@ -288,17 +288,17 @@ Scheduler::build_teardown(qes::Program<>& program) {
 
 void
 Scheduler::prep_tear_h_gates(qes::Program<>& program) {
-    std::vector<int64_t> h_operands;
+    std::set<int64_t> h_operands;
     for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
         test_and_set_exit_on_fail(rpq, "build_preparation");
         // Perform an H gate if necessary.
         auto& support = get_support(rpq);
         if (rpq->qubit_type == raw_vertex_t::type::xparity) {
-            h_operands.push_back(qu(rpq));
+            h_operands.insert(qu(rpq));
         } else {
             for (sptr<raw_vertex_t> rfq : support.flags) {
                 test_and_set_exit_on_fail(rfq, "build_preparation");
-                h_operands.push_back(qu(rfq));
+                h_operands.insert(qu(rfq));
             }
         }
     }

@@ -31,6 +31,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     flag_class_map(),
     edge_class_map(),
     nod_edges(),
+    all_edges(),
     flags_are_active(false)
 {
     stim::DetectorErrorModel dem =
@@ -98,6 +99,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 e->frames = frames;
                 e->probability = p;
                 nod_edges.push_back(e);
+                all_edges.push_back(e);
                 return;
             }
 
@@ -293,6 +295,7 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
             }
             std::cout << ", prob = " << e->probability <<  std::endl;
             */
+            all_edges.push_back(e);
         }
         edge_classes.push_back(c);
         for (uint64_t f : all_flags) {
