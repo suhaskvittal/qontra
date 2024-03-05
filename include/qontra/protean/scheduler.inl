@@ -44,7 +44,8 @@ Scheduler::try_and_push_back_cx_operands(
                              py = network->get_vertex(qy);
     if (!network->contains(px, py)) {
         std::cerr << "[ try_and_push_back_cx_operands ] attempted to do CX(" << qx << ", " << qy << ") when"
-            << " no coupling exists." << std::endl;
+            << " no coupling exists. Roles = " << graph::print_v(rx) 
+            << ", " << graph::print_v(ry) << std::endl;
         exit(1);
     }
     if (in_use.count(qx) || in_use.count(qy)) return false;

@@ -10,13 +10,14 @@ namespace qontra {
 namespace graph {
 
 template <class V, class E> int
-k_coloring_greedy(Graph<V, E>* graph, std::map<sptr<V>, int>& color_map) {
+k_coloring_greedy(Graph<V, E>* graph, std::map<sptr<V>, int>& color_map, size_t bfs_seed) {
     std::vector<sptr<V>> vertices = graph->get_vertices();
     if (vertices.empty()) return -1;
     // Solve by BFS.
     std::set<sptr<V>> visited;
     int max_color = 0;
-    for (sptr<V> st : vertices) {
+    for (size_t i = 0; i < vertices.size(); i++) {
+        sptr<V> st = vertices.at( (i + bfs_seed) % vertices.size() );
         std::deque<sptr<V>> bfs{ st };
         while (bfs.size()) {
             sptr<V> v = bfs.front();

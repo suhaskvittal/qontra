@@ -191,12 +191,14 @@ Scheduler::make_round() {
     while (true) {
         checks_this_cycle.clear();
         std::set<int64_t> r_operands;
+        std::set<sptr<raw_vertex_t>> roles_this_cycle;
         for (sptr<raw_vertex_t> rv : raw_network->get_vertices()) {
             if (rv->is_check()) {
                 sptr<phys_vertex_t> pv = network->role_to_phys.at(rv);
                 size_t cyc = pv->cycle_role_map.at(rv);
-                if (cyc <= cycle && !finished_checks.count(rv)) {
+                if (cyc <= cycle && !finished_checks.count(rv) && !roles_this_cycle.count(rv)) {
                     checks_this_cycle.push_back(rv);
+                    insert_range(roles_this_cycle, raw_network->get_support(rv).all);
                     // Reset all parity, flags, and proxies associated with this qubit.
                     r_operands.insert(qu(rv));
                     auto& support = raw_network->get_support(rv);
@@ -420,7 +422,15 @@ Scheduler::compute_schedules() {
         sch_time_map;
 
     auto& fam = raw_network->flag_assignment_map;
-    for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
+    std::vector<sptr<raw_vertex_t>> sorted_checks(checks_this_cycle);
+    std::sort(sorted_checks.begin(), sorted_checks.end(),
+            [&] (sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry)
+            {
+                return raw_network->get_support(rx).data.size()
+                        < raw_network->get_support(ry).data.size();
+            });
+
+    for (sptr<raw_vertex_t> rpq : sorted_checks) {
         auto& support = get_support(rpq);
         // Make the LP:
         CPXLPManager<sptr<raw_vertex_t>> LP;
@@ -449,16 +459,8 @@ Scheduler::compute_schedules() {
                 // Only add the following constraint if rx and ry both interact
                 // with rpq or the same flag.
                 if (rx_rsq == ry_rsq) {
-                    lp_constr_t con1(x, y, lp_constr_t::direction::neq);
-                    LP.add_constraint(con1);
-                    /*
-                    if (rx_rsq->qubit_type == raw_vertex_t::type::flag) {
-                        lp_constr_t con2(x-y, 1, lp_constr_t::direction::le),
-                                    con3(x-y, -1, lp_constr_t::direction::ge);
-                        LP.add_constraint(con2);
-                        LP.add_constraint(con3);
-                    }
-                    */
+                    lp_constr_t con(x, y, lp_constr_t::direction::neq);
+                    LP.add_constraint(con);
                 }
             }
         }
@@ -526,6 +528,7 @@ Scheduler::compute_schedules() {
         LP.build(max_of_all, false);
         double obj;
         int solstat, status;
+
         if ((status=LP.solve(&obj, &solstat))) {
             std::cerr << "build_body: program is infeasible, solstat = " << solstat
                 << ", status = " << status << std::endl;
@@ -540,6 +543,7 @@ Scheduler::compute_schedules() {
                     if (sch_map.count(rsq)) {
                         std::cerr << " | fixed to be " << sch_time_map[rsq][rdq];
                     }
+                    std::cerr << " | rsq = " << print_v(rsq);
                 }
                 std::cerr << std::endl;
             }
@@ -548,10 +552,12 @@ Scheduler::compute_schedules() {
                     << "\tnumber of constraints (" << LP.l_constraints.size() << ")" << std::endl;
             exit(1);
         }
+
         for (sptr<raw_vertex_t> rdq : support.data) {
             sptr<raw_vertex_t> rsq = fam[rpq].count(rdq) ? fam[rpq][rdq] : rpq;
             size_t t = static_cast<size_t>(round(LP.get_value(rdq)));
             existing_cnot_times[rdq].emplace_back(t, rpq);
+
             if (!sch_map.count(rsq)) {
                 sch_map[rsq] = std::vector<sptr<raw_vertex_t>>(upper_bound, nullptr);
             }
@@ -563,11 +569,9 @@ Scheduler::compute_schedules() {
 }
 
 qes::Program<>
-PhysicalNetwork::make_schedule() {
+PhysicalNetwork::make_schedule(bool mx) {
     Scheduler sch(this);
-    qes::Program<> program = sch.run(config.rounds, config.is_memory_x);
-    // Improve depth of program.
-
+    qes::Program<> program = sch.run(config.rounds, mx);
     return program;
 }
 

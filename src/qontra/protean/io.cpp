@@ -106,8 +106,8 @@ PhysicalNetwork::write_stats_file(std::string output_file) {
 }
 
 void
-PhysicalNetwork::write_schedule_file(std::string output_file) {
-    qes::Program<> schedule = make_schedule();
+PhysicalNetwork::write_schedule_file(std::string output_file, bool is_memory_x) {
+    qes::Program<> schedule = make_schedule(is_memory_x);
     qes::to_file(output_file, schedule);
 }
 

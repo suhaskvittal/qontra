@@ -14,7 +14,7 @@ namespace qontra {
 namespace graph {
 
 template <class V, class E>
-int k_coloring_greedy(Graph<V, E>*, std::map<sptr<V>, int>&);
+int k_coloring_greedy(Graph<V, E>*, std::map<sptr<V>, int>&, size_t bfs_seed);
 
 template <class V, class E>
 int k_coloring_rlf(Graph<V, E>*, std::map<sptr<V>, int>&);

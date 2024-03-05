@@ -33,7 +33,8 @@ int main(int argc, char* argv[]) {
     CmdParser pp(argc, argv, 1);
 
     std::string protean_folder(argv[1]);
-    std::string qes_file = protean_folder + "/ext.qes";
+    std::string qes_file = pp.option_set("mx") ? 
+                                protean_folder + "/memory_x.qes" : protean_folder + "/memory_z.qes";
     std::string coupling_file = protean_folder + "/coupling_graph.txt";
     std::string output_file = protean_folder + "/output/basic_memory.csv";
 

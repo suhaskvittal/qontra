@@ -7,6 +7,8 @@
 
 #include "qontra/graph/algorithms/coloring.h"
 
+#include <limits>
+
 namespace qontra {
 namespace graph {
 
@@ -28,8 +30,19 @@ TannerGraph::update_check_color_map(std::map<sptr<vertex_t>, int>& check_color_m
             }
         }
     }
-    int max_color = k_coloring_greedy(gr.get(), check_color_map);
-    return max_color;
+    /*
+    int best_coloring = std::numeric_limits<int>::max();
+    for (size_t s = 0; s < checks.size(); s++) {
+        std::map<sptr<vertex_t>, int> cm;
+        int c = k_coloring_greedy(gr.get(), cm, s);
+        if (c < best_coloring) {
+            check_color_map = std::move(cm);
+            best_coloring = c;
+        }
+    }
+    */
+    int best_coloring = k_coloring_rlf(gr.get(), check_color_map);
+    return best_coloring;
 }
 
 namespace io {

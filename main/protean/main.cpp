@@ -37,7 +37,6 @@ int main(int argc, char* argv[]) {
     pp.get("s-rounds", schedule_rounds);
     pp.get("max-conn", max_connectivity);
 
-    bool schedule_is_mx = pp.option_set("mx");
     bool verbose = pp.option_set("verbose") || pp.option_set("v");
 
     vtils::safe_create_directory(data_output_folder);
@@ -48,7 +47,6 @@ int main(int argc, char* argv[]) {
 
     network.config.max_connectivity = static_cast<size_t>(max_connectivity);
     network.config.rounds = static_cast<size_t>(schedule_rounds);
-    network.config.is_memory_x = schedule_is_mx;
     network.config.force_xz_flag_merge = pp.option_set("flag-jid");
 
     std::cout << "Data Qubits = " 
@@ -67,6 +65,7 @@ int main(int argc, char* argv[]) {
         std::cout << "coloring checks...\n";
         network.assign_colors_to_checks();
     }
+    std::cout << "writing network to folder...\n";
 
     // Write data to output folder:
     write_network_to_folder(data_output_folder, &network);

@@ -173,16 +173,37 @@ PhysicalNetwork::make_flags() {
             support.push_back(rx);
         }
 
+        flag_pair_set_t flag_pairs;
+        std::set<sptr<raw_vertex_t>> already_matched;
+        // Check if rpq's physical qubit has another role that has already given flags in
+        // the proposed_flag_pair_map.
+        sptr<phys_vertex_t> ppq = role_to_phys.at(rpq);
+        for (sptr<raw_vertex_t> rx : ppq->role_set) {
+            if (proposed_flag_pair_map.count(rx)) {
+                for (const auto& fp : proposed_flag_pair_map.at(rx)) {
+                    sptr<raw_vertex_t> rv = fp.first,
+                                        rw = fp.second;
+                    std::vector<sptr<raw_vertex_t>>::iterator ita, itb;
+                    ita = std::find(support.begin(), support.end(), rv);
+                    itb = std::find(support.begin(), support.end(), rw);
+                    if (ita != support.end() && itb != support.end()) {
+                        flag_pairs.insert(fp);
+                        insert_all(already_matched, {rv, rw});
+                        support.erase(ita);
+                        // Need to recompute itb:
+                        itb = std::find(support.begin(), support.end(), rw);
+                        support.erase(itb);
+                    }
+                }
+            }
+        }
+
         // Perform the perfect matching:
         typedef std::tuple<sptr<raw_vertex_t>, sptr<raw_vertex_t>, size_t>  weighted_edge_t;
         std::vector<weighted_edge_t> edge_list;
         size_t max_edge_weight = 0;
         // In case anything is already matched, we will just forego including them in the matching
         // problem and pre-assign them.
-        flag_pair_set_t flag_pairs;
-
-        std::set<sptr<raw_vertex_t>> visited;
-        std::set<sptr<raw_vertex_t>> already_matched;
         for (auto ita = support.begin(); ita != support.end(); ) {
 edge_build_outer_loop_start:
             if (ita == support.end()) break;
@@ -253,6 +274,7 @@ edge_build_outer_loop_start:
         }
         pm.Solve();
         // Get the PM result.
+        std::set<sptr<raw_vertex_t>> visited;
         for (sptr<raw_vertex_t> rv : support) {
             if (visited.count(rv)) continue;
 
