@@ -33,5 +33,8 @@ if (COMPILE_PROTEAN_EXPERIMENTS)
     add_executable(pr_base_memory 
         main/protean/experiments/base/memory.cpp
         src/qontra/protean/experiments.cpp)
-    target_link_libraries(pr_base_memory PRIVATE libprotean)
+    add_executable(pr_rsc_memory
+        main/protean/experiments/base/run_surface_code.cpp)
+    target_link_libraries(pr_base_memory PRIVATE qontra)
+    target_link_libraries(pr_rsc_memory PRIVATE qontra)
 endif()

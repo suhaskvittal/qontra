@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include <stdint.h>
+
 namespace qontra {
 
 enum class INSTRUCTION_TYPE {
