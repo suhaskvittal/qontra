@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
         "\t--s <shots, default=1e6>\n"
         "\t--pmin <error-rate, default=1e-3>\n"
         "\t--pmax <error-rate, default=1e-3>\n"
-        "\t--steps <# of p, default=1>\n";
+        "\t--step-size <default=1>\n";
 
     std::string qes_file(argv[1]);
     std::string output_file(argv[2]);
@@ -44,12 +44,12 @@ int main(int argc, char* argv[]) {
     uint64_t    shots = 1'000'000;
     fp_t        pmin = 1e-3,
                 pmax = 1e-3;
-    uint64_t    steps = 1;
+    uint64_t    step_size = 1;
 
     pp.get("s", shots);
     pp.get("pmin", pmin);
     pp.get("pmax", pmax);
-    pp.get("steps", steps);
+    pp.get("step-size", step_size);
 
     qes::Program<> program = qes::from_file(qes_file);
 
@@ -87,7 +87,8 @@ int main(int argc, char* argv[]) {
             }
             fout << std::endl;
         }
-        p = pow(M_E, log(p) + (log(pmax)-log(pmin))/(steps-1));
+        fp_t gran = floor(log10(p));
+        p += step_size*pow(10, gran);
     }
     MPI_Finalize();
     return 0;

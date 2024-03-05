@@ -34,7 +34,7 @@ struct memory_result_t {
 };
 
 DetailedStimCircuit make_circuit(std::string qes_file, fp_t, bool fix_timing_error_as_p=false);
-DetailedStimCircuit make_circuit(qes::Program<>, fp_t, bool fix_timing_error_as_p=false);
+DetailedStimCircuit make_circuit(const qes::Program<>&, fp_t, bool fix_timing_error_as_p=false);
 memory_result_t     memory_experiment(Decoder*, memory_config_t);
 
 template <class PROLOGUE, class EPILOGUE>

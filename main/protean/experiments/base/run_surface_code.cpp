@@ -3,11 +3,9 @@
  *  date:   21 January 2024
  * */
 
-#include <qontra/decoder/mwpm.h>
-#include <qontra/decoder/restriction.h>
+#include <qontra/decoder/pymatching.h>
 #include <qontra/ext/stim.h>
 
-#include <qontra/protean/experiments.h>
 #include <qontra/experiments.h>
 #include <qontra/experiments/memory.h>
 
@@ -20,7 +18,6 @@
 #include <mpi.h>
 
 using namespace qontra;
-using namespace protean;
 using namespace vtils;
 
 int main(int argc, char* argv[]) {
@@ -32,24 +29,17 @@ int main(int argc, char* argv[]) {
 
     CmdParser pp(argc, argv, 1);
 
-    std::string protean_folder(argv[1]);
-    std::string qes_file = pp.option_set("mx") ? 
-                                protean_folder + "/memory_x.qes" : protean_folder + "/memory_z.qes";
-    std::string coupling_file = protean_folder + "/coupling_graph.txt";
-    std::string output_file = protean_folder + "/output/basic_memory.csv";
+    std::string qes_file(argv[1]);
+    std::string output_file(argv[2]);
 
     if (world_rank == 0) {
         std::cout << "reading " << qes_file << ", writing to " << output_file << std::endl;
     }
 
-    std::string decoder_name;
-
     uint64_t    shots = 1'000'000;
     fp_t        pmin = 5e-4,
                 pmax = 3e-3;
     uint64_t    step_size = 1;
-
-    pp.get("decoder", decoder_name, true);
 
     pp.get("s", shots);
     pp.get("pmin", pmin);
@@ -60,40 +50,15 @@ int main(int argc, char* argv[]) {
 
     // Initialize error and timing tables.
     qes::Program<> program = qes::from_file(qes_file);
-    ErrorTable errors;
-    TimeTable timing;
-    make_error_and_timing_from_coupling_graph(coupling_file, errors, timing);
 
-    DetailedStimCircuit base_circuit;
-    if (pp.option_set("fix-error")) {
-        base_circuit = make_circuit(program, pmax);
-    } else {
+    DetailedStimCircuit base_circuit = make_circuit(program, pmax);
 
-        ErrorTable errors_base = errors * 1e-3;
-        TimeTable timing_base = timing * 1e-3;
-        base_circuit = DetailedStimCircuit::from_qes(program, errors_base, timing_base);
-    }
-
-    uptr<Decoder> dec = nullptr;
-    if (decoder_name == "mwpm") {
-        dec = std::make_unique<MWPMDecoder>(base_circuit);
-    } else if (decoder_name == "restriction") {
-        dec = std::make_unique<RestrictionDecoder>(base_circuit);
-    } else {
-        std::cerr << "Unsupported decoder type: " << decoder_name << std::endl;
-    }
+    uptr<PyMatching> dec = std::make_unique<PyMatching>(base_circuit);
 
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
-        DetailedStimCircuit circuit;
         // Load model from file and run memory experiment.
-        if (pp.option_set("fix-error")) {
-            circuit = make_circuit(program, p);
-        } else {
-            ErrorTable _errors = errors * p;
-            TimeTable _timing = timing * p;
-            circuit = DetailedStimCircuit::from_qes(program, _errors, _timing);
-        }
+        DetailedStimCircuit circuit = make_circuit(program, p);
         dec->set_circuit(circuit);
 
         memory_config_t config;
@@ -109,12 +74,11 @@ int main(int argc, char* argv[]) {
             }
             std::ofstream fout(output_file, std::ios::app);
             if (write_header) {
-                fout << "physical error rate,shots,logical error rate,word error rate" << std::endl;
+                fout << "physical error rate,shots,logical error rate" << std::endl;
             }
             fout << p << ","
                 << shots << ","
-                << res.logical_error_rate << ","
-                << res.logical_error_rate / static_cast<fp_t>(circuit.count_observables());
+                << res.logical_error_rate;
             fout << std::endl;
         }
         fp_t gran = floor(log10(p));

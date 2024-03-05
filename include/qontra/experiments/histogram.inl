@@ -96,11 +96,15 @@ histogram_normalize(const histogram_t<T>& hist) {
 template <class T> inline size_t
 histogram_get_max_key_width(const histogram_t<T>& hist) {
     size_t max_width = 0;
-    for (const auto& p : hist) {
-        size_t n_words = p.first.size();
+    for (const auto& [ words, x ] : hist) {
+        size_t n_words = words.size();
         // The width is determined by the highest order bit in the last word.
         const size_t lower_order_width = (n_words-1) << 6;
-        const size_t last_word_width = flsll(static_cast<long long>(p.first.back()));
+#if defined(linux)
+        const size_t last_word_width = 64 - __builtin_clzll(words.back());
+#else
+        const size_t last_word_width = flsll(static_cast<long long>(words.back()));
+#endif
         size_t width = lower_order_width + last_word_width;
         max_width = std::max(width, max_width);
     }

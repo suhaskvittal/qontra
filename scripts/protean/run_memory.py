@@ -8,33 +8,19 @@ shots = int(argv[3])
 
 n_proc = int(argv[4])
 
-folder = '../data/protean/%s' % code
+fix_error_opt = '-fix-error' if '-fix-error' in argv else ''
 
 if decoder != 'mwpm' and decoder != 'restriction':
     print('Decoder should be one of \"mwpm\" or \"restriction\".')
     exit()
 
-cmd_1 = r'''
-        cd Release
-        mkdir -p %s/output
-        mpirun -np %d ./pr_base_memory %s --decoder %s --s %d
-        ''' % (folder, n_proc, folder, decoder, shots)
-cmd_2 = r'''
-        cd Release
-        mkdir -p %s/nn/data
-        mpirun -np %d ./pr_nn_data %s --decoder %s --s %d --p 5e-4
-        ''' % (folder, n_proc, folder, decoder, 10*shots)
-cmd_3 = r'''
-        cd Release
-        ./pr_nn_train %s 1000
-        ''' % (folder)
-cmd_4 = r'''
-        cd Release
-        mkdir -p %s/output
-        mpirun -np %d ./pr_nn_memory %s --decoder %s --s %d
-        ''' % (folder, n_proc, folder, decoder, shots)
-
-for cmd in [cmd_1]:
+for version in ['v1', 'v3.2', 'v4.2']:
+    folder = f'../data/protean/{code}/{version}'
+    cmd = fr'''
+            cd Release
+            mkdir -p {folder}/output
+            mpirun -np {n_proc} ./pr_base_memory {folder} --decoder {decoder} --s {shots} {fix_error_opt}
+            '''
     print('----------------------------')
     print(cmd)
     os.system(cmd)
