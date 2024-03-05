@@ -16,6 +16,7 @@ arch_folder_prefix = '../data/protean/%s' % code
 # Version list syntax:
 #   (version-string, pass-string, max-connectivity, options)
 jid_blk = 'jid.ral.' if '-use-jid' in argv else ''
+verbose = '-v' if '-v' in argv else ''
 
 version_list = [
     ('1', 'ral.rlb.rcr', 4, ''),
@@ -41,7 +42,7 @@ for (version, pass_string, max_conn, other_opt) in version_list:
                         --passes "{pass_string}"\
                         --s-rounds {rounds}\
                         --max-conn {max_conn}\
-                        {color_opt} {other_opt}
+                        {color_opt} {other_opt} {verbose}
               '''
     print(protean_cmd)
     os.system(protean_cmd)

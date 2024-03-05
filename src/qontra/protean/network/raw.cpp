@@ -274,9 +274,7 @@ RawNetwork::get_support(sptr<raw_vertex_t> rpq) {
 sptr<raw_vertex_t>
 RawNetwork::are_in_same_support(std::initializer_list<sptr<raw_vertex_t>> vertex_list) {
     for (sptr<raw_vertex_t> rpq : vertices) {
-        if (rpq->qubit_type != raw_vertex_t::type::xparity
-                && rpq->qubit_type != raw_vertex_t::type::zparity)
-        {
+        if (!rpq->is_check()) {
             continue;
         }
         parity_support_t supp = get_support(rpq);

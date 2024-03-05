@@ -1,11 +1,22 @@
-/* author: Suhas Vittal
+/* 
+ *  author: Suhas Vittal
  *  date:   29 December 2023
  * */
+
+#define PROTEAN_PROFILING
 
 #include "qontra/protean/io.h"
 
 #include <fstream>
 #include <iostream>
+
+#ifdef PROTEAN_PROFILING
+
+#include <vtils/timer.h>
+
+static vtils::Timer timer;
+
+#endif
 
 namespace qontra {
 
@@ -50,7 +61,17 @@ update_network(std::string pass_string, PhysicalNetwork* network, bool verbose) 
             std::cout << "[ update_network ] calling pass " << p << std::endl;
         }
         pass_t pass = PASSES.at(p);
-        return (network->*pass)();
+#ifdef PROTEAN_PROFILING
+        timer.clk_start();
+#endif
+        bool res = (network->*pass)();
+#ifdef PROTEAN_PROFILING
+        fp_t t = timer.clk_end();
+        if (verbose) {
+            std::cout << "\ttook " << t*1e-9 << "s" << std::endl;
+        }
+#endif
+        return res;
     };
 
     for (size_t i = 0; i <= pass_string.size(); i++) {

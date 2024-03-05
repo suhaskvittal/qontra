@@ -3,12 +3,18 @@
  *  date:   27 December 2023
  * */
 
+#define PROTEAN_PROFILING
+
 #include "qontra/protean/network.h"
 
 #include <qontra/graph/algorithms/coloring.h>
 
 #include <vtils/set_algebra.h>
 #include <vtils/utility.h>
+
+#ifdef PROTEAN_PROFILING
+#include <vtils/timer.h>
+#endif
 
 #include <PerfectMatching.h>
 
@@ -697,6 +703,44 @@ PhysicalNetwork::recompute_cycle_role_maps() {
     //
     // We also want to compress the flag roles, such that any physical qubit has
     // at most 1 Z-flag and at most 1 X-flag.
+#ifdef PROTEAN_PROFILING
+    Timer timer;
+    timer.clk_start();
+#endif
+    for (sptr<raw_vertex_t> rpq : raw_connection_network->get_vertices()) {
+        if (!rpq->is_check()) continue;
+        auto& support = raw_connection_network->get_support(rpq);
+
+        std::set<sptr<raw_vertex_t>> deleted_vertices;
+        for (sptr<raw_vertex_t> rx : support.all) {
+            if (deleted_vertices.count(rx)) continue;
+            sptr<phys_vertex_t> px = role_to_phys.at(rx);
+            for (sptr<raw_vertex_t> ry : px->role_set) {
+                if (rx == ry) continue;
+                if (deleted_vertices.count(ry)) continue;
+
+                bool rx_ry_are_same_flag =
+                    (rx->qubit_type == raw_vertex_t::type::flag
+                        && ry->qubit_type == raw_vertex_t::type::flag)
+                    &&
+                    (raw_connection_network->x_flag_set.count(rx)
+                        == raw_connection_network->x_flag_set.count(ry));
+                // Try and merge rx and ry.
+                if (support.all.count(ry) || rx_ry_are_same_flag) {
+                    auto deleted = raw_connection_network->merge(rx, ry);
+                    if (deleted != nullptr) {
+                        deleted_vertices.insert(deleted);
+                    }
+                }
+            }
+        }
+        for (sptr<raw_vertex_t> r : deleted_vertices) {
+            sptr<phys_vertex_t> p = role_to_phys.at(r);
+            p->delete_role(r);
+            role_to_phys.erase(r);
+        }
+    }
+    /*
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         std::set<sptr<raw_vertex_t>> deleted_vertices;
         for (sptr<raw_vertex_t> r1 : pv->role_set) {
@@ -706,9 +750,11 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                 if (deleted_vertices.count(r1)) break;
                 if (deleted_vertices.count(r2)) continue;
                 bool r1_r2_are_same_flag =
-                    (r1->qubit_type == raw_vertex_t::type::flag && r2->qubit_type == raw_vertex_t::type::flag)
+                    (r1->qubit_type == raw_vertex_t::type::flag 
+                        && r2->qubit_type == raw_vertex_t::type::flag)
                     &&
-                    (raw_connection_network->x_flag_set.count(r1) == raw_connection_network->x_flag_set.count(r2));
+                    (raw_connection_network->x_flag_set.count(r1) 
+                        == raw_connection_network->x_flag_set.count(r2));
                 // Try the merge.
                 if (raw_connection_network->are_in_same_support(r1, r2) != nullptr
                     || r1_r2_are_same_flag)
@@ -725,6 +771,11 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             role_to_phys.erase(r);
         }
     }
+    */
+#ifdef PROTEAN_PROFILING
+    fp_t t = timer.clk_end();
+    std::cout << "[ rcr ] role merging took " << t*1e-9 << "s" << std::endl;
+#endif
     // Basic idea: pack the roles together by parity check.
     //
     // We track an interaction graph, such that two checks share
@@ -741,6 +792,10 @@ PhysicalNetwork::recompute_cycle_role_maps() {
     struct int_e_t : public base::edge_t {
         std::vector<conflict_t> conflicts;
     };
+
+#ifdef PROTEAN_PROFILING
+    timer.clk_start();
+#endif
 
     uptr<Graph<int_v_t, int_e_t>> interaction_graph = std::make_unique<Graph<int_v_t, int_e_t>>();
     size_t _id = 0;
@@ -799,6 +854,10 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             }
         }
     }
+#ifdef PROTEAN_PROFILING
+    t = timer.clk_end();
+    std::cout << "[ rcr ] interference analysis took " << t*1e-9 << "s" << std::endl;
+#endif
     return true;
 }
 
