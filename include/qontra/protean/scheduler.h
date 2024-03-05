@@ -49,6 +49,13 @@ public:
 private:
     void prep_tear_h_gates(qes::Program<>&);
     void prep_tear_cx_gates(qes::Program<>&);
+    void init_flags(
+            const std::set<sptr<net::raw_vertex_t>>& flags, 
+            sptr<net::raw_vertex_t> rpq,
+            std::set<sptr<net::raw_vertex_t>>& x_endpoints,
+            std::set<sptr<net::raw_vertex_t>>& z_endpoints,
+            std::set<int64_t>& h_operands,
+            std::vector<std::vector<cx_t>>& cx_groups);
 
     void schedule_cx_along_path(const std::vector<cx_t>&, qes::Program<>&);
     void push_back_measurement(std::vector<int64_t>&, sptr<net::raw_vertex_t>);

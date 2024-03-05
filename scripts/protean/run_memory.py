@@ -4,9 +4,10 @@ from sys import argv
 
 code = argv[1]
 decoder = argv[2]
-shots = int(argv[3])
-
-n_proc = int(argv[4])
+pmin = float(argv[3])
+pmax = float(argv[4])
+shots = int(argv[5])
+n_proc = int(argv[6])
 
 fix_error_opt = '-fix-error' if '-fix-error' in argv else ''
 
@@ -21,7 +22,7 @@ for version in ['v1', 'v3.2', 'v4.2']:
                 cd Release
                 mkdir -p {folder}/output
                 mpirun -np {n_proc} ./pr_base_memory {folder} --decoder {decoder} --s {shots}\
-                        {fix_error_opt} {mem_flag}
+                        --pmin {pmin} --pmax {pmax} {fix_error_opt} {mem_flag}
                 '''
         print('----------------------------')
         print(cmd)

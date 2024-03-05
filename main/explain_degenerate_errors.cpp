@@ -17,11 +17,7 @@ std::set<sptr<hyperedge_t>>
 collect_degenerate_errors(uptr<DecodingGraph>& gr) {
     std::set<sptr<hyperedge_t>> degens;
     for (sptr<hyperedge_t> e : gr->get_all_edges()) {
-        if (e->get_order() == 0) {
-            degens.insert(e);
-            continue;
-        }
-        // Otherwise, check the equivalence class of the edge.
+        if (e->get_order() == 0) continue;
         EdgeClass ec = gr->get_edge_class(e);
         sptr<hyperedge_t> r = ec.get_representative();
         if (r->flags == e->flags && r->frames != e->frames) {
@@ -59,7 +55,7 @@ int main(int argc, char* argv[]) {
         stim::SpanRef<stim::DemTarget> sp(&targets[0], &targets[0] + targets.size());
         ddem.append_error_instruction(e->probability, sp);
     }
-    auto explained_errors = stim::ErrorMatcher::explain_errors_from_circuit(circuit, &ddem, false);
+    auto explained_errors = stim::ErrorMatcher::explain_errors_from_circuit(circuit, &ddem, true);
     for (auto ee : explained_errors) {
         std::cout << ee << std::endl;
     }

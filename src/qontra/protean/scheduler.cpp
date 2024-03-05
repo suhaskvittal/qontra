@@ -6,6 +6,7 @@
 #include "qontra/protean/scheduler.h"
 
 #include <vtils/linprog/manager.h>
+#include <vtils/set_algebra.h>
 #include <vtils/two_level_map.h>
 #include <vtils/utility.h>
 
@@ -215,19 +216,18 @@ Scheduler::make_round() {
         build_body(program);
         build_teardown(program);
         
+        std::set<sptr<raw_vertex_t>> qubits_with_events;
         for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
             finished_checks.insert(rpq);
+            qubits_with_events.insert(rpq);
+            insert_range(qubits_with_events, raw_network->get_support(rpq).flags);
+        }
+        for (sptr<raw_vertex_t> rv : qubits_with_events) {
+            declare_event_for_qubit(rv);
         }
         cycle++;
     }
     program[0].put("timing_error");
-    // Create events for this round.
-    for (sptr<raw_vertex_t> rv : raw_network->get_vertices()) {
-        if (!rv->is_check() && rv->qubit_type != raw_vertex_t::type::flag) {
-            continue;
-        }
-        declare_event_for_qubit(rv);
-    }
     return program;
 }
 
@@ -307,14 +307,113 @@ Scheduler::prep_tear_h_gates(qes::Program<>& program) {
 
 void
 Scheduler::prep_tear_cx_gates(qes::Program<>& program) {
-    std::vector<cx_t> cx_arr;
+    std::set<int64_t> h_operands;
+    std::set<sptr<raw_vertex_t>> x_endpoints, z_endpoints;
+    std::vector<std::vector<cx_t>> cx_groups;
     for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
+        std::vector<std::vector<cx_t>> _cx_groups;
         auto& support = get_support(rpq);
-        for (sptr<raw_vertex_t> rfq : support.flags) {
-            cx_arr.push_back({rfq, rpq, rpq->qubit_type == raw_vertex_t::type::xparity});
+
+        init_flags(support.flags, rpq, x_endpoints, z_endpoints, h_operands, _cx_groups);
+        for (size_t i = 0; i < _cx_groups.size(); i++) {
+            if (i >= cx_groups.size()) {
+                cx_groups.push_back(_cx_groups[i]);
+            } else {
+                push_back_range(cx_groups[i], _cx_groups[i]);
+            }
         }
     }
-    schedule_cx_along_path(cx_arr, program);
+    safe_emplace_back(program, "h", h_operands);
+    for (const auto& cx_arr : cx_groups) {
+        schedule_cx_along_path(cx_arr, program);
+    }
+    safe_emplace_back(program, "h", h_operands);
+    // Measure the endpoints and create events for them.
+    std::vector<int64_t> m_operands;
+    int64_t k = 0;
+    for (sptr<raw_vertex_t> re : x_endpoints) {
+        m_operands.push_back(qu(re));
+        event_queue.push_back({re, {mctr+k}, false, false});
+        k++;
+    }
+    for (sptr<raw_vertex_t> re : z_endpoints) {
+        m_operands.push_back(qu(re));
+        event_queue.push_back({re, {mctr+k}, false, true});
+        k++;
+    }
+    safe_emplace_back(program, "measure", m_operands);
+    if (m_operands.size()) program.back().put("no_tick");
+    safe_emplace_back(program, "reset", m_operands);
+    if (m_operands.size()) program.back().put("no_tick");
+    mctr += m_operands.size();
+}
+
+void
+Scheduler::init_flags(
+        const std::set<sptr<raw_vertex_t>>& flags,
+        sptr<raw_vertex_t> rpq,
+        std::set<sptr<raw_vertex_t>>& x_endpoints,
+        std::set<sptr<raw_vertex_t>>& z_endpoints,
+        std::set<int64_t>& h_operands,
+        std::vector<std::vector<cx_t>>& cx_groups)
+{
+    // Amongst the flag qubits, first check if any pairs of flags have a common
+    // qubit in their proxy path that is not their parity qubit.
+    std::map<sptr<raw_vertex_t>, sptr<raw_vertex_t>> endpoint_map;
+    std::set<sptr<raw_vertex_t>> endpoints;
+    std::map<sptr<raw_vertex_t>, std::set<sptr<raw_vertex_t>>> proxy_qubit_map;
+    for (sptr<raw_vertex_t> rfq : flags) {
+        if (endpoint_map.count(rfq)) continue;
+        auto path = raw_network->get_proxy_walk_path(rfq, rpq);
+        if (path.size() > 2) {
+            insert_range(proxy_qubit_map[rfq], path.begin()+1, path.end()-1);
+        } else {
+            endpoint_map[rfq] = rpq;
+            continue;
+        }
+        // Check if any other flags share a proxy with rfq.
+        for (sptr<raw_vertex_t> rx : flags) {
+            if (rx == rfq || endpoint_map.count(rx)) continue;
+            if (!proxy_qubit_map.count(rx)) continue;
+            const auto& rx_pr = proxy_qubit_map.at(rx);
+            sptr<raw_vertex_t> common = nullptr;
+            for (size_t i = 1; i < path.size()-1; i++) {
+                sptr<raw_vertex_t> rp = path.at(i);
+                if (rx_pr.count(rp)) {
+                    // Found a common vertex.
+                    common = rp;
+                    break;
+                }
+            }
+            // Update the endpoint_map.
+            if (common != nullptr) {
+                endpoint_map[rfq] = common;
+                endpoint_map[rx] = common;
+                endpoints.insert(common);
+                if (rpq->qubit_type == raw_vertex_t::type::zparity) {
+                    h_operands.insert(qu(common));
+                    z_endpoints.insert(common);
+                } else {
+                    x_endpoints.insert(common);
+                }
+                break;
+            }
+        }
+    }
+    // Now first entangle the endpoints with rpq.
+    std::vector<std::vector<cx_t>> new_cx_groups;
+    if (endpoints.size()) {
+        init_flags(endpoints, rpq, x_endpoints, z_endpoints, h_operands, new_cx_groups);
+    }
+    // We will push back new_cx_groups before and after performing the flag cnots (init and undo).
+    push_back_range(cx_groups, new_cx_groups);
+    std::vector<cx_t> cx_arr;
+    for (sptr<raw_vertex_t> rfq : flags) {
+        sptr<raw_vertex_t> rsq = endpoint_map.count(rfq) ? endpoint_map.at(rfq) : rpq;
+        cx_arr.push_back({rfq, rsq, rpq->qubit_type == raw_vertex_t::type::xparity});
+    }
+    cx_groups.push_back(cx_arr);
+    push_back_range(cx_groups, new_cx_groups.rbegin(), new_cx_groups.rend());
 }
 
 void
@@ -357,7 +456,7 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
             }
 
             sptr<raw_vertex_t> ry = path.at(k);
-            if (ry->qubit_type == raw_vertex_t::type::proxy) {
+            if (k < path.size()-1 && ry->qubit_type == raw_vertex_t::type::proxy) {
                 proxies_in_use.insert(ry);
                 // If this is for an x check, then perform an H gate on path[k] as well.
                 if (is_for_x_check) {
