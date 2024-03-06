@@ -12,7 +12,10 @@
 
 #include <vtils/cmd_parse.h>
 #include <vtils/filesystem.h>
+
+#ifdef PROTEAN_PERF
 #include <vtils/timer.h>
+#endif
 
 using namespace qontra;
 using namespace graph;

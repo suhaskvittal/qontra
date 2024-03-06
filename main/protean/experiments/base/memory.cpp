@@ -14,6 +14,10 @@
 #include <vtils/cmd_parse.h>
 #include <vtils/filesystem.h>
 
+#ifdef PROTEAN_PERF
+#include <vtils/timer.h>
+#endif
+
 #include <fstream>
 #include <iostream>
 
@@ -40,10 +44,6 @@ int main(int argc, char* argv[]) {
                                 protean_folder + "/output/basic_memory_x.csv"
                                 : protean_folder + "/output/basic_memory_z.csv";
 
-    if (world_rank == 0) {
-        std::cout << "reading " << qes_file << ", writing to " << output_file << std::endl;
-    }
-
     std::string decoder_name;
 
     uint64_t    shots = 1'000'000;
@@ -60,8 +60,24 @@ int main(int argc, char* argv[]) {
 
     G_BASE_SEED = 1000;
 
+#ifdef PROTEAN_PERF
+    Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
+
     // Initialize error and timing tables.
     qes::Program<> program = qes::from_file(qes_file);
+
+#ifdef PROTEAN_PERF
+    t = timer.clk_end();
+    if (world_rank == 0) {
+        std::cout << "[ pr_base_memory ] took " << t*1e-9 << "s to read the QES file." << std::endl;
+    }
+    timer.clk_start();
+#endif
+
     ErrorTable errors;
     TimeTable timing;
     make_error_and_timing_from_coupling_graph(coupling_file, errors, timing);
@@ -84,6 +100,13 @@ int main(int argc, char* argv[]) {
     } else {
         std::cerr << "Unsupported decoder type: " << decoder_name << std::endl;
     }
+
+#ifdef PROTEAN_PERF
+    t = timer.clk_end();
+    if (world_rank == 0) {
+        std::cout << "[ pr_base_memory ] took " << t*1e-9 << "s to initialize the decoder." << std::endl;
+    }
+#endif
 
     fp_t p = pmin;
     while (p <= 1.1*pmax) {

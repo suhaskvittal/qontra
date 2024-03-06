@@ -37,4 +37,6 @@ if (COMPILE_PROTEAN_EXPERIMENTS)
         main/protean/experiments/base/run_surface_code.cpp)
     target_link_libraries(pr_base_memory PRIVATE qontra)
     target_link_libraries(pr_rsc_memory PRIVATE qontra)
+
+    target_compile_definitions(pr_base_memory PUBLIC PROTEAN_PERF)
 endif()
