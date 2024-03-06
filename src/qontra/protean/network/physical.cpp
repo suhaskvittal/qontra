@@ -147,58 +147,46 @@ PhysicalNetwork::join_qubits_with_partial_support() {
 
 bool
 PhysicalNetwork::make_flags() {
-    // Algorithm:
-    //  High-level: saturate each check with the maximum number of flags, and then remove
-    //              any unnecessary flags via error propagation analysis.
-    //  (1) For each check:
-    //      (i) Assign flags in a way that maximizes pairs of qubits with many common
-    //          checks.
-    //      (ii) If any pair of qubits were assigned for a prior check, pre-assign them.
-    //  (2) After assigning flags, identify any flags that do not protect against weight-2
-    //      errors. Remove these flags.
-    //  (3) For the remaining flags (which are raw vertices), create corresponding physical
-    //      vertices and update the connectivity.
-    //
-    // The entries should be ordered pairs to avoid double counting.
     typedef std::set<v_pair_t<raw_vertex_t>>    flag_pair_set_t;
 
+    // Track flag pairs by check role.
     std::map<sptr<raw_vertex_t>, flag_pair_set_t> proposed_flag_pair_map;
+    // Because we want minimize resource usage, also track the flags incident upon a physical qubit.
+    // Checks on the same qubit will use the same flag pairs.
+    std::map<sptr<phys_vertex_t>, flag_pair_set_t> phys_proposed_flag_pair_map;
+    // Finally, track all flag pairs.
     flag_pair_set_t all_proposed_flag_pairs;
+    flag_pair_set_t x_flags, z_flags;
 
-    for (sptr<tanner::vertex_t> check : tanner_graph->get_checks()) {
-        std::vector<sptr<tanner::vertex_t>> _support = tanner_graph->get_neighbors(check);
-        // Get raw vertices.
-        sptr<raw_vertex_t> rpq = raw_connection_network->v_tanner_raw_map.at(check);
-        std::vector<sptr<raw_vertex_t>> support;
-        for (sptr<tanner::vertex_t> tx : _support) {
-            sptr<raw_vertex_t> rx = raw_connection_network->v_tanner_raw_map.at(tx);
-            support.push_back(rx);
-        }
+#ifdef PROTEAN_PERF
+    Timer timer;
+    fp_t t;
+    timer.clk_start();
+#endif
+
+    for (sptr<raw_vertex_t> rpq : raw_connection_network->get_vertices()) {
+        if (!rpq->is_check()) continue;
+        // So, first we will use _support, which is the set of data qubits. Then, we will
+        // convert it to a vector.
+        std::set<sptr<raw_vertex_t>> _support(raw_connection_network->get_support(rpq).data);
 
         flag_pair_set_t flag_pairs;
         std::set<sptr<raw_vertex_t>> already_matched;
         // Check if rpq's physical qubit has another role that has already given flags in
         // the proposed_flag_pair_map.
         sptr<phys_vertex_t> ppq = role_to_phys.at(rpq);
-        for (sptr<raw_vertex_t> rx : ppq->role_set) {
-            if (proposed_flag_pair_map.count(rx)) {
-                for (const auto& fp : proposed_flag_pair_map.at(rx)) {
-                    sptr<raw_vertex_t> rv = fp.first,
-                                        rw = fp.second;
-                    std::vector<sptr<raw_vertex_t>>::iterator ita, itb;
-                    ita = std::find(support.begin(), support.end(), rv);
-                    itb = std::find(support.begin(), support.end(), rw);
-                    if (ita != support.end() && itb != support.end()) {
-                        flag_pairs.insert(fp);
-                        insert_all(already_matched, {rv, rw});
-                        support.erase(ita);
-                        // Need to recompute itb:
-                        itb = std::find(support.begin(), support.end(), rw);
-                        support.erase(itb);
-                    }
-                }
+        for (const auto& fp : phys_proposed_flag_pair_map[ppq]) {
+            sptr<raw_vertex_t> rv = fp.first,
+                                rw = fp.second;
+            if (_support.count(rv) && _support.count(rw)) {
+                flag_pairs.insert(fp);
+                insert_all(already_matched, {rv, rw});
+                _support.erase(rv);
+                _support.erase(rw);
             }
         }
+
+        std::vector<sptr<raw_vertex_t>> support(_support.begin(), _support.end());
 
         // Perform the perfect matching:
         typedef std::tuple<sptr<raw_vertex_t>, sptr<raw_vertex_t>, size_t>  weighted_edge_t;
@@ -213,13 +201,10 @@ edge_build_outer_loop_start:
             // We will the physical qubit (specifically its neighbors) each tick of the
             // inner loop.
             // Note that we only care about neighbors that are parity qubits.
-            sptr<phys_vertex_t> pv = role_to_phys.at(rv);
             std::set<sptr<phys_vertex_t>> p_neighbors;
-            for (sptr<phys_vertex_t> x : get_neighbors(pv)) {
-                if (x->has_role_of_type(raw_vertex_t::type::xparity)
-                    || x->has_role_of_type(raw_vertex_t::type::zparity))
-                {
-                    p_neighbors.insert(x);
+            for (sptr<raw_vertex_t> rx : raw_connection_network->get_neighbors(rv)) {
+                if (rx->is_check()) {
+                    p_neighbors.insert(role_to_phys.at(rx));
                 }
             }
             for (auto itb = ita+1; itb != support.end(); ) {
@@ -262,7 +247,9 @@ edge_build_outer_loop_start:
         pm.options.verbose = false;
         // Assign each node in the support to some node id.
         BijectiveMap<sptr<raw_vertex_t>, size_t> data_node_map;
-        for (size_t i = 0; i < support.size(); i++) data_node_map.put(i, support[i]);
+        for (size_t i = 0; i < support.size(); i++) {
+            data_node_map.put(i, support[i]);
+        }
         // Get the edges from the edge_list. Note that some of these edges are bad (i.e.
         // containing a pre-matched vertex).
         //
@@ -276,36 +263,31 @@ edge_build_outer_loop_start:
         }
         pm.Solve();
         // Get the PM result.
-        std::set<sptr<raw_vertex_t>> visited;
         for (sptr<raw_vertex_t> rv : support) {
-            if (visited.count(rv)) continue;
-
             size_t i = data_node_map.at(rv);
             size_t j = pm.GetMatch(i);
+            if (i > j) continue;
             sptr<raw_vertex_t> rw = data_node_map.at(j);
             
             flag_pairs.insert(make_ordered_pair(rv, rw));
-            insert_all(visited, {rv, rw});
         }
         // Update the flag proposal structures.
+        insert_range(phys_proposed_flag_pair_map[ppq], flag_pairs);
+        insert_range(all_proposed_flag_pairs, flag_pairs);
         proposed_flag_pair_map[rpq] = flag_pairs;
-        all_proposed_flag_pairs += flag_pairs;
-    }
-    // Now, we must run an error-propagation analysis to identify any useless flags.
-    // 
-    // Separate flags from those that protect against X and Z errors.
-    flag_pair_set_t x_flags, z_flags;
-    for (auto& pair : proposed_flag_pair_map) {
-        sptr<raw_vertex_t> rpq = pair.first;
-        flag_pair_set_t flags = pair.second;
         if (rpq->qubit_type == raw_vertex_t::type::xparity) {
-            x_flags += flags;
+            insert_range(x_flags, flag_pairs);
         } else {
-            z_flags += flags;
+            insert_range(z_flags, flag_pairs);
         }
     }
+#ifdef PROTEAN_PERF
+    t = timer.clk_end();
+    std::cout << "[ make_flags ] flag identification took " << t*1e-9 << "s" << std::endl;
+    timer.clk_start();
+#endif
+    // Now, we must run an error-propagation analysis to identify any useless flags.
     std::array<flag_pair_set_t, 2> flag_pair_sets{x_flags, z_flags};
-
     if (config.enable_flag_reduction) {
         size_t flags_removed = 0;
         for (size_t i = 0; i < 2; i++) {
@@ -325,6 +307,11 @@ edge_build_outer_loop_start:
             }
         }
         std::cout << "[ status ] removed flags = " << flags_removed << std::endl;
+#ifdef PROTEAN_PERF
+        t = timer.clk_end();
+        std::cout << "[ make_flags ] flag removal analysis took " << t*1e-9 << "s" << std::endl;
+        timer.clk_start();
+#endif
     }
     // First, we will create flags for each parity qubit. This ignores the case where (q1, q2)
     // is a flag in two different parity qubits. However, note we are only interested in establishing
@@ -334,70 +321,67 @@ edge_build_outer_loop_start:
     std::map<v_pair_t<raw_vertex_t>, std::set<v_pair_t<raw_vertex_t>>>
         flag_pairs_to_flag_roles;
 
-    for (auto& pair : proposed_flag_pair_map) {
-        sptr<raw_vertex_t> rpq = pair.first;
-        flag_pair_set_t flags = pair.second;
-        flags *= all_proposed_flag_pairs;   // Any flags that are not in the all_proposed_flag_pairs
-                                            // set will be removed.
-        for (auto& fp : flags) {
-            sptr<raw_vertex_t> rv1 = fp.first,
-                                rv2 = fp.second;
-            sptr<raw_vertex_t> rfq = raw_connection_network->add_flag(rv1, rv2, rpq);
-            // Update flag_pair_to_flag_roles
-            flag_pairs_to_flag_roles[fp].insert(std::make_pair(rpq, rfq));
+    for (auto& [ rpq, flags ] : proposed_flag_pair_map) {
+        for (auto it = flags.begin(); it != flags.end(); ) {
+            auto& fp = *it;
+            if (all_proposed_flag_pairs.count(fp)) {
+                sptr<raw_vertex_t> rv = fp.first,
+                                    rw = fp.second;
+                sptr<raw_vertex_t> rfq = raw_connection_network->add_flag(rv, rw, rpq);
+                // Update flag_pair_to_flag_roles
+                flag_pairs_to_flag_roles[fp].insert(std::make_pair(rpq, rfq));
+                it++;
+            } else {
+                it = flags.erase(it);
+            }
         }
     }
     // Now, we can make the physical qubits and update the connectivity.
+    std::set<sptr<phys_edge_t>> deleted_edges;
+    std::set<sptr<phys_edge_t>> new_edges;
     for (auto& [ rv_pair, role_set ] : flag_pairs_to_flag_roles) {
-        sptr<raw_vertex_t> rv1 = rv_pair.first,
-                            rv2 = rv_pair.second;
-
-        sptr<phys_vertex_t> pv1 = role_to_phys.at(rv1),
-                            pv2 = role_to_phys.at(rv2);
+        auto [ rv, rw ] = rv_pair;
+        sptr<phys_vertex_t> pv = role_to_phys.at(rv),
+                            pw = role_to_phys.at(rw);
         // Make a separate physical qubit for the X and Z flags.
         for (int i = 0; i < (config.force_xz_flag_merge ? 1 : 2); i++) {
-            sptr<phys_vertex_t> pfq = make_and_add_vertex();
+            sptr<phys_vertex_t> pfq = make_vertex(id_ctr++);
             // Track connected qubits and deleted edges.
-            std::set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv1, pv2};
-            std::set<sptr<phys_edge_t>> deleted_edges;
-            for (auto& p2 : role_set) {
-                sptr<raw_vertex_t> rpq = p2.first,
-                                    rfq = p2.second;
+            std::set<sptr<phys_edge_t>> local_deleted_edges;
+            std::set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv, pw};
+            for (auto& [ rpq, rfq ] : role_set) {
                 if (!config.force_xz_flag_merge && 
                         ((i == 0) ^ (rpq->qubit_type == raw_vertex_t::type::xparity))) 
                 {
                     continue;
                 }
                 sptr<phys_vertex_t> ppq = role_to_phys.at(rpq);
-
                 // Compute cycle for role. This is the maximum of the cycles of rv1, rv2, and rfq.
-                size_t cycle = std::max({pv1->cycle_role_map.at(rv1),
-                                        pv2->cycle_role_map.at(rv2),
+                size_t cycle = std::max({pv->cycle_role_map.at(rv),
+                                        pw->cycle_role_map.at(rw),
                                         ppq->cycle_role_map.at(rpq)});
                 pfq->push_back_role(rfq, cycle);
                 role_to_phys[rfq] = pfq;
                 qubits_connected_to_pfq.insert(ppq);
                 // Delete edge between pv1/pv2 and ppq (if it exists).
-                if (contains(pv1, ppq)) {
-                    deleted_edges.insert(get_edge(pv1, ppq));
-                } 
-                if (contains(pv2, ppq)) {
-                    deleted_edges.insert(get_edge(pv2, ppq));
-                }
+                insert_all(local_deleted_edges, { get_edge(pv, ppq), get_edge(pw, ppq) });
             }
             // Add edges for pfq.
             if (qubits_connected_to_pfq.size() > 2) {
-                for (sptr<phys_edge_t> e : deleted_edges) {
-                    delete_edge(e);
-                }
+                add_vertex(pfq);
+                insert_range(deleted_edges, local_deleted_edges);
                 for (sptr<phys_vertex_t> x : qubits_connected_to_pfq) {
-                    make_and_add_edge(pfq, x);
+                    new_edges.insert(make_edge(pfq, x));
                 }
-            } else {
-                delete_vertex(pfq);
             }
         }
     }
+    for (sptr<phys_edge_t> e : deleted_edges) delete_edge(e);
+    for (sptr<phys_edge_t> e : new_edges) add_edge(e);
+#ifdef PROTEAN_PERF
+    t = timer.clk_end();
+    std::cout << "[ make_flags ] flag creation and placement took " << t*1e-9 << "s" << std::endl;
+#endif
     return !all_proposed_flag_pairs.empty();
 }
 
@@ -426,17 +410,6 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         std::vector<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
         std::vector<sptr<phys_edge_t>> deleted_edges;
         slack_violation++;
-        // Rules for adding proxies:
-        //  (1) pv is a data qubit.
-        //      --> anything goes.
-        //  (2) pv is a parity qubit.
-        //      --> anything goes.
-        //  (3) pv is a flag qubit
-        //      --> only non-data qubits. This is because if the flag is
-        //      connected to data qubits, then introducing proxies between the
-        //      flag and data qubits affects fault-tolerance guarantees.
-        //  (4) pv is a proxy
-        //      --> anything goes.
         for (size_t i = 0; i < adj.size() && slack_violation > 0; i++) {
             sptr<phys_vertex_t> px = adj[i];
             // Now, for each role in pv and px, add a proxy in the raw_connection_network.
@@ -444,13 +417,6 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
             bool any_roles_added = false;
             for (sptr<raw_vertex_t> rv : pv->role_set) {
                 for (sptr<raw_vertex_t> rx : px->role_set) {
-                    // Enforce proxy addition rules.
-                    /*
-                    if (rv->qubit_type == raw_vertex_t::type::flag && rx->qubit_type == raw_vertex_t::type::data
-                        || rx->qubit_type == raw_vertex_t::type::data && r) {
-                        continue;
-                    }
-                    */
                     sptr<raw_edge_t> re = raw_connection_network->get_edge(rv, rx);
                     if (re == nullptr) continue;
                     sptr<raw_vertex_t> rprx = raw_connection_network->add_proxy(re);
@@ -536,6 +502,7 @@ PhysicalNetwork::contract_small_degree_qubits() {
 
 bool
 PhysicalNetwork::reallocate_edges() {
+    if (!graph_has_changed) return false;
     // Top-down: trickle down the edges as much as possible.
     bool mod = false;
     for (size_t k = get_thickness()-1; k > 0; k--) {

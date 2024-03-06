@@ -12,6 +12,7 @@
 
 #include <vtils/cmd_parse.h>
 #include <vtils/filesystem.h>
+#include <vtils/timer.h>
 
 using namespace qontra;
 using namespace graph;
@@ -40,6 +41,13 @@ int main(int argc, char* argv[]) {
     bool verbose = pp.option_set("verbose") || pp.option_set("v");
 
     vtils::safe_create_directory(data_output_folder);
+
+#ifdef PROTEAN_PERF
+    vtils::Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
     
     // Make Network:
     TannerGraph tanner_graph = create_graph_from_file<TannerGraph>(tanner_graph_file, io::update_tanner_graph);
@@ -63,13 +71,17 @@ int main(int argc, char* argv[]) {
             << "Thickness = " << network.get_thickness() << "\n";
 
     if (pp.option_set("color-checks")) {
-        std::cout << "coloring checks...\n";
         network.assign_colors_to_checks();
     }
-    std::cout << "writing network to folder...\n";
 
     // Write data to output folder:
     write_network_to_folder(data_output_folder, &network);
+
+#ifdef PROTEAN_PERF
+    t = timer.clk_end();
+    std::cout << "[ protean ] total time for compilation: " << t*1e-9 << "s" << std::endl;
+#endif
+
 #ifdef GRAPHVIZ_ENABLED
     if (render_output_folder.size() > 0) {
         vtils::safe_create_directory(render_output_folder);
