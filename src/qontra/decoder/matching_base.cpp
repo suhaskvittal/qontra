@@ -33,19 +33,31 @@ MatchingBase::load_syndrome(
         flags.clear();
         flag_edges.clear();
     }
+
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
+
     // Track the number of detectors of each color.
-    for (uint64_t d : all_dets) {
+    for (auto it = all_dets.begin(); it != all_dets.end(); ) {
+        uint64_t d = *it;
         if (circuit.flag_detectors.count(d)) {
             if (recompute_flags) {
                 flags.push_back(d);
             }
+            it = all_dets.erase(it);
         } else {
             if (c1 != COLOR_ANY && circuit.detector_color_map[d] != c1 && circuit.detector_color_map[d] != c2) {
-                continue;
+                it = all_dets.erase(it);
+            } else {
+                it++;
             }
-            detectors.push_back(d);
         }
     }
+    detectors = std::move(all_dets);
     if (detectors.size() & 1) {
         detectors.push_back(get_color_boundary_index(COLOR_ANY));
     }
@@ -73,12 +85,31 @@ MatchingBase::load_syndrome(
         }
         */
     }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ MatchingBase ] Took " << t*1e-9 << "s to retrieve syndrome: D[";
+    for (uint64_t d : detectors) std::cout << " " << d;
+    std::cout << " ], F[";
+    for (uint64_t f : flags) std::cout << " " << f;
+    std::cout << " ]" << std::endl;
+#endif
 }
 
 stim::simd_bits<SIMD_WIDTH>
 MatchingBase::get_base_corr() {
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
+
     stim::simd_bits<SIMD_WIDTH> corr(circuit.count_observables());
     if (flags.empty()) {
+#ifdef DECODER_PERF
+        t = timer.clk_end();
+        std::cout << "[ MatchingBase ] took " << t*1e-9 << "s to compute base correction" << std::endl;
+#endif
         return corr;
     }
     // Otherwise, get a no-detector edge. If such an edge exists, then return the
@@ -87,6 +118,10 @@ MatchingBase::get_base_corr() {
     if (e != nullptr) {
         for (uint64_t fr : e->frames) corr[fr] ^= 1;
     }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ MatchingBase ] took " << t*1e-9 << "s to compute base correction" << std::endl;
+#endif
     return corr;
 }
 
@@ -104,6 +139,13 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
     pm.options.verbose = false;
     // Add edges:
     std::map<uint64_t, uint64_t> boundary_pref_map;
+
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
 
     for (size_t i = 0; i < n; i++) {
         uint64_t di = detectors.at(i);
@@ -128,6 +170,11 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
             pm.AddEdge(i, j, iw);
         }
     }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ MatchingBase ] took " << t*1e-9 << "s to accumulate matching edges." << std::endl;
+#endif
+
     pm.Solve();
     // Return assignments. Deactivate flags to avoid using flag edges.
     std::vector<Decoder::assign_t> assign_arr;

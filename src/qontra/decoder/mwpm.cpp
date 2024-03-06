@@ -37,6 +37,11 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     timer.clk_start();
     std::vector<Decoder::assign_t> assignments = compute_matching();
     fp_t t = static_cast<fp_t>(timer.clk_end());
+    
+#ifdef DECODER_PERF
+    fp_t _t;
+    timer.clk_start();
+#endif
 
     for (auto& match : assignments) {
         uint64_t di = std::get<0>(match),
@@ -58,6 +63,11 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
             for (uint64_t f : e->frames) corr[f] ^= 1;
         }
     }
+
+#ifdef DECODER_PERF
+    _t = timer.clk_end();
+    std::cout << "[ MWPMDecoder ] took " << _t*1e-9 << "s to retrieve correction from matching" << std::endl;
+#endif
 
     return { t, corr, assignments };
 }

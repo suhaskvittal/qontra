@@ -11,6 +11,10 @@
 
 #include <initializer_list>
 
+#ifdef DECODER_PERF
+#include <vtils/timer.h>
+#endif
+
 namespace qontra {
 namespace graph {
 
@@ -327,6 +331,11 @@ DecodingGraph::get_best_flag_edge(std::vector<sptr<hyperedge_t>> edge_list) {
 
 void
 DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+#endif
+
     if (c1 > c2) return dijkstra_(c2, c1, from);
     auto c1_c2 = std::make_pair(c1, c2);
     
@@ -334,20 +343,37 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
     auto& dm_map = flags_are_active ? flagged_distance_matrix_map : distance_matrix_map;
 
     if (!dgr_map.count(c1_c2)) {
+#ifdef DECODER_PERF
+        timer.clk_start();
+#endif
         make_dijkstra_graph(c1, c2);
+#ifdef DECODER_PERF
+        t = timer.clk_end();
+        std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to compute Dijkstra graph" << std::endl;
+#endif
     }
     // Retrieve the dijkstra graph from the map. Place it back later.
-    uptr<DijkstraGraph> dgr = std::move(dgr_map[c1_c2]);
+    uptr<DijkstraGraph>& dgr = dgr_map[c1_c2];
     std::map<sptr<vertex_t>, fp_t> dist;
     std::map<sptr<vertex_t>, sptr<vertex_t>> pred;
+#ifdef DECODER_PERF
+    timer.clk_start();
+#endif
     dijkstra(dgr.get(), from, dist, pred, 
         [] (sptr<edge_t> e)
         {
             return compute_weight(e->probability);
         });
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to perform Dijkstra's" << std::endl;
+#endif
     // Now, update the distance matrix. We'll do this manually to optimize for
     // speed.
     auto& dm = dm_map[c1_c2];
+#ifdef DECODER_PERF
+    timer.clk_start();
+#endif
     for (sptr<vertex_t> w : dgr->get_vertices()) {
         error_chain_t ec;
 
@@ -397,7 +423,10 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
         // Update dm.
         dm[from][w] = std::move(ec);
     }
-    dgr_map[c1_c2] = std::move(dgr);
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to compute paths from Dijkstra's output" << std::endl;
+#endif
 }
 
 void
@@ -412,6 +441,12 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     }
     // Now, add edges to the graph.
     // First handle flag edges.
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
     fp_t renorm_factor = 1.0;
     for (sptr<hyperedge_t> he : get_flag_edges()) {
         fp_t p = he->probability;
@@ -436,9 +471,16 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             renorm_factor *= p;
         }
     }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to add flag edges to Dijkstra graph" << std::endl;
+#endif
 
 //  std::cout << "renorm factor: " << renorm_factor << std::endl;
 
+#ifdef DECODER_PERF
+    timer.clk_start();
+#endif
     // Now handle other edges.
     for (sptr<vertex_t> v : dgr->get_vertices()) {
         for (sptr<vertex_t> w : dgr->get_vertices()) {
@@ -460,6 +502,10 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             }
         }
     }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to add normal edges to Dijkstra graph" << std::endl;
+#endif
     // Now the graph is done.
     auto c1_c2 = std::make_pair(c1, c2);
     if (flags_are_active) {

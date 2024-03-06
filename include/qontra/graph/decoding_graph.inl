@@ -37,7 +37,9 @@ DecodingGraph::get(int c1, int c2, uint64_t d1, uint64_t d2, bool force_unflagge
 }
 
 inline error_chain_t
-DecodingGraph::get(int c1, int c2, sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2, bool force_unflagged) {
+DecodingGraph::get(
+        int c1, int c2, sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2, bool force_unflagged) 
+{
     update_state();
     if (c1 > c2) std::swap(c1, c2);
     auto c1_c2 = std::make_pair(c1, c2);
