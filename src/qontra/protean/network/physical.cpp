@@ -3,8 +3,6 @@
  *  date:   27 December 2023
  * */
 
-#define PROTEAN_PROFILING
-
 #include "qontra/protean/network.h"
 
 #include <qontra/graph/algorithms/coloring.h>
@@ -12,7 +10,7 @@
 #include <vtils/set_algebra.h>
 #include <vtils/utility.h>
 
-#ifdef PROTEAN_PROFILING
+#ifdef PROTEAN_PERF
 #include <vtils/timer.h>
 #endif
 
@@ -62,6 +60,7 @@ PhysicalNetwork::PhysicalNetwork(TannerGraph* tgr)
                             rdst = re->get_target<raw_vertex_t>();
         make_and_add_edge(role_to_phys.at(rsrc), role_to_phys.at(rdst));
     }
+    raw_connection_network->disable_memoization();
 }
 
 bool
@@ -99,9 +98,6 @@ PhysicalNetwork::join_qubits_with_identical_support() {
 
 bool
 PhysicalNetwork::join_qubits_with_partial_support() {
-    // Disable memoization.
-    raw_connection_network->disable_memoization();
-
     bool mod = false;
     // These are vertices that are consumed by another.
     std::set<sptr<phys_vertex_t>> deleted_vertices;
@@ -493,8 +489,6 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
 
 bool
 PhysicalNetwork::contract_small_degree_qubits() {
-    raw_connection_network->disable_memoization();
-
     bool mod = false;
     for (sptr<phys_vertex_t> pv : get_vertices()) {
         if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
@@ -697,13 +691,12 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 
 bool
 PhysicalNetwork::recompute_cycle_role_maps() {
-    raw_connection_network->disable_memoization();
     // Here, we want to enforce that for each check, each physical qubit has at most one role for that
     // check.
     //
     // We also want to compress the flag roles, such that any physical qubit has
     // at most 1 Z-flag and at most 1 X-flag.
-#ifdef PROTEAN_PROFILING
+#ifdef PROTEAN_PERF
     Timer timer;
     timer.clk_start();
 #endif
@@ -730,6 +723,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                     auto deleted = raw_connection_network->merge(rx, ry);
                     if (deleted != nullptr) {
                         deleted_vertices.insert(deleted);
+                        if (deleted == rx) break;
                     }
                 }
             }
@@ -740,39 +734,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             role_to_phys.erase(r);
         }
     }
-    /*
-    for (sptr<phys_vertex_t> pv : get_vertices()) {
-        std::set<sptr<raw_vertex_t>> deleted_vertices;
-        for (sptr<raw_vertex_t> r1 : pv->role_set) {
-            for (sptr<raw_vertex_t> r2 : pv->role_set) {
-                if (r1 <= r2) continue;
-                // If r1 is deleted during a test_and_merge, break.
-                if (deleted_vertices.count(r1)) break;
-                if (deleted_vertices.count(r2)) continue;
-                bool r1_r2_are_same_flag =
-                    (r1->qubit_type == raw_vertex_t::type::flag 
-                        && r2->qubit_type == raw_vertex_t::type::flag)
-                    &&
-                    (raw_connection_network->x_flag_set.count(r1) 
-                        == raw_connection_network->x_flag_set.count(r2));
-                // Try the merge.
-                if (raw_connection_network->are_in_same_support(r1, r2) != nullptr
-                    || r1_r2_are_same_flag)
-                {
-                    auto deleted = raw_connection_network->merge(r1, r2);
-                    if (deleted != nullptr) {
-                        deleted_vertices.insert(deleted);
-                    }
-                }
-            }
-        }
-        for (sptr<raw_vertex_t> r : deleted_vertices) {
-            pv->delete_role(r);
-            role_to_phys.erase(r);
-        }
-    }
-    */
-#ifdef PROTEAN_PROFILING
+#ifdef PROTEAN_PERF
     fp_t t = timer.clk_end();
     std::cout << "[ rcr ] role merging took " << t*1e-9 << "s" << std::endl;
 #endif
@@ -793,7 +755,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         std::vector<conflict_t> conflicts;
     };
 
-#ifdef PROTEAN_PROFILING
+#ifdef PROTEAN_PERF
     timer.clk_start();
 #endif
 
@@ -854,7 +816,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             }
         }
     }
-#ifdef PROTEAN_PROFILING
+#ifdef PROTEAN_PERF
     t = timer.clk_end();
     std::cout << "[ rcr ] interference analysis took " << t*1e-9 << "s" << std::endl;
 #endif

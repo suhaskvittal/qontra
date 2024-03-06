@@ -3,27 +3,22 @@
  *  date:   29 December 2023
  * */
 
-#define PROTEAN_PROFILING
-
 #include "qontra/protean/io.h"
+#include "qontra/protean/scheduler.h"
+
+#include <vtils/filesystem.h>
 
 #include <fstream>
 #include <iostream>
 
-#ifdef PROTEAN_PROFILING
-
+#ifdef PROTEAN_PERF
 #include <vtils/timer.h>
-
-static vtils::Timer timer;
-
 #endif
 
 namespace qontra {
-
-using namespace graph;
-
 namespace protean {
 
+using namespace graph;
 using namespace net;
 
 bool
@@ -55,21 +50,22 @@ update_network(std::string pass_string, PhysicalNetwork* network, bool verbose) 
         PAIR("rlb", PhysicalNetwork::relabel_qubits)
     };
 
+#ifdef PROTEAN_PERF
+    vtils::Timer timer;
+#endif
     auto call_pass = [&] (std::string p)
     {
         if (verbose) {
             std::cout << "[ update_network ] calling pass " << p << std::endl;
         }
         pass_t pass = PASSES.at(p);
-#ifdef PROTEAN_PROFILING
+#ifdef PROTEAN_PERF
         timer.clk_start();
 #endif
         bool res = (network->*pass)();
-#ifdef PROTEAN_PROFILING
+#ifdef PROTEAN_PERF
         fp_t t = timer.clk_end();
-        if (verbose) {
-            std::cout << "\ttook " << t*1e-9 << "s" << std::endl;
-        }
+        std::cout << "[ " << p << " ] took " << t*1e-9 << "s" << std::endl;
 #endif
         return res;
     };
@@ -127,9 +123,20 @@ PhysicalNetwork::write_stats_file(std::string output_file) {
 }
 
 void
-PhysicalNetwork::write_schedule_file(std::string output_file, bool is_memory_x) {
-    qes::Program<> schedule = make_schedule(is_memory_x);
-    qes::to_file(output_file, schedule);
+PhysicalNetwork::write_schedule_folder(std::string output_folder) {
+    vtils::safe_create_directory(output_folder);
+    Scheduler sch(this);
+
+    for (size_t rm = 1; rm <= 3; rm++) {
+        for (int i = 0; i <= 1; i++) {
+            qes::Program<> program = sch.run(config.rounds*rm, i & 1);
+
+            std::string memory_type = i & 1 ? "x" : "z";
+            std::string rounds = std::to_string(rm*config.rounds);
+            std::string filename = output_folder + "/" + memory_type + "r" + rounds + ".qes";
+            qes::to_file(filename, program);
+        }
+    }
 }
 
 void

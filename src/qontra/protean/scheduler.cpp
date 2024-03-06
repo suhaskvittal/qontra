@@ -14,6 +14,10 @@
 #include <iostream>
 #include <sstream>
 
+#ifdef PROTEAN_PERF
+#include <vtils/timer.h>
+#endif
+
 namespace qontra {
 namespace protean {
 
@@ -57,7 +61,9 @@ Scheduler::Scheduler(PhysicalNetwork* n_p)
     tanner_graph(n_p->get_tanner_graph()),
     raw_network(n_p->get_raw_connection_network()),
     network(n_p)
-{}
+{
+    raw_network->enable_memoization = true;
+}
 
 qes::Program<>
 Scheduler::run(size_t rounds, bool is_memory_x) {
@@ -85,11 +91,12 @@ Scheduler::run(size_t rounds, bool is_memory_x) {
     //
     // BODY
     //
-    qes::Program<> base = make_round();
+    make_round();
     // Filter out event queue for events matching the memory type.
-    for (auto it = event_queue.begin(); it != event_queue.end(); ) {
+    std::vector<event_t> sub_event_queue(event_queue);
+    for (auto it = sub_event_queue.begin(); it != sub_event_queue.end(); ) {
         if (it->is_memory_x != is_memory_x) {
-            it = event_queue.erase(it);
+            it = sub_event_queue.erase(it);
         } else {
             it++;
         }
@@ -101,10 +108,10 @@ Scheduler::run(size_t rounds, bool is_memory_x) {
     int64_t event_ctr = 0,
             meas_ctr_offset = 0;
     for (size_t r = 0; r < rounds; r++) {
-        push_back_range(program, base);
+        push_back_range(program, round_program);
         // Make detection events.
-        for (size_t i = 0; i < event_queue.size(); i++) {
-            event_t e = event_queue.at(i);
+        for (size_t i = 0; i < sub_event_queue.size(); i++) {
+            event_t e = sub_event_queue.at(i);
 
             std::vector<int64_t> operands{event_ctr};
             for (int64_t m : e.m_operands) {
@@ -143,8 +150,8 @@ Scheduler::run(size_t rounds, bool is_memory_x) {
     safe_emplace_back(program, "measure", m_operands);
 
     const size_t prev_meas_ctr_offset = meas_ctr_offset - n_mt;
-    for (size_t i = 0; i < event_queue.size(); i++) {
-        event_t e = event_queue.at(i);
+    for (size_t i = 0; i < sub_event_queue.size(); i++) {
+        event_t e = sub_event_queue.at(i);
         if (e.owner == nullptr || !e.owner->is_check()) continue;
 
         std::vector<int64_t> operands{event_ctr};
@@ -184,11 +191,22 @@ Scheduler::run(size_t rounds, bool is_memory_x) {
     return program;
 }
 
-qes::Program<>
+void
 Scheduler::make_round() {
+    if (round_has_been_generated) return;
     qes::Program<> program;
     std::set<sptr<raw_vertex_t>> finished_checks;
+
+    // Reset all tracking values.
     cycle = 0;
+    event_queue.clear();
+    mctr = 0;
+    meas_ctr_map.clear();
+    active_role_map.clear();
+
+#ifdef PROTEAN_PERF
+    Timer timer;
+#endif
     while (true) {
         checks_this_cycle.clear();
         std::set<int64_t> r_operands;
@@ -212,9 +230,28 @@ Scheduler::make_round() {
         safe_emplace_back(program, "reset", r_operands);
 
         if (checks_this_cycle.empty()) break;
+#ifdef PROTEAN_PERF
+        fp_t t;
+        timer.clk_start();
+#endif
         build_preparation(program);
+#ifdef PROTEAN_PERF
+        t = timer.clk_end();
+        std::cout << "[ scheduler ] cycle " << cycle << " | preparation took " << t*1e-9 << "s" << std::endl;
+        timer.clk_start();
+#endif
         build_body(program);
+#ifdef PROTEAN_PERF
+        t = timer.clk_end();
+        std::cout << "[ scheduler ] cycle " << cycle << " | body took " << t*1e-9 << "s" << std::endl;
+        timer.clk_start();
+#endif
         build_teardown(program);
+#ifdef PROTEAN_PERF
+        t = timer.clk_end();
+        std::cout << "[ scheduler ] cycle " << cycle << " | teardown took " << t*1e-9 << "s" << std::endl;
+        timer.clk_start();
+#endif
         
         std::set<sptr<raw_vertex_t>> qubits_with_events;
         for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
@@ -228,7 +265,9 @@ Scheduler::make_round() {
         cycle++;
     }
     program[0].put("timing_error");
-    return program;
+
+    round_program = std::move(program);
+    round_has_been_generated = true;
 }
 
 void
@@ -247,17 +286,14 @@ Scheduler::build_body(qes::Program<>& program) {
     do {
         std::vector<cx_t> cx_arr;
         any_cx_done = false;
-        for (const auto& p : cx_sch_map) {
-            sptr<raw_vertex_t> rsq = p.first;
-            const std::vector<sptr<raw_vertex_t>>& sch = p.second;
+        for (const auto& [ rsq, sch ] : cx_sch_map) {
             // Make sure rsq is valid.
             test_and_set_exit_on_fail(rsq, "build_body");
             // Now get the k-th data qubit.
-            if (k >= sch.size()) continue;
-            sptr<raw_vertex_t> rdq = sch.at(k);
+            if (k >= sch.data_order.size()) continue;
+            sptr<raw_vertex_t> rdq = sch.data_order.at(k);
             if (rdq == nullptr) continue;
-            sptr<raw_vertex_t> common_rpq = raw_network->are_in_same_support(rdq, rsq);
-            cx_arr.push_back({rdq, rsq, common_rpq->qubit_type == raw_vertex_t::type::xparity});
+            cx_arr.push_back({rdq, rsq, sch.check->qubit_type == raw_vertex_t::type::xparity});
             any_cx_done = true;
         }
         schedule_cx_along_path(cx_arr, program);
@@ -341,11 +377,13 @@ Scheduler::prep_tear_cx_gates(qes::Program<>& program) {
         event_queue.push_back({re, {mctr+k}, false, true});
         k++;
     }
-    safe_emplace_back(program, "measure", m_operands);
-    if (m_operands.size()) program.back().put("no_tick");
-    safe_emplace_back(program, "reset", m_operands);
-    if (m_operands.size()) program.back().put("no_tick");
-    mctr += m_operands.size();
+    if (m_operands.size()) {
+        safe_emplace_back(program, "measure", m_operands);
+        program.back().put("no_tick");
+        safe_emplace_back(program, "reset", m_operands);
+        program.back().put("no_tick");
+        mctr += m_operands.size();
+    }
 }
 
 void
@@ -504,9 +542,9 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
     }
 }
 
-std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>
+std::map<sptr<raw_vertex_t>, sch_data_t>
 Scheduler::compute_schedules() {
-    std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>> sch_map;
+    std::map<sptr<raw_vertex_t>, sch_data_t> sch_map;
     // Compute max operator weight.
     size_t max_operator_weight = 0;
     for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
@@ -528,7 +566,10 @@ Scheduler::compute_schedules() {
                 return raw_network->get_support(rx).data.size()
                         < raw_network->get_support(ry).data.size();
             });
-
+#ifdef PROTEAN_PERF
+    Timer timer;
+    timer.clk_start();
+#endif
     for (sptr<raw_vertex_t> rpq : sorted_checks) {
         auto& support = get_support(rpq);
         // Make the LP:
@@ -658,20 +699,17 @@ Scheduler::compute_schedules() {
             existing_cnot_times[rdq].emplace_back(t, rpq);
 
             if (!sch_map.count(rsq)) {
-                sch_map[rsq] = std::vector<sptr<raw_vertex_t>>(upper_bound, nullptr);
+                sch_map[rsq] = { rpq, std::vector<sptr<raw_vertex_t>>(upper_bound, nullptr) };
             }
-            sch_map[rsq][t-1] = rdq;
+            sch_map[rsq].data_order[t-1] = rdq;
             tlm_put(sch_time_map, rsq, rdq, t);
         }
     }
+#ifdef PROTEAN_PERF
+    fp_t t = timer.clk_end();
+    std::cout << "[ compute_schedules ] computing schedule took " << t*1e-9 << "s" << std::endl;
+#endif
     return sch_map;
-}
-
-qes::Program<>
-PhysicalNetwork::make_schedule(bool mx) {
-    Scheduler sch(this);
-    qes::Program<> program = sch.run(config.rounds, mx);
-    return program;
 }
 
 }   // protean
