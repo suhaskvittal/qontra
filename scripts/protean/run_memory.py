@@ -15,7 +15,7 @@ if decoder != 'mwpm' and decoder != 'restriction':
     print('Decoder should be one of \"mwpm\" or \"restriction\".')
     exit()
 
-for version in ['v1', 'v3.2', 'v4.2']:
+for version in ['v1', 'v3.2']:
     folder = f'../data/protean/{code}/{version}'
     for mem_flag in ['', '-mx']:
         cmd = fr'''

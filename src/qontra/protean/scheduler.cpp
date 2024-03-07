@@ -103,8 +103,8 @@ Scheduler::run(size_t rounds, bool is_memory_x) {
     }
 
     const size_t n_mt = mctr;
-    const size_t n_et = event_queue.size();
-
+    const size_t n_et = sub_event_queue.size();
+    
     int64_t event_ctr = 0,
             meas_ctr_offset = 0;
     for (size_t r = 0; r < rounds; r++) {
@@ -206,8 +206,13 @@ Scheduler::make_round() {
 
 #ifdef PROTEAN_PERF
     Timer timer;
+    fp_t t;
 #endif
     while (true) {
+#ifdef PROTEAN_PERF
+        std::cout << "============= CYCLE " << cycle << " ===============" << std::endl;
+#endif
+
         checks_this_cycle.clear();
         std::set<int64_t> r_operands;
         std::set<sptr<raw_vertex_t>> roles_this_cycle;
@@ -228,10 +233,8 @@ Scheduler::make_round() {
             }
         }
         safe_emplace_back(program, "reset", r_operands);
-
         if (checks_this_cycle.empty()) break;
 #ifdef PROTEAN_PERF
-        fp_t t;
         timer.clk_start();
 #endif
         build_preparation(program);

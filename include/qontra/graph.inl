@@ -108,7 +108,7 @@ Graph<V, E>::add_vertex(sptr<V> v) {
     if (v == nullptr || contains(v->id)) return false;
 
     id_to_vertex[v->id] = v;
-    vertex_enum_map.put(v, vertices.size());
+    vertex_enum_map[v] = vertices.size();
     vertices.push_back(v);
     adjacency_lists[v] = {};
 
@@ -174,10 +174,17 @@ Graph<V, E>::get_edge(uint64_t id1, uint64_t id2) const {
 template <class V, class E> void
 Graph<V, E>::delete_vertex(sptr<V> v) {         // O(n) operation
     if (v == nullptr || !contains(v)) return;
+    bool found = false;
     for (auto it = vertices.begin(); it != vertices.end();) {
-        if (*it == v)   it = vertices.erase(it);
-        else            it++;
+        if (*it == v) {
+            it = vertices.erase(it);
+            found = true;
+        } else {
+            vertex_enum_map[*it] -= static_cast<int>(found);
+            it++;
+        }
     }
+    vertex_enum_map.erase(v);
 
     for (auto it = edges.begin(); it != edges.end();) {
         sptr<E> e = *it;
@@ -268,7 +275,7 @@ Graph<V, E>::get_edges() const {
     return edges;
 }
 
-template <class V, class E> inline const vtils::BijectiveMap<sptr<V>, size_t>&
+template <class V, class E> inline const std::map<sptr<V>, size_t>&
 Graph<V, E>::get_enumeration_map() const {
     return vertex_enum_map;
 }

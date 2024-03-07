@@ -132,8 +132,8 @@ PhysicalNetwork::write_schedule_folder(std::string output_folder) {
             qes::Program<> program = sch.run(config.rounds*rm, i & 1);
 
             std::string memory_type = i & 1 ? "x" : "z";
-            std::string rounds = std::to_string(rm*config.rounds);
-            std::string filename = output_folder + "/" + memory_type + "r" + rounds + ".qes";
+            std::string rounds = std::to_string(rm);
+            std::string filename = output_folder + "/" + memory_type + "rm" + rounds + ".qes";
             qes::to_file(filename, program);
         }
     }

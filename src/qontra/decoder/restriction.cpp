@@ -94,6 +94,10 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     corr ^= get_base_corr();
 
     // Compute the MWPM for each restricted lattice.
+#ifdef DECODER_PERF
+    timer.clk_start();
+    fp_t t;
+#endif
     std::vector<assign_t> matchings;
     for (int c1 = 0; c1 < decoding_graph->number_of_colors; c1++) {
         for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
@@ -108,6 +112,10 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             }
         }
     }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ RestrictionDecoder ] took " << t*1e-9 << "s to match restricted lattices" << std::endl;
+#endif
     // Compute connected components.
     std::vector<component_t> components = compute_connected_components(matchings);
     // Identify all edges inside a connected component (and which component it is), and

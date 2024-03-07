@@ -16,7 +16,7 @@ if (NOT COMPILE_OPTIONS)
     set(UNI_COMPILE_OPTIONS
         -Wno-write-strings)
     set(RELEASE_COMPILE_OPTIONS
-        -flto
+#       -flto
         -fno-strict-aliasing
         -march=native
         -Wunused

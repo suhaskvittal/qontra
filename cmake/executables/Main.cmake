@@ -17,3 +17,4 @@ make_main(TARGET qontrasim SOURCE_FILES main/qontrasim.cpp)
 make_main(TARGET print_error_stats SOURCE_FILES main/print_error_stats.cpp)
 
 make_main(TARGET explain_degenerate_errors SOURCE_FILES main/explain_degenerate_errors.cpp)
+make_main(TARGET compute_code_distance SOURCE_FILES main/compute_code_distance.cpp)

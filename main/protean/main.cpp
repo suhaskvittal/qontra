@@ -76,10 +76,8 @@ int main(int argc, char* argv[]) {
     if (pp.option_set("color-checks")) {
         network.assign_colors_to_checks();
     }
-
     // Write data to output folder:
     write_network_to_folder(data_output_folder, &network);
-
 #ifdef PROTEAN_PERF
     t = timer.clk_end();
     std::cout << "[ protean ] total time for compilation: " << t*1e-9 << "s" << std::endl;

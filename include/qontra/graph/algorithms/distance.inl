@@ -22,6 +22,44 @@ dijkstra(
     W_FUNC edge_w_func,
     sptr<V> target)
 {
+    typedef struct { sptr<V> v; fp_t s; } pqv_t;
+    struct cmp {
+        bool operator()(const pqv_t& v1, const pqv_t& v2) {
+            return v1.s > v2.s;
+        }
+    };
+
+    std::map<sptr<V>, pqv_t> v2pv;
+    std::priority_queue<pqv_t, std::vector<pqv_t>, cmp> queue;
+    for (sptr<V> v : graph->get_vertices()) {
+        if (v == src)   distances[v] = 0;
+        else            distances[v] = std::numeric_limits<fp_t>::max();
+        predecessors[v] = v;
+
+        pqv_t pv = {v, distances[v]};
+        queue.push(pv);
+        v2pv[v] = pv;
+    }
+
+    while (!queue.empty()) {
+        pqv_t pv = queue.top();
+        sptr<V> v = pv.v;
+        queue.pop();
+        if (fabsl(pv.s - distances[v]) > 1e-8) continue;   // This entry is outdated.
+
+        std::vector<sptr<V>> adj = graph->get_neighbors(v);
+        for (sptr<V> w : adj) {
+            sptr<E> e = graph->get_edge(v, w);
+            fp_t new_dist = distances[v] + edge_w_func(e);
+            if (new_dist < distances[w]) {
+                distances[w] = new_dist;
+                predecessors[w] = v;
+                pqv_t pw = {w, new_dist};
+                queue.push(pw);
+            }
+        }
+    }
+    /*
     typedef std::pair<int, fp_t> pqv_t;
     struct cmp {
         bool operator()(const pqv_t& v1, const pqv_t& v2) const {
@@ -35,7 +73,10 @@ dijkstra(
     std::vector<fp_t> _dist(n, std::numeric_limits<fp_t>::max());
     std::vector<int> _pred(n, -1);
 
-    const auto& enum_map = graph->get_enumeration_map();
+//  const auto& enum_map = graph->get_enumeration_map();
+    auto vertices = graph->get_vertices();
+    std::map<sptr<V>, int> enum_map;
+    for (size_t i =0; i < vertices.size(); i++) enum_map[vertices[i]] = i;
 
     _dist[enum_map.at(src)] = 0;
     queue.emplace(enum_map.at(src), 0);
@@ -43,9 +84,9 @@ dijkstra(
     while (!queue.empty()) {
         auto [ i, d ] = queue.top();
         queue.pop();
-        if (d != _dist[i]) continue;   // This entry is outdated.
+        if (d > _dist[i]) continue;   // This entry is outdated.
         
-        sptr<V> v = enum_map.at(i);
+        sptr<V> v = vertices.at(i);
         if (target != nullptr && v == target) break;
 
         for (sptr<V> w : graph->get_neighbors(v)) {
@@ -61,12 +102,13 @@ dijkstra(
     }
     // Update distances, predecesors.
     for (size_t i = 0; i < n; i++) {
-        sptr<V> v = enum_map.at(i);
+        sptr<V> v = vertices.at(i);
         distances[v] = _dist[i];
         
         int j = _pred[i];
-        predecessors[v] = j < 0 ? v : enum_map.at(j);
+        predecessors[v] = j < 0 ? v : vertices.at(j);
     }
+    */
 }
 
 template <class V, class E, class W_FUNC> void

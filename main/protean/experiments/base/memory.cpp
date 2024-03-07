@@ -3,8 +3,6 @@
  *  date:   21 January 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/ext/stim.h>
@@ -40,7 +38,7 @@ int main(int argc, char* argv[]) {
 
     std::string protean_folder(argv[1]);
     std::string qes_file = pp.option_set("mx") ? 
-                                protean_folder + "/memory_x.qes" : protean_folder + "/memory_z.qes";
+                                protean_folder + "/memory/xrm1.qes" : protean_folder + "/memory/zrm1.qes";
     std::string coupling_file = protean_folder + "/coupling_graph.txt";
     std::string output_file = pp.option_set("mx") ?
                                 protean_folder + "/output/basic_memory_x.csv"
@@ -125,7 +123,14 @@ int main(int argc, char* argv[]) {
 
         memory_config_t config;
         config.shots = shots;
+#ifdef PROTEAN_PERF
+        timer.clk_start();
+#endif
         auto res = memory_experiment(dec.get(), config);
+#ifdef PROTEAN_PERF
+        t = timer.clk_end();
+        std::cout << "[ pr_base_memory ] took " << t*1e-9 << "s to decode at p = " << p << std::endl;
+#endif
 
         // Write result to file.
         if (world_rank == 0) {
