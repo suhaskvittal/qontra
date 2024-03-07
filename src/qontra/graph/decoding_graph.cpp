@@ -410,14 +410,14 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     // We need to build a suitable graph for Dijkstra's:
     uptr<Graph<vertex_t, edge_t>> dgr = std::make_unique<Graph<vertex_t, edge_t>>();
     // Populate dgr.
-    std::vector<sptr<vertex_t>> _vertices;
     for (sptr<vertex_t> v : get_vertices()) {
         if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
             dgr->add_vertex(v);
-            for (sptr<vertex_t> w : _vertices) {
-                dgr->make_and_add_edge(v, w);
+            for (sptr<vertex_t> w : dgr->get_vertices()) {
+                if (v != w) {
+                    dgr->make_and_add_edge(v, w);
+                }
             }
-            _vertices.push_back(v);
         }
     }
     // Now, add edges to the graph.
@@ -460,10 +460,11 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     timer.clk_start();
 #endif
     // Now handle other edges.
-    for (size_t i = 0; i < _vertices.size(); i++) {
-        sptr<vertex_t> v = _vertices.at(i);
+    auto vertices = dgr->get_vertices();
+    for (size_t i = 0; i < vertices.size(); i++) {
+        sptr<vertex_t> v = vertices.at(i);
         for (size_t j = i+1; j < vertices.size(); j++) {
-            sptr<vertex_t> w = _vertices.at(j);
+            sptr<vertex_t> w = vertices.at(j);
             sptr<edge_t> e = dgr->get_edge(v, w);
             if (v->is_boundary_vertex && w->is_boundary_vertex) {
                 e->probability = 1.0;
