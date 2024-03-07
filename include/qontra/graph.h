@@ -12,6 +12,7 @@
 
 #include "qontra/defs.h"
 
+#include <vtils/bijective_map.h>
 #include <vtils/two_level_map.h>
 
 #include <map>
@@ -82,6 +83,8 @@ public:
     std::vector<sptr<V>>    get_vertices(void) const;
     std::vector<sptr<E>>    get_edges(void) const;
 
+    const vtils::BijectiveMap<sptr<V>, size_t>& get_enumeration_map(void) const;
+
     size_t  n(void) const;
     size_t  m(void) const;
 
@@ -117,7 +120,8 @@ protected:
     // For directed graphs, maintain reverse adjacency lists as well.
     std::map<sptr<V>, std::vector<sptr<V>>>         r_adjacency_lists;
 
-    std::map<uint64_t, sptr<V>>   id_to_vertex;
+    std::map<uint64_t, sptr<V>> id_to_vertex;
+    vtils::BijectiveMap<sptr<V>, size_t> vertex_enum_map;
 
     bool    graph_has_changed;  // Tracks if the graph has changed. May be useful
                                 // for subclasses that need to track state.

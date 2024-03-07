@@ -16,6 +16,7 @@ if (NOT COMPILE_OPTIONS)
     set(UNI_COMPILE_OPTIONS
         -Wno-write-strings)
     set(RELEASE_COMPILE_OPTIONS
+        -flto
         -fno-strict-aliasing
         -Wno-psabi)
     set(DEBUG_COMPILE_OPTIONS

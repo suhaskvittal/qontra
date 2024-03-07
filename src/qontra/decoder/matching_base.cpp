@@ -140,6 +140,10 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
     // Add edges:
     std::map<uint64_t, uint64_t> boundary_pref_map;
 
+    if (flags.size()) {
+        decoding_graph->immediately_initialize_distances_for(c1, c2);
+    }
+
 #ifdef DECODER_PERF
     vtils::Timer timer;
     fp_t t;
@@ -164,9 +168,8 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
             } else {
                 error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
                 w = ec.weight;
-                // Quantize the weight.
             }
-            uint32_t iw = w > 1000.0 ? 1'000'000 : static_cast<uint32_t>(1000 * w);
+            uint32_t iw = static_cast<uint32_t>(1000 * w);
             pm.AddEdge(i, j, iw);
         }
     }

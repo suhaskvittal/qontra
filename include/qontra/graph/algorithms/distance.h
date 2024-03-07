@@ -25,6 +25,13 @@ void dijkstra(
         std::map<sptr<V>, sptr<V>>& pred,
         W_FUNC);
 
+template <class V, class E, class W_FUNC>
+void floyd_warshall(
+        Graph<V, E>*,
+        vtils::TwoLevelMap<sptr<V>, sptr<V>, fp_t>& dist,
+        vtils::TwoLevelMap<sptr<V>, sptr<V>, sptr<V>>& prev,
+        W_FUNC);
+
 template <class V, class E, class DATA, class W_FUNC, class DATA_FUNC>
 DistanceMatrix<V, DATA> create_distance_matrix(Graph<V, E>*, W_FUNC, DATA_FUNC);
 
