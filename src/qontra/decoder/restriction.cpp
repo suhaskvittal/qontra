@@ -391,7 +391,7 @@ RestrictionDecoder::insert_error_chain_into(
         bool force_unflagged,
         std::set<sptr<hyperedge_t>>& triggered_flag_edges)
 {
-    error_chain_t ec = decoding_graph->get(c1, c2, src, dst, force_unflagged);
+    error_chain_t ec = decoding_graph->get_error_chain(src, dst, c1, c2, force_unflagged);
 
     /*
     std::cout << "error chain btwn " << print_v(src) << " and " << print_v(dst) << ":";

@@ -18,6 +18,8 @@ if (NOT COMPILE_OPTIONS)
     set(RELEASE_COMPILE_OPTIONS
         -flto
         -fno-strict-aliasing
+        -march=native
+        -Wunused
         -Wno-psabi)
     set(DEBUG_COMPILE_OPTIONS
         -ggdb3

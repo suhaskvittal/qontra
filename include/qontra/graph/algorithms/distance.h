@@ -16,14 +16,16 @@ namespace graph {
 template <class V, class DATA>
 using DistanceMatrix = vtils::TwoLevelMap<sptr<V>, sptr<V>, DATA>;
 
-// Performs Dijkstra's algorithm given an edge weight function (ewf_t).
+// Performs Dijkstra's algorithm given an edge weight function. If target is null,
+// then the algorithm computes the distance to all vertices from src.
 template <class V, class E, class W_FUNC>
 void dijkstra(
         Graph<V, E>*,
         sptr<V> src,
         std::map<sptr<V>, fp_t>& dist,
         std::map<sptr<V>, sptr<V>>& pred,
-        W_FUNC);
+        W_FUNC,
+        sptr<V> target=nullptr);
 
 template <class V, class E, class W_FUNC>
 void floyd_warshall(

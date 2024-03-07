@@ -19,7 +19,8 @@ dijkstra(
     sptr<V> src,
     std::map<sptr<V>, fp_t>& distances,
     std::map<sptr<V>, sptr<V>>& predecessors,
-    W_FUNC edge_w_func)
+    W_FUNC edge_w_func,
+    sptr<V> target)
 {
     typedef std::pair<int, fp_t> pqv_t;
     struct cmp {
@@ -45,6 +46,8 @@ dijkstra(
         if (d != _dist[i]) continue;   // This entry is outdated.
         
         sptr<V> v = enum_map.at(i);
+        if (target != nullptr && v == target) break;
+
         for (sptr<V> w : graph->get_neighbors(v)) {
             int j = enum_map.at(w);
             sptr<E> e = graph->get_edge(v, w);
@@ -94,29 +97,22 @@ floyd_warshall(
         _dist[j][i] = _dist[i][j];
     }
     // Compute distances.
-    for (size_t i = 0; i < n; i++) {
-        for (size_t j = i+1; j < n; j++) {
-            fp_t& d_ij = _dist[i][j],
-                & d_ji = _dist[j][i];
-
-            fp_t min_update = d_ij;
-            int min_k;
-            for (size_t k = 0; k < n; k++) {
-                fp_t d_ik = _dist[i][k],
-                     d_kj = _dist[k][j];
+    for (size_t k = 0; k < n; k++) {
+        for (size_t i = 0; i < n; i++) {
+            fp_t d_ik = _dist[i][k];
+            for (size_t j = i+1; j < n; j++) {
+                fp_t& d_ij = _dist[i][j],
+                    & d_ji = _dist[j][i];
+                fp_t d_kj = _dist[k][j];
                 if (d_ik != std::numeric_limits<fp_t>::max() 
                     && d_kj != std::numeric_limits<fp_t>::max()
-                    && min_update > d_ik + d_kj) 
+                    && d_ij > d_ik + d_kj) 
                 {
-                    min_update = d_ik + d_kj;
-                    min_k = k;
+                    d_ij = d_ik + d_kj;
+                    d_ji = d_ij;
+                    _pred[i][j] = _pred[k][j];
+                    _pred[j][i] = _pred[k][i];
                 }
-            }
-            if (d_ij > min_update) {
-                d_ij = min_update;
-                d_ji = min_update;
-                _pred[i][j] = _pred[min_k][j];
-                _pred[j][i] = _pred[min_k][i];
             }
         }
     }

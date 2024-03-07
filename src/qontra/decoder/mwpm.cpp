@@ -12,6 +12,12 @@ namespace qontra {
 using namespace graph;
 using namespace decoding;
 
+MWPMDecoder::MWPMDecoder(const DetailedStimCircuit& circuit)
+    :MatchingBase(circuit, 2)
+{
+    decoding_graph->immediately_initialize_distances_for(COLOR_ANY, COLOR_ANY);
+}
+
 Decoder::result_t
 MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     const size_t n_obs = circuit.count_observables();
@@ -46,7 +52,7 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     for (auto& match : assignments) {
         uint64_t di = std::get<0>(match),
                  dj = std::get<1>(match);
-        error_chain_t ec = decoding_graph->get(di, dj);
+        error_chain_t ec = decoding_graph->get_error_chain(di, dj);
         for (size_t i = 1; i < ec.path.size(); i++) {
             sptr<vertex_t> vi = ec.path[i-1],
                             vj = ec.path[i];

@@ -140,16 +140,16 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
     // Add edges:
     std::map<uint64_t, uint64_t> boundary_pref_map;
 
-    if (flags.size()) {
-        decoding_graph->immediately_initialize_distances_for(c1, c2);
-    }
-
 #ifdef DECODER_PERF
     vtils::Timer timer;
     fp_t t;
 
     timer.clk_start();
 #endif
+
+    if (flags.size() && detectors.size() > 10) {
+        decoding_graph->immediately_initialize_distances_for(c1, c2);
+    }
 
     for (size_t i = 0; i < n; i++) {
         uint64_t di = detectors.at(i);
@@ -161,12 +161,12 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
                 // We need to identify the best boundary for di and use that.
                 uint64_t b1 = get_color_boundary_index(c1),
                          b2 = get_color_boundary_index(c2);
-                error_chain_t ec1 = decoding_graph->get(c1, c2, di, b1),
-                              ec2 = decoding_graph->get(c1, c2, di, b2);
+                error_chain_t ec1 = decoding_graph->get_error_chain(di, b1, c1, c2),
+                              ec2 = decoding_graph->get_error_chain(di, b2, c1, c2);
                 boundary_pref_map[di] = ec1.weight < ec2.weight ? b1 : b2;
                 w = std::min(ec1.weight, ec2.weight);
             } else {
-                error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
+                error_chain_t ec = decoding_graph->get_error_chain(di, dj, c1, c2);
                 w = ec.weight;
             }
             uint32_t iw = static_cast<uint32_t>(1000 * w);
@@ -190,7 +190,7 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
         if (dj == get_color_boundary_index(COLOR_ANY) && c1 != COLOR_ANY) {
             dj = boundary_pref_map[di];
         }
-        error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
+        error_chain_t ec = decoding_graph->get_error_chain(di, dj, c1, c2);
         if (split_thru_boundary_match && ec.runs_through_boundary) {
             // Partition path between di and dj with boundaries.
             bool all_entries_are_boundaries = true;

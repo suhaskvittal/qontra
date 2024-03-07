@@ -157,11 +157,12 @@ DecodingGraph::immediately_initialize_distances_for(int c1, int c2) {
         });
 #ifdef DECODER_PERF
     t = timer.clk_end();
-    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to run Floyd-Warshall" << std::endl;
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to run Floyd-Warshall for n = "
+        << dgr->n() << " and m = " << dgr->m() << std::endl;
 #endif
     auto& dm = dm_map[c1_c2];
     for (sptr<vertex_t> v : dgr->get_vertices()) {
-        update_paths(dgr, dm, v, dist[v], pred[v]);
+        update_paths(dgr, dm, v, dgr->get_vertices(), dist[v], pred[v]);
     }
 }
 
@@ -368,13 +369,13 @@ DecodingGraph::get_best_flag_edge(std::vector<sptr<hyperedge_t>> edge_list) {
 }
 
 void
-DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
+DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from, sptr<vertex_t> to) {
 #ifdef DECODER_PERF
     vtils::Timer timer;
     fp_t t;
 #endif
 
-    if (c1 > c2) return dijkstra_(c2, c1, from);
+    if (c1 > c2) return dijkstra_(c2, c1, from, to);
     auto c1_c2 = std::make_pair(c1, c2);
     
     auto& dgr_map = flags_are_active ? flagged_dijkstra_graph_map : dijkstra_graph_map;
@@ -390,11 +391,11 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
 #ifdef DECODER_PERF
     timer.clk_start();
 #endif
-    dijkstra(dgr.get(), from, dist, pred, 
+    dijkstra(dgr.get(), from, dist, pred,
         [] (sptr<edge_t> e)
         {
             return compute_weight(e->probability);
-        });
+        }, to);
 #ifdef DECODER_PERF
     t = timer.clk_end();
     std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to perform Dijkstra's" << std::endl;
@@ -402,22 +403,35 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
     // Now, update the distance matrix. We'll do this manually to optimize for
     // speed.
     auto& dm = dm_map[c1_c2];
-    update_paths(dgr, dm, from, dist, pred);
+    std::vector<sptr<vertex_t>> to_list = //dgr->get_vertices();
+        to == nullptr ? dgr->get_vertices() : std::vector<sptr<vertex_t>>{to};
+    update_paths(dgr, dm, from, to_list, dist, pred);
 }
 
 void
 DecodingGraph::make_dijkstra_graph(int c1, int c2) {
+    auto c1_c2 = std::make_pair(c1, c2);
+    auto& dgr_map = flags_are_active ? flagged_dijkstra_graph_map : dijkstra_graph_map;
+
     // We need to build a suitable graph for Dijkstra's:
-    uptr<Graph<vertex_t, edge_t>> dgr = std::make_unique<Graph<vertex_t, edge_t>>();
-    // Populate dgr.
-    for (sptr<vertex_t> v : get_vertices()) {
-        if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
-            dgr->add_vertex(v);
-            for (sptr<vertex_t> w : dgr->get_vertices()) {
-                if (v != w) {
-                    dgr->make_and_add_edge(v, w);
+    uptr<Graph<vertex_t, edge_t>> dgr;
+    if (dgr_map[c1_c2] == nullptr) {
+        dgr = std::make_unique<Graph<vertex_t, edge_t>>();
+        // Populate dgr.
+        for (sptr<vertex_t> v : get_vertices()) {
+            if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
+                dgr->add_vertex(v);
+                for (sptr<vertex_t> w : dgr->get_vertices()) {
+                    if (v != w) {
+                        dgr->make_and_add_edge(v, w);
+                    }
                 }
             }
+        }
+    } else {
+        dgr = std::move(dgr_map[c1_c2]);
+        for (sptr<edge_t> e : dgr->get_edges()) {
+            e->probability = 0.0;
         }
     }
     // Now, add edges to the graph.
@@ -490,12 +504,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to add normal edges to Dijkstra graph" << std::endl;
 #endif
     // Now the graph is done.
-    auto c1_c2 = std::make_pair(c1, c2);
-    if (flags_are_active) {
-        flagged_dijkstra_graph_map[c1_c2] = std::move(dgr);
-    } else {
-        dijkstra_graph_map[c1_c2] = std::move(dgr);
-    }
+    dgr_map[c1_c2] = std::move(dgr);
 }
 
 void
@@ -503,10 +512,11 @@ DecodingGraph::update_paths(
         uptr<DijkstraGraph>& dgr,
         DistanceMatrix<vertex_t, error_chain_t>& dm,
         sptr<vertex_t> from,
+        std::vector<sptr<vertex_t>> to_list,
         const std::map<sptr<vertex_t>, fp_t>& dist,
         const std::map<sptr<vertex_t>, sptr<vertex_t>>& pred)
 {
-    for (sptr<vertex_t> w : dgr->get_vertices()) {
+    for (sptr<vertex_t> w : to_list) {
         error_chain_t ec;
 
         bool failed_to_converge = false;
