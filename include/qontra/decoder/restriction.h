@@ -15,6 +15,15 @@ namespace qontra {
 
 typedef std::pair<sptr<graph::decoding::vertex_t>, sptr<graph::decoding::vertex_t>> vpair_t;
 
+struct face_t {
+    std::vector<sptr<graph::decoding::vertex_t>> vertices;
+    std::set<uint64_t> frames;
+    fp_t probability;
+
+    bool operator==(const face_t&) const;
+    bool operator<(const face_t&) const;
+};
+
 class RestrictionDecoder : public MatchingBase {
 public:
     typedef std::tuple<uint64_t, uint64_t, int, int> assign_t;
@@ -50,20 +59,20 @@ protected:
     void insert_incident_vertices(
             std::set<sptr<graph::decoding::vertex_t>>&, const std::map<vpair_t, size_t>&, int);
 
-    std::set<sptr<graph::decoding::hyperedge_t>> get_faces(
-            sptr<graph::decoding::vertex_t>, 
-            const std::map<sptr<graph::decoding::hyperedge_t>, sptr<graph::decoding::hyperedge_t>>& best_rep_map);
+    std::set<face_t> get_faces(
+        sptr<graph::decoding::vertex_t>,
+        const std::map<sptr<graph::decoding::hyperedge_t>, sptr<graph::decoding::hyperedge_t>>& best_rep_map);
 };
-
 
 RestrictionDecoder::assign_t cast_assign(Decoder::assign_t, int, int);
 vpair_t make_vpair(sptr<graph::decoding::vertex_t>, sptr<graph::decoding::vertex_t>);
+face_t make_face(sptr<graph::decoding::hyperedge_t>);
 
 void intersect_with_boundary(
             std::set<vpair_t>&,
             stim::simd_bits_range_ref<SIMD_WIDTH>,
             fp_t& probability,
-            sptr<graph::decoding::hyperedge_t>,
+            const face_t&,
             sptr<graph::decoding::vertex_t> incident_vertex);
 
 

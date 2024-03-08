@@ -201,15 +201,15 @@ r_compute_correction:
     vtils::insert_range(all_incident, in_cc_incident);
 
     for (sptr<vertex_t> v : all_incident) {
-        std::set<sptr<hyperedge_t>> faces = get_faces(v, best_rep_map);
+        std::set<face_t> faces = get_faces(v, best_rep_map);
         const size_t nf = faces.size();
         if (nf > 20) {
             std::cerr << "[ RestrictionDecoder ] found vertex " << print_v(v)
                 << " with too many faces: " << nf << std::endl;
-            for (sptr<hyperedge_t> e : faces) {
+            for (const face_t& fc : faces) {
                 std::cerr << "\t<";
-                for (size_t i = 0; i < e->get_order(); i++) {
-                    std::cerr << " " << print_v(e->get<vertex_t>(i));
+                for (sptr<vertex_t> v : fc.vertices) {
+                    std::cerr << " " << print_v(v);
                 }
                 std::cerr << " >" << std::endl;
             }
@@ -298,13 +298,13 @@ r_compute_correction:
             std::cerr << std::endl;
             std::cerr << "Faces for incident vertices:" << std::endl;
             for (sptr<vertex_t> v : all_incident) {
-                std::set<sptr<hyperedge_t>> faces = get_faces(v, best_rep_map);
+                std::set<face_t> faces = get_faces(v, best_rep_map);
                 const size_t nf = faces.size();
                 std::cerr << "\t" << print_v(v) << " (nf = " << nf << "):" << std::endl;
-                for (sptr<hyperedge_t> e : faces) {
+                for (const face_t& fc : faces) {
                     std::cerr << "\t\t<";
-                    for (size_t i = 0; i < e->get_order(); i++) {
-                        std::cerr << " " << print_v(e->get<vertex_t>(i));
+                    for (sptr<vertex_t> v : fc.vertices) {
+                        std::cerr << " " << print_v(v);
                     }
                     std::cerr << " >" << std::endl;
                 }
@@ -475,36 +475,68 @@ RestrictionDecoder::flatten_edge_map(const std::map<sptr<hyperedge_t>, sptr<hype
     return flat_edge_map;
 }
 
-std::set<sptr<hyperedge_t>>
-RestrictionDecoder::get_faces(sptr<vertex_t> v, const std::map<sptr<hyperedge_t>, sptr<hyperedge_t>>& best_rep_map) {
-    std::set<sptr<hyperedge_t>> faces;
+std::set<face_t>
+RestrictionDecoder::get_faces(
+        sptr<vertex_t> v,
+        const std::map<sptr<hyperedge_t>, sptr<hyperedge_t>>& best_rep_map) 
+{
+    std::set<face_t> faces;
     // Here, we will flatten the faces themselves. We require that
     // each face has different colors.
     for (sptr<hyperedge_t> e : decoding_graph->get_common_hyperedges({v})) {
-        std::vector<sptr<vertex_t>> flat_vlist;
-        std::set<int> colors_in_face;
-        bool do_not_add = false;
-        for (size_t i = 0; i < e->get_order(); i++) {
-            sptr<vertex_t> x = e->get<vertex_t>(i);
-            sptr<vertex_t> fx = x->get_base();
-            if (std::find(flat_vlist.begin(), flat_vlist.end(), fx) != flat_vlist.end()) {
-                continue;
-            }
-            if (colors_in_face.count(fx->color)) {
-                do_not_add = true;
-                break;
-            }
-            flat_vlist.push_back(fx);
-            colors_in_face.insert(fx->color);
-        }
-        if (do_not_add) continue;
-        sptr<hyperedge_t> fe = decoding_graph->get_edge(flat_vlist);
-        if (fe != nullptr) {
-            if (best_rep_map.count(fe)) fe = best_rep_map.at(fe);
-            faces.insert(fe);
+        e = best_rep_map.count(e) ? best_rep_map.at(e) : e;
+        face_t fc = make_face(e);
+        if (fc.vertices.size()) {
+            faces.insert(make_face(e));
         }
     }
     return faces;
+}
+
+face_t
+make_face(sptr<hyperedge_t> e) {
+    face_t fc;
+    fc.frames = e->frames;
+    fc.probability = e->probability;
+    // Now flatten all the vertices.
+    std::set<int> colors_in_face;
+    for (size_t i = 0; i < e->get_order(); i++) {
+        sptr<vertex_t> fx = e->get<vertex_t>(i)->get_base();
+        if (std::find(fc.vertices.begin(), fc.vertices.end(), fx) != fc.vertices.end()) {
+            continue;
+        }
+        if (colors_in_face.count(fx->color)) {
+            fc.vertices.clear();
+            return fc;
+        }
+        fc.vertices.push_back(fx);
+        colors_in_face.insert(fx->color);
+    }
+    std::sort(fc.vertices.begin(), fc.vertices.end());
+    return fc;
+}
+
+void
+intersect_with_boundary(
+            std::set<vpair_t>& boundary,
+            stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+            fp_t& probability,
+            const face_t& fc,
+            sptr<vertex_t> v)
+{
+    // Get edges of the hyperedge.
+    for (size_t j = 0; j < fc.vertices.size(); j++) {
+        auto x = fc.vertices.at(j);
+        for (size_t k = j+1; k < fc.vertices.size(); k++) {
+            auto y = fc.vertices.at(k);
+            // Make sure that one of x or y is v.
+            if (x != v && y != v) continue;
+            vpair_t xy = make_vpair(x, y);
+            boundary ^= xy;
+        }
+    }
+    for (uint64_t fr : fc.frames) corr[fr] ^= 1;
+    probability *= fc.probability;
 }
 
 }   // qontra

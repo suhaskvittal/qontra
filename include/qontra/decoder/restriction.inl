@@ -7,6 +7,16 @@
 
 namespace qontra {
 
+inline bool
+face_t::operator==(const face_t& other) const {
+    return vertices == other.vertices;
+}
+
+inline bool
+face_t::operator<(const face_t& other) const {
+    return vertices < other.vertices;
+}
+
 inline void
 RestrictionDecoder::insert_incident_vertices(
         std::set<sptr<graph::decoding::vertex_t>>& vertex_set,
@@ -45,29 +55,6 @@ inline vpair_t
 make_vpair(sptr<graph::decoding::vertex_t> v, sptr<graph::decoding::vertex_t> w) {
     if (v < w)  return std::make_pair(v, w);
     else        return std::make_pair(w, v);
-}
-
-inline void
-intersect_with_boundary(
-            std::set<vpair_t>& boundary,
-            stim::simd_bits_range_ref<SIMD_WIDTH> corr,
-            fp_t& probability,
-            sptr<graph::decoding::hyperedge_t> e,
-            sptr<graph::decoding::vertex_t> v)
-{
-    // Get edges of the hyperedge.
-    for (size_t j = 0; j < e->get_order(); j++) {
-        auto x = e->get<graph::decoding::vertex_t>(j);
-        for (size_t k = j+1; k < e->get_order(); k++) {
-            auto y = e->get<graph::decoding::vertex_t>(k);
-            // Make sure that one of x or y is v.
-            if (x != v && y != v) continue;
-            vpair_t xy = make_vpair(x, y);
-            boundary ^= xy;
-        }
-    }
-    for (uint64_t fr : e->frames) corr[fr] ^= 1;
-    probability *= e->probability;
 }
 
 }   // qontra
