@@ -22,44 +22,6 @@ dijkstra(
     W_FUNC edge_w_func,
     sptr<V> target)
 {
-    typedef struct { sptr<V> v; fp_t s; } pqv_t;
-    struct cmp {
-        bool operator()(const pqv_t& v1, const pqv_t& v2) {
-            return v1.s > v2.s;
-        }
-    };
-
-    std::map<sptr<V>, pqv_t> v2pv;
-    std::priority_queue<pqv_t, std::vector<pqv_t>, cmp> queue;
-    for (sptr<V> v : graph->get_vertices()) {
-        if (v == src)   distances[v] = 0;
-        else            distances[v] = std::numeric_limits<fp_t>::max();
-        predecessors[v] = v;
-
-        pqv_t pv = {v, distances[v]};
-        queue.push(pv);
-        v2pv[v] = pv;
-    }
-
-    while (!queue.empty()) {
-        pqv_t pv = queue.top();
-        sptr<V> v = pv.v;
-        queue.pop();
-        if (fabsl(pv.s - distances[v]) > 1e-8) continue;   // This entry is outdated.
-
-        std::vector<sptr<V>> adj = graph->get_neighbors(v);
-        for (sptr<V> w : adj) {
-            sptr<E> e = graph->get_edge(v, w);
-            fp_t new_dist = distances[v] + edge_w_func(e);
-            if (new_dist < distances[w]) {
-                distances[w] = new_dist;
-                predecessors[w] = v;
-                pqv_t pw = {w, new_dist};
-                queue.push(pw);
-            }
-        }
-    }
-    /*
     typedef std::pair<int, fp_t> pqv_t;
     struct cmp {
         bool operator()(const pqv_t& v1, const pqv_t& v2) const {
@@ -108,7 +70,6 @@ dijkstra(
         int j = _pred[i];
         predecessors[v] = j < 0 ? v : vertices.at(j);
     }
-    */
 }
 
 template <class V, class E, class W_FUNC> void
