@@ -398,6 +398,9 @@ Scheduler::init_flags(
         std::set<int64_t>& h_operands,
         std::vector<std::vector<cx_t>>& cx_groups)
 {
+    std::cout << "init flags for " << print_v(rpq) << "(" << qu(rpq) << "):";
+    for (sptr<raw_vertex_t> rfq : flags) std::cout << " " << print_v(rfq) << "(" << qu(rfq) << ")";
+    std::cout << std::endl;
     // Amongst the flag qubits, first check if any pairs of flags have a common
     // qubit in their proxy path that is not their parity qubit.
     std::map<sptr<raw_vertex_t>, sptr<raw_vertex_t>> endpoint_map;
@@ -467,6 +470,9 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
         sptr<raw_vertex_t> src = cx.src,
                                 dst = cx.dst;
         path_arr[i] = raw_network->get_proxy_walk_path(src, dst);
+        std::cout << "cx(" << print_v(src) << ", " << print_v(dst) << ") = [";
+        for (auto rx : path_arr[i]) std::cout << " " << print_v(rx) << "(" << qu(rx) << ")";
+        std::cout << " ]" << std::endl;
     }
     // Also track undo paths:
     std::vector<std::vector<sptr<raw_vertex_t>>> undo_arr;
