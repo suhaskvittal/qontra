@@ -172,7 +172,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         for (uint64_t fr : e->frames) std::cout << " " << fr;
         std::cout << std::endl;
         */
-
         for (uint64_t fr : e->frames) corr[fr] ^= 1;
     }
 
@@ -217,13 +216,13 @@ r_compute_correction:
         }
         /*
         std::cout << "faces for " << print_v(v) << ":" << std::endl;
-        for (sptr<hyperedge_t> e : faces) {
+        for (const face_t& fc : faces) {
             std::cout << "\t<";
-            for (size_t i = 0; i < e->get_order(); i++) {
-                std::cout << " " << print_v(e->get<vertex_t>(i));
+            for (sptr<vertex_t> v : fc.vertices) {
+                std::cout << " " << print_v(v);
             }
             std::cout << " >, frames:";
-            for (uint64_t fr : e->frames) std::cout << " " << fr;
+            for (uint64_t fr : fc.frames) std::cout << " " << fr;
             std::cout << std::endl;
         }
         */
@@ -503,7 +502,8 @@ make_face(sptr<hyperedge_t> e) {
     for (size_t i = 0; i < e->get_order(); i++) {
         sptr<vertex_t> fx = e->get<vertex_t>(i)->get_base();
         if (std::find(fc.vertices.begin(), fc.vertices.end(), fx) != fc.vertices.end()) {
-            continue;
+            fc.vertices.clear();
+            return fc;
         }
         if (colors_in_face.count(fx->color)) {
             fc.vertices.clear();
