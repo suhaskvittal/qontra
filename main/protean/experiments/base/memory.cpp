@@ -14,6 +14,10 @@
 #include <vtils/cmd_parse.h>
 #include <vtils/filesystem.h>
 
+#ifdef PROTEAN_PERF
+#include <vtils/timer.h>
+#endif
+
 #include <fstream>
 #include <iostream>
 
@@ -34,15 +38,11 @@ int main(int argc, char* argv[]) {
 
     std::string protean_folder(argv[1]);
     std::string qes_file = pp.option_set("mx") ? 
-                                protean_folder + "/memory_x.qes" : protean_folder + "/memory_z.qes";
+                                protean_folder + "/memory/xrm1.qes" : protean_folder + "/memory/zrm1.qes";
     std::string coupling_file = protean_folder + "/coupling_graph.txt";
     std::string output_file = pp.option_set("mx") ?
                                 protean_folder + "/output/basic_memory_x.csv"
                                 : protean_folder + "/output/basic_memory_z.csv";
-
-    if (world_rank == 0) {
-        std::cout << "reading " << qes_file << ", writing to " << output_file << std::endl;
-    }
 
     std::string decoder_name;
 
@@ -60,8 +60,24 @@ int main(int argc, char* argv[]) {
 
     G_BASE_SEED = 1000;
 
+#ifdef PROTEAN_PERF
+    Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
+
     // Initialize error and timing tables.
     qes::Program<> program = qes::from_file(qes_file);
+
+#ifdef PROTEAN_PERF
+    t = timer.clk_end();
+    if (world_rank == 0) {
+        std::cout << "[ pr_base_memory ] took " << t*1e-9 << "s to read the QES file." << std::endl;
+    }
+    timer.clk_start();
+#endif
+
     ErrorTable errors;
     TimeTable timing;
     make_error_and_timing_from_coupling_graph(coupling_file, errors, timing);
@@ -85,6 +101,13 @@ int main(int argc, char* argv[]) {
         std::cerr << "Unsupported decoder type: " << decoder_name << std::endl;
     }
 
+#ifdef PROTEAN_PERF
+    t = timer.clk_end();
+    if (world_rank == 0) {
+        std::cout << "[ pr_base_memory ] took " << t*1e-9 << "s to initialize the decoder." << std::endl;
+    }
+#endif
+
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
         DetailedStimCircuit circuit;
@@ -100,7 +123,14 @@ int main(int argc, char* argv[]) {
 
         memory_config_t config;
         config.shots = shots;
+#ifdef PROTEAN_PERF
+        timer.clk_start();
+#endif
         auto res = memory_experiment(dec.get(), config);
+#ifdef PROTEAN_PERF
+        t = timer.clk_end();
+        std::cout << "[ pr_base_memory ] took " << t*1e-9 << "s to decode at p = " << p << std::endl;
+#endif
 
         // Write result to file.
         if (world_rank == 0) {

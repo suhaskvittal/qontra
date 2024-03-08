@@ -15,7 +15,7 @@ k_coloring_greedy(Graph<V, E>* graph, std::map<sptr<V>, int>& color_map, size_t 
     if (vertices.empty()) return -1;
     // Solve by BFS.
     std::set<sptr<V>> visited;
-    int max_color = 0;
+    int max_color = -1;
     for (size_t i = 0; i < vertices.size(); i++) {
         sptr<V> st = vertices.at( (i + bfs_seed) % vertices.size() );
         std::deque<sptr<V>> bfs{ st };

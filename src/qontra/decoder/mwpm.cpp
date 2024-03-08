@@ -12,6 +12,12 @@ namespace qontra {
 using namespace graph;
 using namespace decoding;
 
+MWPMDecoder::MWPMDecoder(const DetailedStimCircuit& circuit)
+    :MatchingBase(circuit, 2)
+{
+    decoding_graph->immediately_initialize_distances_for(COLOR_ANY, COLOR_ANY);
+}
+
 Decoder::result_t
 MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     const size_t n_obs = circuit.count_observables();
@@ -37,11 +43,16 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     timer.clk_start();
     std::vector<Decoder::assign_t> assignments = compute_matching();
     fp_t t = static_cast<fp_t>(timer.clk_end());
+    
+#ifdef DECODER_PERF
+    fp_t _t;
+    timer.clk_start();
+#endif
 
     for (auto& match : assignments) {
         uint64_t di = std::get<0>(match),
                  dj = std::get<1>(match);
-        error_chain_t ec = decoding_graph->get(di, dj);
+        error_chain_t ec = decoding_graph->get_error_chain(di, dj);
         for (size_t i = 1; i < ec.path.size(); i++) {
             sptr<vertex_t> vi = ec.path[i-1],
                             vj = ec.path[i];
@@ -58,6 +69,11 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
             for (uint64_t f : e->frames) corr[f] ^= 1;
         }
     }
+
+#ifdef DECODER_PERF
+    _t = timer.clk_end();
+    std::cout << "[ MWPMDecoder ] took " << _t*1e-9 << "s to retrieve correction from matching" << std::endl;
+#endif
 
     return { t, corr, assignments };
 }

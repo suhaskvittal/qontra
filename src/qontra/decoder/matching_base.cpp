@@ -33,19 +33,31 @@ MatchingBase::load_syndrome(
         flags.clear();
         flag_edges.clear();
     }
+
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
+
     // Track the number of detectors of each color.
-    for (uint64_t d : all_dets) {
+    for (auto it = all_dets.begin(); it != all_dets.end(); ) {
+        uint64_t d = *it;
         if (circuit.flag_detectors.count(d)) {
             if (recompute_flags) {
                 flags.push_back(d);
             }
+            it = all_dets.erase(it);
         } else {
             if (c1 != COLOR_ANY && circuit.detector_color_map[d] != c1 && circuit.detector_color_map[d] != c2) {
-                continue;
+                it = all_dets.erase(it);
+            } else {
+                it++;
             }
-            detectors.push_back(d);
         }
     }
+    detectors = std::move(all_dets);
     if (detectors.size() & 1) {
         detectors.push_back(get_color_boundary_index(COLOR_ANY));
     }
@@ -73,12 +85,31 @@ MatchingBase::load_syndrome(
         }
         */
     }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ MatchingBase ] Took " << t*1e-9 << "s to retrieve syndrome: D[";
+    for (uint64_t d : detectors) std::cout << " " << d;
+    std::cout << " ], F[";
+    for (uint64_t f : flags) std::cout << " " << f;
+    std::cout << " ]" << std::endl;
+#endif
 }
 
 stim::simd_bits<SIMD_WIDTH>
 MatchingBase::get_base_corr() {
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
+
     stim::simd_bits<SIMD_WIDTH> corr(circuit.count_observables());
     if (flags.empty()) {
+#ifdef DECODER_PERF
+        t = timer.clk_end();
+        std::cout << "[ MatchingBase ] took " << t*1e-9 << "s to compute base correction" << std::endl;
+#endif
         return corr;
     }
     // Otherwise, get a no-detector edge. If such an edge exists, then return the
@@ -87,6 +118,10 @@ MatchingBase::get_base_corr() {
     if (e != nullptr) {
         for (uint64_t fr : e->frames) corr[fr] ^= 1;
     }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ MatchingBase ] took " << t*1e-9 << "s to compute base correction" << std::endl;
+#endif
     return corr;
 }
 
@@ -105,6 +140,17 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
     // Add edges:
     std::map<uint64_t, uint64_t> boundary_pref_map;
 
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
+
+    if (flags.size() && detectors.size() > 10) {
+        decoding_graph->immediately_initialize_distances_for(c1, c2);
+    }
+
     for (size_t i = 0; i < n; i++) {
         uint64_t di = detectors.at(i);
         for (size_t j = i+1; j < n; j++) {
@@ -115,19 +161,23 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
                 // We need to identify the best boundary for di and use that.
                 uint64_t b1 = get_color_boundary_index(c1),
                          b2 = get_color_boundary_index(c2);
-                error_chain_t ec1 = decoding_graph->get(c1, c2, di, b1),
-                              ec2 = decoding_graph->get(c1, c2, di, b2);
+                error_chain_t ec1 = decoding_graph->get_error_chain(di, b1, c1, c2),
+                              ec2 = decoding_graph->get_error_chain(di, b2, c1, c2);
                 boundary_pref_map[di] = ec1.weight < ec2.weight ? b1 : b2;
                 w = std::min(ec1.weight, ec2.weight);
             } else {
-                error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
+                error_chain_t ec = decoding_graph->get_error_chain(di, dj, c1, c2);
                 w = ec.weight;
-                // Quantize the weight.
             }
-            uint32_t iw = w > 1000.0 ? 1'000'000 : static_cast<uint32_t>(1000 * w);
+            uint32_t iw = static_cast<uint32_t>(1000 * w);
             pm.AddEdge(i, j, iw);
         }
     }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ MatchingBase ] took " << t*1e-9 << "s to accumulate matching edges." << std::endl;
+#endif
+
     pm.Solve();
     // Return assignments. Deactivate flags to avoid using flag edges.
     std::vector<Decoder::assign_t> assign_arr;
@@ -140,7 +190,7 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
         if (dj == get_color_boundary_index(COLOR_ANY) && c1 != COLOR_ANY) {
             dj = boundary_pref_map[di];
         }
-        error_chain_t ec = decoding_graph->get(c1, c2, di, dj);
+        error_chain_t ec = decoding_graph->get_error_chain(di, dj, c1, c2);
         if (split_thru_boundary_match && ec.runs_through_boundary) {
             // Partition path between di and dj with boundaries.
             bool all_entries_are_boundaries = true;

@@ -17,10 +17,12 @@ Scheduler::push_back_measurement(std::vector<int64_t>& operands, sptr<net::raw_v
 inline void
 Scheduler::declare_event_for_qubit(sptr<net::raw_vertex_t> rv) {
     int64_t m = meas_ctr_map.at(rv);
-    bool is_cross_round = rv->is_check();
-    bool is_memory_x = (rv->qubit_type == net::raw_vertex_t::type::xparity)
-                        || (rv->qubit_type == net::raw_vertex_t::type::flag 
-                                && !raw_network->x_flag_set.count(rv));
+    const bool is_cross_round = rv->is_check();
+    const bool is_x_check = rv->qubit_type == net::raw_vertex_t::type::xparity;
+    const bool is_flag = rv->qubit_type == net::raw_vertex_t::type::flag;
+    const bool is_x_flag = raw_network->x_flag_set.count(rv);
+
+    const bool is_memory_x = is_x_check || (is_flag && !is_x_flag);
     event_queue.push_back({rv, {m}, is_cross_round, is_memory_x});
 }
 

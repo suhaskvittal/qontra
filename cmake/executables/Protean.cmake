@@ -16,7 +16,7 @@ if (COMPILE_PROTEAN_MAIN)
         src/qontra/protean/experiments.cpp)
     add_library(libprotean ${PROTEAN_FILES})
     target_compile_options(libprotean PUBLIC ${COMPILE_OPTIONS})
-
+#   target_compile_definitions(libprotean PUBLIC PROTEAN_PERF)
     target_include_directories(libprotean PUBLIC ${CPLEX_INCLUDE_DIR}
                                                     ${GRAPHVIZ_INCLUDE_DIR})
     target_link_libraries(libprotean PUBLIC qontra 
@@ -37,4 +37,6 @@ if (COMPILE_PROTEAN_EXPERIMENTS)
         main/protean/experiments/base/run_surface_code.cpp)
     target_link_libraries(pr_base_memory PRIVATE qontra)
     target_link_libraries(pr_rsc_memory PRIVATE qontra)
+
+#   target_compile_definitions(pr_base_memory PUBLIC PROTEAN_PERF)
 endif()

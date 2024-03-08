@@ -11,6 +11,10 @@
 
 #include <initializer_list>
 
+#ifdef DECODER_PERF
+#include <vtils/timer.h>
+#endif
+
 namespace qontra {
 namespace graph {
 
@@ -25,6 +29,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     flagged_dijkstra_graph_map(),
     distance_matrix_map(),
     flagged_distance_matrix_map(),
+    base_probability_map(),
     active_flags(),
     flag_detectors(circuit.flag_detectors),
     edge_classes(),
@@ -123,6 +128,44 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     resolve_edges(tentative_edges, flips_per_error);
 }
 
+void
+DecodingGraph::immediately_initialize_distances_for(int c1, int c2) {
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+#endif
+    update_state();
+    if (c1 > c2) std::swap(c1, c2);
+    auto c1_c2 = std::make_pair(c1, c2);
+    auto& dgr_map = flags_are_active ? flagged_dijkstra_graph_map : dijkstra_graph_map;
+    auto& dm_map = flags_are_active ? flagged_distance_matrix_map : distance_matrix_map;
+
+    if (!dgr_map.count(c1_c2)) {
+        make_dijkstra_graph(c1, c2);
+    }
+    uptr<DijkstraGraph>& dgr = dgr_map[c1_c2];
+
+    vtils::TwoLevelMap<sptr<vertex_t>, sptr<vertex_t>, fp_t> dist;
+    vtils::TwoLevelMap<sptr<vertex_t>, sptr<vertex_t>, sptr<vertex_t>> pred;
+#ifdef DECODER_PERF
+    timer.clk_start();
+#endif
+    floyd_warshall(dgr.get(), dist, pred,
+        [] (sptr<edge_t> e)
+        {
+            return compute_weight(e->probability);
+        });
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to run Floyd-Warshall for n = "
+        << dgr->n() << " and m = " << dgr->m() << std::endl;
+#endif
+    auto& dm = dm_map[c1_c2];
+    for (sptr<vertex_t> v : dgr->get_vertices()) {
+        update_paths(dgr, dm, v, dgr->get_vertices(), dist[v], pred[v]);
+    }
+}
+
 sptr<hyperedge_t>
 DecodingGraph::get_best_shared_edge(std::vector<sptr<vertex_t>> vlist) {
     auto common = get_common_hyperedges(vlist);
@@ -149,7 +192,9 @@ DecodingGraph::get_base_edge(sptr<hyperedge_t> e) {
     const EdgeClass& c = edge_class_map.at(e);
     sptr<hyperedge_t> rep = c.get_representative();
     // Cannot flatten an edge represented by a flag edge.
-    if (rep->flags.size()) return e;
+    if (rep->flags.size()) {
+        return e;
+    }
 
     std::vector<sptr<vertex_t>> vlist;
     for (size_t i = 0; i < rep->get_order(); i++) {
@@ -326,8 +371,13 @@ DecodingGraph::get_best_flag_edge(std::vector<sptr<hyperedge_t>> edge_list) {
 }
 
 void
-DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
-    if (c1 > c2) return dijkstra_(c2, c1, from);
+DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from, sptr<vertex_t> to) {
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+#endif
+
+    if (c1 > c2) return dijkstra_(c2, c1, from, to);
     auto c1_c2 = std::make_pair(c1, c2);
     
     auto& dgr_map = flags_are_active ? flagged_dijkstra_graph_map : dijkstra_graph_map;
@@ -337,18 +387,138 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
         make_dijkstra_graph(c1, c2);
     }
     // Retrieve the dijkstra graph from the map. Place it back later.
-    uptr<DijkstraGraph> dgr = std::move(dgr_map[c1_c2]);
+    uptr<DijkstraGraph>& dgr = dgr_map[c1_c2];
     std::map<sptr<vertex_t>, fp_t> dist;
     std::map<sptr<vertex_t>, sptr<vertex_t>> pred;
-    dijkstra(dgr.get(), from, dist, pred, 
+#ifdef DECODER_PERF
+    timer.clk_start();
+#endif
+    dijkstra(dgr.get(), from, dist, pred,
         [] (sptr<edge_t> e)
         {
             return compute_weight(e->probability);
-        });
+        }, to);
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to perform Dijkstra's" << std::endl;
+#endif
     // Now, update the distance matrix. We'll do this manually to optimize for
     // speed.
     auto& dm = dm_map[c1_c2];
-    for (sptr<vertex_t> w : dgr->get_vertices()) {
+    std::vector<sptr<vertex_t>> to_list = //dgr->get_vertices();
+        to == nullptr ? dgr->get_vertices() : std::vector<sptr<vertex_t>>{to};
+    update_paths(dgr, dm, from, to_list, dist, pred);
+}
+
+void
+DecodingGraph::make_dijkstra_graph(int c1, int c2) {
+    auto c1_c2 = std::make_pair(c1, c2);
+    auto& dgr_map = flags_are_active ? flagged_dijkstra_graph_map : dijkstra_graph_map;
+
+    // We need to build a suitable graph for Dijkstra's:
+    uptr<Graph<vertex_t, edge_t>> dgr;
+    if (dgr_map[c1_c2] == nullptr) {
+        dgr = std::make_unique<Graph<vertex_t, edge_t>>();
+        // Populate dgr.
+        for (sptr<vertex_t> v : get_vertices()) {
+            if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
+                dgr->add_vertex(v);
+                for (sptr<vertex_t> w : dgr->get_vertices()) {
+                    if (v != w) {
+                        dgr->make_and_add_edge(v, w);
+                    }
+                }
+            }
+        }
+    } else {
+        dgr = std::move(dgr_map[c1_c2]);
+        for (sptr<edge_t> e : dgr->get_edges()) {
+            e->probability = 0.0;
+        }
+    }
+    // Now, add edges to the graph.
+    // First handle flag edges.
+#ifdef DECODER_PERF
+    vtils::Timer timer;
+    fp_t t;
+
+    timer.clk_start();
+#endif
+    fp_t renorm_factor = 1.0;
+    for (sptr<hyperedge_t> he : get_flag_edges()) {
+        fp_t p = he->probability;
+        bool any_flag_edge = false;
+        for (size_t i = 0; i < he->get_order(); i++) {
+            sptr<vertex_t> v = he->get<vertex_t>(i);
+            if (!dgr->contains(v)) continue;
+            for (size_t j = i+1; j < he->get_order(); j++) {
+                sptr<vertex_t> w = he->get<vertex_t>(j);
+                if (!dgr->contains(w)) continue;
+                // Make edge if it does not exist. Update probability.
+                sptr<edge_t> e = dgr->get_edge(v, w);
+                fp_t& r = e->probability;
+                r = (1-r)*p + (1-p)*r;
+                any_flag_edge = true;
+            }
+        }
+        if (any_flag_edge) {
+            renorm_factor *= p;
+        }
+    }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to add flag edges to Dijkstra graph" << std::endl;
+#endif
+
+//  std::cout << "renorm factor: " << renorm_factor << std::endl;
+
+#ifdef DECODER_PERF
+    timer.clk_start();
+#endif
+    // Now handle other edges.
+    auto vertices = dgr->get_vertices();
+    for (size_t i = 0; i < vertices.size(); i++) {
+        sptr<vertex_t> v = vertices.at(i);
+        for (size_t j = i+1; j < vertices.size(); j++) {
+            sptr<vertex_t> w = vertices.at(j);
+            sptr<edge_t> e = dgr->get_edge(v, w);
+            if (v->is_boundary_vertex && w->is_boundary_vertex) {
+                e->probability = 1.0;
+            } else {
+                fp_t p = 0.0;
+                if (base_probability_map.count(v) && base_probability_map.at(v).count(w)) {
+                    p = base_probability_map.at(v).at(w);
+                } else {
+                    for (sptr<hyperedge_t> he : get_common_hyperedges({v, w})) {
+                        fp_t r = he->probability;
+                        p = (1-p)*r + (1-r)*p;
+                    }
+                    base_probability_map[v][w] = p;
+                    base_probability_map[w][v] = p;
+                }
+                p *= renorm_factor;
+                e->probability = (1-e->probability)*p + (1-p)*e->probability;
+            }
+        }
+    }
+#ifdef DECODER_PERF
+    t = timer.clk_end();
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to add normal edges to Dijkstra graph" << std::endl;
+#endif
+    // Now the graph is done.
+    dgr_map[c1_c2] = std::move(dgr);
+}
+
+void
+DecodingGraph::update_paths(
+        uptr<DijkstraGraph>& dgr,
+        DistanceMatrix<vertex_t, error_chain_t>& dm,
+        sptr<vertex_t> from,
+        std::vector<sptr<vertex_t>> to_list,
+        const std::map<sptr<vertex_t>, fp_t>& dist,
+        const std::map<sptr<vertex_t>, sptr<vertex_t>>& pred)
+{
+    for (sptr<vertex_t> w : to_list) {
         error_chain_t ec;
 
         bool failed_to_converge = false;
@@ -356,7 +526,7 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
 
         sptr<vertex_t> curr = w;
         while (curr != from) {
-            sptr<vertex_t> next = pred[curr];
+            sptr<vertex_t> next = pred.at(curr);
             if (curr == next) {
                 failed_to_converge = true;
                 break;
@@ -396,76 +566,6 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from) {
         }
         // Update dm.
         dm[from][w] = std::move(ec);
-    }
-    dgr_map[c1_c2] = std::move(dgr);
-}
-
-void
-DecodingGraph::make_dijkstra_graph(int c1, int c2) {
-    // We need to build a suitable graph for Dijkstra's:
-    uptr<Graph<vertex_t, edge_t>> dgr = std::make_unique<Graph<vertex_t, edge_t>>();
-    // Populate dgr.
-    for (sptr<vertex_t> v : get_vertices()) {
-        if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
-            dgr->add_vertex(v);
-        }
-    }
-    // Now, add edges to the graph.
-    // First handle flag edges.
-    fp_t renorm_factor = 1.0;
-    for (sptr<hyperedge_t> he : get_flag_edges()) {
-        fp_t p = he->probability;
-        bool any_flag_edge = false;
-        for (size_t i = 0; i < he->get_order(); i++) {
-            sptr<vertex_t> v = he->get<vertex_t>(i);
-            if (!dgr->contains(v)) continue;
-            for (size_t j = i+1; j < he->get_order(); j++) {
-                sptr<vertex_t> w = he->get<vertex_t>(j);
-                if (!dgr->contains(w)) continue;
-                // Make edge if it does not exist. Update probability.
-                sptr<edge_t> e = dgr->get_edge(v, w);
-                if (e == nullptr) {
-                    e = dgr->make_and_add_edge(v, w);
-                }
-                fp_t& r = e->probability;
-                r = (1-r)*p + (1-p)*r;
-                any_flag_edge = true;
-            }
-        }
-        if (any_flag_edge) {
-            renorm_factor *= p;
-        }
-    }
-
-//  std::cout << "renorm factor: " << renorm_factor << std::endl;
-
-    // Now handle other edges.
-    for (sptr<vertex_t> v : dgr->get_vertices()) {
-        for (sptr<vertex_t> w : dgr->get_vertices()) {
-            if (v <= w) continue;
-            sptr<edge_t> e = dgr->get_edge(v, w);
-            if (e == nullptr) {
-                e = dgr->make_and_add_edge(v, w);
-            }
-            if (v->is_boundary_vertex && w->is_boundary_vertex) {
-                e->probability = 1.0;
-            } else {
-                fp_t p = 0.0;
-                for (sptr<hyperedge_t> he : get_common_hyperedges({v, w})) {
-                    fp_t r = he->probability;
-                    p = (1-p)*r + (1-r)*p;
-                }
-                p *= renorm_factor;
-                e->probability = (1-e->probability)*p + (1-p)*e->probability;
-            }
-        }
-    }
-    // Now the graph is done.
-    auto c1_c2 = std::make_pair(c1, c2);
-    if (flags_are_active) {
-        flagged_dijkstra_graph_map[c1_c2] = std::move(dgr);
-    } else {
-        dijkstra_graph_map[c1_c2] = std::move(dgr);
     }
 }
 

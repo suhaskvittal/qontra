@@ -12,9 +12,7 @@ namespace qontra {
 
 class MWPMDecoder : public MatchingBase {
 public:
-    MWPMDecoder(const DetailedStimCircuit& circuit)
-        :MatchingBase(circuit, 2)
-    {}
+    MWPMDecoder(const DetailedStimCircuit&);
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 };

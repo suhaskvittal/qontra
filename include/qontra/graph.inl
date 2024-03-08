@@ -106,9 +106,12 @@ Graph<V, E>::make_edge(sptr<V> src, sptr<V> dst, bool is_undirected) const {
 template <class V, class E> inline bool
 Graph<V, E>::add_vertex(sptr<V> v) {
     if (v == nullptr || contains(v->id)) return false;
+
     id_to_vertex[v->id] = v;
+    vertex_enum_map[v] = vertices.size();
     vertices.push_back(v);
     adjacency_lists[v] = {};
+
     graph_has_changed = true;
     return true;
 }
@@ -123,9 +126,9 @@ Graph<V, E>::add_edge(sptr<E> e) {
     if (contains(src, dst))                 return false;
     edges.push_back(e);
 
-    vtils::tlm_put(adjacency_matrix, src, dst, e);
+    adjacency_matrix[src][dst] = e;
     if (e->is_undirected) {
-        vtils::tlm_put(adjacency_matrix, dst, src, e);
+        adjacency_matrix[dst][src] = e;
     }
 
     adjacency_lists[src].push_back(dst);
@@ -171,10 +174,17 @@ Graph<V, E>::get_edge(uint64_t id1, uint64_t id2) const {
 template <class V, class E> void
 Graph<V, E>::delete_vertex(sptr<V> v) {         // O(n) operation
     if (v == nullptr || !contains(v)) return;
+    bool found = false;
     for (auto it = vertices.begin(); it != vertices.end();) {
-        if (*it == v)   it = vertices.erase(it);
-        else            it++;
+        if (*it == v) {
+            it = vertices.erase(it);
+            found = true;
+        } else {
+            vertex_enum_map[*it] -= static_cast<int>(found);
+            it++;
+        }
     }
+    vertex_enum_map.erase(v);
 
     for (auto it = edges.begin(); it != edges.end();) {
         sptr<E> e = *it;
@@ -263,6 +273,11 @@ Graph<V, E>::get_vertices() const {
 template <class V, class E> inline std::vector<sptr<E>>
 Graph<V, E>::get_edges() const {
     return edges;
+}
+
+template <class V, class E> inline const std::map<sptr<V>, size_t>&
+Graph<V, E>::get_enumeration_map() const {
+    return vertex_enum_map;
 }
 
 template <class V, class E> inline size_t

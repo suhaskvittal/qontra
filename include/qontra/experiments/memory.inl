@@ -7,6 +7,10 @@
 #include "qontra/experiments/stats.h"
 #include "qontra/ext/qes.h"
 
+#ifdef DECODER_PERF
+#include <vtils/timer.h>
+#endif
+
 namespace qontra {
 
 inline DetailedStimCircuit
@@ -61,10 +65,19 @@ memory_experiment(Decoder* dec, memory_config_t config, PROLOGUE p_cb, EPILOGUE 
         }
 #ifdef MEMORY_DEBUG
         std::cout << "--------------------------------------" << std::endl;
+#ifdef DECODER_PERF
+        vtils::Timer timer;
+        fp_t t;
+        timer.clk_start();
+#endif
 #endif
         // Decode syndrome
         auto res = dec->decode_error(syndrome); 
 #ifdef MEMORY_DEBUG
+#ifdef DECODER_PERF
+        t = timer.clk_end();
+        std::cout << "[ memory ] decoder took " << t*1e-9 << "s to decode HW " << hw << std::endl;
+#endif
         if (payload.observables != res.corr) {
             std::cout << "is logical error!" << std::endl;
             std::cout << "\texpected: ";

@@ -33,6 +33,11 @@ struct event_t {
     bool is_memory_x;
 };
 
+struct sch_data_t {
+    sptr<net::raw_vertex_t> check;
+    std::vector<sptr<net::raw_vertex_t>> data_order;
+};
+
 // The Scheduler class is dedicated to building the syndrome extraction
 // schedule.
 class Scheduler {
@@ -41,7 +46,7 @@ public:
     Scheduler(PhysicalNetwork*);
 
     qes::Program<> run(size_t rounds, bool is_memory_x);
-    qes::Program<> make_round(void);
+    void make_round(void);
 
     void build_preparation(qes::Program<>&);
     void build_body(qes::Program<>&);
@@ -61,8 +66,7 @@ private:
     void push_back_measurement(std::vector<int64_t>&, sptr<net::raw_vertex_t>);
     void declare_event_for_qubit(sptr<net::raw_vertex_t>);
 
-    std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
-        compute_schedules(void);
+    std::map<sptr<net::raw_vertex_t>, sch_data_t> compute_schedules(void);
 
     template <class FUNC>
     bool try_and_push_back_cx_operands(
@@ -88,11 +92,14 @@ private:
     std::vector<event_t> event_queue;
     
     size_t cycle;
-    size_t mctr;
+    int64_t mctr;
 
     graph::TannerGraph* tanner_graph;
     uptr<RawNetwork>& raw_network;
     PhysicalNetwork* network;
+    
+    bool round_has_been_generated;
+    qes::Program<> round_program;
 };
 
 }   // protean

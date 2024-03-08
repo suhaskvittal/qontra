@@ -225,12 +225,10 @@ public:
     bool recompute_cycle_role_maps(void);
     // Relabel qubits so that the ids are not sporadic.
     bool relabel_qubits(void);
-    // Computes the syndrome extraction schedule for the existing layout.
-    qes::Program<> make_schedule(bool is_memory_x);
 
     // IO:
     void    write_stats_file(std::string);
-    void    write_schedule_file(std::string, bool is_memory_x);
+    void    write_schedule_folder(std::string);
     void    write_coupling_file(std::string);
     void    write_role_file(std::string);
     void    write_tanner_graph_file(std::string);

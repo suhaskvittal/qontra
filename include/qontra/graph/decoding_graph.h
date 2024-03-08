@@ -12,6 +12,8 @@
 #include "qontra/ext/stim.h"
 #include "qontra/graph/algorithms/distance.h"
 
+#include <vtils/two_level_map.h>
+
 #include <utility>
 
 namespace qontra {
@@ -39,11 +41,21 @@ public:
 
     sptr<decoding::hyperedge_t> get_best_shared_edge(std::vector<sptr<decoding::vertex_t>>);
 
-    error_chain_t get(uint64_t, uint64_t, bool force_unflagged=false);
-    error_chain_t get(sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
-    error_chain_t get(int c1, int c2, uint64_t, uint64_t, bool force_unflagged=false);
-    error_chain_t get(
-            int c1, int c2, sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, bool force_unflagged=false);
+    void immediately_initialize_distances_for(int, int);
+
+    error_chain_t get_error_chain(
+            uint64_t,
+            uint64_t,
+            int=COLOR_ANY,
+            int=COLOR_ANY,
+            bool force_unflagged=false);
+
+    error_chain_t get_error_chain(
+            sptr<decoding::vertex_t>,
+            sptr<decoding::vertex_t>,
+            int=COLOR_ANY,
+            int=COLOR_ANY,
+            bool force_unflagged=false);
 
     std::vector<sptr<decoding::vertex_t>>
         get_complementary_boundaries_to(std::vector<sptr<decoding::vertex_t>>);
@@ -76,9 +88,18 @@ private:
 
     sptr<decoding::hyperedge_t> get_best_flag_edge(std::vector<sptr<decoding::hyperedge_t>>);
 
-    void dijkstra_(int, int, sptr<decoding::vertex_t> from);
+    // If to is not null, then Dijkstra's will terminate upon finding to.
+    void dijkstra_(int, int, sptr<decoding::vertex_t> from, sptr<decoding::vertex_t> to=nullptr);
     void make_dijkstra_graph(int, int);
     void build_error_polynomial(void);
+
+    void update_paths(
+            uptr<DijkstraGraph>&,
+            DistanceMatrix<decoding::vertex_t, error_chain_t>&,
+            sptr<decoding::vertex_t> from,
+            std::vector<sptr<decoding::vertex_t>> to_list,
+            const std::map<sptr<decoding::vertex_t>, fp_t>& dist,
+            const std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& pred);
 
     poly_t  error_polynomial;
     fp_t    expected_errors;
@@ -91,6 +112,9 @@ private:
         distance_matrix_map;
     std::map<std::pair<int, int>, DistanceMatrix<decoding::vertex_t, error_chain_t>>
         flagged_distance_matrix_map;
+
+    vtils::TwoLevelMap<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, fp_t>
+        base_probability_map;
 
     std::set<uint64_t> active_flags;
     std::set<uint64_t> flag_detectors;

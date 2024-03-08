@@ -226,10 +226,10 @@ RawNetwork::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) 
                 curr = pred.at(curr);
             }
             path.push_back(src);
-            // Well path is currently oriented from dst to src.
-            tlm_put(proxy_memo_map, dst, src, path);
+            // Well path is currently oriented from rx to src.
+            tlm_put(proxy_memo_map, rx, src, path);
             std::reverse(path.begin(), path.end());
-            tlm_put(proxy_memo_map, src, dst, path);
+            tlm_put(proxy_memo_map, src, rx, path);
         }
     }
 found_proxy_path:
@@ -274,9 +274,7 @@ RawNetwork::get_support(sptr<raw_vertex_t> rpq) {
 sptr<raw_vertex_t>
 RawNetwork::are_in_same_support(std::initializer_list<sptr<raw_vertex_t>> vertex_list) {
     for (sptr<raw_vertex_t> rpq : vertices) {
-        if (rpq->qubit_type != raw_vertex_t::type::xparity
-                && rpq->qubit_type != raw_vertex_t::type::zparity)
-        {
+        if (!rpq->is_check()) {
             continue;
         }
         parity_support_t supp = get_support(rpq);
