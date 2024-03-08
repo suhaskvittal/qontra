@@ -346,47 +346,14 @@ Scheduler::prep_tear_h_gates(qes::Program<>& program) {
 
 void
 Scheduler::prep_tear_cx_gates(qes::Program<>& program) {
-    std::set<int64_t> h_operands;
-    std::set<sptr<raw_vertex_t>> x_endpoints, z_endpoints;
-    std::vector<std::vector<cx_t>> cx_groups;
+    std::vector<cx_t> cx_arr;
     for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
-        std::vector<std::vector<cx_t>> _cx_groups;
         auto& support = get_support(rpq);
-
-        init_flags(support.flags, rpq, x_endpoints, z_endpoints, h_operands, _cx_groups);
-        for (size_t i = 0; i < _cx_groups.size(); i++) {
-            if (i >= cx_groups.size()) {
-                cx_groups.push_back(_cx_groups[i]);
-            } else {
-                push_back_range(cx_groups[i], _cx_groups[i]);
-            }
+        for (sptr<raw_vertex_t> rfq : support.flags) {
+            cx_arr.push_back({rfq, rpq, rpq->qubit_type == raw_vertex_t::type::xparity});
         }
     }
-    safe_emplace_back(program, "h", h_operands);
-    for (const auto& cx_arr : cx_groups) {
-        schedule_cx_along_path(cx_arr, program);
-    }
-    safe_emplace_back(program, "h", h_operands);
-    // Measure the endpoints and create events for them.
-    std::vector<int64_t> m_operands;
-    int64_t k = 0;
-    for (sptr<raw_vertex_t> re : x_endpoints) {
-        m_operands.push_back(qu(re));
-        event_queue.push_back({re, {mctr+k}, false, false});
-        k++;
-    }
-    for (sptr<raw_vertex_t> re : z_endpoints) {
-        m_operands.push_back(qu(re));
-        event_queue.push_back({re, {mctr+k}, false, true});
-        k++;
-    }
-    if (m_operands.size()) {
-        safe_emplace_back(program, "measure", m_operands);
-        program.back().put("no_tick");
-        safe_emplace_back(program, "reset", m_operands);
-        program.back().put("no_tick");
-        mctr += m_operands.size();
-    }
+    schedule_cx_along_path(cx_arr, program);
 }
 
 void
