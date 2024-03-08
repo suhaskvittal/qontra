@@ -22,7 +22,7 @@ Scheduler::declare_event_for_qubit(sptr<net::raw_vertex_t> rv) {
     const bool is_flag = rv->qubit_type == net::raw_vertex_t::type::flag;
     const bool is_x_flag = raw_network->x_flag_set.count(rv);
 
-    const bool is_memory_x = is_x_check || (is_flag && is_x_flag);
+    const bool is_memory_x = is_x_check || (is_flag && !is_x_flag);
     event_queue.push_back({rv, {m}, is_cross_round, is_memory_x});
 }
 

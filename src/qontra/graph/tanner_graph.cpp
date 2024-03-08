@@ -64,11 +64,12 @@ TannerGraph::update_check_color_map(std::map<sptr<vertex_t>, int>& check_color_m
         }
     }
     int best_coloring = k_coloring_rlf(gr.get(), check_color_map);
-    for (size_t s = 0; s < checks.size() && best_coloring > 2; s++) {
+    for (size_t s = 0; s < checks.size() && (best_coloring > 2 || best_coloring < 0); s++) {
         std::map<sptr<vertex_t>, int> cm;
         int c = k_coloring_greedy(gr.get(), cm, s);
         if (c < best_coloring) {
             check_color_map = std::move(cm);
+            cm.clear();
             best_coloring = c;
         }
     }
