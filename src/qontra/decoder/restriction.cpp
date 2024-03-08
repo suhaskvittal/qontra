@@ -280,7 +280,6 @@ r_compute_correction:
             goto r_compute_correction;
         } else {
             // Throw an error here.
-            /*
             std::cerr << "[ RestrictionDecoder ] Failed to compute correction for syndrome: D[";
             for (uint64_t d : _detectors) std::cerr << " " << d;
             std::cerr << " ] and F[";
@@ -310,7 +309,6 @@ r_compute_correction:
                     std::cerr << " >" << std::endl;
                 }
             }
-            */
         }
     }
     // Otherwise, we are done.

@@ -30,7 +30,7 @@ hyperedge_t::get_order() const {
 template <class V, class HE> inline std::string
 print_he(sptr<HE> e) {
     std::string out = "(";
-    for (size_t i = 0; i < e.get_order(); i++) {
+    for (size_t i = 0; i < e->get_order(); i++) {
         if (i > 0) out += ",";
         out += print_v<V>(e->endpoints[i]);
     }

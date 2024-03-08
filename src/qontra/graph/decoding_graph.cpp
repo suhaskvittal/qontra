@@ -192,7 +192,9 @@ DecodingGraph::get_base_edge(sptr<hyperedge_t> e) {
     const EdgeClass& c = edge_class_map.at(e);
     sptr<hyperedge_t> rep = c.get_representative();
     // Cannot flatten an edge represented by a flag edge.
-    if (rep->flags.size()) return e;
+    if (rep->flags.size()) {
+        return e;
+    }
 
     std::vector<sptr<vertex_t>> vlist;
     for (size_t i = 0; i < rep->get_order(); i++) {
