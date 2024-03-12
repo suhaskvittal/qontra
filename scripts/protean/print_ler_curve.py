@@ -15,6 +15,8 @@ def read_data_file(data_file, prefix):
             if y > 0:
                 e_phys.append(x)
                 e_log.append(y)
+            if len(e_phys) == 6:
+                break
     if len(e_phys) < 5:
         return
     e_phys, e_log = np.array(e_phys), np.array(e_log)

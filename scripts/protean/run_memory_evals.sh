@@ -10,7 +10,7 @@ declare -a CALLS=(
 for ((i = 0; i < ${#CALLS[@]}; i++))
 do
     c=${CALLS[$i]}
-    memcmd="scripts/protean/run_memory.py ${c} 8e-4 3e-3 1000 ${nproc} -fix-error"
+    memcmd="scripts/protean/run_memory.py ${c} 5e-4 5e-3 10000 ${nproc} -fix-error"
     echo $memcmd
     python3 $memcmd
 done
