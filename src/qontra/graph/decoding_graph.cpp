@@ -423,11 +423,6 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
         for (sptr<vertex_t> v : get_vertices()) {
             if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
                 dgr->add_vertex(v);
-                for (sptr<vertex_t> w : dgr->get_vertices()) {
-                    if (v != w) {
-                        dgr->make_and_add_edge(v, w);
-                    }
-                }
             }
         }
     } else {
@@ -456,6 +451,9 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 if (!dgr->contains(w)) continue;
                 // Make edge if it does not exist. Update probability.
                 sptr<edge_t> e = dgr->get_edge(v, w);
+                if (e == nullptr) {
+                    e = dgr->make_and_add_edge(v, w);
+                }
                 fp_t& r = e->probability;
                 r = (1-r)*p + (1-p)*r;
                 any_flag_edge = true;
@@ -470,8 +468,6 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to add flag edges to Dijkstra graph" << std::endl;
 #endif
 
-//  std::cout << "renorm factor: " << renorm_factor << std::endl;
-
 #ifdef DECODER_PERF
     timer.clk_start();
 #endif
@@ -482,6 +478,9 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
         for (size_t j = i+1; j < vertices.size(); j++) {
             sptr<vertex_t> w = vertices.at(j);
             sptr<edge_t> e = dgr->get_edge(v, w);
+            if (e == nullptr) {
+                e = dgr->make_and_add_edge(v, w);
+            }
             if (v->is_boundary_vertex && w->is_boundary_vertex) {
                 e->probability = 1.0;
             } else {
@@ -500,6 +499,10 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 e->probability = (1-e->probability)*p + (1-p)*e->probability;
             }
         }
+    }
+    // Finally, delete all vertices with degree 0.
+    for (sptr<vertex_t> v : dgr->get_vertices()) {
+        if (dgr->get_degree(v) == 0) dgr->delete_vertex(v);
     }
 #ifdef DECODER_PERF
     t = timer.clk_end();

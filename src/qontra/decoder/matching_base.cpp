@@ -146,11 +146,6 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
 
     timer.clk_start();
 #endif
-
-    if (flags.size() && detectors.size() > 10) {
-        decoding_graph->immediately_initialize_distances_for(c1, c2);
-    }
-
     for (size_t i = 0; i < n; i++) {
         uint64_t di = detectors.at(i);
         for (size_t j = i+1; j < n; j++) {

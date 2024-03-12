@@ -38,5 +38,5 @@ if (COMPILE_PROTEAN_EXPERIMENTS)
     target_link_libraries(pr_base_memory PRIVATE qontra)
     target_link_libraries(pr_rsc_memory PRIVATE qontra)
 
-#   target_compile_definitions(pr_base_memory PUBLIC PROTEAN_PERF)
+    target_compile_definitions(pr_base_memory PUBLIC PROTEAN_PERF)
 endif()
