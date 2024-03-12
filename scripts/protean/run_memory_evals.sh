@@ -4,7 +4,7 @@ nproc=$1
 
 declare -a CALLS=(
 # SURFACE CODES -- SMALL
-    "hysc/4_5/60_8_4_6 mwpm"
+#   "hysc/4_5/60_8_4_6 mwpm"
     "hysc/5_5/30_8_3_3 mwpm"
     "hysc/5_5/80_18_5_5 mwpm"
     "hysc/5_6/60_18_3_4 mwpm"
@@ -23,7 +23,7 @@ declare -a CALLS=(
 for ((i = 0; i < ${#CALLS[@]}; i++))
 do
     c=${CALLS[$i]}
-    memcmd="scripts/protean/run_memory.py ${c} 5e-4 5e-3 100000 ${nproc} -fix-error"
+    memcmd="scripts/protean/run_memory.py ${c} 5e-4 5e-3 10000 ${nproc} -fix-error"
     echo $memcmd
     python3 $memcmd
 done
