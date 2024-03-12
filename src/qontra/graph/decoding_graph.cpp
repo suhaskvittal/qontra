@@ -416,19 +416,53 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     auto& dgr_map = flags_are_active ? flagged_dijkstra_graph_map : dijkstra_graph_map;
 
     // We need to build a suitable graph for Dijkstra's:
-    uptr<Graph<vertex_t, edge_t>> dgr;
-    if (dgr_map[c1_c2] == nullptr) {
-        dgr = std::make_unique<Graph<vertex_t, edge_t>>();
-        // Populate dgr.
+    uptr<Graph<vertex_t, edge_t>> dgr = std::make_unique<Graph<vertex_t, edge_t>>();
+    // Populate dgr. If flags_are_active, then assume dgr is transient only add
+    // vertices relevant to the active detectors.
+    if (flags_are_active) {
+        // Get the non-flagged map.
+        auto& _dm = distance_matrix_map[c1_c2];
+        // Now add the active detectors.
+        for (uint64_t d : active_detectors) {
+            if (d == get_color_boundary_index(COLOR_ANY)) {
+                // Add the boundaries of interest.
+                if (c1 == COLOR_ANY) {
+                    sptr<vertex_t> vb = get_boundary_vertex(COLOR_ANY);
+                    dgr->add_vertex(vb);
+                } else {
+                    sptr<vertex_t> vb1 = get_boundary_vertex(c1),
+                                    vb2 = get_boundary_vertex(c2);
+                    dgr->add_vertex(vb1);
+                    dgr->add_vertex(vb2);
+                }
+            } else {
+                sptr<vertex_t> v = get_vertex(d);
+                if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
+                    dgr->add_vertex(v);
+                }
+            }
+        }
+        // Finally add all detectors in a path between any two vertices. Also
+        // add edges preemptively.
+        for (sptr<vertex_t> v : dgr->get_vertices()) {
+            for (sptr<vertex_t> w : dgr->get_vertices()) {
+                // Get the path in the non-flagged map. Add all detectors in the
+                // path between v and w.
+                error_chain_t ec = _dm[v][w];
+                if (ec.path.empty()) continue;
+                for (size_t i = 1; i < ec.path.size(); i++) {
+                    sptr<vertex_t> x = ec.path[i-1];
+                    sptr<vertex_t> y = ec.path[i-1];
+                    if (!dgr->contains(y)) dgr->add_vertex(y);
+                    dgr->make_and_add_edge(x, y);
+                }
+            }
+        }
+    } else {
         for (sptr<vertex_t> v : get_vertices()) {
             if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
                 dgr->add_vertex(v);
             }
-        }
-    } else {
-        dgr = std::move(dgr_map[c1_c2]);
-        for (sptr<edge_t> e : dgr->get_edges()) {
-            e->probability = 0.0;
         }
     }
     // Now, add edges to the graph.

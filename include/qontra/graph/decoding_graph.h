@@ -37,10 +37,11 @@ public:
     DecodingGraph(const DetailedStimCircuit&, size_t flips_per_error);
     DecodingGraph(DecodingGraph&&) = default;
 
+    // Makes vertex and also sets the base of the vertex to itself.
     sptr<decoding::vertex_t> make_vertex(uint64_t) const override;
-
+    // Gets shared edge with most similarity to the passed in inputs.
     sptr<decoding::hyperedge_t> get_best_shared_edge(std::vector<sptr<decoding::vertex_t>>);
-
+    // Initializes the distance matrix for the two colors using Floyd-Warshall.
     void immediately_initialize_distances_for(int, int);
 
     error_chain_t get_error_chain(
@@ -60,8 +61,12 @@ public:
     std::vector<sptr<decoding::vertex_t>>
         get_complementary_boundaries_to(std::vector<sptr<decoding::vertex_t>>);
     
-    void    activate_flags(const std::vector<uint64_t>& all_detectors);
-    void    deactivate_flags(void);
+    // activate_detectors is useful for flagged decoding, as doing so will (1) activate
+    // any flags in the syndrome, and (2) restrict thee size of the decoding graph
+    // when computing Dijkstra's.
+    void    activate_detectors(const std::vector<uint64_t>& all_detectors);
+    void    activate_detectors(const std::vector<uint64_t>& nonflags, const std::vector<uint64_t>& flags);
+    void    deactivate_detectors(void);
 
     sptr<decoding::vertex_t> get_boundary_vertex(int color);
     sptr<decoding::hyperedge_t> get_base_edge(sptr<decoding::hyperedge_t>);
@@ -82,8 +87,10 @@ public:
 protected:
     bool    update_state(void) override;
 private:
-    sptr<decoding::vertex_t>    make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
-
+    // Add vertices while also adding their bases. This function recursively calls itself until
+    // we find a detector whose base is itself.
+    sptr<decoding::vertex_t> make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
+    // This function creates equivalence classes and initializes the DecodingGraph accordingly.
     void resolve_edges(const std::vector<sptr<decoding::hyperedge_t>>&, size_t flips_per_error);
 
     sptr<decoding::hyperedge_t> get_best_flag_edge(std::vector<sptr<decoding::hyperedge_t>>);
@@ -91,8 +98,7 @@ private:
     // If to is not null, then Dijkstra's will terminate upon finding to.
     void dijkstra_(int, int, sptr<decoding::vertex_t> from, sptr<decoding::vertex_t> to=nullptr);
     void make_dijkstra_graph(int, int);
-    void build_error_polynomial(void);
-
+    // General path update function used by dijkstra_ and immediately_initalize_distances_for
     void update_paths(
             uptr<DijkstraGraph>&,
             DistanceMatrix<decoding::vertex_t, error_chain_t>&,
@@ -100,6 +106,8 @@ private:
             std::vector<sptr<decoding::vertex_t>> to_list,
             const std::map<sptr<decoding::vertex_t>, fp_t>& dist,
             const std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& pred);
+
+    void build_error_polynomial(void);
 
     poly_t  error_polynomial;
     fp_t    expected_errors;
@@ -116,8 +124,12 @@ private:
     vtils::TwoLevelMap<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, fp_t>
         base_probability_map;
 
+    std::set<uint64_t> active_detectors;
     std::set<uint64_t> active_flags;
+    // flag_detectors is a list of all flag detectors (not just those in a syndrome). This is
+    // used to construct active_detectors and active_flags.
     std::set<uint64_t> flag_detectors;
+    // List of equivalence classes
     std::vector<EdgeClass> edge_classes;
 
     // Maps flags to classes that have associated flag edges.

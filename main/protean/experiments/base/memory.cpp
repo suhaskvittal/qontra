@@ -3,6 +3,10 @@
  *  date:   21 January 2024
  * */
 
+#ifdef DECODER_PERF
+#define MEMORY_DEBUG
+#endif
+
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/ext/stim.h>

@@ -63,7 +63,7 @@ MatchingBase::load_syndrome(
     }
     // Activate flag edges in decoding_graph.
     if (recompute_flags) {
-        decoding_graph->activate_flags(flags);
+        decoding_graph->activate_detectors(detectors, flags);
         flag_edges = decoding_graph->get_flag_edges();
 
         /*
@@ -146,6 +146,9 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
 
     timer.clk_start();
 #endif
+    if (flags.size() && detectors.size() > 10) {
+        decoding_graph->immediately_initialize_distances_for(c1, c2);
+    }
     for (size_t i = 0; i < n; i++) {
         uint64_t di = detectors.at(i);
         for (size_t j = i+1; j < n; j++) {

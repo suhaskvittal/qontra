@@ -63,19 +63,32 @@ DecodingGraph::get_complementary_boundaries_to(std::vector<sptr<decoding::vertex
 }
 
 inline void
-DecodingGraph::activate_flags(const std::vector<uint64_t>& all_detectors) {
-    deactivate_flags();
+DecodingGraph::activate_detectors(const std::vector<uint64_t>& all_detectors) {
+    deactivate_detectors();
     for (uint64_t d : all_detectors) {
-        if (flag_detectors.count(d)) active_flags.insert(d);
+        if (flag_detectors.count(d)) {
+            active_flags.insert(d);
+        } else {
+            active_detectors.insert(d);
+        }
     }
     flags_are_active = !active_flags.empty();
 }
 
 inline void
-DecodingGraph::deactivate_flags() {
+DecodingGraph::activate_detectors(const std::vector<uint64_t>& nonflags, const std::vector<uint64_t>& flags) {
+    deactivate_detectors();
+    active_detectors = std::set<uint64_t>(nonflags.begin(), nonflags.end());
+    active_flags = std::set<uint64_t>(flags.begin(), flags.end());
+    flags_are_active = !active_flags.empty();
+}
+
+inline void
+DecodingGraph::deactivate_detectors() {
     flagged_distance_matrix_map.clear();
     flagged_dijkstra_graph_map.clear();
     active_flags.clear();
+    active_detectors.clear();
     flags_are_active = false;
 }
 
