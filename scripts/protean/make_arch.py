@@ -21,10 +21,10 @@ verbose = '-v' if '-v' in argv else ''
 version_list = [
 #   ('1', f'{jid_blk}.rlb.rcr', 4, ''),
 #   ('2.1', 'fla.ral.rlb.rcr', 4, ''),
-    ('2.2', f'{jid_blk}fla.ral.(prx.ral)+rlb.rcr', 4, ''),
-    ('2.3', f'{jid_blk}fla.ral.(prx.ral)+rlb.rcr', 3, ''),
+#   ('2.2', f'{jid_blk}fla.ral.(prx.ral)+rlb.rcr', 4, ''),
+#   ('2.3', f'{jid_blk}fla.ral.(prx.ral)+rlb.rcr', 3, ''),
 #   ('3.1', 'fla.ral(con.ral.prx.ral)+rlb.rcr', 4, ''),
-#   ('3.2', f'{jid_blk}fla.ral.{jid_blk}(con.ral.prx.ral)+rlb.rcr', 4, '-flag-jid'),
+    ('3.2', f'{jid_blk}fla.ral.{jid_blk}(con.ral.prx.ral)+rlb.rcr', 4, '-flag-jid'),
 #   ('4.1', 'fla.ral(con.ral.prx.ral)+rlb.rcr', 3, ''),
 #   ('4.2', f'{jid_blk}fla.ral.{jid_blk}(con.ral.prx.ral)+rlb.rcr', 3, '-flag-jid'),
 ]
