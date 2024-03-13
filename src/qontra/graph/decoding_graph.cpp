@@ -400,7 +400,8 @@ DecodingGraph::dijkstra_(int c1, int c2, sptr<vertex_t> from, sptr<vertex_t> to)
         }, to);
 #ifdef DECODER_PERF
     t = timer.clk_end();
-    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to perform Dijkstra's" << std::endl;
+    std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to perform Dijkstra's for n = " 
+        << dgr->n() << ", m = " << dgr->m() << std::endl;
 #endif
     // Now, update the distance matrix. We'll do this manually to optimize for
     // speed.
@@ -422,21 +423,30 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     if (flags_are_active) {
         // Get the non-flagged map.
         auto& _dm = distance_matrix_map[c1_c2];
+        // Add the boundaries of interest.
+        if (c1 == COLOR_ANY) {
+            sptr<vertex_t> vb = get_boundary_vertex(COLOR_ANY);
+            dgr->add_vertex(vb);
+        } else {
+            sptr<vertex_t> vb1 = get_boundary_vertex(c1),
+                            vb2 = get_boundary_vertex(c2);
+            dgr->add_vertex(vb1);
+            dgr->add_vertex(vb2);
+        }
         // Now add the active detectors.
         for (uint64_t d : active_detectors) {
             if (d == get_color_boundary_index(COLOR_ANY)) {
-                // Add the boundaries of interest.
-                if (c1 == COLOR_ANY) {
-                    sptr<vertex_t> vb = get_boundary_vertex(COLOR_ANY);
-                    dgr->add_vertex(vb);
-                } else {
-                    sptr<vertex_t> vb1 = get_boundary_vertex(c1),
-                                    vb2 = get_boundary_vertex(c2);
-                    dgr->add_vertex(vb1);
-                    dgr->add_vertex(vb2);
-                }
+                continue;
             } else {
                 sptr<vertex_t> v = get_vertex(d);
+                if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
+                    dgr->add_vertex(v);
+                }
+            }
+        }
+        // Also add all detectors in any flag edges.
+        for (sptr<hyperedge_t> he : get_flag_edges()) {
+            for (sptr<vertex_t> v : he->get<vertex_t>()) {
                 if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
                     dgr->add_vertex(v);
                 }

@@ -18,7 +18,17 @@ MatchingBase::MatchingBase(const DetailedStimCircuit& circuit, int flips_per_err
     detectors(),
     flags(),
     flag_edges()
-{}
+{
+    if (decoding_graph->number_of_colors == 0) {
+        decoding_graph->immediately_initialize_distances_for(COLOR_ANY, COLOR_ANY);
+    } else {
+        for (int c1 = 0; c1 < decoding_graph->number_of_colors; c1++) {
+            for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
+                decoding_graph->immediately_initialize_distances_for(c1, c2);
+            }
+        }
+    }
+}
 
 void
 MatchingBase::load_syndrome(

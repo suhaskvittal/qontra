@@ -14,9 +14,7 @@ using namespace decoding;
 
 MWPMDecoder::MWPMDecoder(const DetailedStimCircuit& circuit)
     :MatchingBase(circuit, 2)
-{
-    decoding_graph->immediately_initialize_distances_for(COLOR_ANY, COLOR_ANY);
-}
+{}
 
 Decoder::result_t
 MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
