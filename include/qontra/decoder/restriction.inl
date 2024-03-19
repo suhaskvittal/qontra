@@ -19,13 +19,11 @@ face_t::operator<(const face_t& other) const {
 
 inline void
 RestrictionDecoder::insert_incident_vertices(
-        std::set<sptr<graph::decoding::vertex_t>>& vertex_set,
+        std::set<sptr<gd::vertex_t>>& vertex_set,
         const std::set<vpair_t>& edge_set,
         int color)
 {
-    for (const vpair_t& e : edge_set) {
-        sptr<graph::decoding::vertex_t> v = e.first,
-                                         w = e.second;
+    for (const auto& [v, w] : edge_set) {
         if (v->color == color) vertex_set.insert(v);
         if (w->color == color) vertex_set.insert(w);
     }
@@ -33,28 +31,31 @@ RestrictionDecoder::insert_incident_vertices(
 
 inline void
 RestrictionDecoder::insert_incident_vertices(
-        std::set<sptr<graph::decoding::vertex_t>>& vertex_set,
+        std::set<sptr<gd::vertex_t>>& vertex_set,
         const std::map<vpair_t, size_t>& edge_map,
         int color)
 {
-    for (const auto& p : edge_map) {
-        const vpair_t& e = p.first;
-        sptr<graph::decoding::vertex_t> v = e.first,
-                                        w = e.second;
+    for (const auto& [e, cnt] : edge_map) {
+        const auto& [v, w] = e;
         if (v->color == color) vertex_set.insert(v);
         if (w->color == color) vertex_set.insert(w);
     }
 }
 
-inline RestrictionDecoder::assign_t
+inline c_assign_t
 cast_assign(Decoder::assign_t x, int c1, int c2) {
     return std::make_tuple(std::get<0>(x), std::get<1>(x), c1, c2);
 }
 
 inline vpair_t
-make_vpair(sptr<graph::decoding::vertex_t> v, sptr<graph::decoding::vertex_t> w) {
+make_vpair(sptr<gd::vertex_t> v, sptr<gd::vertex_t> w) {
     if (v < w)  return std::make_pair(v, w);
     else        return std::make_pair(w, v);
+}
+
+inline int
+color_plus_offset(int c, int off) {
+    return (c + off) % 3;
 }
 
 }   // qontra

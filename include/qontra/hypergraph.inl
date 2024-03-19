@@ -398,6 +398,7 @@ template <class V, class HE>
 template <class PTR>
 inline sptr<base::vertex_t>
 HyperGraph<V, HE>::get_incidence_vertex(PTR obj_p) const {
+    if (!incidence_id_map.count(obj_p)) return nullptr;
     return incidence_graph->get_vertex(incidence_id_map.at(obj_p));
 }
 
