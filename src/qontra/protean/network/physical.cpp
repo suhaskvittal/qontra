@@ -290,6 +290,7 @@ edge_build_outer_loop_start:
     std::array<flag_pair_set_t, 2> flag_pair_sets{x_flags, z_flags};
     if (config.enable_flag_reduction) {
         size_t flags_removed = 0;
+        const size_t total_flags = x_flags.size() + z_flags.size();
         for (size_t i = 0; i < 2; i++) {
             flag_pair_set_t& flags = flag_pair_sets[i];
             stim::simd_bits<SIMD_WIDTH> indicator_bits = do_flags_protect_weight_two_error(flags, i==0);
@@ -306,7 +307,7 @@ edge_build_outer_loop_start:
                 k++;
             }
         }
-        std::cout << "[ status ] removed flags = " << flags_removed << std::endl;
+        std::cout << "[ status ] removed flags = " << flags_removed << " of " << total_flags << std::endl;
 #ifdef PROTEAN_PERF
         t = timer.clk_end();
         std::cout << "[ make_flags ] flag removal analysis took " << t*1e-9 << "s" << std::endl;
@@ -559,17 +560,13 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     const size_t HASH_SIZE = obs_list.size() + tanner_graph->get_checks().size()/2;
     const size_t HASH_STABILIZER_OFFSET = obs_list.size();
     // Populate the lowest level with the observables.
-    size_t min_observable_size = std::numeric_limits<size_t>::max();
     for (size_t i = 0; i < obs_list.size(); i++) {
         std::set<sptr<raw_vertex_t>> obs;
         for (sptr<tanner::vertex_t> x : obs_list[i]) {
             obs.insert(raw_connection_network->v_tanner_raw_map.at(x));
         }
-        min_observable_size = std::min(min_observable_size, obs.size());
-
         stim::simd_bits<SIMD_WIDTH> h(HASH_SIZE);
         h[i] = 1;
-
         curr_operator_tree_level.push_back(std::make_tuple(obs, h));
     }
     // Get relevant checks.
@@ -598,23 +595,19 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
             auto op_hash = std::get<1>(op);
 
             size_t k = 0;
-            if (op_qubits.size() <= 2*min_observable_size) {
-                for (auto pair : flag_pairs) {
-                    sptr<raw_vertex_t> v1 = pair.first,
-                                        v2 = pair.second;
-                    if (result[k]) {
-                        if (op_qubits.count(v1) && op_qubits.count(v2)) {
-                            // This is a weight-2 error.
-                            is_weight_two[k] = 0;
-                        }
-                        // Check if op | v1 | v2 forms a stabilizer.
-                        std::set<sptr<raw_vertex_t>> op_v1_v2 = op_qubits ^ std::set<sptr<raw_vertex_t>>{v1, v2};
-                        for (quop_t ch : checks) {
-                            if (std::get<0>(ch) == op_v1_v2) is_stabilizer[k] = 0;
-                        }
+            for (const auto& [v1, v2] : flag_pairs) {
+                if (result[k]) {
+                    if (op_qubits.count(v1) && op_qubits.count(v2)) {
+                        // This is a weight-2 error.
+                        is_weight_two[k] = 0;
                     }
-                    k++;
                 }
+                // Check if op | v1 | v2 forms a stabilizer.
+                std::set<sptr<raw_vertex_t>> op_v1_v2 = op_qubits ^ std::set<sptr<raw_vertex_t>>{v1, v2};
+                for (quop_t ch : checks) {
+                    if (std::get<0>(ch) == op_v1_v2) is_stabilizer[k] = 0;
+                }
+                k++;
             }
             // Now, expand the operator by multiplying it by each stabilizer.
             //
@@ -635,10 +628,6 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
                 // Otherwise, everything is fine.
                 std::set<sptr<raw_vertex_t>> new_qubits = op_qubits ^ stab_qubits;
                 stim::simd_bits<SIMD_WIDTH> new_hash = op_hash | stab_hash;
-
-                if (new_qubits.size() < OPERATOR_WEIGHT_MULT*min_observable_size) {
-                    next_level.emplace_back(new_qubits, new_hash);
-                }
             }
         }
         curr_operator_tree_level = std::move(next_level);
