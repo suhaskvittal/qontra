@@ -549,8 +549,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 
     // We will only examine a single level of the tree at any time to avoid high memory overheads of
     // loading the entire tree.
-    const size_t OPERATOR_TREE_SIZE_LIMIT = 256L*1024L;
-    const fp_t OPERATOR_WEIGHT_MULT = 2.0;
+    const size_t OPERATOR_TREE_SIZE_LIMIT = 4L*1024L;
 
     // The first entry are the qubits in the operator.
     // THe second entry is a simple hash that allows us to check if two operators are equivalent.
@@ -587,6 +586,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     }
     // Perform a BFS via the operator tree.
     stim::simd_bits<SIMD_WIDTH> result(flag_pairs.size());
+    result.invert_bits();
     do {
         // Check if any flags are a weight >2 error on any existing operators.
         std::vector<quop_t> next_level;
@@ -597,7 +597,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
             size_t k = 0;
             for (const auto& [v1, v2] : flag_pairs) {
                 if (result[k]) {
-                    if (op_qubits.count(v1) && op_qubits.count(v2)) {
+                    if (op_qubits.count(v1) && op_qubits.count(v2) && op_qubits.size() <= 12) {
                         // This is a weight-2 error.
                         is_weight_two[k] = 0;
                     }
@@ -628,13 +628,16 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
                 // Otherwise, everything is fine.
                 std::set<sptr<raw_vertex_t>> new_qubits = op_qubits ^ stab_qubits;
                 stim::simd_bits<SIMD_WIDTH> new_hash = op_hash | stab_hash;
+                if (new_qubits.size() < 12) {
+                    next_level.emplace_back(new_qubits, new_hash);
+                }
             }
         }
         curr_operator_tree_level = std::move(next_level);
 
         result = is_weight_two & is_stabilizer;
     } while (curr_operator_tree_level.size() > 0
-        && curr_operator_tree_level.size() < OPERATOR_TREE_SIZE_LIMIT 
+        && curr_operator_tree_level.size() <= OPERATOR_TREE_SIZE_LIMIT 
         && result.not_zero());
     if (curr_operator_tree_level.size() > OPERATOR_TREE_SIZE_LIMIT) {
         std::cerr << "[ warning ] operator tree limit reached. exiting error propagation analysis.\n";

@@ -15,18 +15,16 @@ arch_folder_prefix = '../data/protean/%s' % code
 
 # Version list syntax:
 #   (version-string, pass-string, max-connectivity, options)
-jid_blk = 'jid.ral.' if '-use-jid' in argv else ''
+jid_blk = 'jid.ral' if '-use-jid' in argv else ''
 verbose = '-v' if '-v' in argv else ''
 
 version_list = [
-#   ('1', f'{jid_blk}.rlb.rcr', 4, ''),
-#   ('2.1', 'fla.ral.rlb.rcr', 4, ''),
-#   ('2.2', f'{jid_blk}fla.ral.(prx.ral)+rlb.rcr', 4, ''),
-#   ('2.3', f'{jid_blk}fla.ral.(prx.ral)+rlb.rcr', 3, ''),
-#   ('3.1', 'fla.ral(con.ral.prx.ral)+rlb.rcr', 4, ''),
-    ('3.2', f'{jid_blk}fla.ral.{jid_blk}(con.ral.prx.ral)+rlb.rcr', 4, '-flag-jid -flag-reduce'),
-#   ('4.1', 'fla.ral(con.ral.prx.ral)+rlb.rcr', 3, ''),
-#   ('4.2', f'{jid_blk}fla.ral.{jid_blk}(con.ral.prx.ral)+rlb.rcr', 3, '-flag-jid'),
+    ('1', f'{jid_blk}.rlb.rcr', 4, ''),          # Baseline: no modifications
+    ('2', f'{jid_blk}.fla.ral.rlb.rcr', 4, ''),  # Only flags
+    ('3.3', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 3, ''),  # Naive connectivity 3 implementation
+    ('3.4', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 4, ''),  # Naive connectivity 4 implementation
+    ('4.3', f'{jid_blk}.fla.ral.({jid_blk}.con.prx.ral)+rlb.rcr', 3, '-flag-jid'),  # Optimized connectivity 3
+    ('4.4', f'{jid_blk}.fla.ral.({jid_blk}.con.prx.ral)+rlb.rcr', 4, '-flag-jid')   # Optimized connectivity 4
 ]
 color_opt = '-color-checks' if '-color-checks' in argv else ''
 

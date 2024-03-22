@@ -305,9 +305,7 @@ RestrictionDecoder::insert_error_chain_into(
         // Make sure that their colors are not equal. Otherwise, get a common neighbor
         // of fv and fw which has a different color (call this fu). 
         // Add (fv, fu) and (fu, fw) instead.
-        if (!decoding_graph->share_hyperedge({fv, fw})
-            || fv->color == fw->color) 
-        {
+        if (!decoding_graph->share_hyperedge({fv, fw})) {
             sptr<vertex_t> fu = nullptr;
             for (sptr<vertex_t> x : decoding_graph->get_common_neighbors({fv, fw})) {
                 sptr<vertex_t> fx = x->get_base();
@@ -323,12 +321,11 @@ RestrictionDecoder::insert_error_chain_into(
                 break;
             }
             if (fu == nullptr) {
+                // When this happens, just find a path in the non-flagged graph to use.
+                insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2, true);
                 // Update triggered flag edges if this is a flag edge.
                 sptr<hyperedge_t> e = get_flag_edge_for({v, w});
                 if (e != nullptr) {
-                    // When this happens, just find a path in the non-flagged graph to use.
-                    insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2, true);
-                    // Also mark as triggered.
                     error_chain_t ec = decoding_graph->get_error_chain(fv, fw, c1, c2, true);
                     triggered_flag_edges.emplace_back(e, ec.path);
                 }
