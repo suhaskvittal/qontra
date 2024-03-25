@@ -23,8 +23,8 @@ version_list = [
 #   ('2', f'{jid_blk}.fla.ral.rlb.rcr', 4, ''),  # Only flags
 #   ('3.3', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 3, '-fno-opt-flags -fflag-jid),  # Naive connectivity 3 implementation
 #   ('3.4', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 4, '-fno-opt-flags -fflag-jid'),  # Naive connectivity 4 implementation
-    ('4.3', f'{jid_blk}.fla.ral({jid_blk}.con.prx.ral)+rlb.rcr', 3, '-fflag-jid'),  # Optimized connectivity 3
-    ('4.4', f'{jid_blk}.fla.ral({jid_blk}.con.prx.ral)+rlb.rcr', 4, '-fflag-jid')   # Optimized connectivity 4
+#   ('4.3', f'{jid_blk}.fla.ral({jid_blk}.prx.ral)+rlb.rcr', 3, '-fflag-jid'),  # Optimized connectivity 3
+    ('4.4', f'{jid_blk}.fla.ral({jid_blk}.prx.ral)+rlb.rcr', 4, '-fflag-jid')   # Optimized connectivity 4
 ]
 color_opt = '-color-checks' if '-color-checks' in argv else ''
 

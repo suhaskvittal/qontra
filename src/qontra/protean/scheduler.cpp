@@ -354,7 +354,7 @@ Scheduler::remove_redundant_gates(qes::Program<>& program) {
                 {
                     size_t j = last_inst_index_map[q1];
                     auto& _inst = program[j];
-                    if (_inst.get_name() == "cx" && cx_pair_map[j][q1] == q2) {
+                    if (_inst.get_name() == "cx" && cx_pair_map[j].count(q1) && cx_pair_map[j][q1] == q2) {
                         // Then, this is redundant.
                         insert_all(deleted_operand_map[i], {q1, q2});
                         insert_all(deleted_operand_map[j], {q1, q2});
