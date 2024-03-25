@@ -187,9 +187,22 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     stim::simd_bits<SIMD_WIDTH> corr1(corr),
                                 corr2(corr);
     fp_t log_p1 = lifting(corr1, best_rep_map);
+    std::cout << "corr1 = ";
+    for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
+    std::cout << std::endl;
     // If there are no triggered flag edges. Return here.
     if (triggered_flag_edges.empty()) {
         return { 0.0, corr1 };
+    }
+    std::cout << "Triggered flag edges:" << std::endl;
+    for (auto& [e, path] : triggered_flag_edges) {
+        std::cout << "\t[";
+        for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v->get_base());
+        std::cout << " ], frames =";
+        for (uint64_t fr : e->frames) std::cout << " " << fr;
+        std::cout << ", path = [";
+        for (sptr<vertex_t> v : path) std::cout << " " << print_v(v->get_base());
+        std::cout << " ]" << std::endl;
     }
     // Otherwise, perform the lifting procedure again, this time removing all edges corresponding
     // to triggered flag edges. Also update corr for each removed flag edge.
@@ -197,6 +210,8 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     not_cc_map = std::move(_not_cc_map);
     component_edge_sets = std::move(_c_edge_sets);
     fp_t log_p2 = 0.0;
+
+    std::set<sptr<hyperedge_t>> visited_flag_edges;
     for (const auto& [he, vlist] : triggered_flag_edges) {
         for (size_t i = 1; i < vlist.size(); i++) {
             sptr<vertex_t> v = vlist.at(i-1)->get_base(),
@@ -205,12 +220,30 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             erase_from_incidence_map(e, in_cc_map);
             erase_from_incidence_map(e, not_cc_map);
         }
+        // Check if there is a similar hyperedge.
+        bool found_similar = false;
+        for (sptr<hyperedge_t> _he : visited_flag_edges) {
+            if (he->endpoints == _he->endpoints && he->frames == _he->frames) {
+                found_similar = true;
+                break;
+            }
+        }
         // Apply the edge's frame changes.
-        for (uint64_t fr : he->frames) corr2[fr] ^= 1;
+        if (!found_similar) {
+            for (uint64_t fr : he->frames) corr2[fr] ^= 1;
+            visited_flag_edges.insert(he);
+        }
     }
     log_p2 += lifting(corr2, best_rep_map);
-    corr = std::move(log_p1 > log_p2 ? corr1 : corr2);
-    return { 0.0, corr };
+    std::cout << "corr1 = ";
+    for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
+    std::cout << std::endl;
+
+    std::cout << "corr2 = ";
+    for (size_t i = 0; i < n_obs; i++) std::cout << corr2[i]+0;
+    std::cout << std::endl;
+//  corr = std::move(log_p1 > log_p2 ? corr1 : corr2);
+    return { 0.0, corr2 };
 }
 
 std::vector<component_t>
@@ -306,35 +339,14 @@ RestrictionDecoder::insert_error_chain_into(
         // of fv and fw which has a different color (call this fu). 
         // Add (fv, fu) and (fu, fw) instead.
         if (!decoding_graph->share_hyperedge({fv, fw})) {
-            sptr<vertex_t> fu = nullptr;
-            for (sptr<vertex_t> x : decoding_graph->get_common_neighbors({fv, fw})) {
-                sptr<vertex_t> fx = x->get_base();
-                if (fx->color != c1 && fx->color != c2) continue;
-                if (fx == fv || fx == fw) continue;
-                if (fv->color != component_color 
-                        && fw->color != component_color
-                        && fx->color != component_color)
-                {
-                    continue;
-                }
-                fu = fx;
-                break;
-            }
-            if (fu == nullptr) {
                 // When this happens, just find a path in the non-flagged graph to use.
-                insert_error_chain_into(incidence_map, fv, fw, component_color, c1, c2, true);
+                insert_error_chain_into(incidence_map, v, w, component_color, c1, c2, true);
                 // Update triggered flag edges if this is a flag edge.
                 sptr<hyperedge_t> e = get_flag_edge_for({v, w});
                 if (e != nullptr) {
-                    error_chain_t ec = decoding_graph->get_error_chain(fv, fw, c1, c2, true);
+                    error_chain_t ec = decoding_graph->get_error_chain(v, w, c1, c2, true);
                     triggered_flag_edges.emplace_back(e, ec.path);
                 }
-            } else {
-                vpair_t e1 = make_vpair(fv, fu),
-                        e2 = make_vpair(fu, fw);
-                incidence_map[e1]++;
-                incidence_map[e2]++;
-            }
         } else {
             if (fv->color != component_color && fw->color != component_color) {
                 continue;
@@ -372,6 +384,17 @@ RestrictionDecoder::lifting(
     }
     std::set<sptr<vertex_t>> all_incident(not_cc_incident);
     vtils::insert_range(all_incident, in_cc_incident);
+
+    std::cout << "Edges in CC:" << std::endl;
+    for (auto& [e, cnt] : in_cc_map) {
+        std::cout << "\t[ " << print_v(e.first) << " "
+            << print_v(e.second) << " ], count = " << cnt << std::endl;
+    }
+    std::cout << "Edges not in CC:" << std::endl;
+    for (auto& [e, cnt] : not_cc_map) {
+        std::cout << "\t[ " << print_v(e.first) << " "
+            << print_v(e.second) << " ], count = " << cnt << std::endl;
+    }
 
     for (sptr<vertex_t> v : all_incident) {
         std::set<face_t> faces = get_faces(v, best_rep_map);
