@@ -436,7 +436,7 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         sptr<phys_vertex_t> pw = nullptr;
 
         size_t i = 0;
-        while (slack_violation > 0) {
+        while (slack_violation > 0 && visited.size() < adj.size()) {
             if (i == adj.size()) i = 0;
             sptr<phys_vertex_t> px = adj[i];
             if (config.enable_proxy_triangle_search && searching_for_triangle && px == pw) {
@@ -445,7 +445,10 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                 searching_for_triangle = false;
                 continue;
             }
-            if (visited.count(px)) continue;
+            if (visited.count(px)) {
+                i++;
+                continue;
+            }
             if (config.enable_proxy_triangle_search && searching_for_triangle && !contains(pw, px)) {
                 i++;
                 continue;
@@ -469,16 +472,18 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
             if (any_roles_added) {
                 share_an_edge_with_pprx.push_back(px);
                 // Delete px's edge with pv.
-                sptr<phys_edge_t> pe = get_edge(pv, px);
-                deleted_edges.push_back(pe);
+                deleted_edges.push_back(get_edge(pv, px));
                 slack_violation--;
                 // Update searching_for_triangle
-                if (searching_for_triangle) {
-                    deleted_edges.push_back(get_edge(pw, px));
-                    searching_for_triangle = false;
-                } else {
-                    searching_for_triangle = true;
-                    pw = px;
+                if (config.enable_proxy_triangle_search) {
+                    if (searching_for_triangle) {
+                        deleted_edges.push_back(get_edge(pw, px));
+                        searching_for_triangle = false;
+                        std::cout << "found triangle" << std::endl;
+                    } else {
+                        searching_for_triangle = true;
+                        pw = px;
+                    }
                 }
             }
             visited.insert(px);
