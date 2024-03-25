@@ -7,8 +7,6 @@
 #define MEMORY_DEBUG
 #endif
 
-#define MEMORY_DEBUG
-
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/ext/stim.h>
