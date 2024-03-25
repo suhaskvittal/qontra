@@ -256,6 +256,7 @@ public:
         bool    force_unopt_flags = false;
         bool    force_xz_flag_merge = false;
         bool    enable_flag_reduction = false;
+        bool    enable_proxy_triangle_search = false;
     } config;
 private:
     // Determines if a proposed flag (represented by the two raw vertices -- these are data qubits)

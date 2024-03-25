@@ -423,15 +423,33 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                 {
                     return get_degree(a) > get_degree(b);
                 });
-
         sptr<phys_vertex_t> pprx = make_and_add_vertex();
         // Let k = slack_violation. Then the top k+1 neighbors will
         // be serviced by the proxy.
+        std::set<sptr<phys_vertex_t>> visited;
         std::vector<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
         std::vector<sptr<phys_edge_t>> deleted_edges;
         slack_violation++;
-        for (size_t i = 0; i < adj.size() && slack_violation > 0; i++) {
+        // We want to find triangles amongst the neighbors (i.e. a triple (pv, px, py)). This
+        // means that the proxies reduce the connectivity of three vertices.
+        bool searching_for_triangle = false;
+        sptr<phys_vertex_t> pw = nullptr;
+
+        size_t i = 0;
+        while (slack_violation > 0) {
+            if (i == adj.size()) i = 0;
             sptr<phys_vertex_t> px = adj[i];
+            if (config.enable_proxy_triangle_search && searching_for_triangle && px == pw) {
+                // We could not find a triangle.
+                i++;
+                searching_for_triangle = false;
+                continue;
+            }
+            if (visited.count(px)) continue;
+            if (config.enable_proxy_triangle_search && searching_for_triangle && !contains(pw, px)) {
+                i++;
+                continue;
+            }
             // Now, for each role in pv and px, add a proxy in the raw_connection_network.
             // Each added proxy will be a role for pprx.
             bool any_roles_added = false;
@@ -454,7 +472,17 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
                 sptr<phys_edge_t> pe = get_edge(pv, px);
                 deleted_edges.push_back(pe);
                 slack_violation--;
+                // Update searching_for_triangle
+                if (searching_for_triangle) {
+                    deleted_edges.push_back(get_edge(pw, px));
+                    searching_for_triangle = false;
+                } else {
+                    searching_for_triangle = true;
+                    pw = px;
+                }
             }
+            visited.insert(px);
+            i++;
         }
         // Update the physical connectivity on our side.
         if (share_an_edge_with_pprx.size() > 2) {
