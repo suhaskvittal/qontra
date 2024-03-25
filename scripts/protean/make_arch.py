@@ -19,10 +19,10 @@ jid_blk = 'jid.ral' if '-use-jid' in argv else ''
 verbose = '-v' if '-v' in argv else ''
 
 version_list = [
-    ('1', f'{jid_blk}.rlb.rcr', 4, ''),          # Baseline: no modifications
+#   ('1', f'{jid_blk}.rlb.rcr', 4, ''),          # Baseline: no modifications
     ('2', f'{jid_blk}.fla.ral.rlb.rcr', 4, ''),  # Only flags
-    ('3.3', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 3, ''),  # Naive connectivity 3 implementation
-    ('3.4', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 4, ''),  # Naive connectivity 4 implementation
+    ('3.3', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 3, '-unopt-flags -flag-jid'),  # Naive connectivity 3 implementation
+    ('3.4', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 4, '-unopt-flags -flag-jid'),  # Naive connectivity 4 implementation
     ('4.3', f'{jid_blk}.fla.ral.({jid_blk}.con.prx.ral)+rlb.rcr', 3, '-flag-jid'),  # Optimized connectivity 3
     ('4.4', f'{jid_blk}.fla.ral.({jid_blk}.con.prx.ral)+rlb.rcr', 4, '-flag-jid')   # Optimized connectivity 4
 ]

@@ -8,6 +8,27 @@
 namespace qontra {
 namespace protean {
 
+inline fp_t
+Scheduler::get_depth_as_time(fp_t t_g1q, fp_t t_g2q, fp_t t_ro) {
+    fp_t t = 0;
+    for (const auto& inst : round_program) {
+        std::string name = inst.get_name();
+        if (name == "measure") t += t_ro;
+        else if (name == "cx") t += t_g2q;
+        else                   t += t_g1q;
+    }
+    return t;
+}
+
+inline size_t
+Scheduler::get_depth_as_cx_opcount() {
+    size_t n = 0;
+    for (const auto& inst : round_program) {
+        n += (inst.get_name() == "cx");
+    }
+    return n;
+}
+
 inline void
 Scheduler::push_back_measurement(std::vector<int64_t>& operands, sptr<net::raw_vertex_t> rv) {
     meas_ctr_map[rv] = mctr++;

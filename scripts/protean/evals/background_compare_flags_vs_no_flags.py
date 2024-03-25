@@ -16,6 +16,12 @@ if not os.path.exists(f'data/protean/{code}/v1/output/base_memory.csv'):
             cd Release
             mpirun -np {proc} ./pr_base_memory ../data/protean/{code}/v1 --decoder mwpm\
                     --s 100000 --pmin 5e-4 --pmax 7e-4 -fix-error
+            mpirun -np {proc} ./pr_base_memory ../data/protean/{code}/v1 --decoder mwpm\
+                    --s 10000 --pmin 8e-4 --pmax 3e-3 -fix-error
             mpirun -np {proc} ./pr_base_memory ../data/protean/{code}/v2 --decoder mwpm\
                     --s 1000000 --pmin 5e-4 --pmax 7e-4 -fix-error
+            mpirun -np {proc} ./pr_base_memory ../data/protean/{code}/v2 --decoder mwpm\
+                    --s 100000 --pmin 8e-4 --pmax 1e-3 -fix-error
+            mpirun -np {proc} ./pr_base_memory ../data/protean/{code}/v2 --decoder mwpm\
+                    --s 10000 --pmin 2e-3 --pmax 3e-3 -fix-error
         ''')

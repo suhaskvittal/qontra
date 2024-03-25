@@ -212,7 +212,6 @@ Scheduler::make_round() {
 #ifdef PROTEAN_PERF
         std::cout << "============= CYCLE " << cycle << " ===============" << std::endl;
 #endif
-
         checks_this_cycle.clear();
         std::set<int64_t> r_operands;
         std::set<sptr<raw_vertex_t>> roles_this_cycle;
@@ -255,7 +254,6 @@ Scheduler::make_round() {
         std::cout << "[ scheduler ] cycle " << cycle << " | teardown took " << t*1e-9 << "s" << std::endl;
         timer.clk_start();
 #endif
-        
         std::set<sptr<raw_vertex_t>> qubits_with_events;
         for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
             finished_checks.insert(rpq);
@@ -267,8 +265,10 @@ Scheduler::make_round() {
         }
         cycle++;
     }
+    // Remove redundant instructions.
+    remove_redundant_gates(program);
+    
     program[0].put("timing_error");
-
     round_program = std::move(program);
     round_has_been_generated = true;
 }
@@ -317,12 +317,97 @@ Scheduler::build_teardown(qes::Program<>& program) {
 
         auto& support = get_support(rpq);
         for (sptr<raw_vertex_t> rfq : support.flags) {
-            push_back_measurement(m_operands, rfq);
-            r_operands.push_back(qu(rfq));
-            release_qubit(rfq);
+            if (std::find(m_operands.begin(), m_operands.end(), qu(rfq)) == m_operands.end()) {
+                push_back_measurement(m_operands, rfq);
+                r_operands.push_back(qu(rfq));
+                release_qubit(rfq);
+            }
         }
     }
     safe_emplace_back(program, "measure", m_operands);
+}
+
+void
+Scheduler::remove_redundant_gates(qes::Program<>& program) {
+    // We track two things:
+    //  (1) last_inst_index_map: the last instruction for 
+    //      each qubit operand (index into the program).
+    //      This is used to identify redundant gates.
+    //  (2) cx_pair_map: the corresponding cx operand for
+    //      a qubit operand for some instruction. This is
+    //      used to detect redundant CX gates.
+    //  (3) deleted_operand_map: tracks which operands to
+    //      delete from the corresponding instructions.
+    std::map<int64_t, size_t> last_inst_index_map;
+    TwoLevelMap<size_t, int64_t, int64_t> cx_pair_map;
+    std::map<size_t, std::set<int64_t>> deleted_operand_map;
+
+    size_t n_red = 0;
+    for (size_t i = 0; i < program.size(); i++) {
+        auto& inst = program[i];
+        if (inst.get_name() == "cx") {
+            for (size_t ii = 0; ii < inst.get_number_of_operands(); ii += 2) {
+                int64_t q1 = inst.get<int64_t>(ii),
+                        q2 = inst.get<int64_t>(ii+1);
+                if (last_inst_index_map.count(q1) && last_inst_index_map.count(q2)
+                    && last_inst_index_map.at(q1) == last_inst_index_map.at(q2)) 
+                {
+                    size_t j = last_inst_index_map[q1];
+                    auto& _inst = program[j];
+                    if (_inst.get_name() == "cx" && cx_pair_map[j][q1] == q2) {
+                        // Then, this is redundant.
+                        insert_all(deleted_operand_map[i], {q1, q2});
+                        insert_all(deleted_operand_map[j], {q1, q2});
+                        // Erase last_inst_index_map entry.
+                        last_inst_index_map.erase(q1);
+                        last_inst_index_map.erase(q2);
+                        n_red++;
+                        continue;
+                    }
+                }
+                // Otherwise, update tracking structures.
+                last_inst_index_map[q1] = i;
+                last_inst_index_map[q2] = i;
+                cx_pair_map[i][q1] = q2;
+            }
+        } else {
+            for (size_t ii = 0; ii < inst.get_number_of_operands(); ii++) {
+                int64_t q = inst.get<int64_t>(ii);
+                if (last_inst_index_map.count(q)) {
+                    size_t j = last_inst_index_map[q];
+                    auto& _inst = program[j];
+                    if (inst.get_name() == _inst.get_name()) {
+                        deleted_operand_map[i].insert(q);
+                        deleted_operand_map[j].insert(q);
+                        last_inst_index_map.erase(q);
+                        n_red++;
+                        continue;
+                    }
+                }
+                last_inst_index_map[q] = i;
+            }
+        }
+    }
+    // Update instructions now.
+    for (auto& [i, deleted] : deleted_operand_map) {
+        auto& inst = program[i];
+        std::vector<int64_t> new_operands;
+        for (size_t ii = 0; ii < inst.get_number_of_operands(); ii++) {
+            int64_t q = inst.get<int64_t>(ii);
+            if (!deleted.count(q)) new_operands.push_back(q);
+        }
+        qes::Instruction<> _inst(inst.get_name(), new_operands);
+        // Copy over annotations and properties.
+        for (std::string a : inst.get_annotations()) _inst.put(a);
+        for (auto& [k, v] : inst.get_property_map()) _inst.put(k, v);
+        inst = std::move(_inst);
+    }
+    // Finally, do a final pass and remove any bad instructions.
+    for (auto it = program.begin(); it != program.end(); ) {
+        if (it->get_number_of_operands() == 0) it = program.erase(it);
+        else it++;
+    }
+    std::cout << "[ status ] deleted " << n_red << " redundant instructions" << std::endl;
 }
 
 void
@@ -354,74 +439,6 @@ Scheduler::prep_tear_cx_gates(qes::Program<>& program) {
         }
     }
     schedule_cx_along_path(cx_arr, program);
-}
-
-void
-Scheduler::init_flags(
-        const std::set<sptr<raw_vertex_t>>& flags,
-        sptr<raw_vertex_t> rpq,
-        std::set<sptr<raw_vertex_t>>& x_endpoints,
-        std::set<sptr<raw_vertex_t>>& z_endpoints,
-        std::set<int64_t>& h_operands,
-        std::vector<std::vector<cx_t>>& cx_groups)
-{
-    // Amongst the flag qubits, first check if any pairs of flags have a common
-    // qubit in their proxy path that is not their parity qubit.
-    std::map<sptr<raw_vertex_t>, sptr<raw_vertex_t>> endpoint_map;
-    std::set<sptr<raw_vertex_t>> endpoints;
-    std::map<sptr<raw_vertex_t>, std::set<sptr<raw_vertex_t>>> proxy_qubit_map;
-    for (sptr<raw_vertex_t> rfq : flags) {
-        if (endpoint_map.count(rfq)) continue;
-        auto path = raw_network->get_proxy_walk_path(rfq, rpq);
-        if (path.size() > 2) {
-            insert_range(proxy_qubit_map[rfq], path.begin()+1, path.end()-1);
-        } else {
-            endpoint_map[rfq] = rpq;
-            continue;
-        }
-        // Check if any other flags share a proxy with rfq.
-        for (sptr<raw_vertex_t> rx : flags) {
-            if (rx == rfq || endpoint_map.count(rx)) continue;
-            if (!proxy_qubit_map.count(rx)) continue;
-            const auto& rx_pr = proxy_qubit_map.at(rx);
-            sptr<raw_vertex_t> common = nullptr;
-            for (size_t i = 1; i < path.size()-1; i++) {
-                sptr<raw_vertex_t> rp = path.at(i);
-                if (rx_pr.count(rp)) {
-                    // Found a common vertex.
-                    common = rp;
-                    break;
-                }
-            }
-            // Update the endpoint_map.
-            if (common != nullptr) {
-                endpoint_map[rfq] = common;
-                endpoint_map[rx] = common;
-                endpoints.insert(common);
-                if (rpq->qubit_type == raw_vertex_t::type::zparity) {
-                    h_operands.insert(qu(common));
-                    z_endpoints.insert(common);
-                } else {
-                    x_endpoints.insert(common);
-                }
-                break;
-            }
-        }
-    }
-    // Now first entangle the endpoints with rpq.
-    std::vector<std::vector<cx_t>> new_cx_groups;
-    if (endpoints.size()) {
-        init_flags(endpoints, rpq, x_endpoints, z_endpoints, h_operands, new_cx_groups);
-    }
-    // We will push back new_cx_groups before and after performing the flag cnots (init and undo).
-    push_back_range(cx_groups, new_cx_groups);
-    std::vector<cx_t> cx_arr;
-    for (sptr<raw_vertex_t> rfq : flags) {
-        sptr<raw_vertex_t> rsq = endpoint_map.count(rfq) ? endpoint_map.at(rfq) : rpq;
-        cx_arr.push_back({rfq, rsq, rpq->qubit_type == raw_vertex_t::type::xparity});
-    }
-    cx_groups.push_back(cx_arr);
-    push_back_range(cx_groups, new_cx_groups.rbegin(), new_cx_groups.rend());
 }
 
 void

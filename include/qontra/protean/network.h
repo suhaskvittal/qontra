@@ -198,6 +198,9 @@ public:
 
     size_t  get_thickness(void);
     size_t  get_bulk_degree(sptr<net::phys_vertex_t>);
+    fp_t    get_round_latency(void);
+    size_t  get_round_cnots(void);
+    fp_t    get_expected_collisions(void);
 
     graph::TannerGraph* get_tanner_graph(void);
     uptr<RawNetwork>&   get_raw_connection_network(void);
@@ -226,6 +229,9 @@ public:
     // Relabel qubits so that the ids are not sporadic.
     bool relabel_qubits(void);
 
+    // Runs the scheduler and yield simulator and updates any variables/statistics.
+    void finalize(void);
+
     // IO:
     void    write_stats_file(std::string);
     void    write_schedule_folder(std::string);
@@ -238,10 +244,16 @@ public:
         size_t max_connectivity = 4;
         size_t max_thickness = 1;   // 0 = means only processor bulk, n = n TSV layers.
 
+        fp_t min_qubit_frequency = 5.00e9;
+        fp_t max_qubit_frequency = 5.34e9;
+        fp_t qubit_frequency_step = 0.01e9;
+        fp_t fabrication_precision = 30e6;
+
         // Scheduler settings.
         size_t  rounds = 1;
 
         // Optimization settings.
+        bool    force_unopt_flags = false;
         bool    force_xz_flag_merge = false;
         bool    enable_flag_reduction = false;
     } config;
@@ -279,8 +291,16 @@ private:
 
     // Other tracking structures:
     std::map<sptr<net::raw_vertex_t>, int> check_color_map;
-    
+    // Id tracking for make_and_add_vertex 
     uint64_t id_ctr;
+
+    // Other statistics:
+    fp_t round_latency;
+    size_t round_cnots;
+    fp_t expected_collisions;
+
+    qes::Program<> x_memory;
+    qes::Program<> z_memory;
 
     friend class Scheduler;
 };

@@ -13,6 +13,7 @@ if (COMPILE_PROTEAN_MAIN)
         src/qontra/protean/visualization.cpp
         src/qontra/protean/visualization_attr.cpp
         src/qontra/protean/visualization_lp.cpp
+        src/qontra/protean/yield_sim.cpp
         src/qontra/protean/experiments.cpp)
     add_library(libprotean ${PROTEAN_FILES})
     target_compile_options(libprotean PUBLIC ${COMPILE_OPTIONS})

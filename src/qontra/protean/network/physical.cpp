@@ -4,6 +4,8 @@
  * */
 
 #include "qontra/protean/network.h"
+#include "qontra/protean/scheduler.h"
+#include "qontra/protean/yield_sim.h"
 
 #include <qontra/graph/algorithms/coloring.h>
 
@@ -45,7 +47,12 @@ PhysicalNetwork::PhysicalNetwork(TannerGraph* tgr)
     // Other tracking:
     check_color_map(),
     // Other variables:
-    id_ctr(0)
+    id_ctr(0),
+    round_latency(0),
+    round_cnots(0),
+    expected_collisions(0),
+    x_memory(),
+    z_memory()
 {
     push_back_new_processor_layer(); // The first ever processor layer.
     // Create a corresponding physical qubit for every vertex in raw_connection_network.
@@ -346,7 +353,10 @@ edge_build_outer_loop_start:
                             pw = role_to_phys.at(rw);
         // Make a separate physical qubit for the X and Z flags.
         for (int i = 0; i < (config.force_xz_flag_merge ? 1 : 2); i++) {
-            sptr<phys_vertex_t> pfq = make_vertex(id_ctr++);
+            sptr<phys_vertex_t> pfq;;
+            if (!config.force_unopt_flags) {
+                pfq = make_vertex(id_ctr++);
+            }
             // Track connected qubits and deleted edges.
             std::set<sptr<phys_edge_t>> local_deleted_edges;
             std::set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv, pw};
@@ -356,6 +366,9 @@ edge_build_outer_loop_start:
                 {
                     continue;
                 }
+                if (config.force_unopt_flags) {
+                    pfq = make_and_add_vertex();
+                }
                 sptr<phys_vertex_t> ppq = role_to_phys.at(rpq);
                 // Compute cycle for role. This is the maximum of the cycles of rv1, rv2, and rfq.
                 size_t cycle = std::max({pv->cycle_role_map.at(rv),
@@ -363,12 +376,18 @@ edge_build_outer_loop_start:
                                         ppq->cycle_role_map.at(rpq)});
                 pfq->push_back_role(rfq, cycle);
                 role_to_phys[rfq] = pfq;
-                qubits_connected_to_pfq.insert(ppq);
-                // Delete edge between pv1/pv2 and ppq (if it exists).
-                insert_all(local_deleted_edges, { get_edge(pv, ppq), get_edge(pw, ppq) });
+                if (config.force_unopt_flags) {
+                    // Add the edges now and immediately update deleted_edges.
+                    insert_all(new_edges, { make_edge(pfq, pv), make_edge(pfq, pw), make_edge(pfq, ppq) });
+                    insert_all(deleted_edges, { get_edge(pv, ppq), get_edge(pw, ppq) });
+                } else {
+                    qubits_connected_to_pfq.insert(ppq);
+                    // Delete edge between pv1/pv2 and ppq (if it exists).
+                    insert_all(local_deleted_edges, { get_edge(pv, ppq), get_edge(pw, ppq) });
+                }
             }
             // Add edges for pfq.
-            if (qubits_connected_to_pfq.size() > 2) {
+            if (!config.force_unopt_flags && qubits_connected_to_pfq.size() > 2) {
                 add_vertex(pfq);
                 insert_range(deleted_edges, local_deleted_edges);
                 for (sptr<phys_vertex_t> x : qubits_connected_to_pfq) {
@@ -461,7 +480,7 @@ PhysicalNetwork::contract_small_degree_qubits() {
         if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
         
         const size_t dg = get_degree(pv);
-        if (dg > 2) continue;
+        if (dg >= config.max_connectivity) continue;
         
         if (dg == 0) {
             // God forbid, I can't think of a case like this, so I'm exiting.
@@ -478,7 +497,7 @@ PhysicalNetwork::contract_small_degree_qubits() {
             // This is simple -- just have px consume pv and delete pv.
             consume(px, pv);
             delete_vertex(pv);
-        } else {    // dg == 2
+        } else if (dg == 2) {
             sptr<phys_vertex_t> px1 = get_neighbors(pv)[0],
                                 px2 = get_neighbors(pv)[1];
             // Simple: delete pv, and just add an edge between px1 and px2.
@@ -495,7 +514,28 @@ PhysicalNetwork::contract_small_degree_qubits() {
             if (!contains(px1, px2)) {
                 make_and_add_edge(px1, px2);
             }
+        } else {
+            // Otherwise, this is some vertex with degree less than the max connectivity. If any
+            // of its neighbors have sufficient slack to absorb it, we will do so.
+            auto adj = get_neighbors(pv);
+            for (sptr<phys_vertex_t> px : adj) {
+                int slack = dg + get_degree(px) - 1;
+                if (px->has_role_of_type(raw_vertex_t::type::data)
+                        || slack > config.max_connectivity) continue;
+                consume(px, pv);
+                delete_vertex(pv);
+                // Update neighbors of pv.
+                for (sptr<phys_vertex_t> py : adj) {
+                    if (px == py) continue;
+                    if (!contains(px, py)) {
+                        make_and_add_edge(px, py);
+                    }
+                }
+                goto did_mod_network;
+            }
+            continue;
         }
+did_mod_network:
         mod = true;
     }
     return mod;
@@ -780,6 +820,28 @@ PhysicalNetwork::recompute_cycle_role_maps() {
     std::cout << "[ rcr ] interference analysis took " << t*1e-9 << "s" << std::endl;
 #endif
     return true;
+}
+
+void
+PhysicalNetwork::finalize() {
+    // Run the scheduler.
+    Scheduler sch(this);
+    x_memory = sch.run(config.rounds, true);
+    z_memory = sch.run(config.rounds, false);
+    round_latency = sch.get_depth_as_time();
+    round_cnots = sch.get_depth_as_cx_opcount();
+    // Run the yield simulator.
+    YieldSimulator ysim(this);
+    std::vector<fp_t> freq_list;
+    for (fp_t f = config.min_qubit_frequency; 
+            f <= config.max_qubit_frequency+0.1; 
+            f += config.qubit_frequency_step) 
+    {
+        freq_list.push_back(f);
+    }
+    ysim.assign(config.fabrication_precision, freq_list);
+    ysim.assign(config.fabrication_precision, freq_list);
+    expected_collisions = ysim.est_mean_collisions(config.fabrication_precision, 1'000);
 }
 
 }   // protean

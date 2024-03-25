@@ -58,6 +58,7 @@ int main(int argc, char* argv[]) {
 
     network.config.max_connectivity = static_cast<size_t>(max_connectivity);
     network.config.rounds = static_cast<size_t>(schedule_rounds);
+    network.config.force_unopt_flags = pp.option_set("unopt-flags");
     network.config.force_xz_flag_merge = pp.option_set("flag-jid");
     network.config.enable_flag_reduction = pp.option_set("flag-reduce");
 
@@ -66,18 +67,25 @@ int main(int argc, char* argv[]) {
             << "Checks = " << tanner_graph.get_checks().size() << "\n";
     // Run:
     update_network(pass_string, &network, verbose);
-
+    if (pp.option_set("color-checks")) {
+        network.assign_colors_to_checks();
+    }
+    pp.get("freq-min", network.config.min_qubit_frequency);
+    pp.get("freq-max", network.config.max_qubit_frequency);
+    pp.get("freq-step", network.config.qubit_frequency_step);
+    pp.get("fab-precision", network.config.fabrication_precision);
+    network.finalize();
+    // Write data to output folder:
+    write_network_to_folder(data_output_folder, &network);
     std::cout << "Qubits = " << network.n() << "\n"
             << "Couplings = " << network.m() << "\n"
             << "Mean Degree = " << network.get_mean_degree() << "\n"
             << "Max Degree = " << network.get_max_degree() << "\n"
-            << "Thickness = " << network.get_thickness() << "\n";
+            << "Thickness = " << network.get_thickness() << "\n"
+            << "Round Latency = " << network.get_round_latency() << "\n"
+            << "Round CNOTs = " << network.get_round_cnots() << "\n"
+            << "Expected Collisions = " << network.get_expected_collisions() << "\n";
 
-    if (pp.option_set("color-checks")) {
-        network.assign_colors_to_checks();
-    }
-    // Write data to output folder:
-    write_network_to_folder(data_output_folder, &network);
 #ifdef PROTEAN_PERF
     t = timer.clk_end();
     std::cout << "[ protean ] total time for compilation: " << t*1e-9 << "s" << std::endl;

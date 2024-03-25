@@ -278,6 +278,21 @@ PhysicalNetwork::get_bulk_degree(sptr<net::phys_vertex_t> v) {
     return processor_layers[0]->get_degree(v);
 }
 
+inline fp_t
+PhysicalNetwork::get_round_latency() {
+    return round_latency;
+}
+
+inline size_t
+PhysicalNetwork::get_round_cnots() {
+    return round_cnots;
+}
+
+inline fp_t
+PhysicalNetwork::get_expected_collisions() {
+    return expected_collisions;
+}
+
 inline bool
 PhysicalNetwork::relabel_qubits() {
     for (size_t i = 0; i < vertices.size(); i++) {

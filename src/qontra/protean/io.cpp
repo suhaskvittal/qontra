@@ -4,7 +4,6 @@
  * */
 
 #include "qontra/protean/io.h"
-#include "qontra/protean/scheduler.h"
 
 #include <vtils/filesystem.h>
 
@@ -118,25 +117,18 @@ PhysicalNetwork::write_stats_file(std::string output_file) {
             << "Couplings," << m() << "\n"
             << "Mean Degree," << get_mean_degree() << "\n"
             << "Max Degree," << get_max_degree() << "\n"
-            << "Thickness," << get_thickness() << "\n";
+            << "Thickness," << get_thickness() << "\n"
+            << "Round Latency," << get_round_latency() << "\n"
+            << "Round CNOTs," << get_round_cnots() << "\n"
+            << "Expected Collisions," << get_expected_collisions() << "\n";
     fout.flush();
 }
 
 void
 PhysicalNetwork::write_schedule_folder(std::string output_folder) {
     vtils::safe_create_directory(output_folder);
-    Scheduler sch(this);
-
-    for (size_t rm = 1; rm <= 3; rm++) {
-        for (int i = 0; i <= 1; i++) {
-            qes::Program<> program = sch.run(config.rounds*rm, i & 1);
-
-            std::string memory_type = i & 1 ? "x" : "z";
-            std::string rounds = std::to_string(rm);
-            std::string filename = output_folder + "/" + memory_type + "rm" + rounds + ".qes";
-            qes::to_file(filename, program);
-        }
-    }
+    qes::to_file(output_folder + "/xrm1.qes", x_memory);
+    qes::to_file(output_folder + "/zrm1.qes", z_memory);
 }
 
 void
