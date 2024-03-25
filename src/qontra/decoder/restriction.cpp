@@ -186,6 +186,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 
     stim::simd_bits<SIMD_WIDTH> corr1(corr),
                                 corr2(corr);
+    /*
     fp_t log_p1 = lifting(corr1, best_rep_map);
     std::cout << "corr1 = ";
     for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
@@ -194,6 +195,8 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     if (triggered_flag_edges.empty()) {
         return { 0.0, corr1 };
     }
+    */
+    /*
     std::cout << "Triggered flag edges:" << std::endl;
     for (auto& [e, path] : triggered_flag_edges) {
         std::cout << "\t[";
@@ -204,11 +207,12 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         for (sptr<vertex_t> v : path) std::cout << " " << print_v(v->get_base());
         std::cout << " ]" << std::endl;
     }
+    */
     // Otherwise, perform the lifting procedure again, this time removing all edges corresponding
     // to triggered flag edges. Also update corr for each removed flag edge.
-    in_cc_map = std::move(_in_cc_map);
-    not_cc_map = std::move(_not_cc_map);
-    component_edge_sets = std::move(_c_edge_sets);
+//  in_cc_map = std::move(_in_cc_map);
+//  not_cc_map = std::move(_not_cc_map);
+//  component_edge_sets = std::move(_c_edge_sets);
     fp_t log_p2 = 0.0;
 
     std::set<sptr<hyperedge_t>> visited_flag_edges;
@@ -235,6 +239,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         }
     }
     log_p2 += lifting(corr2, best_rep_map);
+    /*
     std::cout << "corr1 = ";
     for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
     std::cout << std::endl;
@@ -243,6 +248,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     for (size_t i = 0; i < n_obs; i++) std::cout << corr2[i]+0;
     std::cout << std::endl;
 //  corr = std::move(log_p1 > log_p2 ? corr1 : corr2);
+//  */
     return { 0.0, corr2 };
 }
 
@@ -324,6 +330,7 @@ RestrictionDecoder::insert_error_chain_into(
         int c2,
         bool force_unflagged)
 {
+    std::set<vpair_t> edge_set;
     error_chain_t ec = decoding_graph->get_error_chain(src, dst, c1, c2, force_unflagged);
     for (size_t i = 1; i < ec.path.size(); i++) {
         sptr<vertex_t> v = ec.path.at(i-1),
@@ -339,24 +346,39 @@ RestrictionDecoder::insert_error_chain_into(
         // of fv and fw which has a different color (call this fu). 
         // Add (fv, fu) and (fu, fw) instead.
         if (!decoding_graph->share_hyperedge({fv, fw})) {
-                // When this happens, just find a path in the non-flagged graph to use.
-                insert_error_chain_into(incidence_map, v, w, component_color, c1, c2, true);
-                // Update triggered flag edges if this is a flag edge.
-                sptr<hyperedge_t> e = get_flag_edge_for({v, w});
-                if (e != nullptr) {
-                    error_chain_t ec = decoding_graph->get_error_chain(v, w, c1, c2, true);
-                    triggered_flag_edges.emplace_back(e, ec.path);
+            // When this happens, just find a path in the non-flagged graph to use.
+            bool any_added_edges = false;
+            error_chain_t ec = decoding_graph->get_error_chain(fv, fw, c1, c2, true);
+            for (size_t j = 1; j < ec.path.size(); j++) {
+                sptr<vertex_t> fx = ec.path[j-1]->get_base(),
+                                fy = ec.path[j]->get_base();
+                if (fx->color != component_color && fy->color != component_color) {
+                    continue;
                 }
+                vpair_t e = make_vpair(fx, fy);
+                incidence_map[e]++;
+                edge_set.insert(e);
+                any_added_edges = true;
+            }
+            // Update triggered flag edges if this is a flag edge.
+            sptr<hyperedge_t> e = get_flag_edge_for({v, w});
+            if (e != nullptr && any_added_edges) {
+                /*
+                std::cout << "Discovered flag edge [ " << print_v(v) << " " << print_v(w)
+                    << " ] in lattice (" << c1 << ", " << c2 << "), component color = "
+                    << component_color << std::endl;
+                */
+                triggered_flag_edges.emplace_back(e, ec.path);
+            }
         } else {
             if (fv->color != component_color && fw->color != component_color) {
                 continue;
             }
             vpair_t e = make_vpair(fv, fw);
             incidence_map[e]++;
+            edge_set.insert(e);
         }
     }
-    std::set<vpair_t> edge_set;
-    for (auto& [e, cnt] : incidence_map) edge_set.insert(e);
     return edge_set;
 }
 
@@ -385,6 +407,7 @@ RestrictionDecoder::lifting(
     std::set<sptr<vertex_t>> all_incident(not_cc_incident);
     vtils::insert_range(all_incident, in_cc_incident);
 
+    /*
     std::cout << "Edges in CC:" << std::endl;
     for (auto& [e, cnt] : in_cc_map) {
         std::cout << "\t[ " << print_v(e.first) << " "
@@ -395,6 +418,7 @@ RestrictionDecoder::lifting(
         std::cout << "\t[ " << print_v(e.first) << " "
             << print_v(e.second) << " ], count = " << cnt << std::endl;
     }
+    */
 
     for (sptr<vertex_t> v : all_incident) {
         std::set<face_t> faces = get_faces(v, best_rep_map);
