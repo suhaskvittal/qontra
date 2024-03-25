@@ -69,21 +69,24 @@ YieldSimulator::assign(fp_t prec, const std::vector<fp_t>& freq_list) {
             // Set frequency to be middle of freq_list.
             freq_map[v] = freq_list.at(freq_list.size() / 2);
         } else {
-            fp_t min_coll = -1;
-            fp_t best_f;
+            fp_t min_coll = 0;
+            fp_t best_f = -1;
             for (fp_t f : freq_list) {
                 // Simulate the yield of the processor locally.
                 freq_map[v] = f;
-                fp_t c = local_sim(v, prec, 1'000);
-//              fp_t c = est_mean_collisions(prec, 1000);
+                fp_t c = est_mean_collisions(prec, 1000);
                 if (min_coll < c) {
                     min_coll = c;
                     best_f = f;
-                    std::cout << "yield for " << print_v(v) << " with F=" << f << " = " << c << std::endl;
                 }
+            }
+            if (best_f < 0) {
+                std::cerr << "no good frequency found for " << print_v(v) << std::endl;
+                exit(1);
             }
             freq_map[v] = best_f;
         }
+        std::cout << "[ yield_sim ] assigned F=" << freq_map[v] << " ---> " << print_v(v) << std::endl;
         for (sptr<phys_vertex_t> w : network->get_neighbors(v)) {
             bfs.push_back(w);
         }
@@ -96,13 +99,12 @@ YieldSimulator::count_violations(
         sptr<phys_vertex_t> v,
         const std::map<sptr<phys_vertex_t>, fp_t>& fmap) 
 {
-    if (!fmap.count(v)) return 0;
     size_t violations = 0;
     const auto adj = network->get_neighbors(v);
     for (sptr<phys_vertex_t> w : adj) {
-        if (!fmap.count(w)) continue;
+        if (!fmap.count(v) || !fmap.count(w)) continue;
         // Conditions:
-        const bool c1 = abs(fmap.at(v) - fmap.at(w)) < 17e6,
+        const bool c1 = abs(fmap.at(v) - fmap.at(w)) <= 17e6,
                    c2 = abs(fmap.at(v) - (fmap.at(w)-0.5*ANH)) <= 4e6,
                    c3 = abs(fmap.at(v) - (fmap.at(w)-ANH)) <= 25e6,
                    c4 = fmap.at(v) > fmap.at(w)-ANH;
@@ -117,9 +119,10 @@ YieldSimulator::count_violations(
         for (size_t j = i+1; j < adj.size(); j++) {
             sptr<phys_vertex_t> u = adj.at(j);
             if (!fmap.count(u)) continue;
-            const bool c4 = abs(fmap.at(w) - fmap.at(u)) < 17e6,
-                       c5 = abs(fmap.at(w) - (fmap.at(w)-ANH)) <= 25e6,
-                       c6 = abs((2*fmap.at(v)+ANH) - (fmap.at(w)+fmap.at(u))) <= 17e6;
+            const bool c4 = abs(fmap.at(w) - fmap.at(u)) <= 17e6,
+                       c5 = abs(fmap.at(w) - (fmap.at(u)-ANH)) <= 25e6;
+            const bool c6 = fmap.count(v)
+                            && abs((2*fmap.at(v)+ANH) - (fmap.at(w)+fmap.at(u))) <= 17e6;
             violations += 
                 static_cast<size_t>(c4) + static_cast<size_t>(c5) + static_cast<size_t>(c6);
         }

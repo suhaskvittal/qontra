@@ -840,8 +840,7 @@ PhysicalNetwork::finalize() {
         freq_list.push_back(f);
     }
     ysim.assign(config.fabrication_precision, freq_list);
-    ysim.assign(config.fabrication_precision, freq_list);
-    expected_collisions = ysim.est_mean_collisions(config.fabrication_precision, 1'000);
+    expected_collisions = ysim.est_mean_collisions(config.fabrication_precision, 10000);
 }
 
 }   // protean
