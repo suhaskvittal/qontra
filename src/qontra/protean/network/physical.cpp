@@ -831,6 +831,7 @@ PhysicalNetwork::finalize() {
     round_latency = sch.get_depth_as_time();
     round_cnots = sch.get_depth_as_cx_opcount();
     // Run the yield simulator.
+    /*
     YieldSimulator ysim(this);
     std::vector<fp_t> freq_list;
     for (fp_t f = config.min_qubit_frequency; 
@@ -840,7 +841,9 @@ PhysicalNetwork::finalize() {
         freq_list.push_back(f);
     }
     ysim.assign(config.fabrication_precision, freq_list);
+    ysim.assign(config.fabrication_precision, freq_list);
     expected_collisions = ysim.est_mean_collisions(config.fabrication_precision, 10000);
+    */
 }
 
 }   // protean

@@ -35,20 +35,34 @@ YieldSimulator::YieldSimulator(PhysicalNetwork* net)
 }
 
 fp_t
-YieldSimulator::est_mean_collisions(fp_t prec, uint64_t trials, uint64_t seed) {
-    std::map<sptr<phys_vertex_t>, fp_t> fmap;
+YieldSimulator::est_mean_collisions(
+        fp_t prec, uint64_t trials, uint64_t seed, sptr<phys_vertex_t> v)
+{
+    std::vector<sptr<phys_vertex_t>> vertices;
+    if (v == nullptr) {
+        vertices = network->get_vertices();
+    } else {
+        std::set<sptr<phys_vertex_t>> _vertices{v};
+        for (sptr<phys_vertex_t> w : network->get_neighbors(v)) {
+            _vertices.insert(w);
+            for (sptr<phys_vertex_t> u : network->get_neighbors(w)) {
+                _vertices.insert(u);
+            }
+        }
+        vertices = std::vector<sptr<phys_vertex_t>>(_vertices.begin(), _vertices.end());
+    }
 
     fp_t mcoll = 0.0;
 
     std::mt19937_64 rng(seed);
     std::normal_distribution noise{0.0, prec};
     for (uint64_t i = 0; i < trials; i++) {
+        std::map<sptr<phys_vertex_t>, fp_t> fmap;
         // Update the frequency map with noise.
         for (auto& [v, f] : freq_map) {
             fmap[v] = freq_map[v] + noise(rng);
         }
-        if (count_collisions(fmap) == 0) mcoll++;
-//      mcoll += static_cast<fp_t>(count_collisions(fmap));
+        mcoll += static_cast<fp_t>(count_collisions(fmap, vertices));
     }
     mcoll /= static_cast<fp_t>(trials);
     return mcoll;
@@ -56,7 +70,7 @@ YieldSimulator::est_mean_collisions(fp_t prec, uint64_t trials, uint64_t seed) {
 
 void
 YieldSimulator::assign(fp_t prec, const std::vector<fp_t>& freq_list) {
-    std::cout << "====================\n";
+    std::cout << "[ yield_sim ]\n";
     std::deque<sptr<phys_vertex_t>> bfs{vcenter};
     std::set<sptr<phys_vertex_t>> visited;
     while (bfs.size()) {
@@ -69,13 +83,13 @@ YieldSimulator::assign(fp_t prec, const std::vector<fp_t>& freq_list) {
             // Set frequency to be middle of freq_list.
             freq_map[v] = freq_list.at(freq_list.size() / 2);
         } else {
-            fp_t min_coll = 0;
+            fp_t min_coll = std::numeric_limits<fp_t>::max();
             fp_t best_f = -1;
             for (fp_t f : freq_list) {
                 // Simulate the yield of the processor locally.
                 freq_map[v] = f;
-                fp_t c = est_mean_collisions(prec, 1000);
-                if (min_coll < c) {
+                fp_t c = est_mean_collisions(prec, 1000, 0, v);
+                if (c < min_coll) {
                     min_coll = c;
                     best_f = f;
                 }
@@ -86,7 +100,7 @@ YieldSimulator::assign(fp_t prec, const std::vector<fp_t>& freq_list) {
             }
             freq_map[v] = best_f;
         }
-        std::cout << "[ yield_sim ] assigned F=" << freq_map[v] << " ---> " << print_v(v) << std::endl;
+        std::cout << "\tassigned F=" << freq_map[v] << " ---> " << print_v(v) << std::endl;
         for (sptr<phys_vertex_t> w : network->get_neighbors(v)) {
             bfs.push_back(w);
         }
@@ -127,36 +141,19 @@ YieldSimulator::count_violations(
                 static_cast<size_t>(c4) + static_cast<size_t>(c5) + static_cast<size_t>(c6);
         }
     }
-    return violations;
+    return (violations > 0);
 }
 
 size_t
-YieldSimulator::count_collisions(const std::map<sptr<phys_vertex_t>, fp_t>& fmap) {
+YieldSimulator::count_collisions(
+        const std::map<sptr<phys_vertex_t>, fp_t>& fmap,
+        const std::vector<sptr<phys_vertex_t>>& vertices)
+{
     size_t coll = 0;
-    for (sptr<phys_vertex_t> v : network->get_vertices()) {
+    for (sptr<phys_vertex_t> v : vertices) {
         coll += count_violations(v, fmap);
     }
     return coll;
-}
-
-fp_t
-YieldSimulator::local_sim(sptr<phys_vertex_t> v, fp_t prec, uint64_t trials) {
-    std::map<sptr<phys_vertex_t>, fp_t> _freq_map;
-    // Only populate _freq_map with relevant entries.
-    _freq_map[v] = freq_map[v];
-    for (sptr<phys_vertex_t> w : network->get_neighbors(v)) {
-        if (!freq_map.count(w)) continue;
-        _freq_map[w] = freq_map[w];
-        for (sptr<phys_vertex_t> u : network->get_neighbors(w)) {
-            if (!freq_map.count(u)) continue;
-            _freq_map[u] = freq_map[u];
-        }
-    }
-    auto tmp = std::move(freq_map);
-    freq_map = std::move(_freq_map);
-    fp_t mcoll = est_mean_collisions(prec, trials);
-    freq_map = std::move(tmp);
-    return mcoll;
 }
 
 size_t
