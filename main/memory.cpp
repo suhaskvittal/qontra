@@ -3,6 +3,8 @@
  *  date:   21 January 2024
  * */
 
+#define MEMORY_DEBUG
+
 #include <qontra/decoder/chromobius.h>
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/pymatching.h>
@@ -54,7 +56,6 @@ int main(int argc, char* argv[]) {
     qes::Program<> program = qes::from_file(qes_file);
 
     DetailedStimCircuit _circuit = make_circuit(qes_file, pmax, true);
-
     RestrictionDecoder dec(_circuit);
 
     fp_t p = pmin;
@@ -69,6 +70,7 @@ int main(int argc, char* argv[]) {
 
         // Write result to file.
         if (world_rank == 0) {
+            std::cout << "Writing p = " << p << std::endl;
             bool write_header = false;
             if (!file_exists(get_parent_directory(output_file.c_str()))) {
                 safe_create_directory(get_parent_directory(output_file.c_str()));

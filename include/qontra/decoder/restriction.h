@@ -76,8 +76,10 @@ protected:
     std::map<vpair_t, size_t> not_cc_map;
     std::vector<std::pair<std::set<vpair_t>, int>> component_edge_sets;
 
-    std::vector<std::pair<sptr<gd::hyperedge_t>, std::vector<sptr<gd::vertex_t>> >>
-        triggered_flag_edges;
+    typedef std::tuple<sptr<gd::hyperedge_t>, std::vector<sptr<gd::vertex_t>>, std::map<vpair_t, size_t>&>
+        flag_entry_t;
+
+    std::vector<flag_entry_t> triggered_flag_edges;
 };
 
 c_assign_t cast_assign(Decoder::assign_t, int, int);

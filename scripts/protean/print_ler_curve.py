@@ -40,7 +40,7 @@ if code == 'rsc':
         # Read the data from the file.
         read_data_file(data_file, f'rsc d={d}')
 else:
-    for version in ['v1', 'v2.1', 'v2.2', 'v3.1', 'v3.2', 'v4.1', 'v4.2']:
+    for version in ['v4.3', 'v4.4']:
         folder = f'data/protean/{code}/{version}'
         for m in ['x', 'z']:
             data_file = f'{folder}/output/basic_memory_{m}.csv'

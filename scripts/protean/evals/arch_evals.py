@@ -108,16 +108,15 @@ def run_experiment_1(family, subfamily):
     call_list = [
         # pmin, pmax, shots
         (1e-4, 4e-4, 1_000_000),
-        (5e-4, 8e-3, 100_000),
-        (9e-3, 1e-3, 10_000),
-        (2e-3, 3e-3, 1_000)
+        (5e-4, 8e-4, 100_000),
+        (9e-4, 2e-3, 10_000)
     ]
 
     for code in code_list:
-        _, k, _, _ = code_params(code)
-        if k > 64:
+        n, k, _, _ = code_params(code)
+        if n > 300 or k > 64:
             continue
-        for vno in ['4.3', '4.4']:
+        for vno in ['4.4']:
             folder = f'../data/protean/{family}/{subfamily}/{code}/v{vno}'
             for mflag in ['', '-mx']:
                 for (pmin, pmax, shots) in call_list:
@@ -137,4 +136,6 @@ exno = int(argv[3])
 if exno == 0:
     # Make architectures.
     run_experiment_0(family, subfamily)
+elif exno == 1:
+    run_experiment_1(family, subfamily)
 

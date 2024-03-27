@@ -104,13 +104,11 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     auto _detectors = detectors;
     auto _flags = flags;
 
-    /*
     std::cout << "syndrome: D[";
     for (uint64_t d : _detectors) std::cout << " " << d;
     std::cout << " ], F[";
     for (uint64_t f : _flags) std::cout << " " << f;
     std::cout << " ]" << std::endl;
-    */
 
     if (_detectors.empty()) return ret_no_detectors();
 
@@ -127,11 +125,10 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             load_syndrome(syndrome, c1, c2, false);
             std::vector<Decoder::assign_t> _matchings = compute_matching(c1, c2, true);
 
-//          std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
+            std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
             for (Decoder::assign_t x : _matchings) {
                 matchings.push_back(cast_assign(x, c1, c2));
-
-//              std::cout << "\t" << std::get<0>(x) << " <---> " << std::get<1>(x) << std::endl;
+                std::cout << "\t" << std::get<0>(x) << " <---> " << std::get<1>(x) << std::endl;
             }
         }
     }
@@ -186,7 +183,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 
     stim::simd_bits<SIMD_WIDTH> corr1(corr),
                                 corr2(corr);
-    /*
     fp_t log_p1 = lifting(corr1, best_rep_map);
     std::cout << "corr1 = ";
     for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
@@ -195,10 +191,8 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     if (triggered_flag_edges.empty()) {
         return { 0.0, corr1 };
     }
-    */
-    /*
     std::cout << "Triggered flag edges:" << std::endl;
-    for (auto& [e, path] : triggered_flag_edges) {
+    for (auto& [e, path, map_ref] : triggered_flag_edges) {
         std::cout << "\t[";
         for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v->get_base());
         std::cout << " ], frames =";
@@ -207,22 +201,20 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         for (sptr<vertex_t> v : path) std::cout << " " << print_v(v->get_base());
         std::cout << " ]" << std::endl;
     }
-    */
     // Otherwise, perform the lifting procedure again, this time removing all edges corresponding
     // to triggered flag edges. Also update corr for each removed flag edge.
-//  in_cc_map = std::move(_in_cc_map);
-//  not_cc_map = std::move(_not_cc_map);
-//  component_edge_sets = std::move(_c_edge_sets);
+    in_cc_map = std::move(_in_cc_map);
+    not_cc_map = std::move(_not_cc_map);
+    component_edge_sets = std::move(_c_edge_sets);
     fp_t log_p2 = 0.0;
 
     std::set<sptr<hyperedge_t>> visited_flag_edges;
-    for (const auto& [he, vlist] : triggered_flag_edges) {
+    for (const auto& [he, vlist, inc_map_ref] : triggered_flag_edges) {
         for (size_t i = 1; i < vlist.size(); i++) {
             sptr<vertex_t> v = vlist.at(i-1)->get_base(),
                            w = vlist.at(i)->get_base();
             vpair_t e = make_vpair(v, w);
-            erase_from_incidence_map(e, in_cc_map);
-            erase_from_incidence_map(e, not_cc_map);
+            erase_from_incidence_map(e, inc_map_ref);
         }
         // Check if there is a similar hyperedge.
         bool found_similar = false;
@@ -238,8 +230,36 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             visited_flag_edges.insert(he);
         }
     }
-    log_p2 += lifting(corr2, best_rep_map);
     /*
+    for (size_t i = 0; i < triggered_flag_edges.size(); i++) {
+        const auto& [he, vlist] = triggered_flag_edges.at(i);
+        for (size_t j = 0; j < i; j++) {
+            const auto& [_he, _vlist] = triggered_flag_edges.at(j);
+            // We are searching for common edges to apply.
+            if (he->get_order() == _he->get_order() && he->frames == _he->frames) {
+                bool are_similar = true;
+                for (size_t i = 0; i < he->get_order(); i++) {
+                    if (he->get<vertex_t>(i)->get_base() != _he->get<vertex_t>(i)->get_base()) {
+                        are_similar = false;
+                        break;
+                    }
+                }
+                if (!are_similar) continue;
+                for (size_t i = 1; i < vlist.size(); i++) {
+                    sptr<vertex_t> v = vlist.at(i-1)->get_base(),
+                                    w = vlist.at(i)->get_base();
+                    vpair_t e = make_vpair(v, w);
+                    std::cout << "Subtacted [ " << print_v(v) << " " << print_v(w) << " ]" << std::endl;
+                    erase_from_incidence_map(e, in_cc_map);
+                    erase_from_incidence_map(e, not_cc_map);
+                }
+                for (uint64_t fr : he->frames) corr2[fr] ^= 1;
+                break;
+            }
+        }
+    }
+    */
+    log_p2 += lifting(corr2, best_rep_map);
     std::cout << "corr1 = ";
     for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
     std::cout << std::endl;
@@ -247,9 +267,11 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     std::cout << "corr2 = ";
     for (size_t i = 0; i < n_obs; i++) std::cout << corr2[i]+0;
     std::cout << std::endl;
-//  corr = std::move(log_p1 > log_p2 ? corr1 : corr2);
-//  */
-    return { 0.0, corr2 };
+
+    std::cout << "log probs: " << log_p1 << " , " << log_p2 << std::endl;
+    if (corr1 != corr2) std::cout << "correction mismatch detected.\n";
+    corr = std::move(log_p1 > log_p2 ? corr1 : corr2);
+    return { 0.0, corr };
 }
 
 std::vector<component_t>
@@ -281,6 +303,7 @@ RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& 
     sptr<vertex_t> vrb = decoding_graph->get_boundary_vertex(COLOR_RED);
     if (!cgr->contains(vrb)) return {};
     std::vector<component_t> components;
+    /*
     std::set<sptr<vertex_t>> skip_set;
     for (sptr<vertex_t> v : cgr->get_neighbors(vrb)) {
         if (skip_set.count(v)) continue;
@@ -291,7 +314,7 @@ RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& 
         prev[v] = vrb;
         sptr<vertex_t> curr = v;
         while (!curr->is_boundary_vertex) {
-            // Compute next neighbor (should only be one).
+            // Compute next neighbor.
             sptr<vertex_t> next = nullptr;
             for (sptr<vertex_t> w : cgr->get_neighbors(curr)) {
                 if (w != prev[curr]) next = w;
@@ -315,6 +338,58 @@ RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& 
             int cc_color = get_complementary_colors_to(
                                 {vrb->color, curr->color}, decoding_graph->number_of_colors)[0];
             components.push_back({assign_list, cc_color});
+        }
+    }
+    */
+    typedef std::tuple<sptr<vertex_t>, std::vector<sptr<vertex_t>>, bool> c_entry_t;
+    std::deque<c_entry_t> bfs;
+    // Populate the data structures for adj(vrb).
+    for (sptr<vertex_t> v : cgr->get_neighbors(vrb)) {
+        bfs.emplace_back(v, std::vector<sptr<vertex_t>>{vrb, v}, true);
+    }
+    while (bfs.size()) {
+        auto [v, path, is_entry_from_vrb] = bfs.front();
+        bfs.pop_front();
+        if (v->is_boundary_vertex) {
+            // Then compute the connected component.
+            std::vector<c_assign_t> assign_list;
+            for (size_t i = 1; i < path.size(); i++) {
+                sptr<vertex_t> x = path.at(i-1),
+                                y = path.at(i);
+                auto e = cgr->get_edge(x, y);
+                uint64_t id1 = x->id,
+                         id2 = y->id;
+                if (id1 > id2) std::swap(id1, id2);
+                assign_list.emplace_back(id1, id2, e->c1, e->c2);
+            }
+            // Make sure this is not identical to any other components.
+            bool found_copy = false;
+            for (const auto& cc : components) {
+                if (assign_list == cc.assignments) {
+                    found_copy = true;
+                    break;
+                }
+            }
+            if (found_copy) continue;
+            int cc_color = get_complementary_colors_to(
+                                {vrb->color, v->color}, decoding_graph->number_of_colors)[0];
+            components.push_back({assign_list, cc_color});
+            std::cout << "Connected component:";
+            for (sptr<vertex_t> x : path) std::cout << " " << print_v(x);
+            std::cout << std::endl;
+            continue;
+        }
+        // Move to the neighbors of v. If any of them are visited, then it implies we have a loop
+        // to vrb.
+        for (sptr<vertex_t> w : cgr->get_neighbors(v)) {
+            if (w == vrb) {
+                if (is_entry_from_vrb) continue;
+            } else {
+                if (std::find(path.begin(), path.end(), w) != path.end()) continue;
+            }
+            std::vector<sptr<vertex_t>> _path(path);
+            _path.push_back(w);
+            bfs.emplace_back(w, _path, false);
         }
     }
     return components;
@@ -352,6 +427,7 @@ RestrictionDecoder::insert_error_chain_into(
             for (size_t j = 1; j < ec.path.size(); j++) {
                 sptr<vertex_t> fx = ec.path[j-1]->get_base(),
                                 fy = ec.path[j]->get_base();
+                if (fx->is_boundary_vertex && fy->is_boundary_vertex) continue;
                 if (fx->color != component_color && fy->color != component_color) {
                     continue;
                 }
@@ -363,12 +439,10 @@ RestrictionDecoder::insert_error_chain_into(
             // Update triggered flag edges if this is a flag edge.
             sptr<hyperedge_t> e = get_flag_edge_for({v, w});
             if (e != nullptr && any_added_edges) {
-                /*
                 std::cout << "Discovered flag edge [ " << print_v(v) << " " << print_v(w)
                     << " ] in lattice (" << c1 << ", " << c2 << "), component color = "
                     << component_color << std::endl;
-                */
-                triggered_flag_edges.emplace_back(e, ec.path);
+                triggered_flag_edges.emplace_back(e, ec.path, incidence_map);
             }
         } else {
             if (fv->color != component_color && fw->color != component_color) {
@@ -407,7 +481,6 @@ RestrictionDecoder::lifting(
     std::set<sptr<vertex_t>> all_incident(not_cc_incident);
     vtils::insert_range(all_incident, in_cc_incident);
 
-    /*
     std::cout << "Edges in CC:" << std::endl;
     for (auto& [e, cnt] : in_cc_map) {
         std::cout << "\t[ " << print_v(e.first) << " "
@@ -418,7 +491,6 @@ RestrictionDecoder::lifting(
         std::cout << "\t[ " << print_v(e.first) << " "
             << print_v(e.second) << " ], count = " << cnt << std::endl;
     }
-    */
 
     for (sptr<vertex_t> v : all_incident) {
         std::set<face_t> faces = get_faces(v, best_rep_map);
@@ -466,6 +538,7 @@ RestrictionDecoder::lifting(
                     boundary,
                     local_corr);
         }
+        if (best_cc_boundary.empty() && best_no_cc_boundary.empty()) continue;
         if (best_log_prob_cc > best_log_prob_no_cc) {
             update_correction(
                 in_cc_map, corr, out_log_pr, best_cc_corr, best_cc_boundary, best_log_prob_cc);
