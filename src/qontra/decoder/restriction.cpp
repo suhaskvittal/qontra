@@ -70,7 +70,7 @@ update_correction(
     corr_log_pr += local_log_pr;
 }
 
-void
+bool
 remove_widowed_edges(std::map<vpair_t, size_t>& incidence_map) {
     std::map<sptr<vertex_t>, size_t> vertex_inc_map;
     for (const auto& [e, cnt] : incidence_map) {
@@ -80,14 +80,19 @@ remove_widowed_edges(std::map<vpair_t, size_t>& incidence_map) {
     }
     // Remove any pairs of vertices where both endpoints only have a single
     // incidence.
+    bool any_removed = false;
     for (auto it = incidence_map.begin(); it != incidence_map.end(); ) {
         const auto& [v1, v2] = it->first;
         if (vertex_inc_map.at(v1) == 1 && vertex_inc_map.at(v2) == 1) {
+            std::cout << "removed widowed edge [ " << print_v(v1) << " " << print_v(v2) << " ], cnt = "
+                << it->second << std::endl;
+            any_removed |= (it->second % 2 == 1);
             it = incidence_map.erase(it);
         } else {
             it++;
         }
     }
+    return any_removed;
 }
 
 Decoder::result_t
@@ -226,6 +231,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         }
         // Apply the edge's frame changes.
         if (!found_similar) {
+            log_p2 += log(he->probability);
             for (uint64_t fr : he->frames) corr2[fr] ^= 1;
             visited_flag_edges.insert(he);
         }
@@ -303,44 +309,7 @@ RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& 
     sptr<vertex_t> vrb = decoding_graph->get_boundary_vertex(COLOR_RED);
     if (!cgr->contains(vrb)) return {};
     std::vector<component_t> components;
-    /*
-    std::set<sptr<vertex_t>> skip_set;
-    for (sptr<vertex_t> v : cgr->get_neighbors(vrb)) {
-        if (skip_set.count(v)) continue;
-        sptr<e_t> e = cgr->get_edge(v, vrb);
-        std::vector<c_assign_t> assign_list{ std::make_tuple(v->id, vrb->id, e->c1, e->c2) };
-        
-        std::map<sptr<vertex_t>, sptr<vertex_t>> prev;
-        prev[v] = vrb;
-        sptr<vertex_t> curr = v;
-        while (!curr->is_boundary_vertex) {
-            // Compute next neighbor.
-            sptr<vertex_t> next = nullptr;
-            for (sptr<vertex_t> w : cgr->get_neighbors(curr)) {
-                if (w != prev[curr]) next = w;
-            }
-            if (next == nullptr) break;
-            sptr<e_t> _e = cgr->get_edge(curr, next);
-            uint64_t id1 = curr->id,
-                     id2 = next->id;
-            if (id1 > id2) {
-                std::swap(id1, id2);
-            }
-            assign_list.emplace_back(id1, id2, _e->c1, _e->c2);
-            prev[next] = curr;
-            curr = next;
-        }
-        // If curr is a boundary, then we have discovered a connected component.
-        if (curr->is_boundary_vertex) {
-            // Note that if ended up at vrb anyways, we need to mark prev[curr] (prev[vrb])
-            // to be skipped to avoid double counting.
-            if (curr == vrb) skip_set.insert(prev[curr]);
-            int cc_color = get_complementary_colors_to(
-                                {vrb->color, curr->color}, decoding_graph->number_of_colors)[0];
-            components.push_back({assign_list, cc_color});
-        }
-    }
-    */
+
     typedef std::tuple<sptr<vertex_t>, std::vector<sptr<vertex_t>>, bool> c_entry_t;
     std::deque<c_entry_t> bfs;
     // Populate the data structures for adj(vrb).
@@ -548,8 +517,9 @@ RestrictionDecoder::lifting(
         }
     }
     // Remove any widowed edges, as these can cause the decoder to loop infinitely.
-    remove_widowed_edges(in_cc_map);
-    remove_widowed_edges(not_cc_map);
+    if (remove_widowed_edges(in_cc_map) || remove_widowed_edges(not_cc_map)) {
+        out_log_pr -= 100;
+    }
     if (in_cc_map.size() > 1 || not_cc_map.size() > 1) {
         if (tr < MAX_TRIES) {
             return out_log_pr + lifting(corr, best_rep_map, tr+1);
