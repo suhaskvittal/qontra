@@ -48,7 +48,7 @@ CODES = {
             '24_8_4_4',
             '96_20_6_6',
             '192_36_8_8',
-            '1536_260_12_12'
+#           '1536_260_12_12'
         ],
         '4_10': [
             '40_16_4_4',
@@ -74,17 +74,17 @@ def run_experiment_0(family, subfamily):
     arch_folder_prefix = f'../data/protean/{family}/{subfamily}'
 
     version_list = [
-#       ('1', f'{jid_blk}.rlb.rcr', 4, ''),          # Baseline: no modifications
+        ('1', f'{jid_blk}.rlb.rcr', 4, ''),          # Baseline: no modifications
 #       ('2', f'{jid_blk}.fla.ral.rlb.rcr', 4, ''),  # Only flags
-        ('3.3', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 3, '-fno-opt-flags -fflag-jid'),  # Naive connectivity 3 implementation
-        ('3.4', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 4, '-fno-opt-flags -fflag-jid'),  # Naive connectivity 4 implementation
-        ('4.3', f'{jid_blk}.fla.ral({jid_blk}.con.prx.ral)+rlb.rcr', 3, '-fflag-jid'),  # Optimized connectivity 3
+#       ('3.3', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 3, '-fno-opt-flags -fflag-jid'),  # Naive connectivity 3 implementation
+#       ('3.4', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 4, '-fno-opt-flags -fflag-jid'),  # Naive connectivity 4 implementation
+#       ('4.3', f'{jid_blk}.fla.ral({jid_blk}.con.prx.ral)+rlb.rcr', 3, '-fflag-jid'),  # Optimized connectivity 3
         ('4.4', f'{jid_blk}.fla.ral({jid_blk}.con.prx.ral)+rlb.rcr', 4, '-fflag-jid')   # Optimized connectivity 4
     ]
 
     for code in code_list:
         _, _, dx, dz = code_params(code)
-        rounds = min(dx, dz)
+        rounds = 1#min(dx, dz)
         arch_folder = f'../data/protean/{family}/{subfamily}/{code}'
         tanner_file = f'../data/tanner/{family}/{subfamily}/{code}.txt'
         for (vno, passes, conn, flags) in version_list:
