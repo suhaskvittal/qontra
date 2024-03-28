@@ -47,8 +47,6 @@ run_memory_with_generated_syndromes(Decoder* dec, memory_config_t config, PROLOG
         MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
         MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     }
-    const size_t local_errors_until_stop = (config.errors_until_stop / world_size)
-                                            + (world_rank==0)*(config.errors_until_stop % world_size);
 
     const DetailedStimCircuit circuit = dec->get_circuit();
     const size_t n_obs = circuit.count_observables();
@@ -61,9 +59,6 @@ run_memory_with_generated_syndromes(Decoder* dec, memory_config_t config, PROLOG
 
     auto dec_cb = [&] (shot_payload_t payload)
     {
-        if (logical_errors[0] >= local_errors_until_stop) {
-            return;
-        }
         stim::simd_bits<SIMD_WIDTH> syndrome(payload.syndrome),
                                     obs(payload.observables);
         p_cb({syndrome, obs});
@@ -115,9 +110,15 @@ run_memory_with_generated_syndromes(Decoder* dec, memory_config_t config, PROLOG
 
     const uint64_t orig_base_seed = G_BASE_SEED;
 
-    while (logical_errors[0] < local_errors_until_stop) {
+    uint64_t n_errors = 0;
+    while (n_errors < config.errors_until_stop) {
         generate_syndromes(circuit, world_size*G_SHOTS_PER_BATCH, dec_cb);
-        G_BASE_SEED++;
+        G_BASE_SEED += world_size;
+        if (G_USE_MPI) {
+            MPI_Allreduce(&logical_errors[0], &n_errors, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+        } else {
+            n_errors = logical_errors[0];
+        }
     }
     G_BASE_SEED = orig_base_seed;
 
@@ -134,6 +135,9 @@ run_memory_with_generated_syndromes(Decoder* dec, memory_config_t config, PROLOG
 
     shots.reduce();
     uint64_t _shots = shots.at();
+    if (world_rank == 0) {
+        std::cout << "found " << logical_errors.at() << " errors within " << _shots << " shots" << std::endl;
+    }
     // Compute means and variances/std. deviations.
     statistic_t<fp_t> logical_error_rate = logical_errors.get_mean(_shots);
     statistic_t<fp_t> hw_mean = hw_sum.get_mean(_shots);
