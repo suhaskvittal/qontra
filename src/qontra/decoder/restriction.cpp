@@ -13,6 +13,7 @@
 #include <initializer_list>
 
 const int COLOR_RED = 0;
+const int COLOR_GREEN = 1;
 
 namespace qontra {
 
@@ -157,11 +158,29 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     // counter for the number of times an edge appears in a connected component.
     // 
     // We need to track all matches that are in a component to initialize not_cc_map.
+    std::set<sptr<hyperedge_t>> applied_flag_edges;
+
     std::set<assign_t> in_cc_assignments;
     for (const component_t& cc : components) {
         int color = cc.color;
         std::set<vpair_t> edge_set;
         for (const assign_t& m : cc.assignments) {
+            for (sptr<hyperedge_t> e : m.flag_edges) {
+                if (applied_flag_edges.count(e)) continue;
+                for (uint64_t fr : e->frames) {
+                    corr[fr] ^= 1;
+                }
+                applied_flag_edges.insert(e);
+#ifdef MEMORY_DEBUG
+                std::cout << "Applied flag edge [";
+                for (sptr<vertex_t> v : e->get<vertex_t>()) {
+                    std::cout << " " << print_v(v);
+                }
+                std::cout << " ], frames =";
+                for (uint64_t fr : e->frames) std::cout << " " << fr;
+                std::cout << std::endl;
+#endif
+            }
             in_cc_assignments.insert(m);
             std::set<vpair_t> tmp = insert_error_chain_into(in_cc_map, m.path, color, m.c1, m.c2);
             vtils::insert_range(edge_set, tmp);
@@ -172,6 +191,25 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     for (const assign_t& m : matchings) {
         if (in_cc_assignments.count(m)) continue;
         if (m.c1 != COLOR_RED && m.c2 != COLOR_RED) continue;
+        for (sptr<hyperedge_t> e : m.flag_edges) {
+            if (applied_flag_edges.count(e)) continue;
+            for (uint64_t fr : e->frames) {
+                corr[fr] ^= 1;
+            }
+            applied_flag_edges.insert(e);
+#ifdef MEMORY_DEBUG
+            std::cout << "Applied flag edge [";
+            for (sptr<vertex_t> v : e->get<vertex_t>()) {
+                std::cout << " " << print_v(v);
+            }
+            std::cout << " ], frames =";
+            for (uint64_t fr : e->frames) std::cout << " " << fr;
+            std::cout << std::endl;
+#endif
+        }
+        if (m.v == nullptr) {
+            continue;
+        }
         insert_error_chain_into(not_cc_map, m.path, COLOR_RED, m.c1, m.c2);
     }
 
@@ -266,6 +304,7 @@ RestrictionDecoder::compute_connected_components(const std::vector<assign_t>& as
     auto cgr = std::make_unique<Graph<vertex_t, e_t>>();
     // Add all assignments to the graph.
     for (const assign_t& m : assignments) {
+        if (m.v == nullptr) continue;
         if (!cgr->contains(m.v)) cgr->add_vertex(m.v);
         if (!cgr->contains(m.w)) cgr->add_vertex(m.w);
         if (cgr->contains(m.v, m.w)) continue;

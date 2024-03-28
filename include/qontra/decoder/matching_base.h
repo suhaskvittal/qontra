@@ -14,10 +14,22 @@ namespace qontra {
 namespace gd = graph::decoding;
 
 struct assign_t {
-    sptr<gd::vertex_t> v = nullptr;
-    sptr<gd::vertex_t> w = nullptr;
+    assign_t()
+        :v(nullptr),
+        w(nullptr),
+        c1(graph::COLOR_ANY),
+        c2(graph::COLOR_ANY),
+        flag_edges(),
+        path()
+    {}
+
+    ~assign_t() {}
+
+    sptr<gd::vertex_t> v;
+    sptr<gd::vertex_t> w;
     int c1;
     int c2;
+    std::vector<sptr<gd::hyperedge_t>> flag_edges;
     std::vector<sptr<gd::vertex_t>> path;
 
     inline bool operator==(const assign_t& other) const {
@@ -51,11 +63,8 @@ public:
 
     sptr<graph::decoding::hyperedge_t> get_flag_edge_for(std::vector<sptr<gd::vertex_t>>);
 protected:
-    graph::error_chain_t expand_error_chain(
-            uint64_t, uint64_t, int=graph::COLOR_ANY, int=graph::COLOR_ANY);
-    graph::error_chain_t expand_error_chain(
-            sptr<gd::vertex_t>, sptr<gd::vertex_t>, int=graph::COLOR_ANY, int=graph::COLOR_ANY);
-    void update_assignments_wrt_boundary(std::vector<assign_t>&, uint64_t, uint64_t, int, int);
+    void expand_error_chain(
+            std::vector<assign_t>&, sptr<gd::vertex_t>, sptr<gd::vertex_t>, int, int, bool split_thru_boundary_match);
 
     uptr<graph::DecodingGraph> decoding_graph;
 

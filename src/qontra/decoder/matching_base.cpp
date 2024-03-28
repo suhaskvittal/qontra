@@ -202,101 +202,118 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
         }
         sptr<vertex_t> v = decoding_graph->get_vertex(di),
                         w = decoding_graph->get_vertex(dj);
-        error_chain_t ec = expand_error_chain(v, w, c1, c2);
-        if (split_thru_boundary_match && ec.runs_through_boundary) {
-            // Partition path between di and dj with boundaries.
-            bool all_entries_are_boundaries = true;
-            std::vector<sptr<vertex_t>> part;
-            for (size_t i = 0; i < ec.path.size(); i++) {
-                auto x = ec.path.at(i);
-                part.push_back(x);
-                all_entries_are_boundaries &= x->is_boundary_vertex;
-                if (x->is_boundary_vertex) {
-                    if (!all_entries_are_boundaries) {
-                        // Add the endpoints as an assignment.
-                        sptr<vertex_t> a = part.front(),
-                                        b = part.back();
-                        if (a > b) {
-                            assign_arr.push_back({b, a, c1, c2, part});
-                        } else if (a < b) {
-                            assign_arr.push_back({a, b, c1, c2, part});
-                        }
-                    }
-                    part = { x };
-                    all_entries_are_boundaries = true;
-                }
-            }
-            // Add the remaining part as an assignment.
-            if (!all_entries_are_boundaries) {
-                sptr<vertex_t> a = part.front(),
-                                b = part.back();
-                if (a > b) {
-                    assign_arr.push_back({b, a, c1, c2, part});
-                } else if (a < b) {
-                    assign_arr.push_back({a, b, c1, c2, part});
-                }
-            }
-        } else {
-            assign_arr.push_back({v, w, c1, c2, ec.path});
-        }
+        expand_error_chain(assign_arr, v, w, c1, c2, split_thru_boundary_match);
     }
     return assign_arr;
 }
 
-error_chain_t
-MatchingBase::expand_error_chain(uint64_t d1, uint64_t d2, int c1, int c2) {
-    sptr<vertex_t> v = decoding_graph->get_vertex(d1),
-                    w = decoding_graph->get_vertex(d2);
-    return expand_error_chain(v, w, c1, c2);
-}
+void
+MatchingBase::expand_error_chain(
+        std::vector<assign_t>& assign_arr,
+        sptr<vertex_t> src,
+        sptr<vertex_t> dst, 
+        int c1, int c2,
+        bool split_through_boundary_match) 
+{
+    error_chain_t ec = decoding_graph->get_error_chain(src, dst, c1, c2);
+    
+    bool all_entries_are_boundaries = ec.path.front()->is_boundary_vertex;
+    assign_t curr_assign;
+    curr_assign.v = ec.path.front();
+    curr_assign.c1 = c1;
+    curr_assign.c2 = c2;
+    curr_assign.path = {ec.path.front()};
 
-error_chain_t
-MatchingBase::expand_error_chain(sptr<vertex_t> v, sptr<vertex_t> w, int c1, int c2) {
-    error_chain_t ec = decoding_graph->get_error_chain(v, w, c1, c2);
-    if (flags.empty()) {
-        return ec;
-    }
-    // Otherwise, expand any flag edges in the chain.
-    error_chain_t new_ec;
-    new_ec.probability = ec.probability;
-    new_ec.weight = ec.weight;
-
-    new_ec.path = { ec.path[0] };
-    if (ec.path[0]->is_boundary_vertex) {
-        new_ec.runs_through_boundary = true;
-        new_ec.boundary_vertices.push_back(ec.path[0]);
-    }
     for (size_t i = 1; i < ec.path.size(); i++) {
-        sptr<vertex_t> x = ec.path[i-1],
-                        y = ec.path[i];
-        if (decoding_graph->share_hyperedge({x, y})) {
-            if (y->is_boundary_vertex) {
-                new_ec.runs_through_boundary = true;
-                new_ec.boundary_vertices.push_back(y);
-            }
-            new_ec.path.push_back(y);
-        } else {
-            error_chain_t _ec = decoding_graph->get_error_chain(x, y, c1, c2, true);
-            if (_ec.path[0] != x) std::reverse(_ec.path.begin(), _ec.path.end());
-            for (size_t j = 1; j < _ec.path.size(); j++) {
-                sptr<vertex_t> z = _ec.path[j];
-                if (z->is_boundary_vertex) {
-                    new_ec.runs_through_boundary = true;
-                    new_ec.boundary_vertices.push_back(z);
-                }
-                new_ec.path.push_back(z);
-            }
-        }
-    }
-    new_ec.length = new_ec.path.size();
+        sptr<vertex_t> v = ec.path[i-1],
+                        w = ec.path[i];
 #ifdef MEMORY_DEBUG
-    if (ec.length != new_ec.length) {
-        std::cout << "Expanded " << print_v(v) << " <---> " << print_v(w) << " to:";
-        for (sptr<vertex_t> x : new_ec.path) std::cout << " " << print_v(x);
-        std::cout << std::endl;
-    }
+        std::cout << "\ton edge " << print_v(v) << ", " << print_v(w) << std::endl;
 #endif
-    return new_ec;
+        if (decoding_graph->share_hyperedge({v, w})) {
+            curr_assign.w = w;
+            curr_assign.path.push_back(w);
+            all_entries_are_boundaries &= w->is_boundary_vertex;
+        } else {
+            // This may be a flag edge.
+            sptr<hyperedge_t> e = get_flag_edge_for({v, w});
+            if (e == nullptr) {
+#ifdef MEMORY_DEBUG
+                std::cout << "\tForced to expand " << print_v(v) << ", " << print_v(w) << std::endl;
+#endif
+                // Apparently not. Fill in the gap.
+                error_chain_t _ec = decoding_graph->get_error_chain(v, w, c1, c2, true);
+                if (_ec.path.front() == w) std::reverse(_ec.path.begin(), _ec.path.end());
+                for (size_t j = 1; j < _ec.path.size(); j++) {
+                    sptr<vertex_t> x = _ec.path[j];
+                    curr_assign.w = x;
+                    curr_assign.path.push_back(x);
+                    all_entries_are_boundaries &= x->is_boundary_vertex;
+                    if (x->is_boundary_vertex && split_through_boundary_match) {
+                        if (!all_entries_are_boundaries) {
+                            assign_arr.push_back(curr_assign);
+#ifdef MEMORY_DEBUG
+                            std::cout << "\t[B2] Found assignment " << print_v(curr_assign.v) << " <---> "
+                                << print_v(curr_assign.w) << " with path:";
+                            for (sptr<vertex_t> x : curr_assign.path) std::cout << " " << print_v(x);
+                            std::cout << std::endl;
+#endif
+                        } 
+                        curr_assign.v = x;
+                        curr_assign.w = nullptr;
+                        curr_assign.path = {x};
+                        curr_assign.flag_edges.clear();
+                        all_entries_are_boundaries = true;
+                    }
+                }
+            } else {
+                curr_assign.flag_edges.push_back(e);
+                // Break the path here.
+                if (curr_assign.w == nullptr) {
+                    curr_assign.v = nullptr;
+                }
+                assign_arr.push_back(curr_assign);
+#ifdef MEMORY_DEBUG
+                std::cout << "\t[F] Found assignment " << print_v(curr_assign.v) << " <---> "
+                    << print_v(curr_assign.w) << " with path:";
+                for (sptr<vertex_t> x : curr_assign.path) std::cout << " " << print_v(x);
+                std::cout << std::endl;
+#endif
+                curr_assign.v = w;
+                curr_assign.w = nullptr;
+                curr_assign.path = {w};
+                curr_assign.flag_edges.clear();
+                all_entries_are_boundaries = w->is_boundary_vertex;
+            }
+            continue;
+        }
+        // Now handle any boundaries if necessary.
+        if (!split_through_boundary_match || !w->is_boundary_vertex) continue;
+        if (!all_entries_are_boundaries) {
+            assign_arr.push_back(curr_assign);
+#ifdef MEMORY_DEBUG
+            std::cout << "\t[B] Found assignment " << print_v(curr_assign.v) << " <---> "
+                << print_v(curr_assign.w) << " with path:";
+            for (sptr<vertex_t> x : curr_assign.path) std::cout << " " << print_v(x);
+            std::cout << std::endl;
+#endif
+        }
+        curr_assign.v = w;
+        curr_assign.w = nullptr;
+        curr_assign.path = {w};
+        curr_assign.flag_edges.clear();
+        all_entries_are_boundaries = true;
+    }
+    // Handle the remaining assignment.
+    if (!all_entries_are_boundaries && curr_assign.w != nullptr) {
+#ifdef MEMORY_DEBUG
+        std::cout << "\t[T] Found assignment " << print_v(curr_assign.v) << " <---> "
+            << print_v(curr_assign.w) << " with path:";
+        for (sptr<vertex_t> x : curr_assign.path) std::cout << " " << print_v(x);
+        std::cout << std::endl;
+#endif
+        assign_arr.push_back(curr_assign);
+    }
 }
 
 sptr<hyperedge_t>

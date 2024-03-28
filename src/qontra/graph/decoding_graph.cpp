@@ -225,6 +225,7 @@ DecodingGraph::get_flag_edges() {
     // with the active flags.
     std::vector<sptr<hyperedge_t>> edge_list;
     for (EdgeClass& c : edge_classes) {
+        if (c.get_representative()->flags.empty()) continue;
         sptr<hyperedge_t> best_edge = get_best_flag_edge(c.get_edges());
         if (best_edge != nullptr) {
             edge_list.push_back(best_edge);
@@ -369,7 +370,7 @@ DecodingGraph::compute_renorm_factor() {
         const fp_t p = e->probability;
         if (nf == e->flags.size()) {
             remaining_flags -= flag_intersect;
-            renorm_factor *= p;
+            renorm_factor *= pow(p, 1.5);
         }
     }
 }
@@ -510,7 +511,6 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
 #endif
     for (sptr<hyperedge_t> he : get_flag_edges()) {
         fp_t p = he->probability;
-        bool any_flag_edge = false;
         for (size_t i = 0; i < he->get_order(); i++) {
             sptr<vertex_t> v = he->get<vertex_t>(i);
             if (!dgr->contains(v)) continue;
@@ -524,13 +524,11 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 }
                 fp_t& r = e->probability;
                 r = (1-r)*p + (1-p)*r;
-                any_flag_edge = true;
+                std::cout << "Added flag edge between " << print_v(v) << " and " << print_v(w) << ", P = " << r << std::endl;
             }
         }
-        if (any_flag_edge) {
-//          renorm_factor *= p;
-        }
     }
+    std::cout << "Renorm factor = " << renorm_factor << std::endl;
 #ifdef DECODER_PERF
     t = timer.clk_end();
     std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to add flag edges to Dijkstra graph" << std::endl;
@@ -550,7 +548,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 e = dgr->make_and_add_edge(v, w);
             }
             if (v->is_boundary_vertex && w->is_boundary_vertex) {
-                e->probability = 1.0;
+                e->probability = 0.5;
             } else {
                 fp_t p = 0.0;
                 if (base_probability_map.count(v) && base_probability_map.at(v).count(w)) {
