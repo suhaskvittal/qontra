@@ -50,14 +50,14 @@ int main(int argc, char* argv[]) {
 
     std::string decoder_name;
 
-    uint64_t    shots = 1'000'000;
+    uint64_t    errors_until_stop = 40;
     fp_t        pmin = 5e-4,
                 pmax = 3e-3;
     uint64_t    step_size = 1;
 
     pp.get("decoder", decoder_name, true);
 
-    pp.get("s", shots);
+    pp.get("e", errors_until_stop);
     pp.get("pmin", pmin);
     pp.get("pmax", pmax);
     pp.get("step-size", step_size);
@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
 
     DetailedStimCircuit base_circuit;
     if (pp.option_set("fix-error")) {
-        base_circuit = make_circuit(program, pmax);
+        base_circuit = make_default_circuit(program, pmax);
     } else {
 
         ErrorTable errors_base = errors * 1e-3;
@@ -112,25 +112,25 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+    memory_config_t config;
+    config.errors_until_stop = errors_until_stop;
+
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
         DetailedStimCircuit circuit;
         // Load model from file and run memory experiment.
         if (pp.option_set("fix-error")) {
-            circuit = make_circuit(program, p);
+            circuit = make_default_circuit(program, p);
         } else {
             ErrorTable _errors = errors * p;
             TimeTable _timing = timing * p;
             circuit = DetailedStimCircuit::from_qes(program, _errors, _timing);
         }
         dec->set_circuit(circuit);
-
-        memory_config_t config;
-        config.shots = shots;
 #ifdef PROTEAN_PERF
         timer.clk_start();
 #endif
-        auto res = memory_experiment(dec.get(), config);
+        auto res = run_memory_with_generated_syndromes(dec.get(), config);
 #ifdef PROTEAN_PERF
         t = timer.clk_end();
         std::cout << "[ pr_base_memory ] took " << t*1e-9 << "s to decode at p = " << p << std::endl;
@@ -145,10 +145,9 @@ int main(int argc, char* argv[]) {
             }
             std::ofstream fout(output_file, std::ios::app);
             if (write_header) {
-                fout << "physical error rate,shots,logical error rate,word error rate" << std::endl;
+                fout << "physical error rate,word error rate,norm. word error rate" << std::endl;
             }
             fout << p << ","
-                << shots << ","
                 << res.logical_error_rate << ","
                 << res.logical_error_rate / static_cast<fp_t>(circuit.count_observables());
             fout << std::endl;

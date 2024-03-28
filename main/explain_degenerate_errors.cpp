@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
     std::string qes_file(argv[1]);
     int flips_per_error = atoi(argv[2]);
 
-    DetailedStimCircuit circuit = make_circuit(qes_file, 1e-3);
+    DetailedStimCircuit circuit = make_default_circuit(qes_file, 1e-3);
     uptr<DecodingGraph> gr = std::make_unique<DecodingGraph>(circuit, flips_per_error);
     std::set<sptr<hyperedge_t>> degens = collect_degenerate_errors(gr);
 

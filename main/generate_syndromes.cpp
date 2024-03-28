@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     G_FILTERING_HAMMING_WEIGHT = hw_min;
 
     // Get stim circuit.
-    DetailedStimCircuit circuit = make_circuit(qes_file, p);
+    DetailedStimCircuit circuit = make_default_circuit(qes_file, p);
 
     MPI_Init(NULL, NULL);
     int world_rank, world_size;

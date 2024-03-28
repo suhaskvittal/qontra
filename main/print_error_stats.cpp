@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     std::string qes_file(argv[1]);
     fp_t p = atof(argv[2]);
 
-    DetailedStimCircuit error_model = make_circuit(qes_file, p, true);
+    DetailedStimCircuit error_model = make_default_circuit(qes_file, p, true);
 
     uptr<graph::DecodingGraph> gr = std::make_unique<graph::DecodingGraph>(error_model, 2);
     // Print out error polynomial:

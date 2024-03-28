@@ -17,8 +17,7 @@
 namespace qontra {
 
 struct memory_config_t {
-    uint64_t    shots           = 0;
-    std::string trace_folder    = "DNE";
+    size_t errors_until_stop = 40;
 };
 
 struct memory_result_t {
@@ -33,12 +32,13 @@ struct memory_result_t {
     std::vector<fp_t>   logical_error_rate_by_obs;  // Logical error rate for each observable.
 };
 
-DetailedStimCircuit make_circuit(std::string qes_file, fp_t, bool fix_timing_error_as_p=false);
-DetailedStimCircuit make_circuit(const qes::Program<>&, fp_t, bool fix_timing_error_as_p=false);
-memory_result_t     memory_experiment(Decoder*, memory_config_t);
+DetailedStimCircuit make_default_circuit(std::string qes_file, fp_t, bool fix_timing_error_as_p=false);
+DetailedStimCircuit make_default_circuit(const qes::Program<>&, fp_t, bool fix_timing_error_as_p=false);
+
+memory_result_t memory_experiment(Decoder*, memory_config_t);
 
 template <class PROLOGUE, class EPILOGUE>
-memory_result_t memory_experiment(Decoder*, memory_config_t, PROLOGUE, EPILOGUE);
+memory_result_t run_memory_with_generated_syndromes(Decoder*, memory_config_t, PROLOGUE, EPILOGUE);
 
 }   // qontra
 
