@@ -43,6 +43,15 @@ sample_from_graph(
         for (uint64_t fr : e->frames)               obs[fr] ^= 1;
         EdgeClass cl = gr.get_edge_class(e);
         visited.insert(cl.get_representative());
+        
+        std::cout << "Injected error [";
+        for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v);
+        std::cout << " ], flags = [";
+        for (uint64_t f : e->flags) std::cout << " " << f;
+        std::cout << " ], frames =";
+        for (uint64_t fr : e->frames) std::cout << " " << fr;
+        std::cout << std::endl;
+
         if (error_weight == 0) break;
         // Find the next candidate edge.
         std::vector<sptr<hyperedge_t>> candidates;

@@ -67,7 +67,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
         }
         // Make all of these boundaries connected to each other by a 1.0 probability hyperedge.
         sptr<hyperedge_t> e = make_and_add_edge(boundary_vertices);
-        e->probability = 1e-12;
+        e->probability = 1;
     }
     // Do not add edges to the graph immediately. First, we will collect all of them, and then
     // analyze the edges and add them accordingly (see resolve_edges).
@@ -550,7 +550,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 e = dgr->make_and_add_edge(v, w);
             }
             if (v->is_boundary_vertex && w->is_boundary_vertex) {
-                e->probability = 1e-12;
+                e->probability = 1;
             } else {
                 fp_t p = 0.0;
                 if (base_probability_map.count(v) && base_probability_map.at(v).count(w)) {

@@ -10,7 +10,7 @@
 
 #include <initializer_list>
 
-const int COLOR_RED = 0;
+const int COLOR_RED = 2;
 
 namespace qontra {
 
