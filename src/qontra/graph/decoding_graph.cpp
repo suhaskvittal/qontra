@@ -37,7 +37,8 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     edge_class_map(),
     nod_edges(),
     all_edges(),
-    flags_are_active(false)
+    flags_are_active(false),
+    renorm_factor(1.0)
 {
     stim::DetectorErrorModel dem =
         stim::ErrorAnalyzer::circuit_to_detector_error_model(
@@ -126,6 +127,13 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     read_detector_error_model(dem, 1, detector_offset, ef, df);
 
     resolve_edges(tentative_edges, flips_per_error);
+    // Sort nod_edges by the number of flags (greatest to least). This is useful when
+    // computing the renormalization factor.
+    std::sort(nod_edges.begin(), nod_edges.end(),
+            [&] (auto x, auto y)
+            {
+                return x->flags.size() > y->flags.size();
+            });
 }
 
 void
@@ -349,6 +357,23 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
     }
 }
 
+void
+DecodingGraph::compute_renorm_factor() {
+    renorm_factor = 1.0;
+
+    std::set<uint64_t> remaining_flags(active_flags);
+    for (sptr<hyperedge_t> e : nod_edges) {
+        if (remaining_flags.empty()) break;
+        std::set<uint64_t> flag_intersect = e->flags * remaining_flags;
+        const size_t nf = flag_intersect.size();
+        const fp_t p = e->probability;
+        if (nf == e->flags.size()) {
+            remaining_flags -= flag_intersect;
+            renorm_factor *= p;
+        }
+    }
+}
+
 sptr<hyperedge_t>
 DecodingGraph::get_best_flag_edge(std::vector<sptr<hyperedge_t>> edge_list) {
     sptr<hyperedge_t> best_edge = nullptr;
@@ -483,7 +508,6 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
 
     timer.clk_start();
 #endif
-    fp_t renorm_factor = 1.0;
     for (sptr<hyperedge_t> he : get_flag_edges()) {
         fp_t p = he->probability;
         bool any_flag_edge = false;

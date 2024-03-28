@@ -93,6 +93,7 @@ private:
     // This function creates equivalence classes and initializes the DecodingGraph accordingly.
     void resolve_edges(const std::vector<sptr<decoding::hyperedge_t>>&, size_t flips_per_error);
 
+    void compute_renorm_factor(void);
     sptr<decoding::hyperedge_t> get_best_flag_edge(std::vector<sptr<decoding::hyperedge_t>>);
 
     // If to is not null, then Dijkstra's will terminate upon finding to.
@@ -141,6 +142,8 @@ private:
     std::vector<sptr<decoding::hyperedge_t>> nod_edges;
     std::vector<sptr<decoding::hyperedge_t>> all_edges;
     bool flags_are_active;
+
+    fp_t renorm_factor;
 };
 
 std::vector<int> get_complementary_colors_to(std::vector<int>, int number_of_colors);

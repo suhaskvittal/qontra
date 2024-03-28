@@ -76,6 +76,7 @@ MatchingBase::load_syndrome(
         decoding_graph->activate_detectors(detectors, flags);
         flag_edges = decoding_graph->get_flag_edges();
 
+#ifdef MEMORY_DEBUG
         std::cout << "Flag edges:" << std::endl;
         for (sptr<hyperedge_t> e : flag_edges) {
             std::cout << "\tD[";
@@ -92,6 +93,7 @@ MatchingBase::load_syndrome(
             }
             std::cout << std::endl;
         }
+#endif
     }
 #ifdef DECODER_PERF
     t = timer.clk_end();
@@ -279,11 +281,13 @@ MatchingBase::expand_error_chain(sptr<vertex_t> v, sptr<vertex_t> w, int c1, int
         }
     }
     new_ec.length = new_ec.path.size();
+#ifdef MEMORY_DEBUG
     if (ec.length != new_ec.length) {
         std::cout << "Expanded " << print_v(v) << " <---> " << print_v(w) << " to:";
         for (sptr<vertex_t> x : new_ec.path) std::cout << " " << print_v(x);
         std::cout << std::endl;
     }
+#endif
     return new_ec;
 }
 

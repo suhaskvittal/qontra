@@ -84,8 +84,10 @@ remove_widowed_edges(std::map<vpair_t, size_t>& incidence_map) {
     for (auto it = incidence_map.begin(); it != incidence_map.end(); ) {
         const auto& [v1, v2] = it->first;
         if (vertex_inc_map.at(v1) == 1 && vertex_inc_map.at(v2) == 1) {
+#ifdef MEMORY_DEBUG
             std::cout << "removed widowed edge [ " << print_v(v1) << " " << print_v(v2) << " ], cnt = "
                 << it->second << std::endl;
+#endif
             any_removed |= (it->second % 2 == 1);
             it = incidence_map.erase(it);
         } else {
@@ -109,11 +111,13 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     auto _detectors = detectors;
     auto _flags = flags;
 
+#ifdef MEMORY_DEBUG
     std::cout << "syndrome: D[";
     for (uint64_t d : _detectors) std::cout << " " << d;
     std::cout << " ], F[";
     for (uint64_t f : _flags) std::cout << " " << f;
     std::cout << " ]" << std::endl;
+#endif
 
     if (_detectors.empty()) return ret_no_detectors();
 
@@ -130,10 +134,14 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             load_syndrome(syndrome, c1, c2, false);
             std::vector<Decoder::assign_t> _matchings = compute_matching(c1, c2, true);
 
+#ifdef MEMORY_DEBUG
             std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
+#endif
             for (Decoder::assign_t x : _matchings) {
                 matchings.push_back(cast_assign(x, c1, c2));
+#ifdef MEMORY_DEBUG
                 std::cout << "\t" << std::get<0>(x) << " <---> " << std::get<1>(x) << std::endl;
+#endif
             }
         }
     }
@@ -189,13 +197,16 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     stim::simd_bits<SIMD_WIDTH> corr1(corr),
                                 corr2(corr);
     fp_t log_p1 = lifting(corr1, best_rep_map);
+#ifdef MEMORY_DEBUG
     std::cout << "corr1 = ";
     for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
     std::cout << std::endl;
+#endif
     // If there are no triggered flag edges. Return here.
     if (triggered_flag_edges.empty()) {
         return { 0.0, corr1 };
     }
+#ifdef MEMORY_DEBUG
     std::cout << "Triggered flag edges:" << std::endl;
     for (auto& [e, path, map_ref] : triggered_flag_edges) {
         std::cout << "\t[";
@@ -206,6 +217,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         for (sptr<vertex_t> v : path) std::cout << " " << print_v(v->get_base());
         std::cout << " ]" << std::endl;
     }
+#endif
     // Otherwise, perform the lifting procedure again, this time removing all edges corresponding
     // to triggered flag edges. Also update corr for each removed flag edge.
     in_cc_map = std::move(_in_cc_map);
@@ -231,6 +243,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         }
     }
     log_p2 += lifting(corr2, best_rep_map);
+#ifdef MEMORY_DEBUG
     std::cout << "corr1 = ";
     for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
     std::cout << std::endl;
@@ -241,6 +254,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 
     std::cout << "log probs: " << log_p1 << " , " << log_p2 << std::endl;
     if (corr1 != corr2) std::cout << "correction mismatch detected.\n";
+#endif
     corr = std::move(log_p1 > log_p2 ? corr1 : corr2);
     return { 0.0, corr };
 }
@@ -265,7 +279,6 @@ RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& 
         if (!cgr->contains(v)) cgr->add_vertex(v);
         if (!cgr->contains(w)) cgr->add_vertex(w);
         if (cgr->contains(v, w)) continue;
-        std::cout << "Making edge between " << print_v(v) << " , " << print_v(w) << std::endl;
         sptr<e_t> e = cgr->make_and_add_edge(v, w);
         e->c1 = c1;
         e->c2 = c2;
@@ -310,9 +323,11 @@ RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& 
             int cc_color = get_complementary_colors_to(
                                 {vrb->color, v->color}, decoding_graph->number_of_colors)[0];
             components.push_back({assign_list, cc_color});
+#ifdef MEMORY_DEBUG
             std::cout << "Connected component:";
             for (sptr<vertex_t> x : path) std::cout << " " << print_v(x);
             std::cout << std::endl;
+#endif
             continue;
         }
         // Move to the neighbors of v. If any of them are visited, then it implies we have a loop
@@ -375,10 +390,12 @@ RestrictionDecoder::insert_error_chain_into(
             // Update triggered flag edges if this is a flag edge.
             sptr<hyperedge_t> e = get_flag_edge_for({v, w});
             if (e != nullptr && any_added_edges) {
+#ifdef MEMORY_DEBUG
                 std::cout << "Discovered flag edge [ " << print_v(v) << " " << print_v(w)
                     << " ] in path " << print_v(src) << " <---> " << print_v(dst) << 
                     " in lattice (" << c1 << ", " << c2 << "), component color = "
                     << component_color << std::endl;
+#endif
                 triggered_flag_edges.emplace_back(e, ec.path, incidence_map);
             }
         } else {
@@ -418,6 +435,7 @@ RestrictionDecoder::lifting(
     std::set<sptr<vertex_t>> all_incident(not_cc_incident);
     vtils::insert_range(all_incident, in_cc_incident);
 
+#ifdef MEMORY_DEBUG
     std::cout << "Edges in CC:" << std::endl;
     for (auto& [e, cnt] : in_cc_map) {
         std::cout << "\t[ " << print_v(e.first) << " "
@@ -428,12 +446,14 @@ RestrictionDecoder::lifting(
         std::cout << "\t[ " << print_v(e.first) << " "
             << print_v(e.second) << " ], count = " << cnt << std::endl;
     }
+#endif
 
     for (sptr<vertex_t> v : all_incident) {
         std::set<face_t> faces = get_faces(v, best_rep_map);
         const size_t nf = faces.size();
         const uint64_t enf = 1L << nf;
 
+#ifdef MEMORY_DEBUG
         std::cout << "Faces of " << print_v(v) << ":" << std::endl;
         for (face_t fc : faces) {
             std::cout << "\t<";
@@ -442,7 +462,7 @@ RestrictionDecoder::lifting(
             for (uint64_t fr : fc.frames) std::cout << " " << fr;
             std::cout << std::endl;
         }
-
+#endif
         // Track intersections with connected components and outside of
         // connected components.
         std::set<vpair_t> best_cc_boundary,
