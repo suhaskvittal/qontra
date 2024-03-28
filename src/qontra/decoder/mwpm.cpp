@@ -39,7 +39,7 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     corr ^= get_base_corr();
 
     timer.clk_start();
-    std::vector<Decoder::assign_t> assignments = compute_matching();
+    std::vector<assign_t> assignments = compute_matching();
     fp_t t = static_cast<fp_t>(timer.clk_end());
     
 #ifdef DECODER_PERF
@@ -47,17 +47,14 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     timer.clk_start();
 #endif
 
-    for (auto& match : assignments) {
-        uint64_t di = std::get<0>(match),
-                 dj = std::get<1>(match);
-        error_chain_t ec = decoding_graph->get_error_chain(di, dj);
-        for (size_t i = 1; i < ec.path.size(); i++) {
-            sptr<vertex_t> vi = ec.path[i-1],
-                            vj = ec.path[i];
-            sptr<hyperedge_t> e = decoding_graph->get_edge({vi, vj}); 
+    for (const assign_t& m : assignments) {
+        for (size_t i = 1; i < m.path.size(); i++) {
+            sptr<vertex_t> v = m.path[i-1],
+                            w = m.path[i];
+            sptr<hyperedge_t> e = decoding_graph->get_edge({v, w}); 
             if (e == nullptr) {
                 // First try and get the flag edge.
-                e = get_flag_edge_for({vi, vj});
+                e = get_flag_edge_for({v, w});
             }
             // If it is still not found, then just declare an error and move on.
             if (e == nullptr) {
@@ -73,7 +70,7 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     std::cout << "[ MWPMDecoder ] took " << _t*1e-9 << "s to retrieve correction from matching" << std::endl;
 #endif
 
-    return { t, corr, assignments };
+    return { t, corr };
 }
 
 }   // qontra

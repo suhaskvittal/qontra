@@ -10,7 +10,7 @@
 
 #include <initializer_list>
 
-const int COLOR_RED = 2;
+const int COLOR_RED = 0;
 
 namespace qontra {
 
@@ -128,25 +128,20 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     timer.clk_start();
     fp_t t;
 #endif
-    std::vector<c_assign_t> matchings;
+    std::vector<assign_t> matchings;
     for (int c1 = 0; c1 < decoding_graph->number_of_colors; c1++) {
         for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
             load_syndrome(syndrome, c1, c2, false);
-            std::vector<Decoder::assign_t> _matchings = compute_matching(c1, c2, true);
-
+            std::vector<assign_t> _matchings = compute_matching(c1, c2, true);
+            vtils::push_back_range(matchings, _matchings);
 #ifdef MEMORY_DEBUG
             std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
-#endif
-            for (Decoder::assign_t x : _matchings) {
-                matchings.push_back(cast_assign(x, c1, c2));
-#ifdef MEMORY_DEBUG
-                auto [d1, d2] = x;
-                std::cout << "\t" << d1 << " <---> " << d2 << ", path:";
-                error_chain_t ec = expand_error_chain(d1, d2, c1, c2);
-                for (sptr<vertex_t> v : ec.path) std::cout << " " << print_v(v);
+            for (assign_t x : _matchings) {
+                std::cout << "\t" << print_v(x.v) << " <---> " << print_v(x.w) << ", path:";
+                for (sptr<vertex_t> v : x.path) std::cout << " " << print_v(v);
                 std::cout << std::endl;
-#endif
             }
+#endif
         }
     }
 #ifdef DECODER_PERF
@@ -160,29 +155,22 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     // counter for the number of times an edge appears in a connected component.
     // 
     // We need to track all matches that are in a component to initialize not_cc_map.
-    std::set<c_assign_t> in_cc_assignments;
+    std::set<assign_t> in_cc_assignments;
     for (const component_t& cc : components) {
         int color = cc.color;
         std::set<vpair_t> edge_set;
-        for (const c_assign_t& m : cc.assignments) {
-            const auto& [d1, d2, c1, c2] = m;
-
+        for (const assign_t& m : cc.assignments) {
             in_cc_assignments.insert(m);
-            sptr<vertex_t> v = decoding_graph->get_vertex(d1),
-                           w = decoding_graph->get_vertex(d2);
-            std::set<vpair_t> tmp = insert_error_chain_into(in_cc_map, v, w, color, c1, c2, false);
+            std::set<vpair_t> tmp = insert_error_chain_into(in_cc_map, m.path, color, m.c1, m.c2);
             vtils::insert_range(edge_set, tmp);
         }
         component_edge_sets.emplace_back(edge_set, color);
     }
     // Do not_cc now.
-    for (const c_assign_t& m : matchings) {
+    for (const assign_t& m : matchings) {
         if (in_cc_assignments.count(m)) continue;
-        const auto& [d1, d2, c1, c2] = m;
-        sptr<vertex_t> v = decoding_graph->get_vertex(d1),
-                       w = decoding_graph->get_vertex(d2);
-        if (c1 != COLOR_RED && c2 != COLOR_RED) continue;
-        insert_error_chain_into(not_cc_map, v, w, COLOR_RED, c1, c2, false);
+        if (m.c1 != COLOR_RED && m.c2 != COLOR_RED) continue;
+        insert_error_chain_into(not_cc_map, m.path, COLOR_RED, m.c1, m.c2);
     }
 
     if (in_cc_map.empty() && not_cc_map.empty()) {
@@ -264,28 +252,23 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 }
 
 std::vector<component_t>
-RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& assignments) {
+RestrictionDecoder::compute_connected_components(const std::vector<assign_t>& assignments) {
     // For each connected component, we know the following:
     //  (1) A boundary may be connected to multiple vertices (direct matches
     //      to the boundary, or matches that go through a boundary).
     //  (2) Non-boundary vertices are only connected to R-1 vertices (at most),
     //      where R is the number of restricted lattices.
     struct e_t : base::edge_t {
-        int c1;
-        int c2;
+        assign_t m;
     };
     auto cgr = std::make_unique<Graph<vertex_t, e_t>>();
     // Add all assignments to the graph.
-    for (const c_assign_t& m : assignments) {
-        const auto& [dv, dw, c1, c2] = m;
-        sptr<vertex_t> v = decoding_graph->get_vertex(dv),
-                       w = decoding_graph->get_vertex(dw);
-        if (!cgr->contains(v)) cgr->add_vertex(v);
-        if (!cgr->contains(w)) cgr->add_vertex(w);
-        if (cgr->contains(v, w)) continue;
-        sptr<e_t> e = cgr->make_and_add_edge(v, w);
-        e->c1 = c1;
-        e->c2 = c2;
+    for (const assign_t& m : assignments) {
+        if (!cgr->contains(m.v)) cgr->add_vertex(m.v);
+        if (!cgr->contains(m.w)) cgr->add_vertex(m.w);
+        if (cgr->contains(m.v, m.w)) continue;
+        sptr<e_t> e = cgr->make_and_add_edge(m.v, m.w);
+        e->m = m;
     }
     // If the red boundary is not in the graph, then just exit as there will be
     // no connected components.
@@ -304,19 +287,16 @@ RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& 
         bfs.pop_front();
         if (v->is_boundary_vertex) {
             // Then compute the connected component.
-            std::vector<c_assign_t> assign_list;
+            std::vector<assign_t> assign_list;
             for (size_t i = 1; i < path.size(); i++) {
                 sptr<vertex_t> x = path.at(i-1),
                                 y = path.at(i);
                 auto e = cgr->get_edge(x, y);
-                uint64_t id1 = x->id,
-                         id2 = y->id;
-                if (id1 > id2) std::swap(id1, id2);
-                assign_list.emplace_back(id1, id2, e->c1, e->c2);
+                assign_list.push_back(e->m);
             }
             // Make sure this is not identical to any other components.
             bool found_copy = false;
-            std::vector<c_assign_t> rev_assign_list(assign_list.rbegin(), assign_list.rend());
+            std::vector<assign_t> rev_assign_list(assign_list.rbegin(), assign_list.rend());
             for (const auto& cc : components) {
                 if (assign_list == cc.assignments || rev_assign_list == cc.assignments) {
                     found_copy = true;
@@ -353,18 +333,15 @@ RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& 
 std::set<vpair_t>
 RestrictionDecoder::insert_error_chain_into(
         std::map<vpair_t, size_t>& incidence_map,
-        sptr<vertex_t> src,
-        sptr<vertex_t> dst,
+        const std::vector<sptr<vertex_t>>& path,
         int component_color,
         int c1,
-        int c2,
-        bool force_unflagged)
+        int c2)
 {
     std::set<vpair_t> edge_set;
-    error_chain_t ec = decoding_graph->get_error_chain(src, dst, c1, c2, force_unflagged);
-    for (size_t i = 1; i < ec.path.size(); i++) {
-        sptr<vertex_t> v = ec.path.at(i-1),
-                       w = ec.path.at(i);
+    for (size_t i = 1; i < path.size(); i++) {
+        sptr<vertex_t> v = path.at(i-1),
+                       w = path.at(i);
         if (v->is_boundary_vertex && w->is_boundary_vertex) { 
             continue;
         }
@@ -376,32 +353,8 @@ RestrictionDecoder::insert_error_chain_into(
         // of fv and fw which has a different color (call this fu). 
         // Add (fv, fu) and (fu, fw) instead.
         if (!decoding_graph->share_hyperedge({fv, fw})) {
-            // When this happens, just find a path in the non-flagged graph to use.
-            bool any_added_edges = false;
-            error_chain_t ec = decoding_graph->get_error_chain(fv, fw, c1, c2, true);
-            for (size_t j = 1; j < ec.path.size(); j++) {
-                sptr<vertex_t> fx = ec.path[j-1]->get_base(),
-                                fy = ec.path[j]->get_base();
-                if (fx->is_boundary_vertex && fy->is_boundary_vertex) continue;
-                if (fx->color != component_color && fy->color != component_color) {
-                    continue;
-                }
-                vpair_t e = make_vpair(fx, fy);
-                incidence_map[e]++;
-                edge_set.insert(e);
-                any_added_edges = true;
-            }
-            // Update triggered flag edges if this is a flag edge.
-            sptr<hyperedge_t> e = get_flag_edge_for({v, w});
-            if (e != nullptr && any_added_edges) {
-#ifdef MEMORY_DEBUG
-                std::cout << "Discovered flag edge [ " << print_v(v) << " " << print_v(w)
-                    << " ] in path " << print_v(src) << " <---> " << print_v(dst) << 
-                    " in lattice (" << c1 << ", " << c2 << "), component color = "
-                    << component_color << std::endl;
-#endif
-                triggered_flag_edges.emplace_back(e, ec.path, incidence_map);
-            }
+            std::cerr << "not supposed to happen anymore..." << std::endl;
+            exit(1);
         } else {
             if (fv->color != component_color && fw->color != component_color) {
                 continue;

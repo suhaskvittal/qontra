@@ -42,11 +42,6 @@ RestrictionDecoder::insert_incident_vertices(
     }
 }
 
-inline c_assign_t
-cast_assign(Decoder::assign_t x, int c1, int c2) {
-    return std::make_tuple(std::get<0>(x), std::get<1>(x), c1, c2);
-}
-
 inline vpair_t
 make_vpair(sptr<gd::vertex_t> v, sptr<gd::vertex_t> w) {
     if (v < w)  return std::make_pair(v, w);

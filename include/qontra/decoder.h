@@ -22,12 +22,9 @@ std::vector<uint64_t> get_nonzero_detectors_(T, uint64_t number_of_detectors);
 
 class Decoder {
 public: 
-    typedef std::tuple<uint64_t, uint64_t> assign_t;
     struct result_t {
         fp_t exec_time = 0.0;
         stim::simd_bits<SIMD_WIDTH> corr = stim::simd_bits<>(1);
-        // The below arguments are not guaranteed to be populated.
-        std::vector<assign_t>   error_assignments;
     };
 
     // The decoder uses the passed in circuit for decoding. It should

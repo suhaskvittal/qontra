@@ -140,7 +140,7 @@ MatchingBase::ret_no_detectors() {
     return { 0.0, get_base_corr() };
 }
 
-std::vector<Decoder::assign_t>
+std::vector<assign_t>
 MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
     const size_t n = detectors.size();
     const size_t m = n*(n+1)/2;
@@ -188,7 +188,7 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
 
     pm.Solve();
     // Return assignments. Deactivate flags to avoid using flag edges.
-    std::vector<Decoder::assign_t> assign_arr;
+    std::vector<assign_t> assign_arr;
     for (size_t i = 0; i < n; i++) {
         size_t j = pm.GetMatch(i);
         uint64_t di = detectors.at(i),
@@ -198,39 +198,44 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
         if (dj == get_color_boundary_index(COLOR_ANY) && c1 != COLOR_ANY) {
             dj = boundary_pref_map[di];
         }
-        error_chain_t ec = decoding_graph->get_error_chain(di, dj, c1, c2);
+        sptr<vertex_t> v = decoding_graph->get_vertex(di),
+                        w = decoding_graph->get_vertex(dj);
+        error_chain_t ec = expand_error_chain(v, w, c1, c2);
         if (split_thru_boundary_match && ec.runs_through_boundary) {
             // Partition path between di and dj with boundaries.
             bool all_entries_are_boundaries = true;
-            std::vector<uint64_t> part;
+            std::vector<sptr<vertex_t>> part;
             for (size_t i = 0; i < ec.path.size(); i++) {
-                auto v = ec.path.at(i);
-                uint64_t d = v->id;
-                part.push_back(d);
-                all_entries_are_boundaries &= v->is_boundary_vertex;
-                if (v->is_boundary_vertex) {
+                auto x = ec.path.at(i);
+                part.push_back(x);
+                all_entries_are_boundaries &= x->is_boundary_vertex;
+                if (x->is_boundary_vertex) {
                     if (!all_entries_are_boundaries) {
                         // Add the endpoints as an assignment.
-                        uint64_t id1 = part[0],
-                                    id2 = part.back();
-                        if (id1 != id2) {
-                            if (id1 > id2) std::swap(id1, id2);
-                            assign_arr.emplace_back(id1, id2);
+                        sptr<vertex_t> a = part.front(),
+                                        b = part.back();
+                        if (a > b) {
+                            assign_arr.push_back({b, a, c1, c2, part});
+                        } else if (a < b) {
+                            assign_arr.push_back({a, b, c1, c2, part});
                         }
                     }
-                    part = { d };
+                    part = { x };
                     all_entries_are_boundaries = true;
                 }
             }
             // Add the remaining part as an assignment.
             if (!all_entries_are_boundaries) {
-                uint64_t id1 = part[0],
-                            id2 = part.back();
-                if (id1 > id2) std::swap(id1, id2);
-                assign_arr.emplace_back(id1, id2);
+                sptr<vertex_t> a = part.front(),
+                                b = part.back();
+                if (a > b) {
+                    assign_arr.push_back({b, a, c1, c2, part});
+                } else if (a < b) {
+                    assign_arr.push_back({a, b, c1, c2, part});
+                }
             }
         } else {
-            assign_arr.emplace_back(di, dj);
+            assign_arr.push_back({v, w, c1, c2, ec.path});
         }
     }
     return assign_arr;
@@ -282,6 +287,13 @@ MatchingBase::expand_error_chain(sptr<vertex_t> v, sptr<vertex_t> w, int c1, int
         }
     }
     new_ec.length = new_ec.path.size();
+#ifdef MEMORY_DEBUG
+    if (ec.length != new_ec.length) {
+        std::cout << "Expanded " << print_v(v) << " <---> " << print_v(w) << " to:";
+        for (sptr<vertex_t> x : new_ec.path) std::cout << " " << print_v(x);
+        std::cout << std::endl;
+    }
+#endif
     return new_ec;
 }
 

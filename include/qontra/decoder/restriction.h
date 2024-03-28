@@ -17,10 +17,9 @@ namespace gd = graph::decoding;
 
 typedef std::pair<sptr<gd::vertex_t>, sptr<gd::vertex_t>> vpair_t;
 typedef std::tuple<sptr<gd::vertex_t>, sptr<gd::vertex_t>, sptr<gd::vertex_t>> vtriplet_t;
-typedef std::tuple<uint64_t, uint64_t, int, int> c_assign_t;
 
 struct component_t {
-    std::vector<c_assign_t> assignments;
+    std::vector<assign_t> assignments;
     int color;
 };
 
@@ -41,17 +40,14 @@ public:
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 protected:
-    std::vector<component_t>
-        compute_connected_components(const std::vector<c_assign_t>&);
+    std::vector<component_t> compute_connected_components(const std::vector<assign_t>&);
 
     std::set<vpair_t> insert_error_chain_into(
                         std::map<vpair_t, size_t>& incidence_map,
-                        sptr<gd::vertex_t>,
-                        sptr<gd::vertex_t>,
+                        const std::vector<sptr<gd::vertex_t>>& path,
                         int component_color,
-                        int matching_color_1,
-                        int matching_color_2,
-                        bool force_unflagged);
+                        int c1,
+                        int c2);
 
     // Returns log probability of correction.
     fp_t lifting(
@@ -82,7 +78,6 @@ protected:
     std::vector<flag_entry_t> triggered_flag_edges;
 };
 
-c_assign_t cast_assign(Decoder::assign_t, int, int);
 vpair_t make_vpair(sptr<gd::vertex_t>, sptr<gd::vertex_t>);
 face_t make_face(sptr<gd::hyperedge_t>);
 
