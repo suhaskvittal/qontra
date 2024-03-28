@@ -223,12 +223,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         }
         // Check if there is a similar hyperedge.
         bool found_similar = false;
-        for (sptr<hyperedge_t> _he : visited_flag_edges) {
-            if (he->endpoints == _he->endpoints && he->frames == _he->frames) {
-                found_similar = true;
-                break;
-            }
-        }
         // Apply the edge's frame changes.
         if (!found_similar) {
             log_p2 += log(he->probability);
@@ -271,6 +265,7 @@ RestrictionDecoder::compute_connected_components(const std::vector<c_assign_t>& 
         if (!cgr->contains(v)) cgr->add_vertex(v);
         if (!cgr->contains(w)) cgr->add_vertex(w);
         if (cgr->contains(v, w)) continue;
+        std::cout << "Making edge between " << print_v(v) << " , " << print_v(w) << std::endl;
         sptr<e_t> e = cgr->make_and_add_edge(v, w);
         e->c1 = c1;
         e->c2 = c2;
@@ -381,7 +376,8 @@ RestrictionDecoder::insert_error_chain_into(
             sptr<hyperedge_t> e = get_flag_edge_for({v, w});
             if (e != nullptr && any_added_edges) {
                 std::cout << "Discovered flag edge [ " << print_v(v) << " " << print_v(w)
-                    << " ] in lattice (" << c1 << ", " << c2 << "), component color = "
+                    << " ] in path " << print_v(src) << " <---> " << print_v(dst) << 
+                    " in lattice (" << c1 << ", " << c2 << "), component color = "
                     << component_color << std::endl;
                 triggered_flag_edges.emplace_back(e, ec.path, incidence_map);
             }

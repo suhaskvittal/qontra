@@ -504,7 +504,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             }
         }
         if (any_flag_edge) {
-            renorm_factor *= p;
+//          renorm_factor *= p;
         }
     }
 #ifdef DECODER_PERF

@@ -24,7 +24,7 @@ struct error_chain_t {
     fp_t    probability = 1.0;
     fp_t    weight = 0.0;
     
-    bool runs_through_boundary;
+    bool runs_through_boundary = false;
     std::vector<sptr<decoding::vertex_t>>   path;
     std::vector<sptr<decoding::vertex_t>>   boundary_vertices;
 };

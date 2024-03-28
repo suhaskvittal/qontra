@@ -76,7 +76,6 @@ MatchingBase::load_syndrome(
         decoding_graph->activate_detectors(detectors, flags);
         flag_edges = decoding_graph->get_flag_edges();
 
-        /*
         std::cout << "Flag edges:" << std::endl;
         for (sptr<hyperedge_t> e : flag_edges) {
             std::cout << "\tD[";
@@ -93,7 +92,6 @@ MatchingBase::load_syndrome(
             }
             std::cout << std::endl;
         }
-        */
     }
 #ifdef DECODER_PERF
     t = timer.clk_end();
@@ -198,7 +196,7 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
         if (dj == get_color_boundary_index(COLOR_ANY) && c1 != COLOR_ANY) {
             dj = boundary_pref_map[di];
         }
-        error_chain_t ec = decoding_graph->get_error_chain(di, dj, c1, c2);
+        error_chain_t ec = expand_error_chain(di, dj, c1, c2);
         if (split_thru_boundary_match && ec.runs_through_boundary) {
             // Partition path between di and dj with boundaries.
             bool all_entries_are_boundaries = true;
@@ -213,6 +211,7 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
                         // Add the endpoints as an assignment.
                         uint64_t id1 = part[0],
                                     id2 = part.back();
+                        if (id1 == id2) id1 = part[1];
                         if (id1 > id2) std::swap(id1, id2);
                         assign_arr.emplace_back(id1, id2);
                     }
@@ -232,6 +231,60 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
         }
     }
     return assign_arr;
+}
+
+error_chain_t
+MatchingBase::expand_error_chain(uint64_t d1, uint64_t d2, int c1, int c2) {
+    sptr<vertex_t> v = decoding_graph->get_vertex(d1),
+                    w = decoding_graph->get_vertex(d2);
+    return expand_error_chain(v, w, c1, c2);
+}
+
+error_chain_t
+MatchingBase::expand_error_chain(sptr<vertex_t> v, sptr<vertex_t> w, int c1, int c2) {
+    error_chain_t ec = decoding_graph->get_error_chain(v, w, c1, c2);
+    if (flags.empty()) {
+        return ec;
+    }
+    // Otherwise, expand any flag edges in the chain.
+    error_chain_t new_ec;
+    new_ec.probability = ec.probability;
+    new_ec.weight = ec.weight;
+
+    new_ec.path = { ec.path[0] };
+    if (ec.path[0]->is_boundary_vertex) {
+        new_ec.runs_through_boundary = true;
+        new_ec.boundary_vertices.push_back(ec.path[0]);
+    }
+    for (size_t i = 1; i < ec.path.size(); i++) {
+        sptr<vertex_t> x = ec.path[i-1],
+                        y = ec.path[i];
+        if (decoding_graph->share_hyperedge({x, y})) {
+            if (y->is_boundary_vertex) {
+                new_ec.runs_through_boundary = true;
+                new_ec.boundary_vertices.push_back(y);
+            }
+            new_ec.path.push_back(y);
+        } else {
+            error_chain_t _ec = decoding_graph->get_error_chain(x, y, c1, c2, true);
+            if (_ec.path[0] != x) std::reverse(_ec.path.begin(), _ec.path.end());
+            for (size_t j = 1; j < _ec.path.size(); j++) {
+                sptr<vertex_t> z = _ec.path[j];
+                if (z->is_boundary_vertex) {
+                    new_ec.runs_through_boundary = true;
+                    new_ec.boundary_vertices.push_back(z);
+                }
+                new_ec.path.push_back(z);
+            }
+        }
+    }
+    new_ec.length = new_ec.path.size();
+    if (ec.length != new_ec.length) {
+        std::cout << "Expanded " << print_v(v) << " <---> " << print_v(w) << " to:";
+        for (sptr<vertex_t> x : new_ec.path) std::cout << " " << print_v(x);
+        std::cout << std::endl;
+    }
+    return new_ec;
 }
 
 sptr<hyperedge_t>
