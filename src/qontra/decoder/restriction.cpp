@@ -3,8 +3,6 @@
  *  date:   17 February 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include "qontra/decoder/restriction.h"
 
 #include <vtils/set_algebra.h>

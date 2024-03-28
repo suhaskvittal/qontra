@@ -73,7 +73,7 @@ DecodingGraph::activate_detectors(const std::vector<uint64_t>& all_detectors) {
         }
     }
     flags_are_active = !active_flags.empty();
-    compute_renorm_factor();
+    renorm_factor = compute_renorm_factor();
 }
 
 inline void
@@ -82,7 +82,7 @@ DecodingGraph::activate_detectors(const std::vector<uint64_t>& nonflags, const s
     active_detectors = std::set<uint64_t>(nonflags.begin(), nonflags.end());
     active_flags = std::set<uint64_t>(flags.begin(), flags.end());
     flags_are_active = !active_flags.empty();
-    compute_renorm_factor();
+    renorm_factor = compute_renorm_factor();
 }
 
 inline void

@@ -227,7 +227,7 @@ DecodingGraph::get_flag_edges() {
     for (EdgeClass& c : edge_classes) {
         if (c.get_representative()->flags.empty()) continue;
         sptr<hyperedge_t> best_edge = get_best_flag_edge(c.get_edges());
-        if (best_edge != nullptr) {
+        if (best_edge != nullptr && best_edge->get_order() == 2) {
             edge_list.push_back(best_edge);
         }
     }
@@ -358,11 +358,11 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
     }
 }
 
-void
-DecodingGraph::compute_renorm_factor() {
-    renorm_factor = 1.0;
+fp_t
+DecodingGraph::compute_renorm_factor(std::set<uint64_t> flags) {
+    fp_t f = 1.0;
 
-    std::set<uint64_t> remaining_flags(active_flags);
+    std::set<uint64_t> remaining_flags = active_flags - flags;
     for (sptr<hyperedge_t> e : nod_edges) {
         if (remaining_flags.empty()) break;
         std::set<uint64_t> flag_intersect = e->flags * remaining_flags;
@@ -370,9 +370,10 @@ DecodingGraph::compute_renorm_factor() {
         const fp_t p = e->probability;
         if (nf == e->flags.size()) {
             remaining_flags -= flag_intersect;
-            renorm_factor *= pow(p, 1.5);
+            f *= p;
         }
     }
+    return f;
 }
 
 sptr<hyperedge_t>
@@ -510,7 +511,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     timer.clk_start();
 #endif
     for (sptr<hyperedge_t> he : get_flag_edges()) {
-        fp_t p = he->probability;
+        fp_t p = he->probability * compute_renorm_factor(he->flags);
         for (size_t i = 0; i < he->get_order(); i++) {
             sptr<vertex_t> v = he->get<vertex_t>(i);
             if (!dgr->contains(v)) continue;
@@ -524,11 +525,15 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 }
                 fp_t& r = e->probability;
                 r = (1-r)*p + (1-p)*r;
+#ifdef MEMORY_DEBUG
                 std::cout << "Added flag edge between " << print_v(v) << " and " << print_v(w) << ", P = " << r << std::endl;
+#endif
             }
         }
     }
+#ifdef MEMORY_DEBUG
     std::cout << "Renorm factor = " << renorm_factor << std::endl;
+#endif
 #ifdef DECODER_PERF
     t = timer.clk_end();
     std::cout << "[ DecodingGraph ] took " << t*1e-9 << "s to add flag edges to Dijkstra graph" << std::endl;
