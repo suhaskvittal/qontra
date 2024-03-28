@@ -3,8 +3,6 @@
  *  date:   17 February 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include "qontra/decoder/restriction.h"
 
 #include <vtils/set_algebra.h>
@@ -144,7 +142,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 #ifdef MEMORY_DEBUG
                 auto [d1, d2] = x;
                 std::cout << "\t" << d1 << " <---> " << d2 << ", path:";
-                error_chain_t ec = decoding_graph->get_error_chain(d1, d2, c1, c2);
+                error_chain_t ec = expand_error_chain(d1, d2, c1, c2);
                 for (sptr<vertex_t> v : ec.path) std::cout << " " << print_v(v);
                 std::cout << std::endl;
 #endif

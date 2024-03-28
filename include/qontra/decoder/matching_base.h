@@ -35,6 +35,9 @@ public:
 
     sptr<graph::decoding::hyperedge_t> get_flag_edge_for(std::vector<sptr<gd::vertex_t>>);
 protected:
+    void update_assignments_wrt_boundary(
+            std::vector<Decoder::assign_t>&, uint64_t, uint64_t, int, int);
+
     uptr<graph::DecodingGraph> decoding_graph;
 
     std::vector<uint64_t>   detectors;

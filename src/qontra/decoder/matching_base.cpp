@@ -3,8 +3,6 @@
  *  date:   16 February 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include "qontra/decoder/matching_base.h"
 
 #include <PerfectMatching.h>
@@ -200,7 +198,7 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
         if (dj == get_color_boundary_index(COLOR_ANY) && c1 != COLOR_ANY) {
             dj = boundary_pref_map[di];
         }
-        error_chain_t ec = expand_error_chain(di, dj, c1, c2);
+        error_chain_t ec = decoding_graph->get_error_chain(di, dj, c1, c2);
         if (split_thru_boundary_match && ec.runs_through_boundary) {
             // Partition path between di and dj with boundaries.
             bool all_entries_are_boundaries = true;
@@ -284,13 +282,6 @@ MatchingBase::expand_error_chain(sptr<vertex_t> v, sptr<vertex_t> w, int c1, int
         }
     }
     new_ec.length = new_ec.path.size();
-#ifdef MEMORY_DEBUG
-    if (ec.length != new_ec.length) {
-        std::cout << "Expanded " << print_v(v) << " <---> " << print_v(w) << " to:";
-        for (sptr<vertex_t> x : new_ec.path) std::cout << " " << print_v(x);
-        std::cout << std::endl;
-    }
-#endif
     return new_ec;
 }
 
