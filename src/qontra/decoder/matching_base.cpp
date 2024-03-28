@@ -3,6 +3,8 @@
  *  date:   16 February 2024
  * */
 
+#define MEMORY_DEBUG
+
 #include "qontra/decoder/matching_base.h"
 
 #include <PerfectMatching.h>
@@ -213,9 +215,10 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
                         // Add the endpoints as an assignment.
                         uint64_t id1 = part[0],
                                     id2 = part.back();
-                        if (id1 == id2) id1 = part[1];
-                        if (id1 > id2) std::swap(id1, id2);
-                        assign_arr.emplace_back(id1, id2);
+                        if (id1 != id2) {
+                            if (id1 > id2) std::swap(id1, id2);
+                            assign_arr.emplace_back(id1, id2);
+                        }
                     }
                     part = { d };
                     all_entries_are_boundaries = true;
