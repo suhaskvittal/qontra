@@ -225,9 +225,8 @@ DecodingGraph::get_flag_edges() {
     // with the active flags.
     std::vector<sptr<hyperedge_t>> edge_list;
     for (EdgeClass& c : edge_classes) {
-        if (c.get_representative()->flags.empty()) continue;
         sptr<hyperedge_t> best_edge = get_best_flag_edge(c.get_edges());
-        if (best_edge != nullptr && best_edge->get_order() == 2) {
+        if (best_edge != nullptr) {
             edge_list.push_back(best_edge);
         }
     }
@@ -511,7 +510,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     timer.clk_start();
 #endif
     for (sptr<hyperedge_t> he : get_flag_edges()) {
-        fp_t p = he->probability * compute_renorm_factor(he->flags);
+        fp_t p = pow(he->probability * compute_renorm_factor(he->flags),static_cast<fp_t>(he->get_order() - 1));
         for (size_t i = 0; i < he->get_order(); i++) {
             sptr<vertex_t> v = he->get<vertex_t>(i);
             if (!dgr->contains(v)) continue;

@@ -3,6 +3,8 @@
  *  date:   16 February 2024
  * */
 
+#define MEMORY_DEBUG
+
 #include "qontra/decoder/matching_base.h"
 
 #include <PerfectMatching.h>
@@ -225,9 +227,6 @@ MatchingBase::expand_error_chain(
     for (size_t i = 1; i < ec.path.size(); i++) {
         sptr<vertex_t> v = ec.path[i-1],
                         w = ec.path[i];
-#ifdef MEMORY_DEBUG
-        std::cout << "\ton edge " << print_v(v) << ", " << print_v(w) << std::endl;
-#endif
         if (decoding_graph->share_hyperedge({v, w})) {
             curr_assign.w = w;
             curr_assign.path.push_back(w);
@@ -282,8 +281,8 @@ MatchingBase::expand_error_chain(
                 curr_assign.path = {w};
                 curr_assign.flag_edges.clear();
                 all_entries_are_boundaries = w->is_boundary_vertex;
+                continue;
             }
-            continue;
         }
         // Now handle any boundaries if necessary.
         if (!split_through_boundary_match || !w->is_boundary_vertex) continue;

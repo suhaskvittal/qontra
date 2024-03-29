@@ -3,6 +3,8 @@
  *  date:   17 February 2024
  * */
 
+#define MEMORY_DEBUG
+
 #include "qontra/decoder/restriction.h"
 
 #include <vtils/set_algebra.h>
@@ -132,11 +134,13 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     std::vector<assign_t> matchings;
     for (int c1 = 0; c1 < decoding_graph->number_of_colors; c1++) {
         for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
+#ifdef MEMORY_DEBUG
+            std::cout << "Matchings on L(" << c1 << ", " << c2 << ")-----------" << std::endl;
+#endif
             load_syndrome(syndrome, c1, c2, false);
             std::vector<assign_t> _matchings = compute_matching(c1, c2, true);
             vtils::push_back_range(matchings, _matchings);
 #ifdef MEMORY_DEBUG
-            std::cout << "Matchings on L(" << c1 << ", " << c2 << "):" << std::endl;
             for (assign_t x : _matchings) {
                 std::cout << "\t" << print_v(x.v) << " <---> " << print_v(x.w) << ", path:";
                 for (sptr<vertex_t> v : x.path) std::cout << " " << print_v(v);
