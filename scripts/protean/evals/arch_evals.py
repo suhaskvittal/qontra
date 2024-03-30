@@ -48,6 +48,7 @@ CODES = {
             '24_8_4_4',
             '96_20_6_6',
             '192_36_8_8',
+            '240_44_8_8'
 #           '1536_260_12_12'
         ],
         '4_10': [
@@ -74,7 +75,7 @@ def run_experiment_0(family, subfamily):
     arch_folder_prefix = f'../data/protean/{family}/{subfamily}'
 
     version_list = [
-        ('1', f'{jid_blk}.rlb.rcr', 4, ''),          # Baseline: no modifications
+#       ('1', f'{jid_blk}.rlb.rcr', 4, ''),          # Baseline: no modifications
 #       ('2', f'{jid_blk}.fla.ral.rlb.rcr', 4, ''),  # Only flags
 #       ('3.3', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 3, '-fno-opt-flags -fflag-jid'),  # Naive connectivity 3 implementation
 #       ('3.4', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 4, '-fno-opt-flags -fflag-jid'),  # Naive connectivity 4 implementation

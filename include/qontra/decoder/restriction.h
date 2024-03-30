@@ -40,6 +40,11 @@ public:
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 protected:
+    void split_assignment(
+            std::vector<assign_t>&,
+            const assign_t&,
+            const std::map<sptr<gd::hyperedge_t>, size_t>& flag_ctr_map);
+
     std::vector<component_t> compute_connected_components(const std::vector<assign_t>&);
 
     std::set<vpair_t> insert_error_chain_into(

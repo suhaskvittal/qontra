@@ -3,8 +3,6 @@
  *  date:   17 February 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include "qontra/decoder/restriction.h"
 
 #include <vtils/set_algebra.h>
@@ -19,6 +17,14 @@ namespace qontra {
 
 using namespace graph;
 using namespace decoding;
+
+inline void
+push_back_assignment(std::vector<assign_t>& arr, const assign_t& m) {
+    if (m.w == nullptr || m.v == m.w) {
+        return;
+    }
+    arr.push_back(m);
+}
 
 inline void
 erase_from_incidence_map(const vpair_t& e, std::map<vpair_t, size_t>& incidence_map) {
@@ -131,6 +137,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     timer.clk_start();
     fp_t t;
 #endif
+    std::map<sptr<hyperedge_t>, size_t> flag_edge_ctr_map;
     std::vector<assign_t> matchings;
     for (int c1 = 0; c1 < decoding_graph->number_of_colors; c1++) {
         for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
@@ -138,7 +145,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             std::cout << "Matchings on L(" << c1 << ", " << c2 << ")-----------" << std::endl;
 #endif
             load_syndrome(syndrome, c1, c2, false);
-            std::vector<assign_t> _matchings = compute_matching(c1, c2, true);
+            std::vector<assign_t> _matchings = compute_matching(c1, c2, false);
             vtils::push_back_range(matchings, _matchings);
 #ifdef MEMORY_DEBUG
             for (assign_t x : _matchings) {
@@ -146,9 +153,41 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
                 for (sptr<vertex_t> v : x.path) std::cout << " " << print_v(v);
                 std::cout << std::endl;
             }
+            std::cout << "\t-----\n";
 #endif
+            std::set<sptr<hyperedge_t>> flags_in_this_lattice;
+            for (const assign_t& m : _matchings) {
+                vtils::insert_range(flags_in_this_lattice, m.flag_edges.begin(), m.flag_edges.end());
+            }
+            // Update incidence map.
+            for (sptr<hyperedge_t> e : flags_in_this_lattice) {
+#ifdef MEMORY_DEBUG
+                std::cout << "\tFound flag edge [";
+                for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v);
+                std::cout << " ]" << std::endl;
+#endif
+                if ((++flag_edge_ctr_map[e]) == 2) {
+                    for (uint64_t fr : e->frames) corr[fr] ^= 1;
+                }
+            }
         }
     }
+    // After retrieving the matchings, we need to resolve any flag edges. If a flag edge appears in
+    // two restricted lattices, immediately apply its corrections and remove it from any paths.
+    //
+    // Split any boundary matchings as well.
+    std::vector<assign_t> new_matchings;
+    for (const assign_t& m : matchings) {
+        split_assignment(new_matchings, m, flag_edge_ctr_map);
+    }
+    matchings = std::move(new_matchings);
+#ifdef MEMORY_DEBUG
+    for (assign_t x : matchings) {
+        std::cout << "L(" << x.c1 << "," << x.c2 << "):" << print_v(x.v) << " <---> " << print_v(x.w) << ", path:";
+        for (sptr<vertex_t> v : x.path) std::cout << " " << print_v(v);
+        std::cout << std::endl;
+    }
+#endif
 #ifdef DECODER_PERF
     t = timer.clk_end();
     std::cout << "[ RestrictionDecoder ] took " << t*1e-9 << "s to match restricted lattices" << std::endl;
@@ -291,6 +330,87 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 #endif
     corr = std::move(log_p1 > log_p2 ? corr1 : corr2);
     return { 0.0, corr };
+}
+
+void
+RestrictionDecoder::split_assignment(
+        std::vector<assign_t>& assign_arr,
+        const assign_t& m,
+        const std::map<sptr<hyperedge_t>, size_t>& flag_ctr_map)
+{
+    assign_t curr;
+    curr.c1 = m.c1;
+    curr.c2 = m.c2;
+    curr.v = m.v;
+    curr.w = nullptr;
+    curr.path = {m.v};
+
+    bool contains_only_boundaries = m.v->is_boundary_vertex;
+#ifdef MEMORY_DEBUG
+    std::cout << "In expansion of " << print_v(m.v) << ", " << print_v(m.w) << ":";
+    for (sptr<vertex_t> v : m.path) std::cout << " " << print_v(v);
+    std::cout << std::endl;
+#endif
+    for (size_t i = 1; i < m.path.size(); i++) {
+        sptr<vertex_t> v = m.path.at(i-1),
+                        w = m.path.at(i);
+        if (decoding_graph->share_hyperedge({v, w})) {
+            curr.w = w;
+            curr.path.push_back(w);
+            contains_only_boundaries &= w->is_boundary_vertex;
+        } else {
+            sptr<hyperedge_t> e = get_flag_edge_for({v, w});
+            error_chain_t ec = decoding_graph->get_error_chain(v, w, m.c1, m.c2, true);
+            if (e != nullptr && (flag_ctr_map.at(e) == 2 || ec.path.size() > 5)) {
+                // Finish off the current assignment and ignore the flag edge.
+                if (ec.path.size() > 5 && flag_ctr_map.at(e) != 2) {
+                    curr.flag_edges.push_back(e);
+                }
+                push_back_assignment(assign_arr, curr);
+#ifdef MEMORY_DEBUG
+                std::cout << "\tFound flag edge [ " << print_v(v) << ", " << print_v(w) << " ], path:";
+                for (sptr<vertex_t> x : ec.path) std::cout << " " << print_v(x);
+                std::cout << std::endl;
+                std::cout << "\t[F] pushing back assignment " << print_v(curr.v) << " <---> "
+                    << print_v(curr.w) << std::endl;
+#endif
+                curr.v = w;
+                curr.w = nullptr;
+                curr.path = {w};
+            } else {
+                // Expand the path between v and w.
+                if (ec.path.front() != v) std::reverse(ec.path.begin(), ec.path.end());
+                for (size_t j = 1; j < ec.path.size(); j++) {
+                    sptr<vertex_t> x = ec.path[j-1],
+                                    y = ec.path[j];
+                    curr.w = y;
+                    curr.path.push_back(y);
+                    contains_only_boundaries &= y->is_boundary_vertex;
+                    if (y->is_boundary_vertex) {
+                        if (!contains_only_boundaries) {
+                            push_back_assignment(assign_arr, curr);
+                        }
+                        curr.v = y;
+                        curr.w = nullptr;
+                        curr.path = {y};
+                        contains_only_boundaries = true;
+                    }
+                }
+            }
+        }
+        if (w->is_boundary_vertex) {
+            if (!contains_only_boundaries) {
+                push_back_assignment(assign_arr, curr);
+            }
+            curr.v = w;
+            curr.w = nullptr;
+            curr.path = {w};
+            contains_only_boundaries = true;
+        }
+    }
+    if (!contains_only_boundaries) {
+        push_back_assignment(assign_arr, curr);
+    }
 }
 
 std::vector<component_t>
@@ -509,9 +629,23 @@ RestrictionDecoder::lifting(
         if (best_log_prob_cc > best_log_prob_no_cc) {
             update_correction(
                 in_cc_map, corr, out_log_pr, best_cc_corr, best_cc_boundary, best_log_prob_cc);
+#ifdef MEMORY_DEBUG
+                std::cout << "Matched " << print_v(v) << " to CCs with boundary:";
+                for (vpair_t e : best_cc_boundary) {
+                    std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
+                }
+                std::cout << std::endl;
+#endif
         } else {
             update_correction(
                 not_cc_map, corr, out_log_pr, best_no_cc_corr, best_no_cc_boundary, best_log_prob_no_cc);
+#ifdef MEMORY_DEBUG
+            std::cout << "Matched " << print_v(v) << " to bulk with boundary:";
+            for (vpair_t e : best_no_cc_boundary) {
+                std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
+            }
+            std::cout << std::endl;
+#endif
         }
     }
     // Remove any widowed edges, as these can cause the decoder to loop infinitely.
