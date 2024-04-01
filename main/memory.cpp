@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
     qes::Program<> program = qes::from_file(qes_file);
 
     DetailedStimCircuit _circuit = make_default_circuit(qes_file, pmax, true);
-    MobiusDecoder dec(_circuit);
+    RestrictionDecoder dec(_circuit);
 
     memory_config_t config;
     config.errors_until_stop = errors_until_stop;

@@ -124,6 +124,8 @@ public:
     // parity qubit --> data qubit --> flag qubit used in syndrome extraction of check.
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
         flag_assignment_map;
+    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::set<sptr<net::raw_vertex_t>>>
+        flag_support_map;
     std::set<sptr<net::raw_vertex_t>> x_flag_set;
 
     // Scheduling structures:

@@ -57,14 +57,16 @@ sample_from_graph(
         // Find the next candidate edge.
         std::vector<sptr<hyperedge_t>> candidates;
         for (sptr<hyperedge_t> x : edges) {
+            if (x->flags.size()) continue;
             EdgeClass _cl = gr.get_edge_class(x);
             if (visited.count(_cl.get_representative())) continue;
+            size_t common = 0;
             for (sptr<vertex_t> v : e->get<vertex_t>()) {
                 if (std::find(x->endpoints.begin(), x->endpoints.end(), v) != x->endpoints.end()) {
-                    candidates.push_back(x);
-                    break;
+                    common++;
                 }
             }
+            if (common == 1) candidates.push_back(x);
         }
         e = candidates[rng() % candidates.size()];
     }

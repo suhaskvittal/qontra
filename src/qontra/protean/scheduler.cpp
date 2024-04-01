@@ -209,9 +209,7 @@ Scheduler::make_round() {
     fp_t t;
 #endif
     while (true) {
-#ifdef PROTEAN_PERF
         std::cout << "============= CYCLE " << cycle << " ===============" << std::endl;
-#endif
         checks_this_cycle.clear();
         std::set<int64_t> r_operands;
         std::set<sptr<raw_vertex_t>> roles_this_cycle;
@@ -233,6 +231,13 @@ Scheduler::make_round() {
         }
         safe_emplace_back(program, "reset", r_operands);
         if (checks_this_cycle.empty()) break;
+    
+        std::cout << "Checks this cycle:";
+        for (sptr<raw_vertex_t> rx : checks_this_cycle) {
+            std::cout << " " << print_v(rx);
+        }
+        std::cout << std::endl;
+
 #ifdef PROTEAN_PERF
         timer.clk_start();
 #endif
@@ -588,6 +593,11 @@ Scheduler::compute_schedules() {
                 if (rx_rsq == ry_rsq) {
                     lp_constr_t con(x, y, lp_constr_t::direction::neq);
                     LP.add_constraint(con);
+
+                    lp_constr_t con1(x-y, 1, lp_constr_t::direction::le);
+                    lp_constr_t con2(x-y, -1, lp_constr_t::direction::ge);
+                    LP.add_constraint(con1);
+                    LP.add_constraint(con2);
                 }
             }
         }

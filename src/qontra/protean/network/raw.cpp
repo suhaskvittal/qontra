@@ -113,6 +113,26 @@ RawNetwork::delete_vertex(sptr<raw_vertex_t> v) {
         if (ita->second.empty()) ita = flag_assignment_map.erase(ita);
         else                     ita++;
     }
+    // flag_support_map.
+    for (auto ita = flag_support_map.begin(); ita != flag_support_map.end(); ) {
+        if (ita->first == v) {
+            ita = flag_support_map.erase(ita);
+            continue;
+        }
+        // map[*ita], which is itself a map.
+        for (auto itb = ita->second.begin(); itb != ita->second.end(); ) {
+            if (itb->first == v) {
+                itb = ita->second.erase(itb);
+            } else {
+                // itb->second is a set, so we can try to erase v from the set.
+                itb->second.erase(v);
+                if (itb->second.empty()) itb = ita->second.erase(itb);
+                else itb++;
+            }
+        }
+        if (ita->second.empty()) ita = flag_support_map.erase(ita);
+        else ita++;
+    }
 }
 
 sptr<raw_vertex_t>
@@ -135,6 +155,7 @@ RawNetwork::add_flag(sptr<raw_vertex_t> dq1, sptr<raw_vertex_t> dq2, sptr<raw_ve
     flag_ownership_map[pq].push_back(fq);
     tlm_put(flag_assignment_map, pq, dq1, fq);
     tlm_put(flag_assignment_map, pq, dq2, fq);
+    tlm_put(flag_support_map, pq, fq, std::set<sptr<raw_vertex_t>>{dq1, dq2});
     if (pq->qubit_type == raw_vertex_t::type::xparity) {
         x_flag_set.insert(fq);
     }
@@ -300,6 +321,7 @@ RawNetwork::flag_proxy_merge(sptr<raw_vertex_t> rfq, sptr<raw_vertex_t> rprx) {
                 exit(1);
             }
             flag_assignment_map[rpq][rx] = rfq;
+            flag_support_map[rpq][rfq].insert(rx);
         }
     }
 }
@@ -315,14 +337,23 @@ RawNetwork::replace_in_tracking_structures(sptr<raw_vertex_t> v, sptr<raw_vertex
             }
         }
     }
-    // flag_assignment_map:
+    // flag_assignment_map and flag_support_map:
     if (where & 2) {
         map_move_and_delete(flag_assignment_map, v, with);
-        for (auto& p1 : flag_assignment_map) {
-            auto& submap = p1.second;
+        for (auto& [_tmp, submap] : flag_assignment_map) {
             map_move_and_delete(submap, v, with);
-            for (auto& p2 : submap) {
-                if (p2.second == v) p2.second = with;
+            for (auto& [_tmp, x] : submap) {
+                if (x == v) x = with;
+            }
+        }
+        map_move_and_delete(flag_support_map, v, with);
+        for (auto& [_tmp, submap]: flag_support_map) {
+            map_move_and_delete(submap, v, with);
+            for (auto& [_tmp, x] : submap) {
+                if (x.count(v)) {
+                    x.erase(v);
+                    x.insert(with);
+                }
             }
         }
     }

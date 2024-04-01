@@ -803,6 +803,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         iv->support = supp.all;
     }
     // Now, compute interaction graph edges.
+    const auto& fsm = raw_connection_network->flag_support_map;
     for (size_t i = 0; i < _id; i++) {
         sptr<int_v_t> iv = interaction_graph->get_vertex(i);
         for (size_t j = i+1; j < _id; j++) {
@@ -811,12 +812,27 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             sptr<int_e_t> ie = interaction_graph->make_edge(iv, iw);
             for (sptr<raw_vertex_t> rx : iv->support) {
                 if (rx->qubit_type == raw_vertex_t::type::data) continue;
+                std::set<sptr<raw_vertex_t>> data_support;
 
                 sptr<phys_vertex_t> px = role_to_phys.at(rx);
                 for (sptr<raw_vertex_t> ry : iw->support) {
                     if (rx == ry && !rx->is_check()) continue;
+                    // Check if rx and ry use the same physical qubit.
                     sptr<phys_vertex_t> py = role_to_phys.at(ry);
-                    if (px == py) ie->conflicts.emplace_back(rx, ry, px);
+                    if (px == py) {
+                        ie->conflicts.emplace_back(rx, ry, px);
+                        continue;
+                    }
+                    /*
+                    if (rx->qubit_type == raw_vertex_t::type::flag && ry->qubit_type == raw_vertex_t::type::flag) {
+                        const auto& rx_data = fsm.at(iv->check).at(rx),
+                                  & ry_data = fsm.at(iw->check).at(ry);
+                        const auto common = rx_data * ry_data;
+                        if (common.size() == 1) {
+                            ie->conflicts.emplace_back(rx, ry, nullptr);
+                        }
+                    }
+                    */
                 }
             }
             if (ie->conflicts.size()) interaction_graph->add_edge(ie);
