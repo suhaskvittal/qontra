@@ -6,6 +6,7 @@
 #include "qontra/decoder.h"
 #include "qontra/decoder/mwpm.h"
 #include "qontra/decoder/restriction.h"
+#include "qontra/decoder/mobius.h"
 #include "qontra/graph/decoding_graph.h"
 
 #include "qontra/experiments/memory.h"
@@ -81,6 +82,8 @@ int main(int argc, char* argv[]) {
         dec = std::make_unique<MWPMDecoder>(circuit);
     } else if (decoder_name == "restriction") {
         dec = std::make_unique<RestrictionDecoder>(circuit);
+    } else if (decoder_name == "mobius") {
+        dec = std::make_unique<MobiusDecoder>(circuit);
     }
     // The number of errors does not matter as we don't care about boundaries.
     DecodingGraph gr(circuit, 1000);

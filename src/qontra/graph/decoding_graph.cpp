@@ -92,14 +92,6 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
                 }
             }
             if (detectors.size() == 0) {
-                /*
-                std::cout << "Detectorless event: F[";
-                for (uint64_t f : flags) std::cout << " " << f;
-                std::cout << " ], frames =";
-                for (uint64_t fr : frames) std::cout << " " << fr;
-                std::cout << ", prob = " << p << std::endl;
-                */
-
                 sptr<hyperedge_t> e = this->make_edge({});
                 e->flags = std::set<uint64_t>(flags.begin(), flags.end());
                 e->frames = frames;
@@ -137,7 +129,7 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
 }
 
 void
-DecodingGraph::immediately_initialize_distances_for(int c1, int c2) {
+DecodingGraph::init_distances_for(int c1, int c2) {
 #ifdef DECODER_PERF
     vtils::Timer timer;
     fp_t t;
@@ -299,25 +291,10 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
             }
         }
 
-        /*
-        std::cout << "\nEquivalence class of D[";
-        for (size_t i = 0; i < rep->get_order(); i++) {
-            std::cout << " " << print_v(rep->get<vertex_t>(i));
-        }
-        std::cout << " ], F[";
-        for (uint64_t f : rep->flags) {
-            std::cout << " " << f;
-        }
-        std::cout << " ]" << std::endl;
-        */
-
         // Update any edge probabilities.
         std::set<uint64_t> all_flags;
         for (sptr<hyperedge_t> e : c.get_edges()) {
-            if (e->flags.size() && rep->flags.empty()) {
-                // Increase the probability of this edge, as it is also a non flag edge.
-                e->probability += rep->probability;
-            } else if (e->flags.empty()) {
+            if (e->flags.empty()) {
                 // Check if a similar edge already exists. If so, update that.
                 sptr<hyperedge_t> _e = get_edge(e->get<vertex_t>());
                 if (_e != nullptr) {
@@ -332,22 +309,6 @@ DecodingGraph::resolve_edges(const std::vector<sptr<hyperedge_t>>& edge_list, si
             }
             vtils::insert_range(all_flags, e->flags);
             edge_class_map[e] = c;
-
-            /*
-            std::cout << "\tD[";
-            for (size_t i = 0; i < e->get_order(); i++) {
-                std::cout << " " << print_v(e->get<vertex_t>(i));
-            }
-            std::cout << " ], F[";
-            for (uint64_t f : e->flags) {
-                std::cout << " " << f;
-            }
-            std::cout << " ], frames:";
-            for (uint64_t fr : e->frames) {
-                std::cout << " " << fr;
-            }
-            std::cout << ", prob = " << e->probability <<  std::endl;
-            */
             all_edges.push_back(e);
         }
         edge_classes.push_back(c);
@@ -487,8 +448,8 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 error_chain_t ec = _dm[v][w];
                 if (ec.path.empty()) continue;
                 for (size_t i = 1; i < ec.path.size(); i++) {
-                    sptr<vertex_t> x = ec.path[i-1];
-                    sptr<vertex_t> y = ec.path[i-1];
+                    sptr<vertex_t> x = ec.path[i-1],
+                                    y = ec.path[i];
                     if (!dgr->contains(y)) dgr->add_vertex(y);
                     dgr->make_and_add_edge(x, y);
                 }

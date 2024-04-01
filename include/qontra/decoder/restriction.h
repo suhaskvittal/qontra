@@ -40,6 +40,8 @@ public:
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 protected:
+    virtual std::vector<assign_t> compute_matchings(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome);
+
     void split_assignment(
             std::vector<assign_t>&,
             const assign_t&,

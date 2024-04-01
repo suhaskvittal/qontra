@@ -37,12 +37,16 @@ public:
     DecodingGraph(const DetailedStimCircuit&, size_t flips_per_error);
     DecodingGraph(DecodingGraph&&) = default;
 
+    DecodingGraph make_unified_lattice(
+            std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& ufl_map,
+            std::map<sptr<decoding::hyperedge_t>, size_t>& crease_edge_map);
+
     // Makes vertex and also sets the base of the vertex to itself.
     sptr<decoding::vertex_t> make_vertex(uint64_t) const override;
     // Gets shared edge with most similarity to the passed in inputs.
     sptr<decoding::hyperedge_t> get_best_shared_edge(std::vector<sptr<decoding::vertex_t>>);
     // Initializes the distance matrix for the two colors using Floyd-Warshall.
-    void immediately_initialize_distances_for(int, int);
+    void init_distances_for(int=COLOR_ANY, int=COLOR_ANY);
 
     error_chain_t get_error_chain(
             uint64_t,
@@ -85,6 +89,8 @@ public:
 
     const int number_of_colors;
 protected:
+    DecodingGraph(void);
+
     bool    update_state(void) override;
 private:
     // Add vertices while also adding their bases. This function recursively calls itself until

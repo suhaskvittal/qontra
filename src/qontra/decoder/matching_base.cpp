@@ -2,6 +2,7 @@
  *  author: Suhas Vittal
  *  date:   16 February 2024
  * */
+#define MEMORY_DEBUG
 
 #include "qontra/decoder/matching_base.h"
 
@@ -20,11 +21,11 @@ MatchingBase::MatchingBase(const DetailedStimCircuit& circuit, int flips_per_err
     flag_edges()
 {
     if (decoding_graph->number_of_colors == 0) {
-        decoding_graph->immediately_initialize_distances_for(COLOR_ANY, COLOR_ANY);
+        decoding_graph->init_distances_for();
     } else {
         for (int c1 = 0; c1 < decoding_graph->number_of_colors; c1++) {
             for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
-                decoding_graph->immediately_initialize_distances_for(c1, c2);
+                decoding_graph->init_distances_for(c1, c2);
             }
         }
     }
@@ -141,7 +142,7 @@ MatchingBase::ret_no_detectors() {
 }
 
 std::vector<assign_t>
-MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
+MatchingBase::compute_matching(int c1, int c2) {
     const size_t n = detectors.size();
     const size_t m = n*(n+1)/2;
 
@@ -157,7 +158,7 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
     timer.clk_start();
 #endif
     if (flags.size() && detectors.size() > 10) {
-        decoding_graph->immediately_initialize_distances_for(c1, c2);
+        decoding_graph->init_distances_for(c1, c2);
     }
     for (size_t i = 0; i < n; i++) {
         uint64_t di = detectors.at(i);
@@ -187,7 +188,7 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
 #endif
 
     pm.Solve();
-    // Return assignments. Deactivate flags to avoid using flag edges.
+    // Return assignments.
     std::vector<assign_t> assign_arr;
     for (size_t i = 0; i < n; i++) {
         size_t j = pm.GetMatch(i);
@@ -200,44 +201,34 @@ MatchingBase::compute_matching(int c1, int c2, bool split_thru_boundary_match) {
         }
         sptr<vertex_t> v = decoding_graph->get_vertex(di),
                         w = decoding_graph->get_vertex(dj);
-        expand_error_chain(assign_arr, v, w, c1, c2, split_thru_boundary_match);
+        assign_t m;
+        m.v = v;
+        m.w = w;
+        m.c1 = c1;
+        m.c2 = c2;
+        error_chain_t ec = decoding_graph->get_error_chain(v, w, c1, c2);
+        m.path = ec.path;
+        if (m.path.front() != v) std::reverse(m.path.begin(), m.path.end());
+        identify_flag_edges_in_path(m);
+        assign_arr.push_back(m);
     }
     return assign_arr;
 }
 
 void
-MatchingBase::expand_error_chain(
-        std::vector<assign_t>& assign_arr,
-        sptr<vertex_t> src,
-        sptr<vertex_t> dst, 
-        int c1, int c2,
-        bool split_through_boundary_match) 
-{
-    error_chain_t ec = decoding_graph->get_error_chain(src, dst, c1, c2);
-    if (ec.path.front() != src) {
-        std::reverse(ec.path.begin(), ec.path.end());
-    }
-    
-    assign_t curr_assign;
-    curr_assign.v = src;
-    curr_assign.w = dst;
-    curr_assign.c1 = c1;
-    curr_assign.c2 = c2;
-    curr_assign.path = ec.path;
-    // Find flag edges.
-    for (size_t i = 1; i < ec.path.size(); i++) {
-        sptr<vertex_t> v = ec.path[i-1],
-                        w = ec.path[i];
+MatchingBase::identify_flag_edges_in_path(assign_t& m) {
+    for (size_t i = 1; i < m.path.size(); i++) {
+        sptr<vertex_t> v = m.path[i-1],
+                        w = m.path[i];
         if (!decoding_graph->share_hyperedge({v, w})) {
             // This may be a flag edge.
             sptr<hyperedge_t> e = get_flag_edge_for({v, w});
             // Mark the flag edge and add it to the path.
             if (e != nullptr) {
-                curr_assign.flag_edges.push_back(e);
+                m.flag_edges.push_back(e);
             }
         }
     }
-    assign_arr.push_back(curr_assign);
 }
 
 sptr<hyperedge_t>

@@ -156,6 +156,7 @@ HyperGraph<V, HE>::make_and_add_edge(std::vector<sptr<V>> vlist) {
 
 template <class V, class HE> inline sptr<V>
 HyperGraph<V, HE>::get_vertex(uint64_t id) const {
+    if (!id_to_vertex.count(id)) return nullptr;
     return id_to_vertex.at(id);
 }
 
