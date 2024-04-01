@@ -37,9 +37,7 @@ public:
     DecodingGraph(const DetailedStimCircuit&, size_t flips_per_error);
     DecodingGraph(DecodingGraph&&) = default;
 
-    DecodingGraph make_unified_lattice(
-            std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& ufl_map,
-            std::map<sptr<decoding::hyperedge_t>, size_t>& crease_edge_map);
+    DecodingGraph make_unified_lattice(std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& ufl_map);
 
     // Makes vertex and also sets the base of the vertex to itself.
     sptr<decoding::vertex_t> make_vertex(uint64_t) const override;

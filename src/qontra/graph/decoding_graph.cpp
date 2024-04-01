@@ -472,6 +472,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
 #endif
     for (sptr<hyperedge_t> he : get_flag_edges()) {
         fp_t p = pow(he->probability * compute_renorm_factor(he->flags),static_cast<fp_t>(he->get_order() - 1));
+        p = pow(p, he->power);
         for (size_t i = 0; i < he->get_order(); i++) {
             sptr<vertex_t> v = he->get<vertex_t>(i);
             if (!dgr->contains(v)) continue;
@@ -516,17 +517,10 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 e->probability = 0.5;
             } else {
                 fp_t p = 0.0;
-                if (base_probability_map.count(v) && base_probability_map.at(v).count(w)) {
-                    p = base_probability_map.at(v).at(w);
-                } else {
-                    for (sptr<hyperedge_t> he : get_common_hyperedges({v, w})) {
-                        fp_t r = he->probability;
-                        p = (1-p)*r + (1-r)*p;
-                    }
-                    base_probability_map[v][w] = p;
-                    base_probability_map[w][v] = p;
+                for (sptr<hyperedge_t> he : get_common_hyperedges({v, w})) {
+                    fp_t r = pow(renorm_factor*he->probability, he->power);
+                    p = (1-p)*r + (1-r)*p;
                 }
-                p *= renorm_factor;
                 e->probability = (1-e->probability)*p + (1-p)*e->probability;
             }
         }

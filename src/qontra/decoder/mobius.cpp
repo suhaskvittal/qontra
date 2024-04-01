@@ -3,8 +3,6 @@
  *  date:   30 March 2024
  * */
 
-#define MEMORY_DEBUG
-
 #include "qontra/decoder/mobius.h"
 #include "qontra/graph/decoding_graph/unified_lattice.h"
 
@@ -45,20 +43,6 @@ MobiusDecoder::load_syndrome(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome, int
     }
     // Activate detectors in ufl_graph.
     ufl_graph->activate_detectors(ufl_detectors, flags);
-#ifdef MEMORY_DEBUG
-    std::cout << "UFL Flag edges:" << std::endl;
-    for (sptr<hyperedge_t> e : ufl_graph->get_flag_edges()) {
-        std::cout << "\tD[";
-        for (size_t i = 0; i < e->get_order(); i++) {
-            std::cout << " " << print_ufl(e->get<vertex_t>(i));
-        }
-        std::cout << " ], F[";
-        for (uint64_t f : e->flags) {
-            std::cout << " " << f;
-        }
-        std::cout << " ], P = " << e->probability << std::endl;
-    }
-#endif
 }
 
 std::vector<assign_t>
@@ -110,6 +94,22 @@ MobiusDecoder::compute_matching_on_unified_lattice() {
     for (assign_t& m : assign_arr) {
         identify_flag_edges_in_path(m);
     }
+#ifdef MEMORY_DEBUG
+    for (const assign_t& m : assign_arr) {
+        error_chain_t ec = decoding_graph->get_error_chain(m.v, m.w, m.c1, m.c2);
+        error_chain_t _ec = decoding_graph->get_error_chain(m.v, m.w, m.c1, m.c2, true);
+        if (ec.path.front() != m.v) std::reverse(ec.path.begin(), ec.path.end());
+        if (ec.path != m.path) {
+            std::cout << "Path mismatch! mobius path: [";
+            for (sptr<vertex_t> v : m.path) std::cout << " " << print_v(v);
+            std::cout << " ], flagged path: [";
+            for (sptr<vertex_t> v : ec.path) std::cout << " " << print_v(v);
+            std::cout << " ], unflagged path: [";
+            for (sptr<vertex_t> v : _ec.path) std::cout << " " << print_v(v);
+            std::cout << " ]" << std::endl;
+        }
+    }
+#endif
     return assign_arr;
 }
 
@@ -125,6 +125,15 @@ MobiusDecoder::read_ufl_error_chain(std::vector<assign_t>& arr, sptr<vertex_t> s
     error_chain_t ec = ufl_graph->get_error_chain(src, dst);
     if (ec.path.empty()) return;
     if (ec.path.front() != src) std::reverse(ec.path.begin(), ec.path.end());
+
+#ifdef MEMORY_DEBUG
+    error_chain_t _ec = ufl_graph->get_error_chain(src, dst, COLOR_ANY, COLOR_ANY, true);
+    std::cout << "UFL path between " << print_ufl(src) << " and " << print_ufl(dst) << ": flagged = [";
+    for (sptr<vertex_t> v : ec.path) std::cout << " " << print_ufl(v);
+    std::cout << " ], unflagged = [";
+    for (sptr<vertex_t> v : _ec.path) std::cout << " " << print_ufl(v);
+    std::cout << " ]" << std::endl;
+#endif
 
     for (size_t i = 1; i < ec.path.size(); i++) {
         sptr<vertex_t> x = ec.path[i-1],

@@ -2,7 +2,6 @@
  *  author: Suhas Vittal
  *  date:   16 February 2024
  * */
-#define MEMORY_DEBUG
 
 #include "qontra/decoder/matching_base.h"
 

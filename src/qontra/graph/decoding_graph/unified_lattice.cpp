@@ -55,10 +55,7 @@ DecodingGraph::DecodingGraph()
 {}
 
 DecodingGraph
-DecodingGraph::make_unified_lattice(
-        std::map<sptr<vertex_t>, sptr<vertex_t>>& ufl_map,
-        std::map<sptr<hyperedge_t>, sptr<vertex_t>>& crease_edge_map)
-{
+DecodingGraph::make_unified_lattice(std::map<sptr<vertex_t>, sptr<vertex_t>>& ufl_map) {
     DecodingGraph ufl;
     // Copy all non boundary vertices over to ufl.
     for (sptr<vertex_t> v : get_vertices()) {
@@ -67,8 +64,7 @@ DecodingGraph::make_unified_lattice(
         for (int c1 = 0; c1 < number_of_colors; c1++) {
             for (int c2 = c1+1; c2 < number_of_colors; c2++) {
                 if (v->color != c1 && v->color != c2) continue;
-                sptr<vertex_t> x = 
-                    ufl.make_and_add_vertex(unified_lattice_id(v->id, c1, c2));
+                sptr<vertex_t> x = ufl.make_and_add_vertex(unified_lattice_id(v->id, c1, c2));
                 x->base = x;
                 ufl_map[x] = v;
             }
@@ -86,6 +82,13 @@ DecodingGraph::make_unified_lattice(
                 add_edge_to_ufl(ufl, e, c1, c2, tentative_edges, boundary_paired_list);
             }
         }
+#ifdef MEMORY_DEBUG
+        if (boundary_paired_list.size()) {
+            std::cout << "boundary unpaired for edge [";
+            for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v);
+            std::cout << " ]" << std::endl;
+        }
+#endif
         // Make crease edges.
         for (size_t i = 0; i < boundary_paired_list.size(); i++) {
             sptr<vertex_t> x = boundary_paired_list.at(i);
@@ -93,7 +96,7 @@ DecodingGraph::make_unified_lattice(
                 sptr<vertex_t> y = boundary_paired_list.at(j);
                 sptr<hyperedge_t> f = ufl.make_edge({x, y});
                 f->probability = e->probability;
-                crease_edge_map[f] = boundary_paired_list.size() / 2;
+                f->flags = e->flags;
                 tentative_edges.push_back(f);
             }
         }

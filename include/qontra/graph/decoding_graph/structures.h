@@ -33,6 +33,7 @@ struct edge_t : base::edge_t {
 
 struct hyperedge_t : base::hyperedge_t {
     fp_t                probability;
+    fp_t                power = 1.0;
     std::set<uint64_t>  flags;
     std::set<uint64_t>  frames;
 };
