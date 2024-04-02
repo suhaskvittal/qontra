@@ -250,6 +250,9 @@ public:
         fp_t max_qubit_frequency = 5.34e9;
         fp_t qubit_frequency_step = 0.01e9;
         fp_t fabrication_precision = 30e6;
+    
+        // Runtime settings.
+        bool    skip_scheduling = false;
 
         // Scheduler settings.
         size_t  rounds = 1;

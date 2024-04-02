@@ -842,11 +842,13 @@ PhysicalNetwork::recompute_cycle_role_maps() {
 void
 PhysicalNetwork::finalize() {
     // Run the scheduler.
-    Scheduler sch(this);
-    x_memory = sch.run(config.rounds, true);
-    z_memory = sch.run(config.rounds, false);
-    round_latency = sch.get_depth_as_time();
-    round_cnots = sch.get_depth_as_cx_opcount();
+    if (config.skip_scheduling) {
+        Scheduler sch(this);
+        x_memory = sch.run(config.rounds, true);
+        z_memory = sch.run(config.rounds, false);
+        round_latency = sch.get_depth_as_time();
+        round_cnots = sch.get_depth_as_cx_opcount();
+    }
     // Run the yield simulator.
     /*
     YieldSimulator ysim(this);

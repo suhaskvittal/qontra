@@ -71,10 +71,9 @@ int main(int argc, char* argv[]) {
     if (pp.option_set("color-checks")) {
         network.assign_colors_to_checks();
     }
-    pp.get("freq-min", network.config.min_qubit_frequency);
-    pp.get("freq-max", network.config.max_qubit_frequency);
-    pp.get("freq-step", network.config.qubit_frequency_step);
-    pp.get("fab-precision", network.config.fabrication_precision);
+    if (pp.option_set("skip-schedule")) {
+        network.config.skip_scheduling = true;
+    }
     network.finalize();
     // Write data to output folder:
     write_network_to_folder(data_output_folder, &network);
@@ -84,8 +83,7 @@ int main(int argc, char* argv[]) {
             << "Max Degree = " << network.get_max_degree() << "\n"
             << "Thickness = " << network.get_thickness() << "\n"
             << "Round Latency = " << network.get_round_latency() << "\n"
-            << "Round CNOTs = " << network.get_round_cnots() << "\n"
-            << "Expected Collisions = " << network.get_expected_collisions() << "\n";
+            << "Round CNOTs = " << network.get_round_cnots() << "\n";
 
 #ifdef PROTEAN_PERF
     t = timer.clk_end();
@@ -93,7 +91,7 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef GRAPHVIZ_ENABLED
-    if (render_output_folder.size() > 0) {
+    if (!pp.option_set("skip-render") && render_output_folder.size() > 0) {
         vtils::safe_create_directory(render_output_folder);
         // Render the network and save it to a file.
         render_config_t rconfig;
