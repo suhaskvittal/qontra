@@ -140,6 +140,13 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     for (const assign_t& m : matchings) {
         for (sptr<hyperedge_t> e : m.flag_edges) {
             if ((++flag_edge_ctr_map[e]) == 2) {
+#ifdef MEMORY_DEBUG
+                std::cout << "Applying flag edge [";
+                for (sptr<vertex_t> v : e->get<vertex_t>()) {
+                    std::cout << " " << print_v(v);
+                }
+                std::cout << " ]" << std::endl;
+#endif
                 for (uint64_t fr : e->frames) corr[fr] ^= 1;
             }
         }
@@ -359,9 +366,6 @@ RestrictionDecoder::split_assignment(
             error_chain_t ec = decoding_graph->get_error_chain(v, w, m.c1, m.c2, true);
             if (e != nullptr && (flag_ctr_map.at(e) == 2 || ec.path.size() > 3)) {
                 // Finish off the current assignment and ignore the flag edge.
-                if (ec.path.size() > 3 && flag_ctr_map.at(e) != 2) {
-                    curr.flag_edges.push_back(e);
-                }
                 push_back_assignment(assign_arr, curr);
 #ifdef MEMORY_DEBUG
                 std::cout << "\tFound flag edge [ " << print_v(v) << ", " << print_v(w) << " ], path:";

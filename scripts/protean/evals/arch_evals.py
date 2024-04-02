@@ -1,4 +1,12 @@
 CODES = {
+    'hexcc': {
+        '': [
+            '7_1_3_3',
+            '19_1_5_5',
+            '37_1_7_7',
+            '61_1_9_9'
+        ]
+    },
     'hysc': {
         '3_8': [
             '48_6_6_3',
@@ -69,8 +77,8 @@ def code_params(code):
 def run_experiment_0(family, subfamily):
     code_list = CODES[family][subfamily]
 
-    jid_blk = 'jid.ral' if family == 'hycc' else ''
-    other_flags = '-color-checks' if family == 'hycc' else ''
+    jid_blk = 'jid.ral' if 'cc' in family else ''
+    other_flags = '-color-checks' if 'cc' in family else ''
 
     arch_folder_prefix = f'../data/protean/{family}/{subfamily}'
 
@@ -79,8 +87,8 @@ def run_experiment_0(family, subfamily):
 #       ('2', f'{jid_blk}.fla.ral.rlb.rcr', 4, ''),  # Only flags
 #       ('3.3', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 3, '-fno-opt-flags -fflag-jid'),  # Naive connectivity 3 implementation
 #       ('3.4', f'{jid_blk}.fla.ral.(prx.ral)+.rlb.rcr', 4, '-fno-opt-flags -fflag-jid'),  # Naive connectivity 4 implementation
-#       ('4.3', f'{jid_blk}.fla.ral({jid_blk}.con.prx.ral)+rlb.rcr', 3, '-fflag-jid'),  # Optimized connectivity 3
-        ('4.4', f'{jid_blk}.fla.ral({jid_blk}.con.prx.ral)+rlb.rcr', 4, '-fflag-jid')   # Optimized connectivity 4
+#       ('4.3', f'{jid_blk}.fla.ral({jid_blk}.prx.ral)+rlb.rcr', 3, '-fflag-jid'),  # Optimized connectivity 3
+        ('4.4', f'{jid_blk}.fla.ral({jid_blk}.prx.ral)+rlb.rcr', 4, '-fflag-jid')   # Optimized connectivity 4
     ]
 
     for code in code_list:
@@ -133,6 +141,9 @@ def run_experiment_1(family, subfamily):
 family = argv[1]
 subfamily = argv[2]
 exno = int(argv[3])
+
+if subfamily == 'DNE':
+    subfamily = ''
 
 if exno == 0:
     # Make architectures.

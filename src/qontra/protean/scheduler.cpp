@@ -593,11 +593,6 @@ Scheduler::compute_schedules() {
                 if (rx_rsq == ry_rsq) {
                     lp_constr_t con(x, y, lp_constr_t::direction::neq);
                     LP.add_constraint(con);
-
-                    lp_constr_t con1(x-y, 1, lp_constr_t::direction::le);
-                    lp_constr_t con2(x-y, -1, lp_constr_t::direction::ge);
-                    LP.add_constraint(con1);
-                    LP.add_constraint(con2);
                 }
             }
         }

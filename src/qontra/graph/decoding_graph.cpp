@@ -336,6 +336,34 @@ DecodingGraph::compute_renorm_factor(std::set<uint64_t> flags) {
     return f;
 }
 
+fp_t
+DecodingGraph::renormalized_edge_probability(sptr<hyperedge_t> e) {
+    fp_t p = e->probability;
+    // Three renormalizations.
+    //
+    // First: flag renormalization.
+    if (e->flags.empty()) {
+        p *= renorm_factor;
+    } else {
+        p *= compute_renorm_factor(e->flags);
+        // Second (while we're still in this body), renormalize flags based
+        // on order.
+        p = pow(p, static_cast<fp_t>(e->get_order()-1));
+    }
+    // Third: detector-based renormalization. Edges adjacent to an active
+    // detector have higher probability.
+    /*
+    fp_t det_w = 1.0;
+    for (sptr<vertex_t> v : e->get<vertex_t>()) {
+        if (active_detectors.count(v->id)) {
+            det_w += 1.0;
+        }
+    }
+    p = pow(p, 1.0/det_w);
+    */
+    return p;
+}
+
 sptr<hyperedge_t>
 DecodingGraph::get_best_flag_edge(std::vector<sptr<hyperedge_t>> edge_list) {
     sptr<hyperedge_t> best_edge = nullptr;
@@ -471,7 +499,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     timer.clk_start();
 #endif
     for (sptr<hyperedge_t> he : get_flag_edges()) {
-        fp_t p = pow(he->probability * compute_renorm_factor(he->flags),static_cast<fp_t>(he->get_order() - 1));
+        fp_t p = renormalized_edge_probability(he);
         for (size_t i = 0; i < he->get_order(); i++) {
             sptr<vertex_t> v = he->get<vertex_t>(i);
             if (!dgr->contains(v)) continue;
@@ -516,15 +544,9 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
                 e->probability = 0.5;
             } else {
                 fp_t p = 0.0;
-                if (base_probability_map.count(v) && base_probability_map.at(v).count(w)) {
-                    p = base_probability_map.at(v).at(w);
-                } else {
-                    for (sptr<hyperedge_t> he : get_common_hyperedges({v, w})) {
-                        fp_t r = he->probability;
-                        p = (1-p)*r + (1-r)*p;
-                    }
-                    base_probability_map[v][w] = p;
-                    base_probability_map[w][v] = p;
+                for (sptr<hyperedge_t> he : get_common_hyperedges({v, w})) {
+                    fp_t r = renormalized_edge_probability(he);
+                    p = (1-p)*r + (1-r)*p;
                 }
                 p *= renorm_factor;
                 e->probability = (1-e->probability)*p + (1-p)*e->probability;

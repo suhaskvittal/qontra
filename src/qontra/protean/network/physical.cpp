@@ -513,7 +513,7 @@ PhysicalNetwork::contract_small_degree_qubits() {
         if (pv->has_role_of_type(raw_vertex_t::type::data)) continue;
         
         const size_t dg = get_degree(pv);
-        if (dg >= config.max_connectivity) continue;
+        if (dg > 2) continue;
         
         if (dg == 0) {
             // God forbid, I can't think of a case like this, so I'm exiting.
@@ -547,26 +547,6 @@ PhysicalNetwork::contract_small_degree_qubits() {
             if (!contains(px1, px2)) {
                 make_and_add_edge(px1, px2);
             }
-        } else {
-            // Otherwise, this is some vertex with degree less than the max connectivity. If any
-            // of its neighbors have sufficient slack to absorb it, we will do so.
-            auto adj = get_neighbors(pv);
-            for (sptr<phys_vertex_t> px : adj) {
-                int slack = dg + get_degree(px) - 1;
-                if (px->has_role_of_type(raw_vertex_t::type::data)
-                        || slack > config.max_connectivity) continue;
-                consume(px, pv);
-                delete_vertex(pv);
-                // Update neighbors of pv.
-                for (sptr<phys_vertex_t> py : adj) {
-                    if (px == py) continue;
-                    if (!contains(px, py)) {
-                        make_and_add_edge(px, py);
-                    }
-                }
-                goto did_mod_network;
-            }
-            continue;
         }
 did_mod_network:
         mod = true;
@@ -803,7 +783,6 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         iv->support = supp.all;
     }
     // Now, compute interaction graph edges.
-    const auto& fsm = raw_connection_network->flag_support_map;
     for (size_t i = 0; i < _id; i++) {
         sptr<int_v_t> iv = interaction_graph->get_vertex(i);
         for (size_t j = i+1; j < _id; j++) {
@@ -821,18 +800,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
                     sptr<phys_vertex_t> py = role_to_phys.at(ry);
                     if (px == py) {
                         ie->conflicts.emplace_back(rx, ry, px);
-                        continue;
                     }
-                    /*
-                    if (rx->qubit_type == raw_vertex_t::type::flag && ry->qubit_type == raw_vertex_t::type::flag) {
-                        const auto& rx_data = fsm.at(iv->check).at(rx),
-                                  & ry_data = fsm.at(iw->check).at(ry);
-                        const auto common = rx_data * ry_data;
-                        if (common.size() == 1) {
-                            ie->conflicts.emplace_back(rx, ry, nullptr);
-                        }
-                    }
-                    */
                 }
             }
             if (ie->conflicts.size()) interaction_graph->add_edge(ie);
