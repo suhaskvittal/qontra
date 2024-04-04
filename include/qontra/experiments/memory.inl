@@ -14,19 +14,33 @@
 namespace qontra {
 
 inline DetailedStimCircuit
-make_default_circuit(std::string qes_file, fp_t p, bool fix_timing_error_as_p) {
+make_default_circuit(std::string qes_file, fp_t p, bool fix_timing_error_as_p, std::string model) {
     qes::Program<> program = qes::from_file(qes_file);
-    return make_default_circuit(program, p, fix_timing_error_as_p);
+    return make_default_circuit(program, p, fix_timing_error_as_p, model);
 }
 
-inline DetailedStimCircuit
-make_default_circuit(const qes::Program<>& program, fp_t p, bool fix_timing_error_as_p) {
+DetailedStimCircuit
+make_default_circuit(
+        const qes::Program<>& program, fp_t p, bool fix_timing_error_as_p, std::string model) 
+{
     const size_t n = get_number_of_qubits(program);
 
     tables::ErrorAndTiming et;
     et.e_g1q *= 0.1;
     et.e_idle *= 0.1;
     et = et * (1000*p);
+
+    if (model == "cap") {
+        et.e_m1w0 = 0.0;
+        et.e_m0w1 = 0.0;
+        et.e_g1q = 0.0;
+        et.e_g2q = 0.0;
+        et.e_idle = 0.0;
+    } else if (model == "pheno") {
+        et.e_g1q = 0.0;
+        et.e_g2q = 0.0;
+        et.e_idle = 0.0;
+    }
 
     ErrorTable errors;
     TimeTable timing;

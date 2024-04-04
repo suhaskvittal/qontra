@@ -842,7 +842,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
 void
 PhysicalNetwork::finalize() {
     // Run the scheduler.
-    if (config.skip_scheduling) {
+    if (!config.skip_scheduling) {
         Scheduler sch(this);
         x_memory = sch.run(config.rounds, true);
         z_memory = sch.run(config.rounds, false);

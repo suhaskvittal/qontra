@@ -6,6 +6,8 @@
 #ifndef QONTRA_DECODING_GRAPH_h
 #define QONTRA_DECODING_GRAPH_h
 
+#define ALWAYS_REWEIGH
+
 #include "qontra/graph/decoding_graph/edge_class.h"
 #include "qontra/graph/decoding_graph/structures.h"
 

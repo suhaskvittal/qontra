@@ -32,8 +32,16 @@ struct memory_result_t {
     std::vector<fp_t>   logical_error_rate_by_obs;  // Logical error rate for each observable.
 };
 
-DetailedStimCircuit make_default_circuit(std::string qes_file, fp_t, bool fix_timing_error_as_p=false);
-DetailedStimCircuit make_default_circuit(const qes::Program<>&, fp_t, bool fix_timing_error_as_p=false);
+DetailedStimCircuit make_default_circuit(
+        std::string qes_file,
+        fp_t,
+        bool fix_timing_error_as_p=false,
+        std::string model="circuit");
+DetailedStimCircuit make_default_circuit(
+        const qes::Program<>&,
+        fp_t,
+        bool fix_timing_error_as_p=false,
+        std::string model="circuit");
 
 memory_result_t memory_experiment(Decoder*, memory_config_t);
 

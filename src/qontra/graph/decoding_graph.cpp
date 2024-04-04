@@ -352,15 +352,35 @@ DecodingGraph::renormalized_edge_probability(sptr<hyperedge_t> e) {
     }
     // Third: detector-based renormalization. Edges adjacent to an active
     // detector have higher probability.
-    /*
-    fp_t det_w = 1.0;
+#ifdef ALWAYS_REWEIGH
+    bool contains_boundary = false;
+    size_t det_w = 0;
     for (sptr<vertex_t> v : e->get<vertex_t>()) {
         if (active_detectors.count(v->id)) {
-            det_w += 1.0;
+            det_w++;
+        }
+        if (v->is_boundary_vertex && !contains_boundary) {
+            // Check if a restricted lattice needs a boundary.
+            for (int c1 = 0; c1 < number_of_colors; c1++) {
+                for (int c2 = c1+1; c2 < number_of_colors; c2++) {
+                    if (v->color != c1 && v->color != c2) continue;
+                    size_t cnt = 0;
+                    for (uint64_t d : active_detectors) {
+                        if (d == get_color_boundary_index(COLOR_ANY)) continue;
+                        sptr<vertex_t> w = get_vertex(d);
+                        cnt += (w->color == c1 || w->color == c2);
+                    }
+                    if (cnt & 1) contains_boundary = true;
+                }
+            }
         }
     }
-    p = pow(p, 1.0/det_w);
-    */
+    if (det_w >= 2 || (det_w == 1 && contains_boundary)) {
+        p = sqrt(p);
+    } else if (det_w == 1) {
+        p *= 10;
+    }
+#endif
     return p;
 }
 
@@ -435,6 +455,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     uptr<Graph<vertex_t, edge_t>> dgr = std::make_unique<Graph<vertex_t, edge_t>>();
     // Populate dgr. If flags_are_active, then assume dgr is transient only add
     // vertices relevant to the active detectors.
+#ifndef ALWAYS_REWEIGH
     if (flags_are_active) {
         // Get the non-flagged map.
         auto& _dm = distance_matrix_map[c1_c2];
@@ -484,12 +505,15 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             }
         }
     } else {
+#endif
         for (sptr<vertex_t> v : get_vertices()) {
             if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
                 dgr->add_vertex(v);
             }
         }
+#ifndef ALWAYS_REWEIGH
     }
+#endif
     // Now, add edges to the graph.
     // First handle flag edges.
 #ifdef DECODER_PERF
