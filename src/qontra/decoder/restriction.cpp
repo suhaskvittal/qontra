@@ -416,6 +416,7 @@ RestrictionDecoder::split_assignment(
 
 std::vector<component_t>
 RestrictionDecoder::compute_connected_components(const std::vector<assign_t>& assignments) {
+    std::vector<component_t> components;
     // For each connected component, we know the following:
     //  (1) A boundary may be connected to multiple vertices (direct matches
     //      to the boundary, or matches that go through a boundary).
@@ -430,7 +431,17 @@ RestrictionDecoder::compute_connected_components(const std::vector<assign_t>& as
         if (m.v == nullptr) continue;
         if (!cgr->contains(m.v)) cgr->add_vertex(m.v);
         if (!cgr->contains(m.w)) cgr->add_vertex(m.w);
-        if (cgr->contains(m.v, m.w)) continue;
+        if (cgr->contains(m.v, m.w)) {
+            // If either v and w is the red boundary, make a connected component (looped edge).
+            sptr<e_t> e = cgr->get_edge(m.v, m.w);
+            std::vector<assign_t> m_list{ e->m, m };
+            if ((m.v->color == COLOR_RED && m.v->is_boundary_vertex)
+                || (m.w->color == COLOR_RED && m.w->is_boundary_vertex))
+            {
+                components.emplace_back(m_list, COLOR_GREEN);
+            }
+            continue;
+        }
         sptr<e_t> e = cgr->make_and_add_edge(m.v, m.w);
         e->m = m;
     }
@@ -438,7 +449,6 @@ RestrictionDecoder::compute_connected_components(const std::vector<assign_t>& as
     // no connected components.
     sptr<vertex_t> vrb = decoding_graph->get_boundary_vertex(COLOR_RED);
     if (!cgr->contains(vrb)) return {};
-    std::vector<component_t> components;
 
     typedef std::tuple<sptr<vertex_t>, std::vector<sptr<vertex_t>>, bool> c_entry_t;
     std::deque<c_entry_t> bfs;
