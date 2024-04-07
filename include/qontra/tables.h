@@ -71,7 +71,7 @@ struct ErrorAndTiming {
     fp_t e_idle = 1e-3;
     fp_t t_g1q = 30;    // in nanoseconds.
     fp_t t_g2q = 40;
-    fp_t t_ro = 600;
+    fp_t t_ro = 800;
     fp_t t1 = 1000e3;
     fp_t t2 = 500e3;
 

@@ -2,7 +2,6 @@
  *  author: Suhas Vittal
  *  date:   16 February 2024
  * */
-#define MEMORY_DEBUG
 
 #include "qontra/decoder/matching_base.h"
 
@@ -20,6 +19,7 @@ MatchingBase::MatchingBase(const DetailedStimCircuit& circuit, int flips_per_err
     flags(),
     flag_edges()
 {
+#ifndef ALWAYS_REWEIGH
     if (decoding_graph->number_of_colors == 0) {
         decoding_graph->init_distances_for();
     } else {
@@ -29,6 +29,7 @@ MatchingBase::MatchingBase(const DetailedStimCircuit& circuit, int flips_per_err
             }
         }
     }
+#endif
 }
 
 void
