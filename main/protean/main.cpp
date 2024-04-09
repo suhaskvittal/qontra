@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
             << "Checks = " << tanner_graph.get_checks().size() << "\n";
     // Run:
     update_network(pass_string, &network, verbose);
-    if (pp.option_set("color-checks")) {
+    if (pp.option_set("color-checks") && !pp.option_set("skip-schedule")) {
         network.assign_colors_to_checks();
     }
     if (pp.option_set("skip-schedule")) {

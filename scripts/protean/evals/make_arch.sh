@@ -9,7 +9,7 @@ declare -a HYSC_SF=(
 )
 
 declare -a HYCC_SF=(
-    '4_6' '4_8' '4_10' '5_6'
+    '4_6' '4_8' '4_10' '5_8'
 )
 
 if [[ "$FAMILY" = "hysc" || "$FAMILY" = "all" ]]; then
@@ -26,6 +26,6 @@ if [[ "$FAMILY" = "hycc" || "$FAMILY" = "all" ]]; then
     done
 fi
 
-if [[ "$FAMILY" = "hexcc" || "$FAMILY" = "all" ]]; then
-    python scripts/protean/evals.py hexcc DNE 0 $MIN_SIZE $MAX_SIZE
-fi
+#if [[ "$FAMILY" = "hexcc" || "$FAMILY" = "all" ]]; then
+#    python scripts/protean/evals.py hexcc DNE 0 $MIN_SIZE $MAX_SIZE
+#fi

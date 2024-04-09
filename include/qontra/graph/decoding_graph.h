@@ -6,8 +6,6 @@
 #ifndef QONTRA_DECODING_GRAPH_h
 #define QONTRA_DECODING_GRAPH_h
 
-#define ALWAYS_REWEIGH
-
 #include "qontra/graph/decoding_graph/edge_class.h"
 #include "qontra/graph/decoding_graph/structures.h"
 
@@ -36,7 +34,7 @@ typedef Graph<decoding::vertex_t, decoding::edge_t> DijkstraGraph;
 
 class DecodingGraph : public HyperGraph<decoding::vertex_t, decoding::hyperedge_t> {
 public:
-    DecodingGraph(const DetailedStimCircuit&, size_t flips_per_error);
+    DecodingGraph(const DetailedStimCircuit&, size_t flips_per_error, bool reweigh_for_detectors=false);
     DecodingGraph(DecodingGraph&&) = default;
 
     DecodingGraph make_unified_lattice(std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& ufl_map);
@@ -151,6 +149,7 @@ private:
     bool flags_are_active;
 
     fp_t renorm_factor;
+    bool reweigh_for_detectors;
 };
 
 std::vector<int> get_complementary_colors_to(std::vector<int>, int number_of_colors);

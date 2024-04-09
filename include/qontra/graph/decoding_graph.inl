@@ -72,11 +72,7 @@ DecodingGraph::activate_detectors(const std::vector<uint64_t>& all_detectors) {
             active_detectors.insert(d);
         }
     }
-#ifdef ALWAYS_REWEIGH
-    flags_are_active = true;
-#else
-    flags_are_active = !active_flags.empty();
-#endif
+    flags_are_active = reweigh_for_detectors | !active_flags.empty();
     renorm_factor = compute_renorm_factor();
 }
 
@@ -85,20 +81,16 @@ DecodingGraph::activate_detectors(const std::vector<uint64_t>& nonflags, const s
     deactivate_detectors();
     active_detectors = std::set<uint64_t>(nonflags.begin(), nonflags.end());
     active_flags = std::set<uint64_t>(flags.begin(), flags.end());
-#ifdef ALWAYS_REWEIGH
-    flags_are_active = true;
-#else
-    flags_are_active = !active_flags.empty();
-#endif
+    flags_are_active = reweigh_for_detectors | !active_flags.empty();
     renorm_factor = compute_renorm_factor();
 }
 
 inline void
 DecodingGraph::deactivate_detectors() {
-#ifdef ALWAYS_REWEIGH
-    distance_matrix_map.clear();
-    dijkstra_graph_map.clear();
-#endif
+    if (reweigh_for_detectors) {
+        distance_matrix_map.clear();
+        dijkstra_graph_map.clear();
+    }
     flagged_distance_matrix_map.clear();
     flagged_dijkstra_graph_map.clear();
     active_flags.clear();

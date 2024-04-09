@@ -46,7 +46,7 @@ private:
 
 class MatchingBase : public Decoder {
 public:
-    MatchingBase(const DetailedStimCircuit&, int flips_per_error);
+    MatchingBase(const DetailedStimCircuit&, int flips_per_error, bool reweigh_for_detectors=false);
 
     virtual void load_syndrome(
             stim::simd_bits_range_ref<SIMD_WIDTH>, int=graph::COLOR_ANY, int=graph::COLOR_ANY,

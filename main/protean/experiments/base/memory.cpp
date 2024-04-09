@@ -90,7 +90,6 @@ int main(int argc, char* argv[]) {
     if (pp.option_set("fix-error")) {
         base_circuit = make_default_circuit(program, pmax);
     } else {
-
         ErrorTable errors_base = errors * 1e-3;
         TimeTable timing_base = timing * 1e-3;
         base_circuit = DetailedStimCircuit::from_qes(program, errors_base, timing_base);

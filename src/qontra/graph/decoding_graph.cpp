@@ -20,7 +20,7 @@ namespace graph {
 
 using namespace decoding;
 
-DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_per_error)
+DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_per_error, bool reweigh_for_detectors)
     :HyperGraph(),
     number_of_colors(circuit.number_of_colors_in_circuit),
     error_polynomial(),
@@ -38,7 +38,8 @@ DecodingGraph::DecodingGraph(const DetailedStimCircuit& circuit, size_t flips_pe
     nod_edges(),
     all_edges(),
     flags_are_active(false),
-    renorm_factor(1.0)
+    renorm_factor(1.0),
+    reweigh_for_detectors(reweigh_for_detectors)
 {
     stim::DetectorErrorModel dem =
         stim::ErrorAnalyzer::circuit_to_detector_error_model(
@@ -350,9 +351,9 @@ DecodingGraph::renormalized_edge_probability(sptr<hyperedge_t> e) {
         // on order.
         p = pow(p, static_cast<fp_t>(e->get_order()-1));
     }
+    if (!reweigh_for_detectors) return p;
     // Third: detector-based renormalization. Edges adjacent to an active
     // detector have higher probability.
-#ifdef ALWAYS_REWEIGH
     bool contains_boundary = false;
     size_t det_w = 0;
     for (sptr<vertex_t> v : e->get<vertex_t>()) {
@@ -380,7 +381,6 @@ DecodingGraph::renormalized_edge_probability(sptr<hyperedge_t> e) {
     } else if (det_w == 1) {
         p *= 10;
     }
-#endif
     return p;
 }
 
@@ -455,8 +455,7 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
     uptr<Graph<vertex_t, edge_t>> dgr = std::make_unique<Graph<vertex_t, edge_t>>();
     // Populate dgr. If flags_are_active, then assume dgr is transient only add
     // vertices relevant to the active detectors.
-#ifndef ALWAYS_REWEIGH
-    if (flags_are_active) {
+    if (flags_are_active && !reweigh_for_detectors) {
         // Get the non-flagged map.
         auto& _dm = distance_matrix_map[c1_c2];
         // Add the boundaries of interest.
@@ -505,15 +504,12 @@ DecodingGraph::make_dijkstra_graph(int c1, int c2) {
             }
         }
     } else {
-#endif
         for (sptr<vertex_t> v : get_vertices()) {
             if (c1 == COLOR_ANY || v->color == c1 || v->color == c2) {
                 dgr->add_vertex(v);
             }
         }
-#ifndef ALWAYS_REWEIGH
     }
-#endif
     // Now, add edges to the graph.
     // First handle flag edges.
 #ifdef DECODER_PERF

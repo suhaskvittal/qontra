@@ -14,7 +14,7 @@ CODES = {
         '4_6': [ '24_8_4_4', '96_20_6_6', '192_36_8_8'],
         '4_8': [ '336_88_8_8', '3456_868_12_12' ],
         '4_10': [ '40_16_4_4', '480_148_6_6', '640_196_8_8' ],
-        '5_6': [ '120_36_4_4', '600_164_8_8' ]
+        '5_8': [ '240_88_4_4', '2160_760_6_6', '2560_900_8_8' ]
     }
 }
 
@@ -50,7 +50,7 @@ def make_arch(family, subfamily):
         tanner_file = f'../data/tanner/{family}/{subfamily}/{code}.txt'
         # Define remaining flags:
         f_color_checks = '-color-checks' if 'cc' in family else ''
-        f_skip_schedule = '-skip-schedule' if n > 1000 else ''
+        f_skip_schedule = '-skip-schedule' if n > 500 else ''
         for (vno, passes, conn, flags) in version_list:
             output_folder = f'../{arch_folder}/v{vno}'
             print('----------------------------')

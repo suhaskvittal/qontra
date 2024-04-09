@@ -35,7 +35,7 @@ struct face_t {
 class RestrictionDecoder : public MatchingBase {
 public:
     RestrictionDecoder(const DetailedStimCircuit& circuit)
-        :MatchingBase(circuit, 3)
+        :MatchingBase(circuit, 3, true)
     {}
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
