@@ -3,9 +3,16 @@
  *  date:   21 January 2024
  * */
 
-#include <qontra/decoder/chromobius.h>
-#include <qontra/decoder/mwpm.h>
+
+#ifdef COMPILE_PYMATCHING
 #include <qontra/decoder/pymatching.h>
+#endif
+
+#ifdef COMPILE_CHROMOBIUS
+#include <qontra/decoder/chromobius.h>
+#endif
+
+#include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/decoder/mobius.h>
 #include <qontra/experiments.h>
