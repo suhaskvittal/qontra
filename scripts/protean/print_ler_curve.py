@@ -33,18 +33,17 @@ def read_data_file(data_file, prefix):
 code = argv[1]
 
 if code == 'rsc':
-    for d in [3, 5, 7, 9]:
-        data_file = f'data/protean/rsc/output/d{d}.csv'
+    for d in [3, 5, 7]:
+        data_file = f'data/protean/rsc/d{d}.csv'
         if not os.path.exists(data_file):
             continue
         # Read the data from the file.
         read_data_file(data_file, f'rsc d={d}')
 else:
-    for version in ['v4.3', 'v4.4']:
-        folder = f'data/protean/{code}/{version}'
-        for m in ['x', 'z']:
-            data_file = f'{folder}/output/basic_memory_{m}.csv'
-            if not os.path.exists(data_file):
-                continue
-            # Read the data from the file.
-            read_data_file(data_file, f'{version}, {m}')
+    folder = f'data/protean/{code}/v4.4'
+    for m in ['x', 'z']:
+        data_file = f'{folder}/output/basic_memory_{m}.csv'
+        if not os.path.exists(data_file):
+            continue
+        # Read the data from the file.
+        read_data_file(data_file, f'v4.4, {m}')
