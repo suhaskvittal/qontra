@@ -4,6 +4,7 @@
  * */
 
 #include <qontra/decoder/pymatching.h>
+#include <qontra/decoder/restriction.h>
 #include <qontra/ext/stim.h>
 
 #include <qontra/experiments.h>
@@ -31,6 +32,7 @@ int main(int argc, char* argv[]) {
 
     std::string qes_file(argv[1]);
     std::string output_file(argv[2]);
+    std::string decoder;
 
     if (world_rank == 0) {
         std::cout << "reading " << qes_file << ", writing to " << output_file << std::endl;
@@ -40,6 +42,8 @@ int main(int argc, char* argv[]) {
     fp_t        pmin = 5e-4,
                 pmax = 3e-3;
     uint64_t    step_size = 1;
+
+    pp.get("decoder", decoder, true);
 
     pp.get("e", errors_until_stop);
     pp.get("pmin", pmin);
@@ -53,7 +57,12 @@ int main(int argc, char* argv[]) {
 
     DetailedStimCircuit base_circuit = make_default_circuit(program, pmax);
 
-    uptr<PyMatching> dec = std::make_unique<PyMatching>(base_circuit);
+    uptr<Decoder> dec;
+    if (decoder == "mwpm") {
+        dec = std::make_unique<PyMatching>(base_circuit);
+    } else {
+        dec = std::make_unique<RestrictionDecoder>(base_circuit);
+    }
 
     memory_config_t config;
     config.errors_until_stop = errors_until_stop;
