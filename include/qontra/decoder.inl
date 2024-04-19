@@ -3,6 +3,8 @@
  *  date    25 December 2023
  * */
 
+#include <strings.h>
+
 namespace qontra {
 
 template <class T> std::vector<uint64_t>
@@ -29,6 +31,11 @@ get_nonzero_detectors_(T syndrome, uint64_t number_of_detectors) {
 inline DetailedStimCircuit
 Decoder::get_circuit() {
     return circuit;
+}
+
+inline void
+Decoder::set_circuit(const DetailedStimCircuit& circ) {
+    circuit = circ;
 }
 
 template <class T> inline std::vector<uint64_t>

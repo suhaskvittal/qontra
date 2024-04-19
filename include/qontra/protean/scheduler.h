@@ -13,136 +13,91 @@
 #include <vtils/bijective_map.h>
 #include <vtils/two_level_map.h>
 
+#include <deque>
 #include <set>
 #include <tuple>
 
 namespace qontra {
 namespace protean {
 
+struct cx_t {
+    sptr<net::raw_vertex_t> src;
+    sptr<net::raw_vertex_t> dst;
+    bool is_for_x_check;
+};
+
+struct event_t {
+    sptr<net::raw_vertex_t> owner;
+    std::vector<int64_t> m_operands;
+    bool is_cross_round;
+    bool is_memory_x;
+};
+
+struct sch_data_t {
+    sptr<net::raw_vertex_t> check;
+    std::vector<sptr<net::raw_vertex_t>> data_order;
+};
+
 // The Scheduler class is dedicated to building the syndrome extraction
 // schedule.
 class Scheduler {
 public:
+    // source, target, is_for_x_check
     Scheduler(PhysicalNetwork*);
 
-    qes::Program<>  run(void);
+    qes::Program<> run(size_t rounds, bool is_memory_x);
+    void make_round(void);
 
-    void    build_preparation(qes::Program<>&);
-    void    build_body(qes::Program<>&);
-    void    build_teardown(qes::Program<>&);
-    void    build_measurement(qes::Program<>&);
+    void build_preparation(qes::Program<>&);
+    void build_body(qes::Program<>&);
+    void build_teardown(qes::Program<>&);
 
-    size_t  get_measurement_ctr(void);
-    size_t  get_measurement_time(sptr<net::raw_vertex_t>);
-    std::map<sptr<net::raw_vertex_t>, size_t>   get_meas_ctr_map(void);
+    fp_t get_depth_as_time(fp_t t_g1q=30, fp_t t_g2q=40, fp_t t_ro=700);
+    size_t get_depth_as_cx_opcount(void);
 private:
-    typedef int stage_t;
-    typedef std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_edge_t>>
-        cx_t;
+    void remove_redundant_gates(qes::Program<>&);
 
-    // Indirection functions (inlined):
-    //
-    // Just a level of indirection to avoid the syntax of net_p->raw_connection_network.get_support(...) (e.g,)
-    RawNetwork::parity_support_t&           get_support(sptr<net::raw_vertex_t>);
-    std::vector<sptr<net::raw_vertex_t>>&   get_proxy_walk_path(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>);
+    void prep_tear_h_gates(qes::Program<>&);
+    void prep_tear_cx_gates(qes::Program<>&);
 
-    bool    is_good_for_current_cycle(sptr<net::raw_vertex_t>);
-    bool    is_proxy_usable(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t> src, sptr<net::raw_vertex_t> dst);
-    bool    has_contention(sptr<net::raw_vertex_t>);
-    bool    test_and_set_physical_qubit(sptr<net::raw_vertex_t>);
-    void    release_physical_qubit(sptr<net::raw_vertex_t>);
+    void schedule_cx_along_path(const std::vector<cx_t>&, qes::Program<>&);
+    void push_back_measurement(std::vector<int64_t>&, sptr<net::raw_vertex_t>);
+    void declare_event_for_qubit(sptr<net::raw_vertex_t>);
 
-    cx_t    ret_null_and_set_status(int);
+    std::map<sptr<net::raw_vertex_t>, sch_data_t> compute_schedules(void);
 
-    void    push_back_cx(std::vector<uint64_t>&, cx_t, stage_t);
-    void    push_back_measurement(std::vector<uint64_t>&, sptr<net::raw_vertex_t>);
+    template <class FUNC>
+    bool try_and_push_back_cx_operands(
+            std::vector<int64_t>& cx_operands,
+            std::set<int64_t>& in_use,
+            const std::vector<sptr<net::raw_vertex_t>>& path,
+            size_t k,
+            FUNC additional_test,
+            bool reverse_cx_dir=false);
 
-    void    perform_proxy_resets(qes::Program<>&);
+    RawNetwork::parity_support_t&   get_support(sptr<net::raw_vertex_t>);
+    int64_t                         qu(sptr<net::raw_vertex_t>);
 
-    // Retrieves the subset of checks whose stage_map is set to the input.
-    std::set<sptr<net::raw_vertex_t>>       get_checks_at_stage(stage_t);
+    bool test_and_set_qubit(sptr<net::raw_vertex_t>);
+    bool release_qubit(sptr<net::raw_vertex_t>);
 
-    cx_t get_next_edge_between(sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, bool for_x_check, stage_t);
+    void test_and_set_exit_on_fail(sptr<net::raw_vertex_t>, std::string caller);
+    void print_test_and_set_debug_and_exit(sptr<net::raw_vertex_t>, std::string caller);
 
-    // For the given endpoint, this function (1) traverses the path, stopping early if any edge has not been
-    // completed, (2) upon arriving at an edge with the endpoint, returns the other endpoint if the edge
-    // is not done, (3) returns nullptr if stopped early or no edge satisfying (2) is found.
-    sptr<net::raw_vertex_t> test_and_get_other_endpoint_if_ready(
-                                    sptr<net::raw_vertex_t> endpoint, std::vector<sptr<net::raw_vertex_t>> path);
+    std::map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>> active_role_map;
+    std::vector<sptr<net::raw_vertex_t>> checks_this_cycle;
+    std::map<sptr<net::raw_vertex_t>, size_t> meas_ctr_map;
+    std::vector<event_t> event_queue;
+    
+    size_t cycle;
+    int64_t mctr;
 
-    // Note that preparation and teardown are the exact same operations, but teardown is reversed.
-    //
-    // Gets the H operands (which are X-parity or Z-flags) for a check operator.
-    std::vector<uint64_t>   prep_tear_get_h_operands(sptr<net::raw_vertex_t>, stage_t);
-    // Gets the CX operands to prepare flags for a check operator.
-    std::vector<uint64_t>   prep_tear_get_cx_operands(sptr<net::raw_vertex_t>, stage_t);
-
-    // Gets all data qubits that have a CNOT for this check operator.
-    std::set<sptr<net::raw_vertex_t>>
-        body_get_partial_data_support(sptr<net::raw_vertex_t>);
-    // Gets the CX operands according to the data_cnot_schedules.
-    std::vector<uint64_t> 
-        body_get_cx_operands(sptr<net::raw_vertex_t>, const std::vector<sptr<net::raw_vertex_t>>&, size_t k);
-
-    // Basic data structures: just holds read-only information.
-    std::set<sptr<net::raw_vertex_t>>   all_checks;
-    // Tracking structures: used to track where each check is when constructing the schedule.
-    std::map<sptr<net::raw_vertex_t>, stage_t>  stage_map;
-    std::map<sptr<net::raw_edge_t>, stage_t>    visited_edge_map;
-    std::map<sptr<net::raw_vertex_t>, stage_t>  h_gate_stage_map;
-    std::map<sptr<net::raw_vertex_t>, stage_t>  flag_stage_map;
-
-    // This map tracks if we need to reset a proxy. This is set by get_next_edge_between, but as
-    // the results of that function are not guaranteed to be committed, it sets it to 1. push_back_cx
-    // sets the value of any proxies to 2, and this confirms the proxy is ready to be reset.
-    std::map<sptr<net::raw_vertex_t>, int>  proxy_reset_map;
-    // This map marks if a proxy has a nonzero state by indicating which CX path it is currently
-    // involved in. If the value of a proxy key is valid, then the proxy is not usable.
-    //
-    // Like with proxy_reset_map, we need to track if the CX was actually committed. So, 0 = free, 1 = tentatively
-    // free, and 2 = not free.
-    std::map<sptr<net::raw_vertex_t>, std::tuple<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, int>>
-        proxy_occupied_map;
-
-    std::map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>>
-        active_role_map;
-    std::map<sptr<net::phys_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
-        remaining_roles_map;
-
-    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, stage_t>
-        data_stage_map;
-
-    // After probing and checking which data qubits need CNOTs, the CNOT that is required is
-    // stored here for easy access.
-    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, cx_t>
-        data_cx_map;
-    // Tracks which qubits have been used for CXs.
-    std::set<sptr<net::phys_vertex_t>>      cx_in_use_set;
-    // Tracks the order of measurements.
-    std::map<sptr<net::raw_vertex_t>, size_t>   meas_ctr_map;
-    size_t                                      meas_ctr;
-
-    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, double>
-        running_ind_sum_map;
-    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, size_t>
-        running_ind_ctr_map;
-
-    size_t  cycle;
-    int     cx_return_status;
-
-    PhysicalNetwork* net_p;
-
-    const int CX_RET_GOOD = 0;
-    const int CX_RET_TOO_EARLY = 1;
-    const int CX_RET_FINISHED = 2;
-    const int CX_RET_CONTENTION = 3;
-    const int CX_RET_PROXY_OCCUPIED = 4;
-
-    const stage_t PREP_STAGE = 0;
-    const stage_t BODY_STAGE = 1;
-    const stage_t TEAR_STAGE = 2;
-    const stage_t MEAS_STAGE = 3;
-    const stage_t DONE_STAGE = 4;
+    graph::TannerGraph* tanner_graph;
+    uptr<RawNetwork>& raw_network;
+    PhysicalNetwork* network;
+    
+    bool round_has_been_generated;
+    qes::Program<> round_program;
 };
 
 }   // protean

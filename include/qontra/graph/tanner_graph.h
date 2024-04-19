@@ -62,8 +62,6 @@ print_id(uint64_t id) {
 
 }   // tanner
 
-#define __TannerGraphParent graph::Graph<tanner::vertex_t, tanner::edge_t>
-
 class TannerGraph;
 
 namespace io {
@@ -77,75 +75,31 @@ void update_tanner_graph(TannerGraph&, std::string); // Callback for io function
 
 }   // io
 
-class TannerGraph : public __TannerGraphParent {
+class TannerGraph : public Graph<tanner::vertex_t, tanner::edge_t> {
 public:
     typedef std::vector<sptr<tanner::vertex_t>>  obs_t;
 
-    TannerGraph(void)
-        :__TannerGraphParent(), 
-        data_qubits(),
-        xparity_checks(),
-        zparity_checks(),
-        x_obs_list(),
-        z_obs_list()
-    {}
+    TannerGraph(void) = default;
+    TannerGraph(TannerGraph&& other) = default;
 
-    TannerGraph(const TannerGraph& other)
-        :__TannerGraphParent(other),
-        data_qubits(other.data_qubits),
-        xparity_checks(other.xparity_checks),
-        zparity_checks(other.zparity_checks),
-        x_obs_list(other.x_obs_list),
-        z_obs_list(other.z_obs_list)
-    {}
+    bool    add_vertex(sptr<tanner::vertex_t>) override;
+    bool    add_edge(sptr<tanner::edge_t>) override;
+    void    delete_vertex(sptr<tanner::vertex_t>) override;
+    
+    std::vector<sptr<tanner::vertex_t>> get_vertices_by_type(tanner::vertex_t::type) const;
+    std::vector<sptr<tanner::vertex_t>> get_checks(void) const;
 
-    bool add_vertex(sptr<tanner::vertex_t> v) override {
-        if (!__TannerGraphParent::add_vertex(v))  return false;
-        if (v->qubit_type == tanner::vertex_t::type::data)      data_qubits.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::type::xparity)   xparity_checks.push_back(v);
-        if (v->qubit_type == tanner::vertex_t::type::zparity)   zparity_checks.push_back(v);
-        return true;
-    }
+    // Sets the map reference to the color map. Returns the max color used.
+    int compute_check_color_map(std::map<sptr<tanner::vertex_t>, int>&) const;
+    int compute_code_distance(bool for_x) const;
 
-    bool add_edge(sptr<tanner::edge_t> e) override {
-        auto v = std::reinterpret_pointer_cast<tanner::vertex_t>(e->src);
-        auto w = std::reinterpret_pointer_cast<tanner::vertex_t>(e->dst);
-        // Make sure the edge preserves the bipartite property.
-        bool src_is_parity = v->qubit_type != tanner::vertex_t::type::data;
-        bool dst_is_parity = w->qubit_type != tanner::vertex_t::type::data;
-        if (src_is_parity && dst_is_parity) return false;
-        return __TannerGraphParent::add_edge(e);
-    }
-
-    void delete_vertex(sptr<tanner::vertex_t> v) override {
-        std::vector<sptr<tanner::vertex_t>>* cat;
-        if (v->qubit_type == tanner::vertex_t::type::data)      cat = &data_qubits;
-        if (v->qubit_type == tanner::vertex_t::type::xparity)   cat = &xparity_checks;
-        if (v->qubit_type == tanner::vertex_t::type::zparity)   cat = &zparity_checks;
-        for (auto it = cat->begin(); it != cat->end();) {
-            if (*it == v)   it = cat->erase(it);
-            else            it++;
-        }
-        __TannerGraphParent::delete_vertex(v);
-    }
-
-    std::vector<sptr<tanner::vertex_t>> get_vertices_by_type(tanner::vertex_t::type type) {
-        if (type == tanner::vertex_t::type::data)           return data_qubits;
-        else if (type == tanner::vertex_t::type::xparity)   return xparity_checks;
-        else                                                return zparity_checks;
-    }
-
-    std::vector<sptr<tanner::vertex_t>> get_checks() {
-        std::vector<sptr<tanner::vertex_t>> parity_qubits(xparity_checks);
-        for (auto c : zparity_checks)   parity_qubits.push_back(c);
-        return parity_qubits;
-    }
-
-    std::vector<obs_t> get_obs(bool get_x_obs) {
-        if (get_x_obs)  return x_obs_list;
-        else            return z_obs_list;
-    }
+    std::vector<obs_t> get_obs(bool get_x_obs) const;
 private:
+    std::vector<sptr<tanner::vertex_t>>& get_vertices_by_type_(tanner::vertex_t::type);
+
+    // This is a helper function for compute_check_color_map.
+    int update_check_color_map(std::map<sptr<tanner::vertex_t>, int>&, bool use_x_checks) const;
+
     std::vector<sptr<tanner::vertex_t>>  data_qubits;
     std::vector<sptr<tanner::vertex_t>>  xparity_checks;
     std::vector<sptr<tanner::vertex_t>>  zparity_checks;
@@ -157,20 +111,12 @@ private:
 };
 
 // Specialization of print_v to tanner::vertex_t
-template <> inline std::string
-print_v(sptr<tanner::vertex_t> v) {
-    std::string type_prefix;
-    if (v->qubit_type == tanner::vertex_t::type::data) {
-        type_prefix = "d";
-    } else if (v->qubit_type == tanner::vertex_t::type::xparity) {
-        type_prefix = "x";
-    } else {
-        type_prefix = "z";
-    }
-    return type_prefix + std::to_string(v->id & tanner::VERTEX_ID_NUMBER_MASK);
-}
+template <>
+std::string print_v(sptr<tanner::vertex_t>);
 
 }   // graph
 }   // qontra
+
+#include "tanner_graph.inl"
 
 #endif  // QONTRA_TANNER_GRAPH_h

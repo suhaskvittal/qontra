@@ -24,8 +24,8 @@ get_distance_metric(vtils::lp_var_t xi, vtils::lp_var_t yi, vtils::lp_var_t xj, 
 }
 
 inline void
-lp_add_variables(LP& mgr, PhysicalNetwork& network, placement_config_t config) {
-    for (sptr<net::phys_vertex_t> v : network.get_vertices()) {
+lp_add_variables(LP& mgr, PhysicalNetwork* network, placement_config_t config) {
+    for (sptr<net::phys_vertex_t> v : network->get_vertices()) {
         mgr.add_var(get_x(v), config.x_min, config.x_max, 
                         vtils::lp_var_t::bounds::both, vtils::lp_var_t::domain::continuous);
         mgr.add_var(get_y(v), config.y_min, config.y_max,

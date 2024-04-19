@@ -19,7 +19,7 @@ chromobius::Decoder init_chromobius(stim::Circuit);
 class Chromobius : public Decoder {
 public:
     Chromobius(DetailedStimCircuit circuit)
-        :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
+        :Decoder(circuit),
         backing_decoder(init_chromobius(circuit))
     {}
         

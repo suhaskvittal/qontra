@@ -23,14 +23,14 @@ lp_label_t  get_y(sptr<net::phys_vertex_t>);
 vtils::lp_expr_t    get_distance_metric(vtils::lp_var_t, vtils::lp_var_t, vtils::lp_var_t, vtils::lp_var_t);
 
 // LP formulation functions:
-void    lp_add_variables(LP&, PhysicalNetwork&);
+void    lp_add_variables(LP&, PhysicalNetwork*);
 
 // Constraint: each vertex should be at least D units away.
 //
 // Formally:
 //      (xi - xj)^2 + (yi - yj)^2 >= D**2
 //  --> xi**2 - 2*xi*xj + xj**2 + ... >= D**2
-void    lp_add_minimum_distance_constraints(LP&, PhysicalNetwork&, placement_config_t);
+void    lp_add_minimum_distance_constraints(LP&, PhysicalNetwork*, placement_config_t);
 
 // Create constraints to identify crossing edges.
 // Let AB and CD be line segments. We say AB and CD are x-crossing if
@@ -45,8 +45,8 @@ void    lp_add_minimum_distance_constraints(LP&, PhysicalNetwork&, placement_con
 //      --> sum(bX_i) = 2y + BX - 1 where 0 <= y <= 2 is an integer.
 // AB and CD are intersecting if BX + BY = 2.
 //      --> 2*ind + 1 >= BX + BY where ind = 1 if AB and CD are intersecting.
-vtils::lp_expr_t    lp_add_crossing_edges_objective(LP&, PhysicalNetwork&, placement_config_t);
-vtils::lp_expr_t    lp_add_edge_distance_objective(LP&, PhysicalNetwork&);
+vtils::lp_expr_t    lp_add_crossing_edges_objective(LP&, PhysicalNetwork*, placement_config_t);
+vtils::lp_expr_t    lp_add_edge_distance_objective(LP&, PhysicalNetwork*);
 
 }   // protean
 }   // qontra

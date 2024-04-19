@@ -15,8 +15,8 @@ inline fp_t sqr(fp_t x) {
 }
 
 void
-lp_add_minimum_distance_constraints(LP& mgr, PhysicalNetwork& network, placement_config_t config) {
-    auto vertices = network.get_vertices();
+lp_add_minimum_distance_constraints(LP& mgr, PhysicalNetwork* network, placement_config_t config) {
+    auto vertices = network->get_vertices();
     for (size_t i = 0; i < vertices.size(); i++) {
         sptr<net::phys_vertex_t> v = vertices[i];
         lp_var_t xi = mgr.get_var(get_x(v)),
@@ -35,13 +35,13 @@ lp_add_minimum_distance_constraints(LP& mgr, PhysicalNetwork& network, placement
 }
 
 lp_expr_t
-lp_add_crossing_edges_objective(LP& mgr, PhysicalNetwork& network, placement_config_t config) {
+lp_add_crossing_edges_objective(LP& mgr, PhysicalNetwork* network, placement_config_t config) {
     const fp_t M = config.x_max - config.x_min;
     const lp_var_t::domain svardom = config.edge_crossing_relax_variables ? 
                                         lp_var_t::domain::continuous : lp_var_t::domain::integer;
 
     lp_expr_t crossing_edge_sum;
-    auto edges = network.get_edges();
+    auto edges = network->get_edges();
 
     size_t indicator_count = 0;
     for (size_t i = 0; i < edges.size(); i++) {
@@ -120,15 +120,15 @@ crossing_edge_exit:
 }
 
 lp_expr_t
-lp_add_edge_distance_objective(LP& mgr, PhysicalNetwork& network) {
+lp_add_edge_distance_objective(LP& mgr, PhysicalNetwork* network) {
     lp_expr_t edge_length_sum;
-    for (sptr<net::phys_vertex_t> v : network.get_vertices()) {
+    for (sptr<net::phys_vertex_t> v : network->get_vertices()) {
         lp_var_t xi = mgr.get_var(get_x(v)),
                  yi = mgr.get_var(get_y(v));
-        auto neighbors = network.get_neighbors(v);
+        auto neighbors = network->get_neighbors(v);
         for (size_t i = 0; i < neighbors.size(); i++) {
             sptr<net::phys_vertex_t> w = neighbors[i];
-            sptr<net::phys_edge_t> e = network.get_edge(v, w);
+            sptr<net::phys_edge_t> e = network->get_edge(v, w);
             if (e->is_out_of_plane()) continue;
             // Otherwise, we can continue.
             lp_var_t xj = mgr.get_var(get_x(w)),

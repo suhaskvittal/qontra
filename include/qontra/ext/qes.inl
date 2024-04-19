@@ -43,13 +43,21 @@ get_number_of_qubits(const qes::Program<>& program) {
 
 inline size_t
 get_number_of_qubits(const qes::Program<>& program, std::vector<uint64_t>& qubits) {
-    std::set<uint64_t> qubits_in_program;
+    uint64_t max_qubit = 0;
+    std::set<uint64_t> visited;
     for (const auto& inst : program) {
         auto _qubits = get_qubits(inst);
-        qubits_in_program.insert(_qubits.begin(), _qubits.end());
+        for (uint64_t q : _qubits) {
+            if (!visited.count(q)) {
+                qubits.push_back(q);
+                visited.insert(q);
+            }
+        }
+        if (_qubits.empty()) continue;
+        uint64_t mq = *std::max_element(_qubits.begin(), _qubits.end());
+        max_qubit = std::max(max_qubit, mq);
     }
-    qubits = std::vector<uint64_t>(qubits_in_program.begin(), qubits_in_program.end());
-    return qubits_in_program.size();
+    return max_qubit+1;
 }
 
 }   // qontra

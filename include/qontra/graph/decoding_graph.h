@@ -1,125 +1,174 @@
 /*
  *  author: Suhas Vittal
- *  date:   2 August 2022
+ *  date:   15 February 2024
  * */
 
 #ifndef QONTRA_DECODING_GRAPH_h
 #define QONTRA_DECODING_GRAPH_h
 
-#include "qontra/defs.h"
-#include "qontra/graph/algorithms/distance.h"
-#include "qontra/graph.h"
+#include "qontra/graph/decoding_graph/edge_class.h"
+#include "qontra/graph/decoding_graph/structures.h"
 
-#include <stim.h>
+#include "qontra/ext/stim.h"
+#include "qontra/graph/algorithms/distance.h"
+
+#include <vtils/two_level_map.h>
+
+#include <utility>
 
 namespace qontra {
 namespace graph {
 
-const uint64_t BOUNDARY_INDEX = std::numeric_limits<uint32_t>::max();
-
-const uint64_t RED_BOUNDARY_INDEX = (1L << 48) | BOUNDARY_INDEX;
-const uint64_t BLUE_BOUNDARY_INDEX = (1L << 49) | BOUNDARY_INDEX;
-const uint64_t GREEN_BOUNDARY_INDEX = (1L << 50) | BOUNDARY_INDEX;
-
-namespace decoding {
-
-#define N_COORD    16
-
-struct vertex_t : base::vertex_t {
-    std::array<fp_t, N_COORD>    coords;
+struct error_chain_t {
+    size_t  length = 0;
+    fp_t    probability = 1.0;
+    fp_t    weight = 0.0;
+    
+    bool runs_through_boundary = false;
+    std::vector<sptr<decoding::vertex_t>>   path;
+    std::vector<sptr<decoding::vertex_t>>   boundary_vertices;
 };
 
-struct edge_t : base::edge_t {
-    fp_t                edge_weight;
-    fp_t                error_probability;
-    std::set<uint64_t>  frames;
-};
+typedef std::vector<fp_t> poly_t;
+typedef Graph<decoding::vertex_t, decoding::edge_t> DijkstraGraph;
 
-struct colored_vertex_t : vertex_t {
-    std::string color;
-};
-
-struct colored_edge_t : edge_t {
-};
-
-}   // decoding
-
-bool    is_boundary(sptr<decoding::vertex_t>);
-bool    is_colored_boundary(sptr<decoding::vertex_t>);
-
-std::string int_to_color(int x);
-int         color_to_int(std::string x);
-
-#define __DecodingGraphParent   Graph<decoding::vertex_t, decoding::edge_t>
-
-class DecodingGraph : public __DecodingGraphParent {
+class DecodingGraph : public HyperGraph<decoding::vertex_t, decoding::hyperedge_t> {
 public:
-    enum class Mode {
-        NORMAL,     // No adjustments. Default option.
-        LOW_MEMORY, // Here, we will not generate the distance matrix.
-        DO_NOT_BUILD,   // Hidden option for decoders to avoid building the decoding graph.
-    };
+    DecodingGraph(const DetailedStimCircuit&, size_t flips_per_error, bool reweigh_for_detectors=false);
+    DecodingGraph(DecodingGraph&&) = default;
 
-    DecodingGraph(Mode=Mode::NORMAL);
-    DecodingGraph(const DecodingGraph& other);
+    DecodingGraph make_unified_lattice(std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& ufl_map);
 
-    DecodingGraph& operator=(const DecodingGraph& other);
+    // Makes vertex and also sets the base of the vertex to itself.
+    sptr<decoding::vertex_t> make_vertex(uint64_t) const override;
+    // Gets shared edge with most similarity to the passed in inputs.
+    sptr<decoding::hyperedge_t> get_best_shared_edge(std::vector<sptr<decoding::vertex_t>>);
+    // Initializes the distance matrix for the two colors using Floyd-Warshall.
+    void init_distances_for(int=COLOR_ANY, int=COLOR_ANY);
 
-    typedef struct {    // Each pair of vertices has this entry, and each entry
-                        // corresponds to an error chain.
-        size_t  chain_length;   // Length of error chain (or shortest path)
-        fp_t    probability;    // Probability of error chain
-        fp_t    weight;         // Weight used for MWPM decoding
+    error_chain_t get_error_chain(
+            uint64_t,
+            uint64_t,
+            int=COLOR_ANY,
+            int=COLOR_ANY,
+            bool force_unflagged=false);
 
-        std::set<uint64_t>  frame_changes;  // Pauli frames that are changed by the chain
+    error_chain_t get_error_chain(
+            sptr<decoding::vertex_t>,
+            sptr<decoding::vertex_t>,
+            int=COLOR_ANY,
+            int=COLOR_ANY,
+            bool force_unflagged=false);
 
-        std::vector<sptr<decoding::vertex_t>> error_chain;
-        bool error_chain_runs_through_boundary;
-    } matrix_entry_t;
+    std::vector<sptr<decoding::vertex_t>>
+        get_complementary_boundaries_to(std::vector<sptr<decoding::vertex_t>>);
+    
+    // activate_detectors is useful for flagged decoding, as doing so will (1) activate
+    // any flags in the syndrome, and (2) restrict thee size of the decoding graph
+    // when computing Dijkstra's.
+    void    activate_detectors(const std::vector<uint64_t>& all_detectors);
+    void    activate_detectors(const std::vector<uint64_t>& nonflags, const std::vector<uint64_t>& flags);
+    void    deactivate_detectors(void);
 
-    matrix_entry_t get_error_chain_data(sptr<decoding::vertex_t>, sptr<decoding::vertex_t>);
+    sptr<decoding::vertex_t> get_boundary_vertex(int color);
+    sptr<decoding::hyperedge_t> get_base_edge(sptr<decoding::hyperedge_t>);
 
-    // We can represent the number of errors as a polynomial where the coefficient
-    // of xk corresponds to the probability of having k errors.
-    //
-    // We can compute this polynomial using generating functions.
-    //
-    // The below functions return that polynomial and the expected number of errors.
+    std::vector<sptr<decoding::hyperedge_t>> get_flag_edges(void);
+    std::vector<sptr<decoding::hyperedge_t>> get_all_edges(void);
+
+    sptr<decoding::hyperedge_t> get_best_edge_from_class_of(sptr<decoding::hyperedge_t>);
+    sptr<decoding::hyperedge_t> get_best_nod_edge(bool require_exact_match=false);
+
+    std::map<sptr<decoding::hyperedge_t>, sptr<decoding::hyperedge_t>> get_best_rep_map(void);
+    EdgeClass get_edge_class(sptr<decoding::hyperedge_t>);
 
     poly_t  get_error_polynomial(void);
     fp_t    get_expected_errors(void);
+
+    const int number_of_colors;
 protected:
+    DecodingGraph(void);
+
     bool    update_state(void) override;
 private:
-    matrix_entry_t dijkstra_cb(
-                        sptr<decoding::vertex_t>,
-                        sptr<decoding::vertex_t>,
-                        const std::map<sptr<decoding::vertex_t>, fp_t>&,
-                        const std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>&);
+    // Add vertices while also adding their bases. This function recursively calls itself until
+    // we find a detector whose base is itself.
+    sptr<decoding::vertex_t> make_and_add_vertex_(uint64_t, const DetailedStimCircuit&);
+    // This function creates equivalence classes and initializes the DecodingGraph accordingly.
+    void resolve_edges(const std::vector<sptr<decoding::hyperedge_t>>&, size_t flips_per_error);
 
-    void    build_distance_matrix(void);
-    void    build_flagged_decoding_graph(void); // This is a partial copy.
-    void    build_error_polynomial(void);
+    fp_t compute_renorm_factor(std::set<uint64_t> flags={});
+    fp_t renormalized_edge_probability(sptr<decoding::hyperedge_t>);
+    sptr<decoding::hyperedge_t> get_best_flag_edge(std::vector<sptr<decoding::hyperedge_t>>);
 
-    DistanceMatrix<decoding::vertex_t, matrix_entry_t>  distance_matrix;
+    // If to is not null, then Dijkstra's will terminate upon finding to.
+    void dijkstra_(int, int, sptr<decoding::vertex_t> from, sptr<decoding::vertex_t> to=nullptr);
+    void make_dijkstra_graph(int, int);
+    // General path update function used by dijkstra_ and immediately_initalize_distances_for
+    void update_paths(
+            uptr<DijkstraGraph>&,
+            DistanceMatrix<decoding::vertex_t, error_chain_t>&,
+            sptr<decoding::vertex_t> from,
+            std::vector<sptr<decoding::vertex_t>> to_list,
+            const std::map<sptr<decoding::vertex_t>, fp_t>& dist,
+            const std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& pred);
+
+    void build_error_polynomial(void);
 
     poly_t  error_polynomial;
     fp_t    expected_errors;
 
-    Mode mode;
+    std::map<std::pair<int, int>, uptr<DijkstraGraph>>
+        dijkstra_graph_map;
+    std::map<std::pair<int, int>, uptr<DijkstraGraph>>
+        flagged_dijkstra_graph_map;
+    std::map<std::pair<int, int>, DistanceMatrix<decoding::vertex_t, error_chain_t>>
+        distance_matrix_map;
+    std::map<std::pair<int, int>, DistanceMatrix<decoding::vertex_t, error_chain_t>>
+        flagged_distance_matrix_map;
+
+    vtils::TwoLevelMap<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>, fp_t>
+        base_probability_map;
+
+    std::set<uint64_t> active_detectors;
+    std::set<uint64_t> active_flags;
+    // flag_detectors is a list of all flag detectors (not just those in a syndrome). This is
+    // used to construct active_detectors and active_flags.
+    std::set<uint64_t> flag_detectors;
+    // List of equivalence classes
+    std::vector<EdgeClass> edge_classes;
+
+    // Maps flags to classes that have associated flag edges.
+    std::map<uint64_t, std::vector<EdgeClass>> flag_class_map;
+    // Maps edges to their containing class.
+    std::map<sptr<decoding::hyperedge_t>, EdgeClass> edge_class_map;
+    // nod_edges = no detector edges. These are unique flag edges that should be used when
+    // flags are active, but no detectors are observed.
+    std::vector<sptr<decoding::hyperedge_t>> nod_edges;
+    std::vector<sptr<decoding::hyperedge_t>> all_edges;
+    bool flags_are_active;
+
+    fp_t renorm_factor;
+    bool reweigh_for_detectors;
 };
 
-// This is standard method of building decoding graphs, where each error is assumed
-// to flip exactly two detectors. This works for codes like the surface code.
-//
-// For codes such as the color code where an error can flip 3 detectors, a custom 
-// method must be used. We leave this at the discretion of the user, but we note
-// this can be easily performed by leveraging the metadata for each detector
-// in the Stim circuit (i.e. instead of coordinates, use colors and have your own
-// method use that).
+std::vector<int> get_complementary_colors_to(std::vector<int>, int number_of_colors);
 
-DecodingGraph
-to_decoding_graph(const stim::Circuit&, DecodingGraph::Mode=DecodingGraph::Mode::NORMAL);
+uint64_t    get_color_boundary_index(int);
+fp_t        compute_weight(fp_t probability);
+
+// DEM_ERROR_FUNC should take in (1) an error probability, (2) a vector of
+// uint64_t corresponding to the detectors, and (3) a set of uint64_t
+// corresponding to the frame changes.
+//
+// DEM_DET_FUNC should take in a single parameter: a detector.
+template <class DEM_ERROR_FUNC, class DEM_DET_FUNC>
+void read_detector_error_model(
+        const stim::DetectorErrorModel&,
+        size_t n_iter,
+        size_t& detector_offset,
+        DEM_ERROR_FUNC,
+        DEM_DET_FUNC);
 
 }   // graph
 }   // qontra

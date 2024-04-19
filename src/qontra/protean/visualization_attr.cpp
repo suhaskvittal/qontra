@@ -44,10 +44,10 @@ get_attributes(sptr<phys_vertex_t> pv) {
         attributes.shape = "octagon";
         attributes.fontsize = "10";
     } else {
-        attributes.fillcolor = "black";
-        attributes.fontcolor = "black";
-        attributes.shape = "point";
-        attributes.fontsize = "8";
+        attributes.fillcolor = "#faf0e6";
+        attributes.fontcolor = "red";
+        attributes.shape = "triangle";
+        attributes.fontsize = "10";
     }
     attributes.fontname = "serif";
     attributes.style = "filled";

@@ -20,7 +20,7 @@ namespace graph {
 // number of nodes.
 
 template <class V, class E>
-std::set<sptr<V>> mis_approx_greedy(Graph<V, E>* graph);
+std::set<sptr<V>> mis_greedy(Graph<V, E>* graph);
 
 }   // graph
 }   // qontra

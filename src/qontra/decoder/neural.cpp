@@ -8,12 +8,10 @@
 
 namespace qontra {
 
-using namespace experiments;
-
 static const uint64_t PER_HW_LIMIT = 100'000;
 
-NeuralDecoder::NeuralDecoder(DetailedStimCircuit circuit)
-    :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
+NeuralDecoder::NeuralDecoder(const DetailedStimCircuit& circuit)
+    :Decoder(circuit),
     model(),
     training_circuit(circuit)
 {}
@@ -27,33 +25,33 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
     arma::mat y(n_obs, shots, arma::fill::zeros);
 
     uint64_t shots_elapsed = 0;
-    callback_t cb;
     // We will train the model every batch.
     std::map<size_t, uint64_t> hw_freq;
-    cb.prologue = [&] (shot_payload_t payload) {
-        stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = payload.syndrome;
-        stim::simd_bits_range_ref<SIMD_WIDTH> obs = payload.observables;
+    generate_syndromes(training_circuit, shots,
+        [&] (shot_payload_t payload)
+        {
+            stim::simd_bits_range_ref<SIMD_WIDTH> syndrome = payload.syndrome;
+            stim::simd_bits_range_ref<SIMD_WIDTH> obs = payload.observables;
 
-        const size_t hw = syndrome.popcnt();
-        if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
-            return;
-        }
-        if (hw_freq[hw]++ >= PER_HW_LIMIT)  return;
+            const size_t hw = syndrome.popcnt();
+            if (G_FILTER_OUT_SYNDROMES && hw <= G_FILTERING_HAMMING_WEIGHT) {
+                return;
+            }
+            if (hw_freq[hw]++ >= PER_HW_LIMIT)  return;
 
-        std::vector<uint64_t> detectors = get_nonzero_detectors(syndrome);
-        for (uint64_t d : detectors) {
-            data_matrix(d, shots_elapsed) = 1;
-        }
-        for (size_t i = 0; i < n_obs; i++) {
-            y(i, shots_elapsed) = obs[i] ? 1 : -1;
-        }
-        shots_elapsed++;
+            std::vector<uint64_t> detectors = get_nonzero_detectors(syndrome);
+            for (uint64_t d : detectors) {
+                data_matrix(d, shots_elapsed) = 1;
+            }
+            for (size_t i = 0; i < n_obs; i++) {
+                y(i, shots_elapsed) = obs[i] ? 1 : -1;
+            }
+            shots_elapsed++;
 
-        if (shots_elapsed % 100'000 == 0 && verbose) {
-            std::cout << "[ NeuralDecoder ] shots_elapsed: " << shots_elapsed << std::endl;
-        }
-    };
-    generate_syndromes(training_circuit, shots, cb);
+            if (shots_elapsed % 100'000 == 0 && verbose) {
+                std::cout << "[ NeuralDecoder ] shots_elapsed: " << shots_elapsed << std::endl;
+            }
+        });
     data_matrix.reshape(n_det, shots_elapsed);
     y.reshape(n_obs, shots_elapsed);
 
@@ -89,38 +87,6 @@ NeuralDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
         corr
     };
     return res;
-}
-
-FragmentedNeuralDecoder::FragmentedNeuralDecoder(DetailedStimCircuit circuit)
-    :NeuralDecoder(circuit),
-    backing_decoders(circuit.count_observables())
-{
-    std::vector<DetailedStimCircuit> circuits = isolate_observables(circuit);
-    for (size_t i = 0; i < backing_decoders.size(); i++) {
-        backing_decoders[i] = std::make_unique<NeuralDecoder>(circuits[i]);
-    }
-}
-
-std::vector<DetailedStimCircuit>
-isolate_observables(DetailedStimCircuit circuit) {
-    std::vector<DetailedStimCircuit> arr(circuit.count_observables(), DetailedStimCircuit());
-    circuit.for_each_operation(
-            [&] (const stim::CircuitInstruction& inst)
-            {
-                if (inst.gate_type == stim::GateType::OBSERVABLE_INCLUDE) {
-                    for (size_t i = 0; i < arr.size(); i++) {
-                        double _tmp = 0;
-                        stim::CircuitInstruction
-                            new_obs_inst(inst.gate_type, stim::SpanRef(&_tmp), inst.targets);
-                        arr[i].safe_append(new_obs_inst);
-                    }
-                } else {
-                    for (size_t i = 0; i < arr.size(); i++) {
-                        arr[i].safe_append(inst);
-                    }
-                }
-            });
-    return arr;
 }
 
 }   // qontra

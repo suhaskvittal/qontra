@@ -32,9 +32,9 @@ struct render_config_t {
 };
 
 // Renders the entire network in one file.
-void render_network(std::string output_file, PhysicalNetwork&, render_config_t);
+void render_network(std::string output_file, PhysicalNetwork*, render_config_t);
 /// Renders each check in a different file. Good for readability or fine-grained examination.
-void render_network_by_check(std::string output_folder, std::string ext, PhysicalNetwork&, render_config_t);
+void render_network_by_check(std::string output_folder, std::string ext, PhysicalNetwork*, render_config_t);
 
 // place_network maps each qubit in the PhysicalNetwork on a coordinate plane
 // via linear programming. The program is a quadratic program and attempts
@@ -68,7 +68,7 @@ struct placement_config_t {
     fp_t    y_max = 32.0;
 };
 
-Plane place_network(PhysicalNetwork&, placement_config_t);
+Plane place_network(PhysicalNetwork*, placement_config_t);
 
 }   // protean
 }   // qontra

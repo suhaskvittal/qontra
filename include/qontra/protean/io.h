@@ -37,7 +37,7 @@ namespace protean {
 //          jidralflaraljparal(prxconjparal)+rlb
 //          jid|ral|fla|ral|jpa|ral(prx.con.jpa.ral)+rlb
 //      Use whichever is most readable.
-bool update_network(std::string pass_string, PhysicalNetwork&, bool verbose=false);
+bool update_network(std::string pass_string, PhysicalNetwork*, bool verbose=false);
 
 // Writes the physical network to a folder.
 // Generated Files:
@@ -47,14 +47,7 @@ bool update_network(std::string pass_string, PhysicalNetwork&, bool verbose=fals
 //  (3) tanner_graph.txt: corresponding checks for each (raw) parity qubit
 //                      and logical observables (not directly usable with TannerGraph)
 //  (4) flag_assignment.txt: corresponding flags for each (raw) parity qubit
-void write_network_to_folder(std::string, PhysicalNetwork&);
-
-void write_stats_file(std::string, PhysicalNetwork&);
-void write_schedule_file(std::string, PhysicalNetwork&);
-void write_coupling_file(std::string, PhysicalNetwork&);
-void write_role_file(std::string, PhysicalNetwork&);
-void write_tanner_graph_file(std::string, PhysicalNetwork&);
-void write_flag_assignment_file(std::string, PhysicalNetwork&);
+void write_network_to_folder(std::string, PhysicalNetwork*);
 
 }   // protean
 }   // qontra

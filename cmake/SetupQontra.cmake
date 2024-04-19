@@ -11,8 +11,13 @@ set(QONTRA_FILES
     src/qontra/ext/stim.cpp
     # Decoders
     src/qontra/decoder/mwpm.cpp
+    src/qontra/decoder/matching_base.cpp
+    src/qontra/decoder/restriction.cpp
+    src/qontra/decoder/mobius.cpp
     # Graphs
     src/qontra/graph/decoding_graph.cpp 
+    src/qontra/graph/decoding_graph/edge_class.cpp
+    src/qontra/graph/decoding_graph/unified_lattice.cpp
     src/qontra/graph/tanner_graph.cpp
     # Simulators
     src/qontra/sim/base/frame_sim.cpp
@@ -32,7 +37,9 @@ if (COMPILE_NEURAL_DECODER)
                     "and MLPACK_INCLUDE_DIRS must be set.")
     find_package(Armadillo REQUIRED)
     find_package(OpenMP REQUIRED)
-    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/neural.cpp)
+    set(QONTRA_FILES ${QONTRA_FILES} 
+            src/qontra/decoder/neural.cpp
+            src/qontra/decoder/neural_assisted.cpp)
 endif()
 
 find_package(MPI REQUIRED)
@@ -41,6 +48,7 @@ add_library(qontra ${QONTRA_FILES})
 target_compile_options(qontra PRIVATE ${COMPILE_OPTIONS} -fPIC)
 
 target_compile_definitions(qontra PUBLIC QONTRA_ISA_FILE="${QONTRA_ISA_FILE}")
+#target_compile_definitions(qontra PUBLIC DECODER_PERF)
 
 if (L1D_CACHE_LINE_SIZE)
     target_compile_definitions(qontra PUBLIC L1D_CACHE_LINE_SIZE=${L1D_CACHE_LINE_SIZE})

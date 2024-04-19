@@ -1,59 +1,124 @@
 /*
  *  author: Suhas Vittal
- *  date:   25 December 2023
+ *  date:   15 February 2024
  * */
 
-#include "qontra/graph/algorithms/distance.h"
-
-#include <algorithm>
-
-#include <assert.h>
+#include <math.h>
 
 namespace qontra {
 namespace graph {
 
-inline bool
-is_boundary(sptr<decoding::vertex_t> v) {
-    return v->id == BOUNDARY_INDEX;
+inline sptr<decoding::vertex_t>
+DecodingGraph::make_vertex(uint64_t id) const {
+    sptr<decoding::vertex_t> v = HyperGraph::make_vertex(id);
+    v->base = v;
+    return v;
 }
 
-inline bool
-is_colored_boundary(sptr<decoding::vertex_t> v) {
-    return v->id == RED_BOUNDARY_INDEX
-            || v->id == BLUE_BOUNDARY_INDEX
-            || v->id == GREEN_BOUNDARY_INDEX;
+inline sptr<decoding::vertex_t>
+DecodingGraph::get_boundary_vertex(int color) {
+    uint64_t db = get_color_boundary_index(color);
+    return get_vertex(db);
 }
 
-template <> inline std::string
-print_v<decoding::vertex_t>(sptr<decoding::vertex_t> v) {
-    if (is_boundary(v)) return "B";
-    else                return std::to_string(v->id);
+inline error_chain_t
+DecodingGraph::get_error_chain(
+        uint64_t d1,
+        uint64_t d2,
+        int c1,
+        int c2,
+        bool force_unflagged)
+{
+    return get_error_chain(get_vertex(d1), get_vertex(d2), c1, c2, force_unflagged);
 }
 
-template <> inline std::string
-print_v<decoding::colored_vertex_t>(sptr<decoding::colored_vertex_t> v) {
-    if (is_colored_boundary(v)) return "B[" + v->color + "]";
-    else                        return std::to_string(v->id) + "[" + v->color + "]";
+inline error_chain_t
+DecodingGraph::get_error_chain(
+        sptr<decoding::vertex_t> v1,
+        sptr<decoding::vertex_t> v2,
+        int c1,
+        int c2,
+        bool force_unflagged) 
+{
+    update_state();
+    if (c1 > c2) std::swap(c1, c2);
+    auto c1_c2 = std::make_pair(c1, c2);
+    auto& dm_map = flags_are_active && !force_unflagged 
+                    ? flagged_distance_matrix_map[c1_c2] : distance_matrix_map[c1_c2];
+    if (!dm_map.count(v1) || !dm_map.at(v1).count(v2)) {
+        dijkstra_(c1, c2, v1);
+    }
+    return dm_map[v1][v2];
 }
 
-inline std::string
-int_to_color(int x) {
-    if (x == 0)         return "r";
-    else if (x == 1)    return "g";
-    else                return "b";
+inline std::vector<sptr<decoding::vertex_t>>
+DecodingGraph::get_complementary_boundaries_to(std::vector<sptr<decoding::vertex_t>> vlist) {
+    std::vector<int> colors_in_vlist;
+    for (sptr<decoding::vertex_t> v : vlist) colors_in_vlist.push_back(v->color);
+    std::vector<sptr<decoding::vertex_t>> boundary_list;
+    for (int c : get_complementary_colors_to(colors_in_vlist, number_of_colors)) {
+        boundary_list.push_back(get_boundary_vertex(c));
+    }
+    return boundary_list;
 }
 
-inline int
-color_to_int(std::string x) {
-    if (x == "r")       return 0;
-    else if (x == "g")  return 1;
-    else                return 2;
+inline void
+DecodingGraph::activate_detectors(const std::vector<uint64_t>& all_detectors) {
+    deactivate_detectors();
+    for (uint64_t d : all_detectors) {
+        if (flag_detectors.count(d)) {
+            active_flags.insert(d);
+        } else {
+            active_detectors.insert(d);
+        }
+    }
+    flags_are_active = reweigh_for_detectors || !active_flags.empty();
+    renorm_factor = compute_renorm_factor();
 }
 
-inline DecodingGraph::matrix_entry_t
-DecodingGraph::get_error_chain_data(sptr<decoding::vertex_t> v1, sptr<decoding::vertex_t> v2) {
-    update_state(); 
-    return distance_matrix[v1][v2];
+inline void
+DecodingGraph::activate_detectors(const std::vector<uint64_t>& nonflags, const std::vector<uint64_t>& flags) {
+    deactivate_detectors();
+    active_detectors = std::set<uint64_t>(nonflags.begin(), nonflags.end());
+    active_flags = std::set<uint64_t>(flags.begin(), flags.end());
+    flags_are_active = reweigh_for_detectors || !active_flags.empty();
+    renorm_factor = compute_renorm_factor();
+}
+
+inline void
+DecodingGraph::deactivate_detectors() {
+    flagged_distance_matrix_map.clear();
+    flagged_dijkstra_graph_map.clear();
+    active_flags.clear();
+    active_detectors.clear();
+    flags_are_active = false;
+}
+
+inline std::vector<sptr<decoding::hyperedge_t>>
+DecodingGraph::get_all_edges() {
+    return all_edges;
+}
+
+inline sptr<decoding::hyperedge_t>
+DecodingGraph::get_best_edge_from_class_of(sptr<decoding::hyperedge_t> e) {
+    if (!edge_class_map.count(e)) {
+        return e;
+    }
+    const EdgeClass& c = edge_class_map.at(e);
+    sptr<decoding::hyperedge_t> _e = get_best_flag_edge(c.get_edges());
+    return _e == nullptr ? e : _e;
+}
+
+inline sptr<decoding::hyperedge_t>
+DecodingGraph::get_best_nod_edge(bool exact_match) {
+    sptr<decoding::hyperedge_t> e = get_best_flag_edge(nod_edges);
+    if (e == nullptr || (exact_match && e->flags.size() != active_flags.size())) return nullptr;
+    return e;
+}
+
+inline EdgeClass
+DecodingGraph::get_edge_class(sptr<decoding::hyperedge_t> e) {
+    return edge_class_map.at(e);
 }
 
 inline poly_t
@@ -68,20 +133,77 @@ DecodingGraph::get_expected_errors() {
     return expected_errors;
 }
 
-inline void
-DecodingGraph::build_distance_matrix() {
-    using namespace decoding;
-    distance_matrix = create_distance_matrix<vertex_t, edge_t, matrix_entry_t>(this, 
-            // Weight function:
-            [] (sptr<decoding::edge_t> e) { return e->edge_weight; },
-            // Dijkstra callback:
-            [&] (sptr<decoding::vertex_t> src,
-                sptr<decoding::vertex_t> dst,
-                const std::map<sptr<decoding::vertex_t>, fp_t>& dist,
-                const std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& prev)
-            { 
-                return dijkstra_cb(src, dst, dist, prev);
-            });
+inline bool
+DecodingGraph::update_state() {
+    if (!HyperGraph::update_state()) return false;
+    dijkstra_graph_map.clear();
+    distance_matrix_map.clear();
+    build_error_polynomial();
+    return true;
+}
+
+inline std::vector<int>
+get_complementary_colors_to(std::vector<int> clist, int number_of_colors) {
+    std::set<int> clist_set(clist.begin(), clist.end());
+    std::vector<int> compl_list;
+    for (int c = 0; c < number_of_colors; c++) {
+        if (!clist_set.count(c)) compl_list.push_back(c);
+    }
+    return compl_list;
+}
+
+inline uint64_t
+get_color_boundary_index(int color) {
+    return BOUNDARY_FLAG | (static_cast<uint64_t>(color+1) << 48);
+}
+
+inline fp_t
+compute_weight(fp_t probability) {
+    return -log(probability);
+}
+
+template <class F1, class F2> void
+read_detector_error_model(
+        const stim::DetectorErrorModel& dem,
+        size_t n_iter,
+        size_t& detector_offset,
+        F1 ef,
+        F2 df)
+{
+    while (n_iter--) {
+        for (stim::DemInstruction inst : dem.instructions) {
+            stim::DemInstructionType type = inst.type;
+            if (type == stim::DemInstructionType::DEM_REPEAT_BLOCK) {
+                size_t n_rep = static_cast<size_t>(inst.target_data[0].val());
+                stim::DetectorErrorModel blk = dem.blocks[inst.target_data[1].val()];
+                read_detector_error_model(blk, n_rep, detector_offset, ef, df);
+            } else if (type == stim::DemInstructionType::DEM_ERROR) {
+                std::vector<uint64_t> detectors;
+                std::set<uint64_t> frames;
+
+                fp_t p = static_cast<fp_t>(inst.arg_data[0]);
+                for (stim::DemTarget t : inst.target_data) {
+                    if (t.is_relative_detector_id()) {
+                        detectors.push_back(t.val() + detector_offset);
+                    } else if (t.is_observable_id()) {
+                        frames.insert(t.val());
+                    } else {
+                        // This is just a separator, so call ef.
+                        ef(p, detectors, frames);
+                        detectors.clear();
+                        frames.clear();
+                    }
+                }
+                ef(p, detectors, frames);
+            } else if (type == stim::DemInstructionType::DEM_SHIFT_DETECTORS) {
+                detector_offset += inst.target_data[0].val();
+            } else if (type == stim::DemInstructionType::DEM_DETECTOR) {
+                for (stim::DemTarget t : inst.target_data) {
+                    df(t.val() + detector_offset);
+                }
+            }
+        }
+    }
 }
 
 }   // graph

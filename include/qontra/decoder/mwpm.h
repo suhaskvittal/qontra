@@ -6,19 +6,13 @@
 #ifndef DECODER_MWPM_h
 #define DECODER_MWPM_h
 
-#include "qontra/decoder.h"
-#include "qontra/graph/decoding_graph.h"
+#include "qontra/decoder/matching_base.h"
 
 namespace qontra {
 
-const fp_t MWPM_INTEGER_SCALE = 1000.0;
-#define MWPM_TO_INT(x)  ((uint32_t) (MWPM_INTEGER_SCALE * (x)))
-
-class MWPMDecoder : public Decoder {
+class MWPMDecoder : public MatchingBase {
 public:
-    MWPMDecoder(DetailedStimCircuit circ)
-        :Decoder(circ)
-    {}
+    MWPMDecoder(const DetailedStimCircuit&);
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 };

@@ -4,6 +4,7 @@
  * */
 
 #include "qontra/protean/network.h"
+#include "qontra/graph/algorithms/distance.h"
 
 #include <vtils/utility.h>
 
@@ -39,7 +40,7 @@ map_move_and_delete(MAP& m, T v, T w) {
     m.erase(v);
 }
 
-RawNetwork::RawNetwork(TannerGraph& tgr) 
+RawNetwork::RawNetwork(TannerGraph* tgr) 
     :Graph(),
     v_tanner_raw_map(),
     tanner_graph(tgr),
@@ -50,8 +51,8 @@ RawNetwork::RawNetwork(TannerGraph& tgr)
     id_ctr(0)
 {
     // Essentially copy over the tanner graph.
-    for (sptr<tanner::vertex_t> tv : tgr.get_vertices()) {
-        sptr<raw_vertex_t> rv = make_vertex();
+    for (sptr<tanner::vertex_t> tv : tgr->get_vertices()) {
+        sptr<raw_vertex_t> rv = make_and_add_vertex();
         if (tv->qubit_type == tanner::vertex_t::type::xparity) {
             rv->qubit_type = raw_vertex_t::type::xparity;
         } else if (tv->qubit_type == tanner::vertex_t::type::zparity) {
@@ -60,16 +61,14 @@ RawNetwork::RawNetwork(TannerGraph& tgr)
             rv->qubit_type = raw_vertex_t::type::data;
         }
         v_tanner_raw_map.put(tv, rv);
-        add_vertex(rv);
     }
 
-    for (sptr<tanner::edge_t> te : tgr.get_edges()) {
-        sptr<tanner::vertex_t> tv1 = tgr.get_source(te),
-                                tv2 = tgr.get_target(te);
+    for (sptr<tanner::edge_t> te : tgr->get_edges()) {
+        sptr<tanner::vertex_t> tv1 = te->get_source<tanner::vertex_t>(),
+                                tv2 = te->get_target<tanner::vertex_t>();
         auto rv1 = v_tanner_raw_map.at(tv1),
             rv2 = v_tanner_raw_map.at(tv2);
-        sptr<raw_edge_t> re = make_edge(rv1, rv2);
-        add_edge(re);
+        sptr<raw_edge_t> re = make_and_add_edge(rv1, rv2);
     }
 }
 
@@ -114,30 +113,25 @@ RawNetwork::delete_vertex(sptr<raw_vertex_t> v) {
         if (ita->second.empty()) ita = flag_assignment_map.erase(ita);
         else                     ita++;
     }
-    // proxy_indirection_map:
-    for (auto ita = proxy_indirection_map.begin(); ita != proxy_indirection_map.end(); ) {
-        // Like with flag_assignment_map, there are three possibilities for v if it exists in an entry.
+    // flag_support_map.
+    for (auto ita = flag_support_map.begin(); ita != flag_support_map.end(); ) {
         if (ita->first == v) {
-            ita = proxy_indirection_map.erase(ita);
+            ita = flag_support_map.erase(ita);
             continue;
         }
-        // Goto map[*ita] (which is a map itself).
+        // map[*ita], which is itself a map.
         for (auto itb = ita->second.begin(); itb != ita->second.end(); ) {
-            if (itb->first == v) {  // Second key or value, so delete itb.
+            if (itb->first == v) {
                 itb = ita->second.erase(itb);
             } else {
-                // It may be in the array.
-                for (auto itc = itb->second.begin(); itc != itb->second.end(); ) {
-                    if (*itc == v)  itc = itb->second.erase(itc);
-                    else            itc++;
-                }
-                // Erase itb if itc is now empty.
+                // itb->second is a set, so we can try to erase v from the set.
+                itb->second.erase(v);
                 if (itb->second.empty()) itb = ita->second.erase(itb);
-                else                     itb++;
+                else itb++;
             }
         }
-        if (ita->second.empty()) ita = proxy_indirection_map.erase(ita);
-        else                     ita++;
+        if (ita->second.empty()) ita = flag_support_map.erase(ita);
+        else ita++;
     }
 }
 
@@ -150,48 +144,35 @@ RawNetwork::add_flag(sptr<raw_vertex_t> dq1, sptr<raw_vertex_t> dq2, sptr<raw_ve
     delete_edge(re1);
     delete_edge(re2);
     // Create flag and corresponding edges.
-    sptr<raw_vertex_t> fq = make_vertex();
+    sptr<raw_vertex_t> fq = make_and_add_vertex();
     fq->qubit_type = raw_vertex_t::type::flag;
-    add_vertex(fq);
 
-    sptr<raw_edge_t> rfe1 = make_edge(dq1, fq),
-                       rfe2 = make_edge(dq2, fq),
-                       rfe3 = make_edge(fq, pq);
-    add_edge(rfe1);
-    add_edge(rfe2);
-    add_edge(rfe3);
+    make_and_add_edge(dq1, fq);
+    make_and_add_edge(dq2, fq);
+    make_and_add_edge(fq, pq);
 
     // Update tracking structures and return.
     flag_ownership_map[pq].push_back(fq);
     tlm_put(flag_assignment_map, pq, dq1, fq);
     tlm_put(flag_assignment_map, pq, dq2, fq);
+    tlm_put(flag_support_map, pq, fq, std::set<sptr<raw_vertex_t>>{dq1, dq2});
+    if (pq->qubit_type == raw_vertex_t::type::xparity) {
+        x_flag_set.insert(fq);
+    }
     return fq;
 }
 
 sptr<raw_vertex_t>
 RawNetwork::add_proxy(sptr<raw_edge_t> e) {
-    sptr<raw_vertex_t> q1 = get_source(e),
-                        q2 = get_target(e);
+    sptr<raw_vertex_t> q1 = e->get_source<raw_vertex_t>(),
+                        q2 = e->get_target<raw_vertex_t>();
     delete_edge(e);
     // Create proxy and corresponding edges.
-    sptr<raw_vertex_t> prxq = make_vertex();
+    sptr<raw_vertex_t> prxq = make_and_add_vertex();
     prxq->qubit_type = raw_vertex_t::type::proxy;
-    add_vertex(prxq);
 
-    sptr<raw_edge_t> e1 = make_edge(q1, prxq),
-                        e2 = make_edge(prxq, q2);
-    add_edge(e1);
-    add_edge(e2);
-    // Update tracking structures and return.
-    proxy_indirection_map[prxq][q1].push_back(q2);
-    proxy_indirection_map[prxq][q2].push_back(q1);
-    // If q1 or q2 are proxies, we need to update their entries too.
-    if (q1->qubit_type == raw_vertex_t::type::proxy) {
-        update_endpoint_in_indirection_map(q1, q2, prxq);
-    }
-    if (q2->qubit_type == raw_vertex_t::type::proxy) {
-        update_endpoint_in_indirection_map(q2, q1, prxq);
-    }
+    make_and_add_edge(q1, prxq);
+    make_and_add_edge(prxq, q2);
     return prxq;
 }
 
@@ -207,9 +188,7 @@ RawNetwork::merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
     for (sptr<raw_vertex_t> rw : get_neighbors(little)) {
         if (big == rw) continue;
         if (contains(big, rw)) continue;
-        sptr<raw_edge_t> e = make_edge(big, rw);
-        e->is_undirected = true;
-        add_edge(e);
+        make_and_add_edge(big, rw);
     }
     // Depending on what big and little are, we need to update the
     // tracking data structures.
@@ -222,49 +201,12 @@ RawNetwork::merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
             flag_proxy_merge(big, little);
         }
     } else {
-        proxy_proxy_merge(big, little);
+        replace_in_tracking_structures(little, big);
     }
     delete_vertex(little);
     return little;
 }
 
-std::vector<sptr<raw_vertex_t>>
-RawNetwork::proxy_walk(sptr<raw_vertex_t> from,
-                        sptr<raw_vertex_t> thru,
-                        std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>>& walk_res_ref) 
-{
-    if (!proxy_indirection_map.count(thru) || !proxy_indirection_map[thru].count(from)) {
-        return {};
-    }
-
-    std::vector<sptr<raw_vertex_t>> dst_array;
-
-    std::deque<sptr<raw_vertex_t>> bfs{thru};
-    std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>> bfs_prev;
-    bfs_prev[thru] = {from, thru};
-
-    std::set<sptr<raw_vertex_t>> visited{from, thru};
-    while (bfs.size()) {
-        sptr<raw_vertex_t> rx = bfs.front();
-        bfs.pop_front();
-
-        if (rx->qubit_type != raw_vertex_t::type::proxy) {
-            // We are done with this qubit -- it is not a proxy.
-            dst_array.push_back(rx);
-            walk_res_ref[rx] = std::move(bfs_prev[rx]);
-            continue;
-        }
-        auto prev = bfs_prev[rx][bfs_prev[rx].size()-2];
-        for (sptr<raw_vertex_t> ry : proxy_indirection_map[rx][prev]) {
-            if (visited.count(ry)) continue;
-            bfs_prev[ry] = std::vector<sptr<raw_vertex_t>>(bfs_prev[rx]);
-            bfs_prev[ry].push_back(ry);
-            visited.insert(ry);
-            bfs.push_back(ry);
-        }
-    }
-    return dst_array;
-}
 
 std::vector<sptr<raw_vertex_t>>&
 RawNetwork::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) {
@@ -273,52 +215,43 @@ RawNetwork::get_proxy_walk_path(sptr<raw_vertex_t> src, sptr<raw_vertex_t> dst) 
             (!proxy_memo_map.count(src) || !proxy_memo_map[src].count(dst)))
     {
         if (contains(src, dst)) {
-            tlm_put(proxy_memo_map, src, dst, {});
-            tlm_put(proxy_memo_map, dst, src, {});
+            tlm_put(proxy_memo_map, src, dst, {src, dst});
+            tlm_put(proxy_memo_map, dst, src, {dst, src});
             goto found_proxy_path;
         }
-        // We must search.
-        for (sptr<raw_vertex_t> rprx : get_neighbors(src)) {
-            if (rprx->qubit_type != raw_vertex_t::type::proxy) continue;
-
-            std::map<sptr<raw_vertex_t>, std::vector<sptr<raw_vertex_t>>> walk_path_map;
-            proxy_walk(src, rprx, walk_path_map);
-            if (walk_path_map.count(dst)) {
-                // We found the proxy qubit.
-                auto walk_path = std::move(walk_path_map[dst]);
-                tlm_put(proxy_memo_map, src, dst, walk_path);
-                std::reverse(walk_path.begin(), walk_path.end());
-                tlm_put(proxy_memo_map, dst, src, walk_path);
-                goto found_proxy_path;
-            }
-        }
-        std::cerr << "[ get_proxy_walk_path ] proxy path between " << print_v(src) << " and "
-            << print_v(dst) << " could not be found." << std::endl;
-        std::cerr << "\tadj(" << print_v(src) << "):";
-        std::set<sptr<raw_vertex_t>> prx_set;
-        for (sptr<raw_vertex_t> rx : get_neighbors(src)) {
-            std::cerr << " " << print_v(rx);
-            if (rx->qubit_type == raw_vertex_t::type::proxy) {
-                std::cerr << "[";
-                for (sptr<raw_vertex_t> ry : proxy_indirection_map[rx][src]) {
-                    std::cerr << " " << print_v(ry);
+        // Compute Dijkstra's from src.
+        std::map<sptr<raw_vertex_t>, fp_t> dist;
+        std::map<sptr<raw_vertex_t>, sptr<raw_vertex_t>> pred;
+        dijkstra(this, src, dist, pred,
+            [&] (sptr<raw_edge_t> e)
+            {
+                sptr<raw_vertex_t> x = e->get_source<raw_vertex_t>(),
+                                    y = e->get_target<raw_vertex_t>();
+                if (x->qubit_type == raw_vertex_t::type::data
+                    || y->qubit_type == raw_vertex_t::type::data)
+                {
+                    return 100.0;
                 }
-                std::cerr << " ]";
+                return 1.0;
+            });
+        // If enable_memoization = true, then compute distance to all vertices. Otherwise,
+        // only compute to dst.
+        std::vector<sptr<raw_vertex_t>> compute_distance_to{dst};
+        if (enable_memoization) compute_distance_to = vertices;
+        // Now, use pred to compute paths.
+        for (sptr<raw_vertex_t> rx : compute_distance_to) {
+            sptr<raw_vertex_t> curr = rx;
+            std::vector<sptr<raw_vertex_t>> path;
+            while (curr != src) {
+                path.push_back(curr);
+                curr = pred.at(curr);
             }
+            path.push_back(src);
+            // Well path is currently oriented from rx to src.
+            tlm_put(proxy_memo_map, rx, src, path);
+            std::reverse(path.begin(), path.end());
+            tlm_put(proxy_memo_map, src, rx, path);
         }
-        std::cerr << std::endl << "\tadj(" << print_v(dst) << "):";
-        for (sptr<raw_vertex_t> rx : get_neighbors(dst)) {
-            std::cerr << " " << print_v(rx);
-            if (rx->qubit_type == raw_vertex_t::type::proxy) {
-                std::cerr << "[";
-                for (sptr<raw_vertex_t> ry : proxy_indirection_map[rx][dst]) {
-                    std::cerr << " " << print_v(ry);
-                }
-                std::cerr << " ]";
-            }
-        }
-        std::cerr << std::endl;
-        exit(1);
     }
 found_proxy_path:
     return proxy_memo_map[src][dst];
@@ -334,7 +267,7 @@ RawNetwork::get_support(sptr<raw_vertex_t> rpq) {
         // Get all data qubits in support. The flags and proxies in rpq's support are
         // any encountered when entangling the data qubits with the parity qubit.
         sptr<tanner::vertex_t> tpq = v_tanner_raw_map.at(rpq);
-        for (sptr<tanner::vertex_t> tdq : tanner_graph.get_neighbors(tpq)) {
+        for (sptr<tanner::vertex_t> tdq : tanner_graph->get_neighbors(tpq)) {
             sptr<raw_vertex_t> rdq = v_tanner_raw_map.at(tdq);
             // rdq is connected via a flag.
             if (flag_assignment_map[rpq].count(rdq)) {
@@ -362,9 +295,7 @@ RawNetwork::get_support(sptr<raw_vertex_t> rpq) {
 sptr<raw_vertex_t>
 RawNetwork::are_in_same_support(std::initializer_list<sptr<raw_vertex_t>> vertex_list) {
     for (sptr<raw_vertex_t> rpq : vertices) {
-        if (rpq->qubit_type != raw_vertex_t::type::xparity
-                && rpq->qubit_type != raw_vertex_t::type::zparity)
-        {
+        if (!rpq->is_check()) {
             continue;
         }
         parity_support_t supp = get_support(rpq);
@@ -378,75 +309,21 @@ RawNetwork::are_in_same_support(std::initializer_list<sptr<raw_vertex_t>> vertex
 }
 
 void
-RawNetwork::update_endpoint_in_indirection_map(
-        sptr<raw_vertex_t> proxy,
-        sptr<raw_vertex_t> old_endpoint,
-        sptr<raw_vertex_t> new_endpoint)
-{
-    map_move_and_delete(proxy_indirection_map[proxy], old_endpoint, new_endpoint);
-    for (auto& p : proxy_indirection_map[proxy]) {
-        for (auto& x : p.second) {
-            if (x == old_endpoint) x = new_endpoint;
-        }
-    }
-}
-
-void
 RawNetwork::flag_proxy_merge(sptr<raw_vertex_t> rfq, sptr<raw_vertex_t> rprx) {
-    // Get the endpoints of rprx from the proxy_indirection_map.
-    for (auto& p : proxy_indirection_map[rprx]) {
-        sptr<raw_vertex_t> rx = p.first;
-        for (sptr<raw_vertex_t> ry : p.second) {
-            // Place rx and ry in the flag_assignment_map. We also need the parity check, which
-            // can be easily retrieved.
-            sptr<raw_vertex_t> rpq = are_in_same_support({rfq, rx, ry});
+    // Get the neighbors of rprx that are not rfq
+    for (sptr<raw_vertex_t> rx : get_neighbors(rprx)) {
+        if (rx->qubit_type == raw_vertex_t::type::data) {
+            // Then just add to the flag_assignment_map
+            sptr<raw_vertex_t> rpq = are_in_same_support({rfq, rx});
             if (rpq == nullptr) {
                 // This should not happen.
                 std::cerr << "[ flag_proxy_merge ] invalid merge attempted" << std::endl;
                 exit(1);
             }
             flag_assignment_map[rpq][rx] = rfq;
-            flag_assignment_map[rpq][ry] = rfq;
+            flag_support_map[rpq][rfq].insert(rx);
         }
     }
-    proxy_indirection_map.erase(rprx);
-}
-
-void
-RawNetwork::proxy_proxy_merge(sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry) {
-    // We need to join the contents of rx and ry together.
-    for (auto& p : proxy_indirection_map[ry]) {
-        if (rx == p.first) continue;
-
-        if (!proxy_indirection_map[rx].count(p.first)) {
-            // This is a simple move.
-            proxy_indirection_map[rx][p.first] = std::move(p.second);
-            continue;
-        }
-        // Otherwise, we need to join and handle duplicates.
-        auto& arr = proxy_indirection_map[rx][p.first];
-        for (sptr<raw_vertex_t> r : p.second) {
-            if (std::find(arr.begin(), arr.end(), r) == arr.end()) {
-                arr.push_back(r);
-            }
-        }
-    }
-    proxy_indirection_map.erase(ry);
-    // We also need to remove any references to ry in rx's part of the map.
-    for (auto ita = proxy_indirection_map[rx].begin(); ita != proxy_indirection_map[rx].end(); ) {
-        if (ita->first == ry) {
-            ita = proxy_indirection_map[rx].erase(ita);
-            continue;
-        }
-        for (auto itb = ita->second.begin(); itb != ita->second.end(); ) {
-            if (*itb == ry) itb = ita->second.erase(itb);
-            else            itb++;
-        }
-        if (ita->second.empty()) ita = proxy_indirection_map[rx].erase(ita);
-        else                     ita++;
-    }
-    // Now replace ry with rx everywhere else in the proxy_indirection_map
-    replace_in_tracking_structures(ry, rx, 4);
 }
 
 void
@@ -460,26 +337,22 @@ RawNetwork::replace_in_tracking_structures(sptr<raw_vertex_t> v, sptr<raw_vertex
             }
         }
     }
-    // flag_assignment_map:
+    // flag_assignment_map and flag_support_map:
     if (where & 2) {
         map_move_and_delete(flag_assignment_map, v, with);
-        for (auto& p1 : flag_assignment_map) {
-            auto& submap = p1.second;
+        for (auto& [_tmp, submap] : flag_assignment_map) {
             map_move_and_delete(submap, v, with);
-            for (auto& p2 : submap) {
-                if (p2.second == v) p2.second = with;
+            for (auto& [_tmp, x] : submap) {
+                if (x == v) x = with;
             }
         }
-    }
-    // proxy_indirection_map:
-    if (where & 4) {
-        map_move_and_delete(proxy_indirection_map, v, with);
-        for (auto& p1 : proxy_indirection_map) {
-            auto& submap = p1.second;
+        map_move_and_delete(flag_support_map, v, with);
+        for (auto& [_tmp, submap]: flag_support_map) {
             map_move_and_delete(submap, v, with);
-            for (auto& p2 : submap) {
-                for (auto& x : p2.second) {
-                    if (x == v) x = with;
+            for (auto& [_tmp, x] : submap) {
+                if (x.count(v)) {
+                    x.erase(v);
+                    x.insert(with);
                 }
             }
         }

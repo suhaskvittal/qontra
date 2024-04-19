@@ -1,80 +1,105 @@
-/* author: Suhas Vittal
- *  date:   19 July 2023
+/*
+ *  author: Suhas Vittal
+ *  date:   17 February 2024
  *
  *  An implementation of Kubica and Delfosse's
  *  Restriction Decoder for color codes.
  * */
 
-#ifndef RESTRICTION_DECODER_h
-#define RESTRICTION_DECODER_h
+#ifndef DECODER_RESTRICTION_h
+#define DECODER_RESTRICTION_h
 
-#include "decoder.h"
-
-#include <PerfectMatching.h>
-
-#include <assert.h>
+#include "qontra/decoder/matching_base.h"
 
 namespace qontra {
 
-class RestrictionDecoder : public Decoder {
+namespace gd = graph::decoding;
+
+typedef std::pair<sptr<gd::vertex_t>, sptr<gd::vertex_t>> vpair_t;
+typedef std::tuple<sptr<gd::vertex_t>, sptr<gd::vertex_t>, sptr<gd::vertex_t>> vtriplet_t;
+
+struct component_t {
+    std::vector<assign_t> assignments;
+    int color;
+};
+
+struct face_t {
+    std::vector<sptr<gd::vertex_t>> vertices;
+    std::set<uint64_t> frames;
+    fp_t probability;
+
+    bool operator==(const face_t&) const;
+    bool operator<(const face_t&) const;
+};
+
+class RestrictionDecoder : public MatchingBase {
 public:
-    RestrictionDecoder(DetailedStimCircuit circuit, uint64_t detectors_per_round)
-        :Decoder(circuit, graph::DecodingGraph::Mode::DO_NOT_BUILD),
-        c_decoding_graph(graph::to_colored_decoding_graph(circuit)),
-        flags_are_active(false),
-        detectors_per_round(detectors_per_round)
+    RestrictionDecoder(const DetailedStimCircuit& circuit)
+        :MatchingBase(circuit, 3, false)
     {}
 
-    Decoder::result_t   decode_error(stim::simd_bits_range_ref) override;
-
-    std::string name() override { return "RestrictionDecoder"; }
+    Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 protected:
-    typedef std::tuple<uint64_t, uint64_t, std::string> match_t;
-    typedef std::tuple<uint64_t, uint64_t, std::vector<match_t>, std::string> cc_t;
+    virtual std::vector<assign_t> compute_matchings(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome);
 
-    template <class VPTR> graph::DecodingGraph::matrix_entry_t
-    get_error_chain_data(VPTR x, VPTR y, std::string rc) {
-        if (flags_are_active)   return c_decoding_graph[rc].get_error_chain_data_from_flagged_graph(x, y);
-        else                    return c_decoding_graph[rc].get_error_chain_data(x, y);
-    }
+    void split_assignment(
+            std::vector<assign_t>&,
+            const assign_t&,
+            const std::map<sptr<gd::hyperedge_t>, size_t>& flag_ctr_map);
 
-    match_t 
-    make_match(uint64_t x, uint64_t y, std::string color) {
-        if (x > y) std::swap(x, y);
-        return std::make_tuple(x, y, color);
-    }
+    std::vector<component_t> compute_connected_components(const std::vector<assign_t>&);
 
-    std::vector<match_t>    blossom_subroutine(const std::vector<uint>&);
-    std::vector<cc_t>       compute_connected_components(const std::vector<match_t>&);
+    std::set<vpair_t> insert_error_chain_into(
+                        std::map<vpair_t, size_t>& incidence_map,
+                        const std::vector<sptr<gd::vertex_t>>& path,
+                        int component_color,
+                        int c1,
+                        int c2);
 
-    void    insert_error_chain_into(std::set<sptr<graph::decoding::colored_edge_t>>&,
-                                    std::map<sptr<graph::decoding::colored_edge_t>, uint>& incidence_map,
-                                    std::string component_color,
-                                    sptr<graph::decoding::colored_vertex_t> src,
-                                    sptr<graph::decoding::colored_vertex_t> dst,
-                                    std::string r_color);
+    // Returns log probability of correction.
+    fp_t lifting(
+            stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+            const std::map<sptr<gd::hyperedge_t>, sptr<gd::hyperedge_t>>& best_rep_map,
+            size_t tries=0);
 
-    sptr<graph::decoding::colored_vertex_t> flatten(sptr<graph::decoding::colored_vertex_t>);
+    std::map<sptr<gd::hyperedge_t>, sptr<gd::hyperedge_t>>
+        flatten_edge_map(const std::map<sptr<gd::hyperedge_t>, sptr<gd::hyperedge_t>>&);
 
-    std::set<graph::face_t> get_incident_faces(sptr<graph::decoding::colored_vertex_t>);
-    stim::simd_bits         get_correction_for_face(graph::face_t);
+    void insert_incident_vertices(std::set<sptr<gd::vertex_t>>&, const std::set<vpair_t>&, int);
+    void insert_incident_vertices(std::set<sptr<gd::vertex_t>>&, const std::map<vpair_t, size_t>&, int);
 
-    // Switches out the boundary connected to other. Used in case we can't make faces with the boundary.
-    void switch_out_boundaries(
-                    std::set<sptr<graph::decoding::colored_edge_t>>&,
-                    std::map<sptr<graph::decoding::colored_edge_t>, uint>& incidence_map);
-    // Changes boundary edges to non-boundary edges/
-    void remap_boundary_edges(
-                    std::set<sptr<graph::decoding::colored_edge_t>>&,
-                    std::map<sptr<graph::decoding::colored_edge_t>, uint>& incidence_map);
+    std::set<face_t> get_faces(
+        sptr<gd::vertex_t>,
+        const std::map<sptr<gd::hyperedge_t>, sptr<gd::hyperedge_t>>& best_rep_map);
 
-    graph::ColoredDecodingGraph c_decoding_graph;
+    // Data structures:
+    // in_cc_map and not_cc_map track the edges present in and outside of the connected components.
+    // The specific in_cc edges are in component_edge_sets.
+    std::map<vpair_t, size_t> in_cc_map;
+    std::map<vpair_t, size_t> not_cc_map;
+    std::vector<std::pair<std::set<vpair_t>, int>> component_edge_sets;
 
-    bool            flags_are_active;
-    const uint64_t  detectors_per_round;
+    typedef std::tuple<sptr<gd::hyperedge_t>, std::vector<sptr<gd::vertex_t>>, std::map<vpair_t, size_t>&>
+        flag_entry_t;
+
+    std::vector<flag_entry_t> triggered_flag_edges;
 };
+
+vpair_t make_vpair(sptr<gd::vertex_t>, sptr<gd::vertex_t>);
+face_t make_face(sptr<gd::hyperedge_t>);
+
+int color_plus_offset(int, int);
+
+void intersect_with_boundary(
+            std::set<vpair_t>&,
+            stim::simd_bits_range_ref<SIMD_WIDTH>,
+            fp_t& probability,
+            const face_t&,
+            sptr<gd::vertex_t> incident_vertex);
+
 
 }   // qontra
 
-#endif  // RESTRICTION_DECODER_h
+#include "restriction.inl"
 
+#endif  // DECODER_RESTRICTION_h

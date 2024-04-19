@@ -64,7 +64,7 @@ public:
         int64_t     record_obs_until = -1;
 
         // Microarchitecture:
-        size_t  n_registers = 32;
+        size_t  n_registers = 64;
 
         struct {
             size_t  rreoz_track_last_n_events = 0;

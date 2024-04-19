@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     G_FILTERING_HAMMING_WEIGHT = hw_min;
 
     // Get stim circuit.
-    DetailedStimCircuit circuit = make_circuit(qes_file, p);
+    DetailedStimCircuit circuit = make_default_circuit(qes_file, p);
 
     MPI_Init(NULL, NULL);
     int world_rank, world_size;
@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
     statistic_t<fp_t> hw_mean = hw_sum.get_mean(shots);
 
     if (world_rank == 0) {
-        out << "Statistics: mean = " << hw_sum.at() << ", max = " << hw_max.at() << "\n";
+        out << "Statistics: mean = " << hw_mean.at() << ", max = " << hw_max.at() << "\n";
     }
     for (int r = 0; r < world_size; r++) {
         MPI_Barrier(MPI_COMM_WORLD);
