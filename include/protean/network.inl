@@ -8,7 +8,6 @@
 #include <algorithm>
 
 namespace qontra {
-
 namespace graph {
 
 template <> inline std::string
@@ -34,6 +33,7 @@ print_v<protean::net::raw_vertex_t>(sptr<protean::net::raw_vertex_t> v) {
 }
 
 } // graph
+} // qontra
 
 namespace protean {
 
@@ -166,7 +166,7 @@ ProcessorLayer::update_state() {
     return true;
 }
 
-inline graph::TannerGraph*
+inline qgr::TannerGraph*
 PhysicalNetwork::get_tanner_graph() {
     return tanner_graph;
 }
@@ -209,11 +209,11 @@ PhysicalNetwork::add_edge(sptr<net::phys_edge_t> e) {
     } else {
         sptr<net::phys_vertex_t> src = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->src),
                                  dst = std::reinterpret_pointer_cast<net::phys_vertex_t>(e->dst);
-        std::cout << "[ debug ] failed to add edge " << graph::print_e<net::phys_vertex_t>(e)
+        std::cout << "[ debug ] failed to add edge " << qgr::print_e<net::phys_vertex_t>(e)
                         << ", reasons:\n"
                         << "\tlayer does not contain endpoints: "
-                        << graph::print_v(src) << "(" << new_layer->contains(src)
-                        << "), " << graph::print_v(dst) << "(" << new_layer->contains(dst) << ")\n";
+                        << qgr::print_v(src) << "(" << new_layer->contains(src)
+                        << "), " << qgr::print_v(dst) << "(" << new_layer->contains(dst) << ")\n";
         Graph::delete_edge(e);
         return false;
     }
@@ -256,7 +256,7 @@ PhysicalNetwork::test_and_move_edge_down(sptr<net::phys_edge_t> e) {
 
 inline void
 PhysicalNetwork::assign_colors_to_checks() {
-    std::map<sptr<graph::tanner::vertex_t>, int> tanner_color_map;
+    std::map<sptr<qgr::tanner::vertex_t>, int> tanner_color_map;
     int max_color = tanner_graph->compute_check_color_map(tanner_color_map);
     if (max_color != 2) {
         std::cerr << "Expected 3-coloring of tanner graph, got " << (max_color+1) << "-coloring." << std::endl;
@@ -336,4 +336,3 @@ PhysicalNetwork::are_in_same_support(sptr<net::phys_vertex_t> v, sptr<net::phys_
 }
 
 }   // protean
-}   // qontra

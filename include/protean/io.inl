@@ -5,7 +5,6 @@
 
 #include <vtils/filesystem.h>
 
-namespace qontra {
 namespace protean {
 
 inline void
@@ -29,5 +28,4 @@ write_network_to_folder(std::string output_folder, PhysicalNetwork* network) {
 }
 
 }   // protean
-}   // qontra
 

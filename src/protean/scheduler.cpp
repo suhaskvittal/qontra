@@ -3,7 +3,7 @@
  *  date:   7 January 2024
  * */
 
-#include "qontra/protean/scheduler.h"
+#include "protean/scheduler.h"
 
 #include <vtils/linprog/manager.h>
 #include <vtils/set_algebra.h>
@@ -18,12 +18,13 @@
 #include <vtils/timer.h>
 #endif
 
-namespace qontra {
+using namespace qontra;
+using namespace graph;
+using namespace vtils;
+
 namespace protean {
 
-using namespace graph;
 using namespace net;
-using namespace vtils;
 
 template <class PTR> std::string
 print_path_inl(std::vector<PTR> path) {
@@ -705,4 +706,3 @@ Scheduler::compute_schedules() {
 }
 
 }   // protean
-}   // qontra

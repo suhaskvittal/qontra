@@ -3,18 +3,18 @@
  *  date:   2 March 2024
  * */
 
-#include "qontra/protean/experiments.h"
+#include "protean/experiments.h"
 
 #include <fstream>
 #include <iostream>
 
 #include <math.h>
 
-namespace qontra {
-namespace protean {
-
+using namespace qontra;
 using namespace graph;
 using namespace base;
+
+namespace protean {
 
 inline fp_t get_cx_error(uptr<CouplingGraph>& graph, sptr<edge_t> e) {
     sptr<vertex_t> v = e->get_source<vertex_t>(),
@@ -101,6 +101,4 @@ make_error_and_timing_from_coupling_graph(std::string coupling_file, ErrorTable&
     }
 }
 
-
 }   // protean
-}   // qontra

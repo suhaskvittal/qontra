@@ -7,11 +7,12 @@
 #define MEMORY_DEBUG
 #endif
 
+#include <protean/experiments.h>
+
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/ext/stim.h>
 
-#include <qontra/protean/experiments.h>
 #include <qontra/experiments.h>
 #include <qontra/experiments/memory.h>
 

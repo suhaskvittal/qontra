@@ -6,9 +6,8 @@
 #ifndef PROTEAN_IO_h
 #define PROTEAN_IO_h
 
-#include "qontra/protean/network.h"
+#include "protean/network.h"
 
-namespace qontra {
 namespace protean {
 
 // Takes in a string of characters corresponding to pass execution and updates the PhysicalNetwork
@@ -50,7 +49,6 @@ bool update_network(std::string pass_string, PhysicalNetwork*, bool verbose=fals
 void write_network_to_folder(std::string, PhysicalNetwork*);
 
 }   // protean
-}   // qontra
 
 #include "io.inl"
 

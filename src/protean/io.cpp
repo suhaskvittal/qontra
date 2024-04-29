@@ -3,7 +3,7 @@
  *  date:   29 December 2023
  * */
 
-#include "qontra/protean/io.h"
+#include "protean/io.h"
 
 #include <vtils/filesystem.h>
 
@@ -14,10 +14,11 @@
 #include <vtils/timer.h>
 #endif
 
-namespace qontra {
+using namespace qontra;
+using namespace graph;
+
 namespace protean {
 
-using namespace graph;
 using namespace net;
 
 bool
@@ -255,6 +256,4 @@ PhysicalNetwork::write_flag_assignment_file(std::string output_file) {
     fout.flush();
 }
 
-
 }   // protean
-}   // qontra

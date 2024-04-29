@@ -5,7 +5,6 @@
 
 #include <vtils/utility.h>
 
-namespace qontra {
 namespace protean {
 
 inline fp_t
@@ -67,8 +66,8 @@ Scheduler::try_and_push_back_cx_operands(
                              py = network->get_vertex(qy);
     if (!network->contains(px, py)) {
         std::cerr << "[ try_and_push_back_cx_operands ] attempted to do CX(" << qx << ", " << qy << ") when"
-            << " no coupling exists. Roles = " << graph::print_v(rx) 
-            << ", " << graph::print_v(ry) << std::endl;
+            << " no coupling exists. Roles = " << qgr::print_v(rx) 
+            << ", " << qgr::print_v(ry) << std::endl;
         exit(1);
     }
     if (in_use.count(qx) || in_use.count(qy)) return false;
@@ -124,12 +123,11 @@ Scheduler::test_and_set_exit_on_fail(sptr<net::raw_vertex_t> rv, std::string cal
 inline void
 Scheduler::print_test_and_set_debug_and_exit(sptr<net::raw_vertex_t> rv, std::string caller) {
     sptr<net::phys_vertex_t> pv = network->role_to_phys.at(rv);
-    std::cerr << "[ " << caller << " ] qubit " << graph::print_v(rv)
-        << " failed to acquire " << graph::print_v(pv)
-        << " from " << graph::print_v(active_role_map.at(pv))
+    std::cerr << "[ " << caller << " ] qubit " << qgr::print_v(rv)
+        << " failed to acquire " << qgr::print_v(pv)
+        << " from " << qgr::print_v(active_role_map.at(pv))
         << std::endl;
     exit(1);
 }
 
 }   // protean
-}   // qontra

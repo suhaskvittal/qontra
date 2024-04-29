@@ -6,8 +6,6 @@
 #ifndef PROTEAN_SCHEDULER_h
 #define PROTEAN_SCHEDULER_h
 
-#include "qontra/protean/network.h"
-
 #include <qontra/ext/qes.h>
 
 #include <vtils/bijective_map.h>
@@ -17,7 +15,8 @@
 #include <set>
 #include <tuple>
 
-namespace qontra {
+#include "protean/network.h"
+
 namespace protean {
 
 struct cx_t {
@@ -92,7 +91,7 @@ private:
     size_t cycle;
     int64_t mctr;
 
-    graph::TannerGraph* tanner_graph;
+    qgr::TannerGraph* tanner_graph;
     uptr<RawNetwork>& raw_network;
     PhysicalNetwork* network;
     
@@ -101,7 +100,6 @@ private:
 };
 
 }   // protean
-}   // qontra
 
 #include "scheduler.inl"
 
