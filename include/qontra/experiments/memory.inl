@@ -133,6 +133,9 @@ run_memory_with_generated_syndromes(Decoder* dec, memory_config_t config, PROLOG
         } else {
             n_errors = logical_errors[0];
         }
+        if (world_rank == 0) {
+            std::cout << "[ mxp status ] " << n_errors << " over " << (shots[0]*world_size) << std::endl;
+        }
     }
     G_BASE_SEED = orig_base_seed;
 

@@ -10,13 +10,21 @@ macro(make_main)
     target_link_libraries(${MAKE_MAIN_TARGET} PRIVATE qontra)
 endmacro()
 
-make_main(TARGET converter SOURCE_FILES main/converter.cpp)
-make_main(TARGET generate_syndromes SOURCE_FILES main/generate_syndromes.cpp)
 make_main(TARGET memory SOURCE_FILES main/memory.cpp)
 make_main(TARGET qontrasim SOURCE_FILES main/qontrasim.cpp)
-make_main(TARGET print_error_stats SOURCE_FILES main/print_error_stats.cpp)
 
+make_main(TARGET converter SOURCE_FILES main/converter.cpp)
+make_main(TARGET generate_syndromes SOURCE_FILES main/generate_syndromes.cpp)
+
+make_main(TARGET print_error_stats SOURCE_FILES main/print_error_stats.cpp)
 make_main(TARGET explain_degenerate_errors SOURCE_FILES main/explain_degenerate_errors.cpp)
 make_main(TARGET compute_code_distance SOURCE_FILES main/compute_code_distance.cpp)
 make_main(TARGET compute_circuit_distance SOURCE_FILES main/compute_circuit_distance.cpp)
 make_main(TARGET decoder_debugger SOURCE_FILES main/decoder_debugger.cpp)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/utils)
+set_target_properties(
+    converter generate_syndromes
+    print_error_stats explain_degenerate_errors compute_code_distance compute_circuit_distance decoder_debugger
+    PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/utils)

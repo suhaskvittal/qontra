@@ -33,6 +33,12 @@ add_node_to_render_graph(
     cxx_agset(av, "label", attr.name);
     cxx_agset(av, "shape", attr.shape);
     cxx_agset(av, "style", attr.style);
+    
+    if (config.layout.count(pv)) {
+        const auto& [x, y] = config.layout.at(pv);
+        std::string ps = std::to_string(x) + "," + std::to_string(y) + "!";
+        cxx_agset(av, "pos", ps);
+    }
 }
 
 void

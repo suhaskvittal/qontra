@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
 
     CmdParser pp(argc, argv, 2);
     std::string HELP = 
-        "usage: ./memory --qes <file> --out <file>\n"
+        "usage: ./memory <qes-file> <output-file>\n"
         "optional:\n"
         "\t--e <errors until stopping, default=40>\n"
         "\t--pmin <error-rate, default=1e-3>\n"

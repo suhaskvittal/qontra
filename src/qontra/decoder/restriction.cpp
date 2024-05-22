@@ -2,7 +2,6 @@
  *  author: Suhas Vittal
  *  date:   17 February 2024
  * */
-
 #include "qontra/decoder/restriction.h"
 
 #include <vtils/set_algebra.h>
@@ -584,7 +583,7 @@ RestrictionDecoder::lifting(
         const uint64_t enf = 1L << nf;
 
 #ifdef MEMORY_DEBUG
-        std::cout << "Faces of " << print_v(v) << ":" << std::endl;
+        std::cout << "Faces of " << print_v(v) << ": (count = " << faces.size() << ")" << std::endl;
         for (face_t fc : faces) {
             std::cout << "\t<";
             for (sptr<vertex_t> x : fc.vertices) std::cout << " " << print_v(x);
