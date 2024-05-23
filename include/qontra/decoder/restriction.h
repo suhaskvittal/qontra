@@ -91,12 +91,19 @@ face_t make_face(sptr<gd::hyperedge_t>);
 int color_plus_offset(int, int);
 
 void intersect_with_boundary(
-            std::set<vpair_t>&,
-            stim::simd_bits_range_ref<SIMD_WIDTH>,
-            fp_t& probability,
-            const face_t&,
-            sptr<gd::vertex_t> incident_vertex);
+        std::set<vpair_t>&,
+        stim::simd_bits_range_ref<SIMD_WIDTH>,
+        fp_t& probability,
+        const face_t&,
+        sptr<gd::vertex_t> incident_vertex);
 
+std::set<vpair_t>
+find_face_subset_given_cc_map(
+        const std::map<vpair_t, size_t>& x_cc_map,
+        const std::set<face_t>& faces,
+        stim::simd_bits_range_ref<SIMD_WIDTH>,
+        fp_t& probability,
+        sptr<gd::vertex_t> incident_vertex);
 
 }   // qontra
 

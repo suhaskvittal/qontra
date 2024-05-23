@@ -150,9 +150,6 @@ int main(int argc, char* argv[]) {
     }
     fp_t p = pmin;
     DetailedStimCircuit base_circuit = make_capacity(&tgr, p, mx, color_map);
-    if (world_rank == 0) {
-        std::cout << base_circuit << std::endl;
-    }
     RestrictionDecoder dec(base_circuit);
 
     memory_config_t config;

@@ -2,6 +2,8 @@
  *  author: Suhas Vittal
  *  date:   17 February 2024
  * */
+#define MEMORY_DEBUG
+
 #include "qontra/decoder/restriction.h"
 
 #include <vtils/set_algebra.h>
@@ -635,6 +637,41 @@ RestrictionDecoder::lifting(
                     local_corr);
         }
         if (best_cc_boundary.empty() && best_no_cc_boundary.empty()) continue;
+#ifdef MEMORY_DEBUG
+        // TESTING NON_EXHAUSTIVE ALGORITHM ========
+        fp_t nex_lpr_cc, nex_lpr_no_cc;
+        stim::simd_bits<SIMD_WIDTH> nex_cc_corr(1), nex_no_cc_corr(1);
+        auto nex_cc_b = find_face_subset_given_cc_map(
+                            in_cc_map, faces, nex_cc_corr, nex_lpr_cc, v);
+        auto nex_no_cc_b = find_face_subset_given_cc_map(
+                            not_cc_map, faces, nex_no_cc_corr, nex_lpr_no_cc, v);
+        std::cout << "NEX matches CC: " << (nex_cc_corr == best_cc_corr)
+            << ", boundary sizes = " << nex_cc_b.size() << ", "
+            << best_cc_boundary.size() << std::endl;
+        std::cout << "NEX matches NO CC: " << (nex_no_cc_corr == best_no_cc_corr)
+            << ", boundary sizes = " << nex_no_cc_b.size() << ", "
+            << best_no_cc_boundary.size() << std::endl;
+        std::cout << "NEX boundary CC:";
+        for (const auto& [x,y] : nex_cc_b) {
+            std::cout << " [ " << print_v(x) << "," << print_v(y) << " ]";
+        }
+        std::cout << std::endl;
+        std::cout << "\tcorr = ";
+        for (size_t i=0; i < circuit.count_observables(); i++) {
+            std::cout << (nex_cc_corr[i]+0);
+        }
+        std::cout << std::endl;
+        std::cout << "NEX boundary NO CC:";
+        for (const auto& [x,y] : nex_no_cc_b) {
+            std::cout << " [ " << print_v(x) << "," << print_v(y) << " ]";
+        }
+        std::cout << std::endl;
+        std::cout << "\tcorr = ";
+        for (size_t i=0; i < circuit.count_observables(); i++) {
+            std::cout << (nex_no_cc_corr[i]+0);
+        }
+        std::cout << std::endl;
+#endif
         if (best_log_prob_cc > best_log_prob_no_cc) {
             update_correction(
                 in_cc_map, corr, out_log_pr, best_cc_corr, best_cc_boundary, best_log_prob_cc);
@@ -724,11 +761,11 @@ make_face(sptr<hyperedge_t> e) {
 
 void
 intersect_with_boundary(
-            std::set<vpair_t>& boundary,
-            stim::simd_bits_range_ref<SIMD_WIDTH> corr,
-            fp_t& log_pr,
-            const face_t& fc,
-            sptr<vertex_t> v)
+        std::set<vpair_t>& boundary,
+        stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+        fp_t& log_pr,
+        const face_t& fc,
+        sptr<vertex_t> v)
 {
     // Get edges of the hyperedge.
     for (size_t j = 0; j < fc.vertices.size(); j++) {
@@ -743,6 +780,146 @@ intersect_with_boundary(
     }
     for (uint64_t fr : fc.frames) corr[fr] ^= 1;
     log_pr += log(fc.probability);
+}
+
+std::set<vpair_t>
+find_face_subset_given_cc_map(
+    const std::map<vpair_t, size_t>& x_cc_map,
+    const std::set<face_t>& faces,
+    stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+    fp_t& log_pr,
+    sptr<vertex_t> vcen)
+{
+    // Go through faces and compute adjacency. We will do a BFS from a starting
+    // face repeatedly to satisfy the boundary.
+    struct v_t : base::vertex_t {
+        const face_t* f_p;
+    };
+    Graph<v_t, base::edge_t> fgr;
+    size_t index = 0;
+    for (const face_t& fc : faces) {
+        sptr<v_t> v = fgr.make_and_add_vertex(index++);
+        v->f_p = &fc;
+        // Make edges.
+        for (sptr<v_t> w : fgr.get_vertices()) {
+            if (v == w) continue;
+            size_t cnt = 0;
+            for (sptr<vertex_t> x : fc.vertices) {
+                const auto& wfcv = w->f_p->vertices;
+                if (std::find(wfcv.begin(), wfcv.end(), x) != wfcv.end()) {
+                    cnt++;
+                }
+            }
+            if (cnt == 2) fgr.make_and_add_edge(v,w);
+        }
+    }
+    std::set<vpair_t> boundary_update;
+    for (const auto& [vp, cnt] : x_cc_map) {
+        if (boundary_update.count(vp)) continue;
+        const auto& [x,y] = vp;
+        if (x != vcen && y != vcen) continue;
+#ifdef MEMORY_DEBUG
+        std::cout << "checking " << print_v(x) << ", " << print_v(y) 
+            << " | cnt = " << cnt << std::endl;
+#endif
+        // Find two starting vertices with x and y in the face.
+        std::vector<sptr<v_t>> starting;
+        for (sptr<v_t> v : fgr.get_vertices()) {
+            const auto& vfcv = v->f_p->vertices;
+            if (std::find(vfcv.begin(), vfcv.end(), x) != vfcv.end()
+                && std::find(vfcv.begin(), vfcv.end(), y) != vfcv.end())
+            {
+                starting.push_back(v);
+            }
+        }
+        fp_t best_log_pr = std::numeric_limits<fp_t>::lowest();
+        std::set<vpair_t> best_update;
+        stim::simd_bits<SIMD_WIDTH> best_local_corr(corr.num_bits_padded());
+        for (sptr<v_t> s : starting) {
+            // First check if face is wholly incident to x_cc_map.
+            std::set<vpair_t> base_boundary;
+            size_t s_inc_cnt = 0;
+            for (size_t i = 0; i < s->f_p->vertices.size(); i++) {
+                sptr<vertex_t> v = s->f_p->vertices[i];
+                for (size_t j = i+1; j < s->f_p->vertices.size(); j++) {
+                    sptr<vertex_t> w = s->f_p->vertices[j];
+                    if (v != vcen && w != vcen) continue;
+                    vpair_t p = make_vpair(v,w);
+                    if (x_cc_map.count(p)) s_inc_cnt++;
+                    base_boundary.emplace(p);
+                }
+            }
+            if (s_inc_cnt == 2) {
+                best_log_pr = s->f_p->probability;
+                best_update = base_boundary;
+                best_local_corr.clear();
+                for (uint64_t fr : s->f_p->frames) best_local_corr[fr] ^= 1;
+                continue;
+            }
+#ifdef MEMORY_DEBUG
+            std::cout << "\tstarting search from face " << print_v(s) << std::endl;
+#endif
+            // We will move "left" and "right" from s, and choose the set of
+            // faces that has the best probability.
+            stim::simd_bits<SIMD_WIDTH> base_corr(corr.num_bits_padded());
+            for (uint64_t fr : s->f_p->frames) base_corr[fr] ^= 1;
+            for (sptr<v_t> ss : fgr.get_neighbors(s)) {
+                fp_t local_log_pr = log(s->f_p->probability);
+                std::set<vpair_t> local_boundary_update(base_boundary);
+                stim::simd_bits<SIMD_WIDTH> local_corr(base_corr);
+
+                std::set<sptr<v_t>> visited{s};
+                std::deque<sptr<v_t>> bfs{ss};
+                while (bfs.size()) {
+                    sptr<v_t> v = bfs.front();
+                    bfs.pop_front();
+                    if (visited.count(v)) continue;
+
+                    for (uint64_t fr : v->f_p->frames) local_corr[fr] ^= 1;
+                    local_log_pr += log(v->f_p->probability);
+                    // Check if we have found something else in the boundary.
+                    bool tried_to_remove_vp = false;
+                    bool any_edge_in_cc_map = false;
+                    for (size_t i = 0; i < v->f_p->vertices.size(); i++) {
+                        sptr<vertex_t> a = v->f_p->vertices[i];
+                        for (size_t j = i+1; j < v->f_p->vertices.size(); j++) {
+                            sptr<vertex_t> b = v->f_p->vertices[j];
+                            if (a != vcen && b != vcen) continue;
+                            vpair_t p = make_vpair(a,b);
+                            if (p == vp) {
+                                // This is bad.
+                                local_log_pr = std::numeric_limits<fp_t>::lowest();
+                                tried_to_remove_vp = true;
+                            }
+                            if (x_cc_map.count(p) && !boundary_update.count(p)) {
+                                local_boundary_update ^= p;
+                                any_edge_in_cc_map = true;
+                            }
+                        }
+                    }
+                    if (any_edge_in_cc_map || tried_to_remove_vp) break;
+                    for (sptr<v_t> w : fgr.get_neighbors(v)) {
+                        bfs.push_back(w);
+                    }
+                    visited.insert(v);
+                }
+                if (local_log_pr > best_log_pr) {
+                    best_log_pr = local_log_pr;
+                    best_update = local_boundary_update;
+                    best_local_corr = local_corr;
+#ifdef MEMORY_DEBUG
+                    std::cout << "new local corr: ";
+                    for (size_t i = 0; i < 8; i++) std::cout << (base_corr[i]+0);
+                    std::cout << std::endl;
+#endif
+                }
+            }
+        }
+        boundary_update ^= best_update;
+        corr ^= best_local_corr;
+        log_pr += best_log_pr;
+    }
+    return boundary_update;
 }
 
 }   // qontra
