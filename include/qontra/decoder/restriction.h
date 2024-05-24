@@ -59,6 +59,7 @@ protected:
     // Returns log probability of correction.
     fp_t lifting(
             stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+            stim::simd_bits_range_ref<SIMD_WIDTH> syndrome_delta,
             const std::map<sptr<gd::hyperedge_t>, sptr<gd::hyperedge_t>>& best_rep_map,
             size_t tries=0);
 
@@ -103,6 +104,7 @@ find_face_subset_given_cc_map(
         const std::set<face_t>& faces,
         stim::simd_bits_range_ref<SIMD_WIDTH>,
         fp_t& probability,
+        std::vector<face_t>& applied_faces,
         sptr<gd::vertex_t> incident_vertex);
 
 }   // qontra

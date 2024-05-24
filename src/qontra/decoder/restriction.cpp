@@ -2,7 +2,7 @@
  *  author: Suhas Vittal
  *  date:   17 February 2024
  * */
-#define MEMORY_DEBUG
+#define TEST_ALG
 
 #include "qontra/decoder/restriction.h"
 
@@ -250,7 +250,8 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 
     stim::simd_bits<SIMD_WIDTH> corr1(corr),
                                 corr2(corr);
-    fp_t log_p1 = lifting(corr1, best_rep_map);
+    stim::simd_bits<SIMD_WIDTH> syndrome_delta(syndrome.num_bits_padded());
+    fp_t log_p1 = lifting(corr1, syndrome_delta, best_rep_map);
 #ifdef MEMORY_DEBUG
     std::cout << "corr1 = ";
     for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
@@ -258,6 +259,18 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 #endif
     // If there are no triggered flag edges. Return here.
     if (triggered_flag_edges.empty()) {
+        syndrome_delta ^= syndrome;
+        if (syndrome_delta.not_zero()) {
+#ifdef MEMORY_DEBUG
+            std::cout << "syndrome delta = ";
+            for (size_t i = 0; i < circuit.count_detectors(); i++) {
+                std::cout << (syndrome_delta[i]+0);
+            }
+            std::cout << std::endl;
+#endif
+            auto res = decode_error(syndrome_delta);
+            corr1 ^= res.corr;
+        }
         return { 0.0, corr1 };
     }
 #ifdef MEMORY_DEBUG
@@ -296,7 +309,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             visited_flag_edges.insert(he);
         }
     }
-    log_p2 += lifting(corr2, best_rep_map);
+    log_p2 += lifting(corr2, syndrome_delta, best_rep_map);
 #ifdef MEMORY_DEBUG
     std::cout << "corr1 = ";
     for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
@@ -544,6 +557,7 @@ RestrictionDecoder::insert_error_chain_into(
 fp_t
 RestrictionDecoder::lifting(
         stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+        stim::simd_bits_range_ref<SIMD_WIDTH> syndrome_delta,
         const std::map<sptr<hyperedge_t>, sptr<hyperedge_t>>& best_rep_map,
         size_t tr) 
 {
@@ -602,79 +616,71 @@ RestrictionDecoder::lifting(
                                     best_no_cc_corr(corr.num_bits_padded());
         fp_t best_log_prob_cc = std::numeric_limits<fp_t>::lowest(),
              best_log_prob_no_cc = std::numeric_limits<fp_t>::lowest();
-        for (uint64_t i = 0; i < enf; i++) {
-            std::set<vpair_t> boundary;
-            stim::simd_bits<SIMD_WIDTH> local_corr(corr.num_bits_padded());
-            fp_t log_pr = 0.0;
+        std::vector<face_t> applied_faces;
+#ifndef TEST_ALG
+        if (nf <= 12) {
+            for (uint64_t i = 0; i < enf; i++) {
+                std::set<vpair_t> boundary;
+                stim::simd_bits<SIMD_WIDTH> local_corr(corr.num_bits_padded());
+                fp_t log_pr = 0.0;
 
-            uint64_t ii = i;
-            for (auto it = faces.begin(); it != faces.end() && ii; it++) {
-                if (ii & 1) {
-                    intersect_with_boundary(boundary, local_corr, log_pr, *it, v);
+                uint64_t ii = i;
+                for (auto it = faces.begin(); it != faces.end() && ii; it++) {
+                    if (ii & 1) {
+                        intersect_with_boundary(boundary, local_corr, log_pr, *it, v);
+                    }
+                    ii >>= 1;
                 }
-                ii >>= 1;
+                // Now, we need to check how much boundary intersects with connected components
+                // or anything not in the connected components. Note that this intersection is
+                // in the neighborhood of v.
+                size_t int_in_cc = locally_matches(in_cc_map, boundary, v),
+                       int_not_cc = locally_matches(not_cc_map, boundary, v);
+                update_best_boundary(
+                        int_in_cc,
+                        best_log_prob_cc,
+                        best_cc_boundary,
+                        best_cc_corr, 
+                        log_pr,
+                        boundary,
+                        local_corr);
+                update_best_boundary(
+                        int_not_cc,
+                        best_log_prob_no_cc,
+                        best_no_cc_boundary,
+                        best_no_cc_corr,
+                        log_pr,
+                        boundary,
+                        local_corr);
             }
-            // Now, we need to check how much boundary intersects with connected components
-            // or anything not in the connected components. Note that this intersection is
-            // in the neighborhood of v.
-            size_t int_in_cc = locally_matches(in_cc_map, boundary, v),
-                   int_not_cc = locally_matches(not_cc_map, boundary, v);
-            update_best_boundary(
-                    int_in_cc,
-                    best_log_prob_cc,
-                    best_cc_boundary,
-                    best_cc_corr, 
-                    log_pr,
-                    boundary,
-                    local_corr);
-            update_best_boundary(
-                    int_not_cc,
-                    best_log_prob_no_cc,
-                    best_no_cc_boundary,
-                    best_no_cc_corr,
-                    log_pr,
-                    boundary,
-                    local_corr);
-        }
-        if (best_cc_boundary.empty() && best_no_cc_boundary.empty()) continue;
-#ifdef MEMORY_DEBUG
-        // TESTING NON_EXHAUSTIVE ALGORITHM ========
-        fp_t nex_lpr_cc, nex_lpr_no_cc;
-        stim::simd_bits<SIMD_WIDTH> nex_cc_corr(1), nex_no_cc_corr(1);
-        auto nex_cc_b = find_face_subset_given_cc_map(
-                            in_cc_map, faces, nex_cc_corr, nex_lpr_cc, v);
-        auto nex_no_cc_b = find_face_subset_given_cc_map(
-                            not_cc_map, faces, nex_no_cc_corr, nex_lpr_no_cc, v);
-        std::cout << "NEX matches CC: " << (nex_cc_corr == best_cc_corr)
-            << ", boundary sizes = " << nex_cc_b.size() << ", "
-            << best_cc_boundary.size() << std::endl;
-        std::cout << "NEX matches NO CC: " << (nex_no_cc_corr == best_no_cc_corr)
-            << ", boundary sizes = " << nex_no_cc_b.size() << ", "
-            << best_no_cc_boundary.size() << std::endl;
-        std::cout << "NEX boundary CC:";
-        for (const auto& [x,y] : nex_cc_b) {
-            std::cout << " [ " << print_v(x) << "," << print_v(y) << " ]";
-        }
-        std::cout << std::endl;
-        std::cout << "\tcorr = ";
-        for (size_t i=0; i < circuit.count_observables(); i++) {
-            std::cout << (nex_cc_corr[i]+0);
-        }
-        std::cout << std::endl;
-        std::cout << "NEX boundary NO CC:";
-        for (const auto& [x,y] : nex_no_cc_b) {
-            std::cout << " [ " << print_v(x) << "," << print_v(y) << " ]";
-        }
-        std::cout << std::endl;
-        std::cout << "\tcorr = ";
-        for (size_t i=0; i < circuit.count_observables(); i++) {
-            std::cout << (nex_no_cc_corr[i]+0);
-        }
-        std::cout << std::endl;
+        } else {
 #endif
+            best_cc_boundary = find_face_subset_given_cc_map(
+                                    in_cc_map, 
+                                    faces,
+                                    best_cc_corr,
+                                    best_log_prob_cc, 
+                                    applied_faces,
+                                    v);
+            best_no_cc_boundary = find_face_subset_given_cc_map(
+                                    not_cc_map,
+                                    faces,
+                                    best_no_cc_corr,
+                                    best_log_prob_no_cc,
+                                    applied_faces,
+                                    v);
+#ifndef TEST_ALG
+        }
+#endif
+        if (best_cc_boundary.empty() && best_no_cc_boundary.empty()) continue;
         if (best_log_prob_cc > best_log_prob_no_cc) {
             update_correction(
-                in_cc_map, corr, out_log_pr, best_cc_corr, best_cc_boundary, best_log_prob_cc);
+                in_cc_map,
+                corr,
+                out_log_pr,
+                best_cc_corr,
+                best_cc_boundary,
+                best_log_prob_cc);
 #ifdef MEMORY_DEBUG
                 std::cout << "Matched " << print_v(v) << " to CCs with boundary:";
                 for (vpair_t e : best_cc_boundary) {
@@ -684,13 +690,35 @@ RestrictionDecoder::lifting(
 #endif
         } else {
             update_correction(
-                not_cc_map, corr, out_log_pr, best_no_cc_corr, best_no_cc_boundary, best_log_prob_no_cc);
+                not_cc_map,
+                corr,
+                out_log_pr,
+                best_no_cc_corr,
+                best_no_cc_boundary,
+                best_log_prob_no_cc);
 #ifdef MEMORY_DEBUG
             std::cout << "Matched " << print_v(v) << " to bulk with boundary:";
             for (vpair_t e : best_no_cc_boundary) {
                 std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
             }
             std::cout << std::endl;
+#endif
+        }
+#ifdef MEMORY_DEBUG
+        std::cout << "Applied faces:\n";
+#endif
+        for (const face_t& f : applied_faces) {
+#ifdef MEMORY_DEBUG
+            std::cout << "<";
+#endif
+            for (sptr<vertex_t> v : f.vertices) {
+#ifdef MEMORY_DEBUG
+                std::cout << " " << print_v(v);
+#endif
+                if (!v->is_boundary_vertex) syndrome_delta[v->id] ^= 1;
+            }
+#ifdef MEMORY_DEBUG
+            std::cout << " >\n";
 #endif
         }
     }
@@ -700,7 +728,7 @@ RestrictionDecoder::lifting(
     }
     if (in_cc_map.size() > 1 || not_cc_map.size() > 1) {
         if (tr < MAX_TRIES) {
-            return out_log_pr + lifting(corr, best_rep_map, tr+1);
+            return out_log_pr + lifting(corr, syndrome_delta, best_rep_map, tr+1);
         }
     }
     return out_log_pr;
@@ -788,8 +816,10 @@ find_face_subset_given_cc_map(
     const std::set<face_t>& faces,
     stim::simd_bits_range_ref<SIMD_WIDTH> corr,
     fp_t& log_pr,
+    std::vector<face_t>& applied_faces,
     sptr<vertex_t> vcen)
 {
+    log_pr = 0;
     // Go through faces and compute adjacency. We will do a BFS from a starting
     // face repeatedly to satisfy the boundary.
     struct v_t : base::vertex_t {
@@ -835,7 +865,11 @@ find_face_subset_given_cc_map(
         fp_t best_log_pr = std::numeric_limits<fp_t>::lowest();
         std::set<vpair_t> best_update;
         stim::simd_bits<SIMD_WIDTH> best_local_corr(corr.num_bits_padded());
+        std::vector<face_t> best_applied_faces;
         for (sptr<v_t> s : starting) {
+#ifdef MEMORY_DEBUG
+            std::cout << "\tstarting search from face " << print_v(s) << std::endl;
+#endif
             // First check if face is wholly incident to x_cc_map.
             std::set<vpair_t> base_boundary;
             size_t s_inc_cnt = 0;
@@ -843,22 +877,30 @@ find_face_subset_given_cc_map(
                 sptr<vertex_t> v = s->f_p->vertices[i];
                 for (size_t j = i+1; j < s->f_p->vertices.size(); j++) {
                     sptr<vertex_t> w = s->f_p->vertices[j];
-                    if (v != vcen && w != vcen) continue;
+//                  if (v != vcen && w != vcen) continue;
                     vpair_t p = make_vpair(v,w);
                     if (x_cc_map.count(p)) s_inc_cnt++;
-                    base_boundary.emplace(p);
+                    base_boundary.insert(p);
                 }
             }
+#ifdef MEMORY_DEBUG
+                std::cout << "\t\tboundary:";
+                for (const auto& [a,b] : base_boundary) {
+                    std::cout << " [" << print_v(a) << "," << print_v(b) << " ]";
+                }
+                std::cout << std::endl;
+#endif
             if (s_inc_cnt == 2) {
-                best_log_pr = s->f_p->probability;
+#ifdef MEMORY_DEBUG
+                std::cout << "\t\tface is good." << std::endl;
+#endif
+                best_log_pr = log(s->f_p->probability);
                 best_update = base_boundary;
                 best_local_corr.clear();
+                best_applied_faces = { *(s->f_p) };
                 for (uint64_t fr : s->f_p->frames) best_local_corr[fr] ^= 1;
                 continue;
             }
-#ifdef MEMORY_DEBUG
-            std::cout << "\tstarting search from face " << print_v(s) << std::endl;
-#endif
             // We will move "left" and "right" from s, and choose the set of
             // faces that has the best probability.
             stim::simd_bits<SIMD_WIDTH> base_corr(corr.num_bits_padded());
@@ -867,7 +909,10 @@ find_face_subset_given_cc_map(
                 fp_t local_log_pr = log(s->f_p->probability);
                 std::set<vpair_t> local_boundary_update(base_boundary);
                 stim::simd_bits<SIMD_WIDTH> local_corr(base_corr);
-
+                std::vector<face_t> local_applied_faces{ *(s->f_p) };
+#ifdef MEMORY_DEBUG
+                std::cout << "\t\tbfs------\n";
+#endif
                 std::set<sptr<v_t>> visited{s};
                 std::deque<sptr<v_t>> bfs{ss};
                 while (bfs.size()) {
@@ -880,11 +925,12 @@ find_face_subset_given_cc_map(
                     // Check if we have found something else in the boundary.
                     bool tried_to_remove_vp = false;
                     bool any_edge_in_cc_map = false;
+                    std::set<vpair_t> tmp;
                     for (size_t i = 0; i < v->f_p->vertices.size(); i++) {
                         sptr<vertex_t> a = v->f_p->vertices[i];
                         for (size_t j = i+1; j < v->f_p->vertices.size(); j++) {
                             sptr<vertex_t> b = v->f_p->vertices[j];
-                            if (a != vcen && b != vcen) continue;
+//                          if (a != vcen && b != vcen) continue;
                             vpair_t p = make_vpair(a,b);
                             if (p == vp) {
                                 // This is bad.
@@ -892,12 +938,22 @@ find_face_subset_given_cc_map(
                                 tried_to_remove_vp = true;
                             }
                             if (x_cc_map.count(p) && !boundary_update.count(p)) {
-                                local_boundary_update ^= p;
                                 any_edge_in_cc_map = true;
                             }
+                            tmp.insert(p);
                         }
                     }
-                    if (any_edge_in_cc_map || tried_to_remove_vp) break;
+                    if (tried_to_remove_vp) break;
+#ifdef MEMORY_DEBUG
+                    std::cout << "\t\t\tadded boundary:";
+                    for (auto& [x,y] : tmp) {
+                        std::cout << " [" << print_v(x) << "," << print_v(y) << "]";
+                    }
+                    std::cout << std::endl;
+#endif
+                    local_applied_faces.push_back(*(v->f_p));
+                    local_boundary_update ^= tmp;
+                    if (any_edge_in_cc_map) break;
                     for (sptr<v_t> w : fgr.get_neighbors(v)) {
                         bfs.push_back(w);
                     }
@@ -907,18 +963,16 @@ find_face_subset_given_cc_map(
                     best_log_pr = local_log_pr;
                     best_update = local_boundary_update;
                     best_local_corr = local_corr;
-#ifdef MEMORY_DEBUG
-                    std::cout << "new local corr: ";
-                    for (size_t i = 0; i < 8; i++) std::cout << (base_corr[i]+0);
-                    std::cout << std::endl;
-#endif
+                    best_applied_faces = local_applied_faces;
                 }
             }
         }
         boundary_update ^= best_update;
         corr ^= best_local_corr;
         log_pr += best_log_pr;
+        vtils::push_back_range(applied_faces, best_applied_faces);
     }
+    if (boundary_update.empty()) log_pr = std::numeric_limits<fp_t>::lowest();
     return boundary_update;
 }
 
