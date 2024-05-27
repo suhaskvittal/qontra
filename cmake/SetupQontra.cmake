@@ -10,10 +10,12 @@ set(QONTRA_FILES
     src/qontra/ext/qes.cpp
     src/qontra/ext/stim.cpp
     # Decoders
-    src/qontra/decoder/mwpm.cpp
     src/qontra/decoder/matching_base.cpp
-    src/qontra/decoder/restriction.cpp
     src/qontra/decoder/mobius.cpp
+    src/qontra/decoder/mwpm.cpp
+    src/qontra/decoder/restriction.cpp
+    src/qontra/decoder/restriction/helpers.cpp
+    src/qontra/decoder/restriction/incident_vertices.cpp
     # Graphs
     src/qontra/graph/decoding_graph.cpp 
     src/qontra/graph/decoding_graph/edge_class.cpp
@@ -38,8 +40,7 @@ if (COMPILE_NEURAL_DECODER)
     find_package(Armadillo REQUIRED)
     find_package(OpenMP REQUIRED)
     set(QONTRA_FILES ${QONTRA_FILES} 
-            src/qontra/decoder/neural.cpp
-            src/qontra/decoder/neural_assisted.cpp)
+            src/qontra/decoder/neural.cpp)
 endif()
 
 find_package(MPI REQUIRED)
@@ -55,9 +56,11 @@ if (L1D_CACHE_LINE_SIZE)
 endif()
 
 if (COMPILE_PYMATCHING)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/pymatching.cpp)
     target_compile_definitions(qontra PUBLIC QONTRA_PYMATCHING_ENABLED) 
 endif()
 
 if (COMPILE_CHROMOBIUS)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/chromobius.cpp)
     target_compile_definitions(qontra PUBLIC QONTRA_CHROMOBIUS_ENABLED)
 endif()

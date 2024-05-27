@@ -33,6 +33,4 @@ public:
 
 }   // qontra
 
-#include "neural.inl"
-
 #endif  // NEURAL_DECODER_h

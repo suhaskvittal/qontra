@@ -16,14 +16,11 @@
 
 namespace qontra {
 
-pm::Mwpm    init_solver_from_circuit(stim::Circuit);
+pm::Mwpm init_solver_from_circuit(stim::Circuit);
 
 class PyMatching : public Decoder {
 public:
-    PyMatching(DetailedStimCircuit circuit)
-        :Decoder(circuit),
-        solver(init_solver_from_circuit(circuit))
-    {}
+    PyMatching(const DetailedStimCircuit&);
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) override;
 private:
@@ -31,7 +28,5 @@ private:
 };
 
 }   // qontra
-
-#include "pymatching.inl"
 
 #endif  // QONTRA_PYMATCHING_h
