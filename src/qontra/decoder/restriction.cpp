@@ -32,8 +32,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 
     if (detectors.empty()) return ret_no_detectors();
 
-    corr ^= get_base_corr();
-
     // Compute the MWPM for each restricted lattice.
 #ifdef DECODER_PERF
     timer.clk_start();

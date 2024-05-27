@@ -18,9 +18,15 @@ set(QONTRA_FILES
     src/qontra/decoder/restriction/incident_vertices.cpp
     # Graphs
     src/qontra/graph/decoding_graph.cpp 
+    src/qontra/graph/decoding_graph/detectors.cpp
+    src/qontra/graph/decoding_graph/distance.cpp
     src/qontra/graph/decoding_graph/edge_class.cpp
+    src/qontra/graph/decoding_graph/helpers.cpp
+    src/qontra/graph/decoding_graph/init.cpp
     src/qontra/graph/decoding_graph/unified_lattice.cpp
     src/qontra/graph/tanner_graph.cpp
+    src/qontra/graph/tanner_graph/code_distance.cpp
+    src/qontra/graph/tanner_graph/io.cpp
     # Simulators
     src/qontra/sim/base/frame_sim.cpp
     src/qontra/sim/base/state_sim.cpp

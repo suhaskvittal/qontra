@@ -22,6 +22,6 @@ std::string print_ufl(sptr<decoding::vertex_t>);
 }   // graph
 }   // qontra
 
-#include "unified_lattice.inl"
+#include "inl/unified_lattice.inl"
  
 #endif  // QONTRA_DECODING_GRAPH_UNIFIED_LATTICE_h

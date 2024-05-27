@@ -26,7 +26,8 @@ struct hyperedge_t {
 
 }   // base
 
-template <class V=void, class HE> std::string   print_he(sptr<HE>);
+template <class V=void, class HE>
+std::string print_he(sptr<HE>);
 
 typedef Graph<base::vertex_t, base::edge_t> IncidenceGraph;
 
@@ -136,6 +137,6 @@ private:
 }   // graph
 }   // qontra
 
-#include "hypergraph.inl"
+#include "inl/hypergraph.inl"
 
 #endif  // QONTRA_HYPERGRAPH_h

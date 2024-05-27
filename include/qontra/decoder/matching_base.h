@@ -54,7 +54,6 @@ public:
 
     virtual std::vector<assign_t> compute_matching(int=graph::COLOR_ANY, int=graph::COLOR_ANY);
 
-    stim::simd_bits<SIMD_WIDTH> get_base_corr(void);
     Decoder::result_t ret_no_detectors(void);
     sptr<graph::decoding::hyperedge_t> get_flag_edge_for(std::vector<sptr<gd::vertex_t>>);
 protected:

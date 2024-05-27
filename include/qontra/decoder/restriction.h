@@ -120,6 +120,6 @@ find_face_subset_given_cc_map(
 
 }   // qontra
 
-#include "inl/restriction"
+#include "inl/restriction.inl"
 
 #endif  // DECODER_RESTRICTION_h

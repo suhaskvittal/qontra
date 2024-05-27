@@ -12,7 +12,6 @@
 
 #include <qontra/decoder/chromobius.h>
 #include <qontra/decoder/restriction.h>
-#include <qontra/decoder/neural.h>
 
 #include <vtils/cmd_parse.h>
 #include <vtils/filesystem.h>

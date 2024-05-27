@@ -105,39 +105,10 @@ MatchingBase::load_syndrome(
 #endif
 }
 
-stim::simd_bits<SIMD_WIDTH>
-MatchingBase::get_base_corr() {
-#ifdef DECODER_PERF
-    vtils::Timer timer;
-    fp_t t;
-
-    timer.clk_start();
-#endif
-
-    stim::simd_bits<SIMD_WIDTH> corr(circuit.count_observables());
-    if (flags.empty()) {
-#ifdef DECODER_PERF
-        t = timer.clk_end();
-        std::cout << "[ MatchingBase ] took " << t*1e-9 << "s to compute base correction" << std::endl;
-#endif
-        return corr;
-    }
-    // Otherwise, get a no-detector edge. If such an edge exists, then return the
-    // corresponding correction.
-    sptr<hyperedge_t> e = decoding_graph->get_best_nod_edge(detectors.size());
-    if (e != nullptr) {
-        for (uint64_t fr : e->frames) corr[fr] ^= 1;
-    }
-#ifdef DECODER_PERF
-    t = timer.clk_end();
-    std::cout << "[ MatchingBase ] took " << t*1e-9 << "s to compute base correction" << std::endl;
-#endif
-    return corr;
-}
-
 Decoder::result_t
 MatchingBase::ret_no_detectors() {
-    return { 0.0, get_base_corr() };
+    stim::simd_bits<SIMD_WIDTH> base_corr(circuit.count_observables());
+    return { 0.0, base_corr };
 }
 
 std::vector<assign_t>
