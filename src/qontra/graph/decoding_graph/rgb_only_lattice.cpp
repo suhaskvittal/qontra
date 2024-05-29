@@ -12,22 +12,23 @@ namespace graph {
 using namespace decoding;
 
 sptr<vertex_t>
-make_edge_vertex(DecodingGraph& gr, sptr<vertex_t> x, sptr<vertex_t> y, evmap_t& evm) {
-    if (x > y) return make_edge_vertex(gr, y, x, evm);
-    const uint64_t mask = (1L<<32)-1;
-    uint64_t id = (x->id & mask) | ((y->id & mask) << 32);
-    if (!gr.contains(id)) {
-        sptr<vertex_t> v = gr.make_and_add_vertex(id);
-        evm[std::make_pair(x,y)] = v;
-        evm[std::make_pair(y,v)] = v;
+make_edge_vertex(
+        DecodingGraph& gr, sptr<vertex_t> x, sptr<vertex_t> y, evmap_t& evm, uint64_t& idctr) 
+{
+    auto xy = make_ev_pair(x,y);
+    if (!evm.count(xy)) {
+        sptr<vertex_t> v = gr.make_and_add_vertex(idctr++);
+        evm.put(xy, v);
         return v;
     } else {
-        return gr.get_vertex(id);
+        return evm.at(xy);
     }
 }
 
 sptr<hyperedge_t>
-translate_edge_to_lattice(DecodingGraph& gr, sptr<hyperedge_t> e, int color, evmap_t& evm) {
+translate_edge_to_lattice(
+        DecodingGraph& gr, sptr<hyperedge_t> e, int color, evmap_t& evm, uint64_t& idctr) 
+{
     if (e->get_order() == 2) {
         // Measurement and flag edges.
         auto x = e->get<vertex_t>(0),
@@ -50,7 +51,7 @@ translate_edge_to_lattice(DecodingGraph& gr, sptr<hyperedge_t> e, int color, evm
         auto x = offc[0],
              y = offc[1];
         if (!gr.contains(v)) gr.add_vertex(v);
-        auto w = make_edge_vertex(gr, x, y, evm);
+        auto w = make_edge_vertex(gr, x, y, evm, idctr);
         sptr<hyperedge_t> _e = gr.make_edge({v, w});
         _e->probability = e->probability;
         _e->power = e->power;
@@ -75,12 +76,12 @@ translate_edge_to_lattice(DecodingGraph& gr, sptr<hyperedge_t> e, int color, evm
         }
         if (a1 == nullptr || a2 == nullptr || b1 == nullptr || b2 == nullptr) return nullptr;
         sptr<vertex_t> v, w;
-        if (evm.count(std::make_pair(a1, b1))) {
-            v = evm.at(std::make_pair(a1,b1));
-            w = evm.at(std::make_pair(a2,b2));
+        if (evm.count(make_ev_pair(a1, b1))) {
+            v = evm.at(make_ev_pair(a1,b1));
+            w = evm.at(make_ev_pair(a2,b2));
         } else {
-            v = evm.at(std::make_pair(a1,b2));
-            w = evm.at(std::make_pair(a2,b1));
+            v = evm.at(make_ev_pair(a1,b2));
+            w = evm.at(make_ev_pair(a2,b1));
         }
         sptr<hyperedge_t> _e = gr.make_edge({v,w});
         _e->probability = e->probability;
@@ -99,24 +100,27 @@ DecodingGraph::make_rgb_only_lattice(int color, evmap_t& evm) {
     // Add edges to rgb only lattice.
     std::vector<sptr<hyperedge_t>> tentative_edges;
     std::vector<sptr<hyperedge_t>> ord4_edges;
+
+    uint64_t idctr = 1L << 48;
     for (sptr<hyperedge_t> e : all_edges) {
         if (e->get_order() == 0) {
             continue;
         } else if (e->get_order() == 4) {
             ord4_edges.push_back(e);
         } else {
-            auto _e = translate_edge_to_lattice(gr, e, color, evm);
+            auto _e = translate_edge_to_lattice(gr, e, color, evm, idctr);
             if (_e != nullptr) {
                 tentative_edges.push_back(_e);
             }
         }
     }
     for (sptr<hyperedge_t> e : ord4_edges) {
-        auto _e = translate_edge_to_lattice(gr, e, color, evm);
+        auto _e = translate_edge_to_lattice(gr, e, color, evm, idctr);
         if (_e != nullptr) {
             tentative_edges.push_back(_e);
         }
     }
+    gr.resolve_edges(tentative_edges, 2);
     gr.nod_edges = nod_edges;
     return gr;
 }

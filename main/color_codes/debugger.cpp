@@ -6,6 +6,7 @@
 #include "gen.h"
 
 #include "qontra/decoder.h"
+#include "qontra/decoder/concat_mwpm.h"
 #include "qontra/decoder/restriction.h"
 #include "qontra/decoder/mobius.h"
 #include "qontra/graph/decoding_graph.h"
@@ -88,7 +89,7 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
     DetailedStimCircuit circuit = make_capacity(&tgr, 1e-3, false, color_map);
-    uptr<Decoder> dec = std::make_unique<RestrictionDecoder>(circuit);
+    uptr<Decoder> dec = std::make_unique<ConcatMWPMDecoder>(circuit);
     // The number of errors does not matter as we don't care about boundaries.
     DecodingGraph gr(circuit, 1000);
     auto edges = gr.get_all_edges();

@@ -12,6 +12,7 @@
 #include "qontra/ext/stim.h"
 #include "qontra/graph/algorithms/distance.h"
 
+#include <vtils/bijective_map.h>
 #include <vtils/two_level_map.h>
 
 #include <utility>
@@ -47,7 +48,7 @@ public:
             std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& ufl_map);
     DecodingGraph make_rgb_only_lattice(
             int color,
-            std::map<
+            vtils::BijectiveMap<
                     std::pair<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>,
                     sptr<decoding::vertex_t>
                 >& edge_vertex_map);

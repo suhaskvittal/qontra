@@ -8,12 +8,18 @@
 
 #include "qontra/decoder/matching_base.h"
 
+#include <vtils/bijective_map.h>
+
 namespace qontra {
 
 namespace gd=graph::decoding;
 
-typedef std::map<std::pair<sptr<gd::vertex_t>, sptr<gd::vertex_t>>, sptr<gd::vertex_t>>
+typedef 
+    vtils::BijectiveMap<std::pair<sptr<gd::vertex_t>, sptr<gd::vertex_t>>, sptr<gd::vertex_t>>
     evmap_t;
+
+std::pair<sptr<gd::vertex_t>, sptr<gd::vertex_t>>
+    make_ev_pair(sptr<gd::vertex_t>, sptr<gd::vertex_t>);
 
 class ConcatMWPMDecoder : public MatchingBase {
 public:
@@ -37,5 +43,7 @@ private:
 };
 
 }   // qontra
+
+#include "inl/concat_mwpm.inl"
 
 #endif  // DECODER_CONCAT_MWPM_h
