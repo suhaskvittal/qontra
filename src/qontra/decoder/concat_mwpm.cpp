@@ -2,7 +2,6 @@
  *  author: Suhas Vittal
  *  date:   27 May 2024
  * */
-#define MEMORY_DEBUG
 
 #include "qontra/decoder/concat_mwpm.h"
 

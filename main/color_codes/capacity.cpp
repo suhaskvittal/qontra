@@ -11,6 +11,7 @@
 #include <qontra/ext/stim.h>
 
 #include <qontra/decoder/chromobius.h>
+#include <qontra/decoder/concat_mwpm.h>
 #include <qontra/decoder/restriction.h>
 
 #include <vtils/cmd_parse.h>
@@ -63,7 +64,7 @@ int main(int argc, char* argv[]) {
     }
     fp_t p = pmin;
     DetailedStimCircuit base_circuit = make_capacity(&tgr, p, mx, color_map);
-    RestrictionDecoder dec(base_circuit);
+    ConcatMWPMDecoder dec(base_circuit);
 
     memory_config_t config;
     config.errors_until_stop = errors_until_stop;
