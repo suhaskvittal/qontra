@@ -13,6 +13,11 @@ namespace graph {
 
 using namespace decoding;
 
+DecodingGraph::DecodingGraph() 
+    :number_of_colors(0),
+    renorm_factor(1.0)
+{}
+
 DecodingGraph::DecodingGraph(
         const DetailedStimCircuit& circuit, size_t flips_per_error, bool reweigh_for_detectors)
     :HyperGraph(),

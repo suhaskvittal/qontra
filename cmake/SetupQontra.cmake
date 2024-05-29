@@ -10,6 +10,7 @@ set(QONTRA_FILES
     src/qontra/ext/qes.cpp
     src/qontra/ext/stim.cpp
     # Decoders
+    src/qontra/decoder/concat_mwpm.cpp
     src/qontra/decoder/matching_base.cpp
     src/qontra/decoder/mobius.cpp
     src/qontra/decoder/mwpm.cpp
@@ -23,6 +24,7 @@ set(QONTRA_FILES
     src/qontra/graph/decoding_graph/edge_class.cpp
     src/qontra/graph/decoding_graph/helpers.cpp
     src/qontra/graph/decoding_graph/init.cpp
+    src/qontra/graph/decoding_graph/rgb_only_lattice.cpp
     src/qontra/graph/decoding_graph/unified_lattice.cpp
     src/qontra/graph/tanner_graph.cpp
     src/qontra/graph/tanner_graph/code_distance.cpp

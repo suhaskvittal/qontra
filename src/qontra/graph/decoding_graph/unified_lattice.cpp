@@ -49,11 +49,6 @@ add_edge_to_ufl(
     }
 }
 
-DecodingGraph::DecodingGraph() 
-    :number_of_colors(0),
-    renorm_factor(1.0)
-{}
-
 DecodingGraph
 DecodingGraph::make_unified_lattice(std::map<sptr<vertex_t>, sptr<vertex_t>>& ufl_map) {
     DecodingGraph ufl;
@@ -74,7 +69,12 @@ DecodingGraph::make_unified_lattice(std::map<sptr<vertex_t>, sptr<vertex_t>>& uf
     std::vector<sptr<hyperedge_t>> tentative_edges;
     // First go through normal edges.
     for (sptr<hyperedge_t> e : all_edges) {
-        if (e->get_order() == 0 || e->get_order() > 3 || (e->get_order() > 2 && e->flags.size())) continue;
+        if (e->get_order() == 0 
+                || e->get_order() > 3
+                || (e->get_order() > 2 && e->flags.size()))
+        {
+            continue;
+        }
         // Track would-be boundary edges. These will be merged together in the unified lattice.
         std::vector<sptr<vertex_t>> boundary_paired_list;
         for (int c1 = 0; c1 < number_of_colors; c1++) {

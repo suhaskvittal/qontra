@@ -25,8 +25,8 @@ struct error_chain_t {
     fp_t    weight = 0.0;
     
     bool runs_through_boundary = false;
-    std::vector<sptr<decoding::vertex_t>>   path;
-    std::vector<sptr<decoding::vertex_t>>   boundary_vertices;
+    std::vector<sptr<decoding::vertex_t>> path;
+    std::vector<sptr<decoding::vertex_t>> boundary_vertices;
 };
 
 typedef std::vector<fp_t> poly_t;
@@ -34,14 +34,23 @@ typedef Graph<decoding::vertex_t, decoding::edge_t> DijkstraGraph;
 
 class DecodingGraph : public HyperGraph<decoding::vertex_t, decoding::hyperedge_t> {
 public:
+    DecodingGraph(void);
+
     DecodingGraph(
             const DetailedStimCircuit&,
             size_t flips_per_error,
             bool reweigh_for_detectors=false);
     DecodingGraph(DecodingGraph&&) = default;
 
+    // Functions to make very specific structures for decoders.
     DecodingGraph make_unified_lattice(
             std::map<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>& ufl_map);
+    DecodingGraph make_rgb_only_lattice(
+            int color,
+            std::map<
+                    std::pair<sptr<decoding::vertex_t>, sptr<decoding::vertex_t>>,
+                    sptr<decoding::vertex_t>
+                >& edge_vertex_map);
 
     // Makes vertex and also sets the base of the vertex to itself.
     sptr<decoding::vertex_t> make_vertex(uint64_t) const override;
@@ -93,8 +102,6 @@ public:
 
     const int number_of_colors;
 protected:
-    DecodingGraph(void);
-
     bool    update_state(void) override;
 private:
     // Add vertices while also adding their bases. This function recursively calls itself until

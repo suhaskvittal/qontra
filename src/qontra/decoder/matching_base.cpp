@@ -14,7 +14,8 @@ using namespace decoding;
 
 MatchingBase::MatchingBase(const DetailedStimCircuit& circuit, int flips_per_error, bool reweigh_for_detectors)
     :Decoder(circuit),
-    decoding_graph(std::make_unique<DecodingGraph>(circuit, flips_per_error, reweigh_for_detectors)),
+    decoding_graph(
+            std::make_unique<DecodingGraph>(circuit, flips_per_error, reweigh_for_detectors)),
     detectors(),
     flags(),
     flag_edges()
@@ -60,7 +61,10 @@ MatchingBase::load_syndrome(
             }
             it = all_dets.erase(it);
         } else {
-            if (c1 != COLOR_ANY && circuit.detector_color_map[d] != c1 && circuit.detector_color_map[d] != c2) {
+            if (c1 != COLOR_ANY
+                    && circuit.detector_color_map[d] != c1 
+                    && circuit.detector_color_map[d] != c2) 
+            {
                 it = all_dets.erase(it);
             } else {
                 it++;
@@ -75,25 +79,6 @@ MatchingBase::load_syndrome(
     if (recompute_flags) {
         decoding_graph->activate_detectors(detectors, flags);
         flag_edges = decoding_graph->get_flag_edges();
-
-#ifdef MEMORY_DEBUG
-        std::cout << "Flag edges:" << std::endl;
-        for (sptr<hyperedge_t> e : flag_edges) {
-            std::cout << "\tD[";
-            for (size_t i = 0; i < e->get_order(); i++) {
-                std::cout << " " << print_v(e->get<vertex_t>(i));
-            }
-            std::cout << " ], F[";
-            for (uint64_t f : e->flags) {
-                std::cout << " " << f;
-            }
-            std::cout << " ], frames:";
-            for (uint64_t fr : e->frames) {
-                std::cout << " " << fr;
-            }
-            std::cout << std::endl;
-        }
-#endif
     }
 #ifdef DECODER_PERF
     t = timer.clk_end();
