@@ -102,6 +102,7 @@ FPN::place_flags() {
     std::set<sptr<fpn_v_t>> used;
     for (sptr<fpn_v_t> v : data_qubits) {
         if (used.count(v)) continue;
+        if (!inc_matrix.count(v)) continue; // This is a widowed qubit.
         sptr<fpn_v_t> w = nullptr;
         size_t best_score = 0;
         for (const auto& [u, cnt] : inc_matrix.at(v)) {
@@ -111,14 +112,12 @@ FPN::place_flags() {
             }
         }
         if (w == nullptr) {
-            // Likely a widowed qubit.
-            continue;
+            std::cerr << "[ place_flags ] found qubit without partner" << std::endl;
+            exit(1);
         }
         // Make flag qubit.
         sptr<fpn_v_t> f = make_and_add_vertex(idctr++);
-        for (sptr<fpn_v_t> x : {v,w}) {
-            make_and_add_edge(x,f);
-        }
+        f->qubit_type = fpn_v_t::type::flag;
         for (sptr<fpn_v_t> ch : get_common_neighbors({v,w})) {
             ch->flag_usage_map[std::make_pair(v,w)] = f;
             ch->flag_usage_map[std::make_pair(w,v)] = f;
@@ -126,6 +125,9 @@ FPN::place_flags() {
                 delete_edge(get_edge(x,ch));
             }
             make_and_add_edge(ch,f);
+        }
+        for (sptr<fpn_v_t> x : {v,w}) {
+            make_and_add_edge(x,f);
         }
         flag_qubits.push_back(f);
         vtils::insert_all(used, {v,w});
@@ -171,7 +173,7 @@ FPN::compute_cnot_order() {
                 if (_adj == grp.adjacent_checks) {
                     grp.elements.push_back(v);
                     vtils::insert_range(
-                            grp.unavailable_times, occupied_timestep_map.at(v));
+                            grp.unavailable_times, occupied_timestep_map[v]);
                     found = true;
                     break;
                 }
@@ -180,7 +182,7 @@ FPN::compute_cnot_order() {
             if (!found) {
                 timestep_grp_t grp;
                 grp.adjacent_checks = _adj;
-                grp.unavailable_times = occupied_timestep_map.at(v);
+                grp.unavailable_times = occupied_timestep_map[v];
                 timestep_grps.push_back(grp);
             }
             // Update adj_checks.

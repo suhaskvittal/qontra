@@ -23,6 +23,7 @@ FPN::phase_one_schedule(fp_t& lat) {
     qes::Program<> sch;
     CXManager cxm;
 
+    std::cout << "[ p1 ] max timestep = " << max_timestep << std::endl;
     for (int mx = 0; mx <= 1; mx++) {
         lat += 2*et.t_g1q;
         push_back_gate(sch, "reset", {inplace_parity_qubits, flag_qubits});
@@ -53,8 +54,13 @@ FPN::phase_one_schedule(fp_t& lat) {
         cxm.flush(sch);
         vtils::push_back_range(sch, cx_flag_ent);
         // Measure parity and flag qubits.
+        lat += et.t_g1q;
+        if (mx) push_back_gate(sch, "h", inplace_parity_qubits);
+        else    push_back_gate(sch, "h", flag_qubits);
+        lat += et.t_ro;
         push_back_gate(sch, "measure", {inplace_parity_qubits, flag_qubits});
     }
+    return sch;
 }
 
 }   // placc

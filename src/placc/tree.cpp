@@ -8,6 +8,9 @@
 #include <deque>
 #include <map>
 
+using namespace qontra;
+using namespace graph;
+
 namespace placc {
     
 ShorTree
@@ -46,7 +49,9 @@ ShorTree::build_tree(
             for (sptr<fpn_v_t> w : fpn->get_neighbors(v)) {
                 if (blocked_qubits.count(w)) continue;
                 bfs.push_back(w);
-                prev_map[w] = v;
+                if (!prev_map.count(w)) {
+                    prev_map[w] = v;
+                }
             }
         }
         visited.insert(v);

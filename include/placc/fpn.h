@@ -39,10 +39,11 @@ public:
     FPN(qg::TannerGraph*, int color_to_remove);
     FPN(FPN&&) =default;
 
+    void place_flags(void);
+
     qes::Program<> phase_one_schedule(fp_t&);
     qes::Program<> phase_two_schedule(fp_t&);
 private:
-    void place_flags(void);
     void compute_cnot_order(void);
 
     DMAT compute_distance_matrix(const std::set<sptr<fpn_v_t>>& blocked_qubits);

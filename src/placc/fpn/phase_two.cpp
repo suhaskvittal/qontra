@@ -92,6 +92,7 @@ FPN::phase_two_schedule(fp_t& lat) {
     std::map<sptr<fpn_v_t>, uptr<ShorTree>> shor_tree_map;
 
     std::vector<sptr<fpn_v_t>> remaining(removed_parity_qubits);
+    size_t subp = 0;
     while (remaining.size()) {
         DMAT m = compute_distance_matrix(blocked_qubits);
         std::map<sptr<fpn_v_t>, uptr<ShorTree>> loc_shor_tree_map;
@@ -104,7 +105,9 @@ FPN::phase_two_schedule(fp_t& lat) {
                 );
                 cost_map[x] = shor_tree->get_spacetime_cost();
                 loc_shor_tree_map[x] = std::move(shor_tree);
+                std::cout << "[ p2 ] could made tree for " << print_v(x) << ", ST-cost=" << cost_map[x] << std::endl;
             } else {
+                std::cout << "[ p2 ] could not make tree for " << print_v(x) << std::endl;
                 loc_shor_tree_map[x] = nullptr;
                 cost_map[x] = std::numeric_limits<size_t>::max();
             }
@@ -127,29 +130,41 @@ FPN::phase_two_schedule(fp_t& lat) {
             for (sptr<fpn_v_t> v : new_blocked_qubits) {
                 if (st->contains(v)) {
                     found_blockage = true;
+                    std::cout << "\tfailed to schedule " << print_v(x) << " due to blockage on " << print_v(v) << std::endl;
                     break;
                 }
             }
             if (found_blockage) { it++; continue; }
             // Otherwise, this qubit can be committed.
+            std::cout << "\t" << print_v(x) << " induced blocks on";
+            for (sptr<fpn_v_t> v : st->get_vertices()) std::cout << " " << print_v(v);
+            std::cout << std::endl;
             vtils::insert_range(new_blocked_qubits, st->get_vertices());
             shor_tree_map[x] = std::move(st);
             commit_queue.push_back(x);
             it = remaining.erase(it);
             any_new_commits = true;
         }
+        std::cout << "[ p2 ] remaining =";
+        for (sptr<fpn_v_t> x : remaining) std::cout << " " << print_v(x);
+        std::cout << std::endl;
         if (any_new_commits) {
             vtils::insert_range(blocked_qubits, new_blocked_qubits);
             continue;
         }
         // Otherwise, attempt to schedule CNOTs.
+        std::cout << "[ p2 ] subphase " << subp << ", cumlat = " << lat << "ns" << std::endl;
+        subp++;
         for (int mx = 0; mx <= 1; mx++) {
             lat += write_to_sch(sch, commit_queue, shor_tree_map, static_cast<bool>(mx));
         }
         commit_queue.clear();
         shor_tree_map.clear();
+        blocked_qubits.clear();
     }
     // Final commit:
+    std::cout << "[ p2 ] subphase " << subp << ", cumlat = " << lat << "ns" << std::endl;
+    subp++;
     for (int mx = 0; mx <= 1; mx++) {
         lat += write_to_sch(sch, commit_queue, shor_tree_map, static_cast<bool>(mx));
     }

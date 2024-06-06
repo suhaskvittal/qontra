@@ -20,11 +20,13 @@ int main(int argc, char* argv[]) {
     for (int c = 0; c < 3; c++) {
         fp_t lat1 = 0, lat2 = 0;
         FPN fpn(&tgr, c);
-        fpn.phase_one_schedule(lat1);
-        fpn.phase_two_schedule(lat2);
+        fpn.place_flags();
+        auto sch = fpn.phase_one_schedule(lat1);
+        sch = fpn.phase_two_schedule(lat2);
 
         std::cout << "[ Rc = " << c << " ] Latency: P1=" << lat1 << "ns\tP2=" << lat2 << "ns"
                 << std::endl;
+        std::cout << sch << std::endl;
     }
     return 0;
 }

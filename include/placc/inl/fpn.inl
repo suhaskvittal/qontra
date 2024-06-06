@@ -3,6 +3,30 @@
  *  date:   29 May 2024
  * */
 
+namespace qontra {
+namespace graph {
+
+template <> inline std::string
+print_v<placc::fpn_v_t>(sptr<placc::fpn_v_t> v) {
+    using namespace placc;
+
+    if (v == nullptr) return "<nil>";
+
+    std::string s;
+    if (v->qubit_type == fpn_v_t::type::data) {
+        s += "d";
+    } else if (v->qubit_type == fpn_v_t::type::parity) {
+        s += "p";
+    } else if (v->qubit_type == fpn_v_t::type::flag) {
+        s += "f";
+    }
+    s += std::to_string(v->id);
+    return s;
+}
+
+}   // graph
+}   // qontra
+
 namespace placc {
 
 inline void

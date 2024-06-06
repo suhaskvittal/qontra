@@ -31,6 +31,7 @@ CXManager::flush(qes::Program<>& program) {
         program.emplace_back("cx", layer.operands);
     }
     layers.clear();
+    operand_layer_map.clear();
 }
 
 inline qes::Program<>
