@@ -21,6 +21,7 @@ int main(int argc, char* argv[]) {
         fp_t lat1 = 0, lat2 = 0;
         FPN fpn(&tgr, c);
         fpn.place_flags();
+        fpn.place_widowed_qubits();
         auto sch = fpn.phase_one_schedule(lat1);
         sch = fpn.phase_two_schedule(lat2);
 

@@ -7,6 +7,9 @@
 
 #include <qontra/graph/algorithms/distance.h>
 
+using namespace qontra;
+using namespace graph;
+
 namespace placc {
 
 DMAT
@@ -46,12 +49,12 @@ FPN::get_center_of(
         for (sptr<fpn_v_t> x : get_vertices()) {
             if (x->qubit_type == fpn_v_t::type::data || inf_rad.count(x)) continue;
             const fp_t& d = m.at(v).at(x);
-            if (d < 0) {
+            if (d < 0 || d > n()) {
                 rad_map.erase(x);
                 inf_rad.insert(x);
                 continue;
             }
-            rad_map[x] += d;
+            rad_map[x] = std::max(rad_map[x], d);
         }
     }
     // Select vertex with min radius (this is the center).
@@ -62,6 +65,10 @@ FPN::get_center_of(
             cen = x;
             min_rad = r;
         }
+    }
+    if (cen != nullptr) {
+        std::cout << "[ cen ] Distance for each qubit in support:" << std::endl;
+        for (sptr<fpn_v_t> x : qubits) std::cout << "\t" << print_v(x) << ": " << m.at(x).at(cen) << std::endl;
     }
     return cen;
 }

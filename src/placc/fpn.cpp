@@ -135,6 +135,28 @@ FPN::place_flags() {
 }
 
 void
+FPN::place_widowed_qubits() {
+    const int CRITERIA = 4; // TODO: set to 4 once everything is settled.
+
+    std::vector<sptr<fpn_v_t>> widowed;
+    for (sptr<fpn_v_t> v : get_vertices()) {
+        if (get_degree(v) == 0 && v->qubit_type == fpn_v_t::type::data) {
+            widowed.push_back(v);
+            v->is_widowed = true;
+        }
+    }
+    // Find appropriate ancilla to place them on.
+    for (sptr<fpn_v_t> v : get_vertices()) {
+        if (widowed.empty()) break;
+        if (v->qubit_type == fpn_v_t::type::data) continue;
+        if (get_degree(v) < CRITERIA && get_degree(v) > 0) {
+            make_and_add_edge(widowed.back(), v);
+            widowed.pop_back();
+        }
+    }
+}
+
+void
 FPN::compute_cnot_order() {
     // Basic idea: perform a BFS from an initial parity qubit. As we don't need to
     // consider commutativity rules for the color codes (each check is measured

@@ -44,7 +44,7 @@ FPN::phase_one_schedule(fp_t& lat) {
         // Perform data CX with flags.
         for (sptr<fpn_v_t> f : flag_qubits) {
             for (sptr<fpn_v_t> q : get_neighbors(f)) {
-                if (q->qubit_type == fpn_v_t::type::data) {
+                if (q->qubit_type == fpn_v_t::type::data && !q->is_widowed) {
                     if (mx) cxm.push_back_cx(f->id,q->id);
                     else    cxm.push_back_cx(q->id,f->id);
                 }

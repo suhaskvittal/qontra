@@ -21,6 +21,7 @@ namespace placc {
 struct fpn_v_t : qg::base::vertex_t {
     enum class type { data, parity, flag };
     type qubit_type;
+    bool is_widowed = false;
     // Parity qubit only data:
     std::vector<sptr<fpn_v_t>> support;
     std::map<std::pair<sptr<fpn_v_t>, sptr<fpn_v_t>>, sptr<fpn_v_t>>
@@ -40,6 +41,7 @@ public:
     FPN(FPN&&) =default;
 
     void place_flags(void);
+    void place_widowed_qubits(void);
 
     qes::Program<> phase_one_schedule(fp_t&);
     qes::Program<> phase_two_schedule(fp_t&);

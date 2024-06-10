@@ -105,7 +105,9 @@ FPN::phase_two_schedule(fp_t& lat) {
                 );
                 cost_map[x] = shor_tree->get_spacetime_cost();
                 loc_shor_tree_map[x] = std::move(shor_tree);
-                std::cout << "[ p2 ] could made tree for " << print_v(x) << ", ST-cost=" << cost_map[x] << std::endl;
+                std::cout << "[ p2 ] could made tree for " << print_v(x) << " [";
+                for (sptr<fpn_v_t> u :x->support) std::cout << " " << print_v(u);
+                std::cout << " ], ST-cost=" << cost_map[x] << std::endl;
             } else {
                 std::cout << "[ p2 ] could not make tree for " << print_v(x) << std::endl;
                 loc_shor_tree_map[x] = nullptr;
