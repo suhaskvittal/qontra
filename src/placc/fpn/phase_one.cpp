@@ -18,12 +18,12 @@ static tables::ErrorAndTiming et;
 namespace placc {
 
 qes::Program<>
-FPN::phase_one_schedule(fp_t& lat) {
+FPN::phase_one_schedule(fp_t& lat, mm_t& x_ctr_map, mm_t& z_ctr_map) {
     if (timestep_map.empty()) compute_cnot_order();
     qes::Program<> sch;
     CXManager cxm;
 
-    std::cout << "[ p1 ] max timestep = " << max_timestep << std::endl;
+    size_t mctr = 0;
     for (int mx = 0; mx <= 1; mx++) {
         lat += 2*et.t_g1q;
         push_back_gate(sch, "reset", {inplace_parity_qubits, flag_qubits});
@@ -58,7 +58,7 @@ FPN::phase_one_schedule(fp_t& lat) {
         if (mx) push_back_gate(sch, "h", inplace_parity_qubits);
         else    push_back_gate(sch, "h", flag_qubits);
         lat += et.t_ro;
-        push_back_gate(sch, "measure", {inplace_parity_qubits, flag_qubits});
+        push_back_measurement(sch, {inplace_parity_qubits, flag_qubits}, mctr, mx ? x_ctr_map : z_ctr_map);
     }
     return sch;
 }

@@ -53,4 +53,36 @@ push_back_gate(
     prog.emplace_back(name, _operands);
 }
 
+inline void
+push_back_measurement(
+        qes::Program<>& prog,
+        const std::vector<sptr<fpn_v_t>>& operands,
+        size_t& ctr,
+        mm_t& m)
+{
+    std::vector<int64_t> _operands;
+    for (const sptr<fpn_v_t>& x : operands) {
+        m[x] = ctr++;
+        _operands.push_back( static_cast<int64_t>(x->id) );
+    }
+    prog.emplace_back("measure", _operands);
+}
+
+inline void
+push_back_measurement(
+        qes::Program<>& prog,
+        std::initializer_list<std::vector<sptr<fpn_v_t>>> operand_list,
+        size_t& ctr,
+        mm_t& m)
+{
+    std::vector<int64_t> _operands;
+    for (const std::vector<sptr<fpn_v_t>>& operands : operand_list) {
+        for (const sptr<fpn_v_t>& x : operands) {
+            m[x] = ctr++;
+            _operands.push_back( static_cast<int64_t>(x->id) );
+        }
+    }
+    prog.emplace_back("measure", _operands);
+}
+
 }   // placc
