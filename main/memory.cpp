@@ -54,8 +54,8 @@ int main(int argc, char* argv[]) {
 
     qes::Program<> program = qes::from_file(qes_file);
 
-    DetailedStimCircuit _circuit = make_default_circuit(qes_file, pmax, true, "cap");
-    RestrictionDecoder dec(_circuit);
+    DetailedStimCircuit _circuit = make_default_circuit(qes_file, pmax, true, "circuit");
+    PyMatching dec(_circuit);
 
     memory_config_t config;
     config.errors_until_stop = errors_until_stop;
@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
         // Load model from file and run memory experiment.
-        DetailedStimCircuit circuit = make_default_circuit(qes_file, p, true, "cap");
+        DetailedStimCircuit circuit = make_default_circuit(qes_file, p, true, "circuit");
         dec.set_circuit(circuit);
 
         auto res = run_memory_with_generated_syndromes(&dec, config);
