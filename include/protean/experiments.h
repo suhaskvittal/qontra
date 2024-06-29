@@ -11,15 +11,15 @@
 
 #include <string>
 
-namespace qontra {
+#include "protean/defs.h"
+
 namespace protean {
 
-typedef graph::Graph<graph::base::vertex_t, graph::base::edge_t> CouplingGraph;
+typedef qgr::Graph<qgr::base::vertex_t, qgr::base::edge_t> CouplingGraph;
 
 uptr<CouplingGraph> read_coupling_graph(std::string);
-void make_error_and_timing_from_coupling_graph(std::string, ErrorTable&, TimeTable&);
+void make_error_and_timing_from_coupling_graph(std::string, qon::ErrorTable&, qon::TimeTable&);
 
 }   // protean
-}   // qontra
 
 #endif  // PROTEAN_EXPERIMENTS_h

@@ -3,7 +3,7 @@
  *  date:   7 January 2024
  * */
 
-#include "qontra/protean/scheduler.h"
+#include "protean/scheduler.h"
 
 #include <vtils/linprog/manager.h>
 #include <vtils/set_algebra.h>
@@ -18,12 +18,13 @@
 #include <vtils/timer.h>
 #endif
 
-namespace qontra {
+using namespace qontra;
+using namespace graph;
+using namespace vtils;
+
 namespace protean {
 
-using namespace graph;
 using namespace net;
-using namespace vtils;
 
 template <class PTR> std::string
 print_path_inl(std::vector<PTR> path) {
@@ -551,18 +552,39 @@ Scheduler::compute_schedules() {
         sch_time_map;
 
     auto& fam = raw_network->flag_assignment_map;
-    std::vector<sptr<raw_vertex_t>> sorted_checks(checks_this_cycle);
-    std::sort(sorted_checks.begin(), sorted_checks.end(),
+    // Create graph of checks, where checks share an edge if they share a data qubit.
+    Graph<raw_vertex_t, base::edge_t> g;
+    for (sptr<raw_vertex_t> x : checks_this_cycle) g.add_vertex(x);
+    for (size_t i = 0; i < checks_this_cycle.size(); i++) {
+        auto x = checks_this_cycle.at(i);
+        auto& xsupp = raw_network->get_support(x);
+        for (size_t j = i+1; j < checks_this_cycle.size(); j++) {
+            auto y = checks_this_cycle.at(j);
+            auto& ysupp = raw_network->get_support(y);
+            auto comm = xsupp.data * ysupp.data;
+            if (comm.size()) {
+                g.make_and_add_edge(x,y);
+            }
+        }
+    }
+#ifdef PROTEAN_PERF
+    Timer timer;
+    timer.clk_start();
+#endif
+    std::sort(checks_this_cycle.begin(), checks_this_cycle.end(),
             [&] (sptr<raw_vertex_t> rx, sptr<raw_vertex_t> ry)
             {
                 return raw_network->get_support(rx).data.size()
                         < raw_network->get_support(ry).data.size();
             });
-#ifdef PROTEAN_PERF
-    Timer timer;
-    timer.clk_start();
-#endif
-    for (sptr<raw_vertex_t> rpq : sorted_checks) {
+//  std::deque<sptr<raw_vertex_t>> dfs(checks_this_cycle.begin(), checks_this_cycle.end());
+    std::deque<sptr<raw_vertex_t>> dfs{ checks_this_cycle[0] };
+    std::set<sptr<raw_vertex_t>> visited;
+    while (dfs.size()) {
+        sptr<raw_vertex_t> rpq = dfs.front();
+        dfs.pop_front();
+        if (visited.count(rpq)) continue;
+
         auto& support = get_support(rpq);
         // Make the LP:
         CPXLPManager<sptr<raw_vertex_t>> LP;
@@ -696,6 +718,11 @@ Scheduler::compute_schedules() {
             sch_map[rsq].data_order[t-1] = rdq;
             tlm_put(sch_time_map, rsq, rdq, t);
         }
+        // Traverse to next parity qubits.
+        for (sptr<raw_vertex_t> _rpq : g.get_neighbors(rpq)) {
+            dfs.push_back(_rpq);
+        }
+        visited.insert(rpq);
     }
 #ifdef PROTEAN_PERF
     fp_t t = timer.clk_end();
@@ -705,4 +732,3 @@ Scheduler::compute_schedules() {
 }
 
 }   // protean
-}   // qontra

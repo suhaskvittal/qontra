@@ -34,8 +34,11 @@ struct face_t {
 
 class RestrictionDecoder : public MatchingBase {
 public:
-    RestrictionDecoder(const DetailedStimCircuit& circuit)
-        :MatchingBase(circuit, 3, false)
+    // Set chamberland=true to use Chris Chamberland's original version. This is heavily modified to work
+    // with hyperbolic color codes as well.
+    RestrictionDecoder(const DetailedStimCircuit& circuit, bool chamberland=false)
+        :MatchingBase(circuit, 3, false),
+        chamberland(chamberland)
     {}
 
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
@@ -83,6 +86,8 @@ protected:
         flag_entry_t;
 
     std::vector<flag_entry_t> triggered_flag_edges;
+
+    bool chamberland;
 };
 
 vpair_t make_vpair(sptr<gd::vertex_t>, sptr<gd::vertex_t>);

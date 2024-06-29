@@ -3,21 +3,22 @@
  *  date:   27 December 2023
  * */
 
-#include "qontra/protean/network.h"
-#include "qontra/graph/algorithms/distance.h"
+#include "protean/network.h"
+
+#include <qontra/graph/algorithms/distance.h>
 
 #include <vtils/utility.h>
 
 #include <algorithm>
 #include <deque>
 
-namespace qontra {
+using namespace qontra;
+using namespace graph;
+using namespace vtils;
+
 namespace protean {
 
-using namespace graph;
 using namespace net;
-
-using namespace vtils;
 
 inline int
 get_merge_priority(sptr<raw_vertex_t> v) {
@@ -360,4 +361,3 @@ RawNetwork::replace_in_tracking_structures(sptr<raw_vertex_t> v, sptr<raw_vertex
 }
 
 }   // protean
-}   // qontra

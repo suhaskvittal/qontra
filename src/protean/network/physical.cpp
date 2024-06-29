@@ -3,9 +3,8 @@
  *  date:   27 December 2023
  * */
 
-#include "qontra/protean/network.h"
-#include "qontra/protean/scheduler.h"
-#include "qontra/protean/yield_sim.h"
+#include "protean/network.h"
+#include "protean/scheduler.h"
 
 #include <qontra/graph/algorithms/coloring.h>
 
@@ -21,13 +20,13 @@
 #include <algorithm>
 #include <limits>
 
-namespace qontra {
+using namespace qontra;
+using namespace graph;
+using namespace vtils;
+
 namespace protean {
 
-using namespace graph;
 using namespace net;
-
-using namespace vtils;
 
 template <class V> using v_pair_t=std::pair<sptr<V>, sptr<V>>;
 
@@ -849,21 +848,6 @@ PhysicalNetwork::finalize() {
         round_latency = sch.get_depth_as_time();
         round_cnots = sch.get_depth_as_cx_opcount();
     }
-    // Run the yield simulator.
-    /*
-    YieldSimulator ysim(this);
-    std::vector<fp_t> freq_list;
-    for (fp_t f = config.min_qubit_frequency; 
-            f <= config.max_qubit_frequency+0.1; 
-            f += config.qubit_frequency_step) 
-    {
-        freq_list.push_back(f);
-    }
-    ysim.assign(config.fabrication_precision, freq_list);
-    ysim.assign(config.fabrication_precision, freq_list);
-    expected_collisions = ysim.est_mean_collisions(config.fabrication_precision, 10000);
-    */
 }
 
 }   // protean
-}   // qontra

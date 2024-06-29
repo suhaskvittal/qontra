@@ -12,7 +12,8 @@
 #include <vtils/bijective_map.h>
 #include <vtils/two_level_map.h>
 
-namespace qontra {
+#include "protean/defs.h"
+
 namespace protean {
 
 // We will have two types of networks:
@@ -23,16 +24,16 @@ namespace protean {
 
 namespace net {
 
-struct raw_vertex_t : graph::base::vertex_t {
+struct raw_vertex_t : qgr::base::vertex_t {
     enum class type { data, xparity, zparity, flag, proxy };
     type qubit_type;
 
     bool is_check(void);
 };
 
-struct raw_edge_t : graph::base::edge_t {};
+struct raw_edge_t : qgr::base::edge_t {};
 
-struct phys_vertex_t : graph::base::vertex_t {
+struct phys_vertex_t : qgr::base::vertex_t {
     std::set<sptr<raw_vertex_t>> role_set;
     vtils::BijectiveMap<size_t, sptr<raw_vertex_t>> cycle_role_map;
 
@@ -49,7 +50,7 @@ private:
     std::map<raw_vertex_t::type, size_t> role_type_map;
 };
 
-struct phys_edge_t : graph::base::edge_t {
+struct phys_edge_t : qgr::base::edge_t {
     size_t tsv_layer;
 
     bool is_out_of_plane(void) const;
@@ -59,7 +60,7 @@ struct phys_edge_t : graph::base::edge_t {
 
 // The RawNetwork keeps track of the "roles", or all the qubit interactions that need to
 // happen to implement syndrome extraction.
-class RawNetwork : public graph::Graph<net::raw_vertex_t, net::raw_edge_t> {
+class RawNetwork : public qgr::Graph<net::raw_vertex_t, net::raw_edge_t> {
 public:
     struct parity_support_t {
         sptr<net::raw_vertex_t> check;
@@ -71,7 +72,7 @@ public:
         std::set<sptr<net::raw_vertex_t>>   all;
     };
 
-    RawNetwork(graph::TannerGraph*);
+    RawNetwork(qgr::TannerGraph*);
     RawNetwork(RawNetwork&&) = default;
 
     void delete_vertex(sptr<net::raw_vertex_t>) override;
@@ -114,7 +115,7 @@ public:
     void    disable_memoization(void);
     
     // Tanner graph tracking structures:
-    vtils::BijectiveMap<sptr<graph::tanner::vertex_t>, sptr<net::raw_vertex_t>> v_tanner_raw_map;
+    vtils::BijectiveMap<sptr<qgr::tanner::vertex_t>, sptr<net::raw_vertex_t>> v_tanner_raw_map;
 
     // Flag tracking structures:
     //
@@ -134,7 +135,7 @@ public:
     std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
         schedule_order_map;
 
-    graph::TannerGraph* tanner_graph;
+    qgr::TannerGraph* tanner_graph;
     bool enable_memoization; // This should be set to true once the network has stabilized.
 private:
     void update_endpoint_in_indirection_map(
@@ -162,7 +163,7 @@ private:
 
 // The ProcessorLayer class encapsulates a layer of the processor that is planar.
 // An array of these layers builds a full processor.
-class ProcessorLayer : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
+class ProcessorLayer : public qgr::Graph<net::phys_vertex_t, net::phys_edge_t> {
 public:
     bool add_edge(sptr<net::phys_edge_t>) override;
     size_t get_max_endpoint_degree(sptr<net::phys_edge_t>);
@@ -174,9 +175,9 @@ private:
 };
 
 // A PhysicalNetwork is the realization of the processor.
-class PhysicalNetwork : public graph::Graph<net::phys_vertex_t, net::phys_edge_t> {
+class PhysicalNetwork : public qgr::Graph<net::phys_vertex_t, net::phys_edge_t> {
 public:
-    PhysicalNetwork(graph::TannerGraph*);
+    PhysicalNetwork(qgr::TannerGraph*);
     PhysicalNetwork(PhysicalNetwork&&) = default;
     
     // All of the graph modification functions need to be updated to handle planarity.
@@ -204,7 +205,7 @@ public:
     size_t  get_round_cnots(void);
     fp_t    get_expected_collisions(void);
 
-    graph::TannerGraph* get_tanner_graph(void);
+    qgr::TannerGraph* get_tanner_graph(void);
     uptr<RawNetwork>&   get_raw_connection_network(void);
 
     sptr<net::phys_vertex_t> get_physical_qubit_for(sptr<net::raw_vertex_t>);
@@ -284,7 +285,7 @@ private:
 
     // The reason tanner_graph is a raw pointer whereas raw_connection_network is a unique ptr
     // is that tanner_graph is supplied by the user. The user may choose to allocate it on the stack.
-    graph::TannerGraph* tanner_graph;
+    qgr::TannerGraph* tanner_graph;
 
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
@@ -312,7 +313,6 @@ private:
 };
 
 }   // protean
-}   // qontra
 
 #include "network.inl"
 

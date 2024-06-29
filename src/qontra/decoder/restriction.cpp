@@ -256,7 +256,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     std::cout << std::endl;
 #endif
     // If there are no triggered flag edges. Return here.
-    if (triggered_flag_edges.empty()) {
+    if (triggered_flag_edges.empty() || chamberland) {
         return { 0.0, corr1 };
     }
 #ifdef MEMORY_DEBUG
@@ -364,16 +364,12 @@ RestrictionDecoder::split_assignment(
         } else {
             sptr<hyperedge_t> e = get_flag_edge_for({v, w});
             error_chain_t ec = decoding_graph->get_error_chain(v, w, m.c1, m.c2, true);
-            if (e != nullptr && (flag_ctr_map.at(e) == 2 || ec.path.size() > 3)) {
+            if (!chamberland
+                    && e != nullptr
+                    && (flag_ctr_map.at(e) == 2 || ec.path.size() > 3))
+            {
                 // Finish off the current assignment and ignore the flag edge.
                 push_back_assignment(assign_arr, curr);
-#ifdef MEMORY_DEBUG
-                std::cout << "\tFound flag edge [ " << print_v(v) << ", " << print_v(w) << " ], path:";
-                for (sptr<vertex_t> x : ec.path) std::cout << " " << print_v(x);
-                std::cout << std::endl;
-                std::cout << "\t[F] pushing back assignment " << print_v(curr.v) << " <---> "
-                    << print_v(curr.w) << std::endl;
-#endif
                 curr.v = w;
                 curr.w = nullptr;
                 curr.path = {w};

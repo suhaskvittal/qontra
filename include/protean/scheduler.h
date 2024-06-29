@@ -6,8 +6,6 @@
 #ifndef PROTEAN_SCHEDULER_h
 #define PROTEAN_SCHEDULER_h
 
-#include "qontra/protean/network.h"
-
 #include <qontra/ext/qes.h>
 
 #include <vtils/bijective_map.h>
@@ -17,7 +15,8 @@
 #include <set>
 #include <tuple>
 
-namespace qontra {
+#include "protean/network.h"
+
 namespace protean {
 
 struct cx_t {
@@ -52,7 +51,7 @@ public:
     void build_body(qes::Program<>&);
     void build_teardown(qes::Program<>&);
 
-    fp_t get_depth_as_time(fp_t t_g1q=30, fp_t t_g2q=40, fp_t t_ro=700);
+    fp_t get_depth_as_time(fp_t t_g1q=30, fp_t t_g2q=40, fp_t t_ro=800);
     size_t get_depth_as_cx_opcount(void);
 private:
     void remove_redundant_gates(qes::Program<>&);
@@ -92,7 +91,7 @@ private:
     size_t cycle;
     int64_t mctr;
 
-    graph::TannerGraph* tanner_graph;
+    qgr::TannerGraph* tanner_graph;
     uptr<RawNetwork>& raw_network;
     PhysicalNetwork* network;
     
@@ -101,7 +100,6 @@ private:
 };
 
 }   // protean
-}   // qontra
 
 #include "scheduler.inl"
 

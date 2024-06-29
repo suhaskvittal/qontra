@@ -30,19 +30,10 @@ include(${CMAKE_SOURCE_DIR}/cmake/LinkDependencies.cmake)
 
 include(${CMAKE_SOURCE_DIR}/cmake/executables/Main.cmake)
 
-
 if (COMPILE_PROTEAN)
     include(${CMAKE_SOURCE_DIR}/cmake/executables/Protean.cmake)
 endif()
 
-if (COMPILE_PROBIUS)
-    include(${CMAKE_SOURCE_DIR}/cmake/executables/Probius.cmake)
-endif()
-
 if (COMPILE_TESTS)
     include(${CMAKE_SOURCE_DIR}/cmake/executables/Test.cmake)
-endif()
-
-if (COMPILE_SSE)
-    include(${CMAKE_SOURCE_DIR}/cmake/executables/SSE.cmake)
 endif()
