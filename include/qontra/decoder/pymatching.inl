@@ -24,12 +24,16 @@ PyMatching::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     const size_t n_observables = circuit.count_observables();
 
     std::vector<uint64_t> detectors = get_nonzero_detectors(syndrome);
+    std::vector<uint8_t> _corr(n_observables);
     stim::simd_bits<SIMD_WIDTH> corr(n_observables);
 
     int64_t w;
     timer.clk_start();
-    pm::decode_detection_events(solver, detectors, corr.u8, w);
+    solver.flooder.graph.num_observables = n_observables;
+    pm::decode_detection_events(solver, detectors, &_corr[0], w);
     fp_t t = (fp_t)timer.clk_end();
+
+    for (size_t i = 0; i < n_observables; i++) corr[i] = (_corr[i] > 0);
 
     return { t, corr };
 }

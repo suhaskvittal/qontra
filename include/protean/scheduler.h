@@ -51,7 +51,7 @@ public:
     void build_body(qes::Program<>&);
     void build_teardown(qes::Program<>&);
 
-    fp_t get_depth_as_time(fp_t t_g1q=30, fp_t t_g2q=40, fp_t t_ro=700);
+    fp_t get_depth_as_time(fp_t t_g1q=30, fp_t t_g2q=40, fp_t t_ro=800);
     size_t get_depth_as_cx_opcount(void);
 private:
     void remove_redundant_gates(qes::Program<>&);
