@@ -18,94 +18,6 @@ namespace qontra {
 using namespace graph;
 using namespace decoding;
 
-inline void
-push_back_assignment(std::vector<assign_t>& arr, const assign_t& m) {
-    if (m.w == nullptr || m.v == m.w) {
-        return;
-    }
-    arr.push_back(m);
-}
-
-inline void
-erase_from_incidence_map(const vpair_t& e, std::map<vpair_t, size_t>& incidence_map) {
-    if (incidence_map.count(e) && (--incidence_map[e]) == 0) {
-        incidence_map.erase(e);
-    }
-}
-
-template <class SETLIKE> inline size_t
-locally_matches(SETLIKE s1, const std::set<vpair_t>& s2, sptr<vertex_t> v) {
-    size_t m = 0;
-    for (const vpair_t& e : s2) {
-        if (!s1.count(e)) return 0;
-        else              m++;
-    }
-    return m;
-}
-
-inline bool
-update_best_boundary(
-        int intersection,
-        fp_t& best_log_p,
-        std::set<vpair_t>& best_boundary,
-        stim::simd_bits_range_ref<SIMD_WIDTH> best_corr,
-        fp_t log_p,
-        const std::set<vpair_t>& boundary,
-        stim::simd_bits_range_ref<SIMD_WIDTH> corr)
-{
-    if (intersection > 0 && log_p > best_log_p) {
-        best_log_p = log_p;
-        best_boundary = boundary;
-        best_corr.clear();
-        best_corr |= corr;
-        return true;
-    }
-    return false;
-}
-
-inline void
-update_correction(
-        std::map<vpair_t, size_t>& incidence_map,
-        stim::simd_bits_range_ref<SIMD_WIDTH> corr,
-        fp_t& corr_log_pr,
-        stim::simd_bits_range_ref<SIMD_WIDTH> local_corr,
-        const std::set<vpair_t>& local_boundary,
-        fp_t local_log_pr)
-{
-    corr ^= local_corr;
-    for (const vpair_t& e : local_boundary) {
-        erase_from_incidence_map(e, incidence_map);
-    }
-    corr_log_pr += local_log_pr;
-}
-
-bool
-remove_widowed_edges(std::map<vpair_t, size_t>& incidence_map) {
-    std::map<sptr<vertex_t>, size_t> vertex_inc_map;
-    for (const auto& [e, cnt] : incidence_map) {
-        const auto& [v1, v2] = e;
-        vertex_inc_map[v1]++;
-        vertex_inc_map[v2]++;
-    }
-    // Remove any pairs of vertices where both endpoints only have a single
-    // incidence.
-    bool any_removed = false;
-    for (auto it = incidence_map.begin(); it != incidence_map.end(); ) {
-        const auto& [v1, v2] = it->first;
-        if (vertex_inc_map.at(v1) == 1 && vertex_inc_map.at(v2) == 1) {
-#ifdef MEMORY_DEBUG
-            std::cout << "removed widowed edge [ " << print_v(v1) << " " << print_v(v2) << " ], cnt = "
-                << it->second << std::endl;
-#endif
-            any_removed |= (it->second % 2 == 1);
-            it = incidence_map.erase(it);
-        } else {
-            it++;
-        }
-    }
-    return any_removed;
-}
-
 Decoder::result_t
 RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     // Reset data structures:
@@ -117,17 +29,8 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     const size_t n_obs = circuit.count_observables();
     stim::simd_bits<SIMD_WIDTH> corr(n_obs);
     load_syndrome(syndrome);
-#ifdef MEMORY_DEBUG
-    std::cout << "syndrome: D[";
-    for (uint64_t d : detectors) std::cout << " " << d;
-    std::cout << " ], F[";
-    for (uint64_t f : flags) std::cout << " " << f;
-    std::cout << " ]" << std::endl;
-#endif
 
     if (detectors.empty()) return ret_no_detectors();
-
-    corr ^= get_base_corr();
 
     // Compute the MWPM for each restricted lattice.
 #ifdef DECODER_PERF
@@ -140,13 +43,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     for (const assign_t& m : matchings) {
         for (sptr<hyperedge_t> e : m.flag_edges) {
             if ((++flag_edge_ctr_map[e]) == 2) {
-#ifdef MEMORY_DEBUG
-                std::cout << "Applying flag edge [";
-                for (sptr<vertex_t> v : e->get<vertex_t>()) {
-                    std::cout << " " << print_v(v);
-                }
-                std::cout << " ]" << std::endl;
-#endif
                 for (uint64_t fr : e->frames) corr[fr] ^= 1;
             }
         }
@@ -160,14 +56,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         split_assignment(new_matchings, m, flag_edge_ctr_map);
     }
     matchings = std::move(new_matchings);
-#ifdef MEMORY_DEBUG
-    for (assign_t x : matchings) {
-        std::cout << "L(" << x.c1 << "," << x.c2 << "):" << print_v(x.v) << 
-            " <---> " << print_v(x.w) << ", path:";
-        for (sptr<vertex_t> v : x.path) std::cout << " " << print_v(v);
-        std::cout << std::endl;
-    }
-#endif
 #ifdef DECODER_PERF
     t = timer.clk_end();
     std::cout << "[ RestrictionDecoder ] took " << t*1e-9 << "s to match restricted lattices" << std::endl;
@@ -192,15 +80,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
                     corr[fr] ^= 1;
                 }
                 applied_flag_edges.insert(e);
-#ifdef MEMORY_DEBUG
-                std::cout << "Applied flag edge [";
-                for (sptr<vertex_t> v : e->get<vertex_t>()) {
-                    std::cout << " " << print_v(v);
-                }
-                std::cout << " ], frames =";
-                for (uint64_t fr : e->frames) std::cout << " " << fr;
-                std::cout << std::endl;
-#endif
             }
             in_cc_assignments.insert(m);
             std::set<vpair_t> tmp = insert_error_chain_into(in_cc_map, m.path, color, m.c1, m.c2);
@@ -218,15 +97,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
                 corr[fr] ^= 1;
             }
             applied_flag_edges.insert(e);
-#ifdef MEMORY_DEBUG
-            std::cout << "Applied flag edge [";
-            for (sptr<vertex_t> v : e->get<vertex_t>()) {
-                std::cout << " " << print_v(v);
-            }
-            std::cout << " ], frames =";
-            for (uint64_t fr : e->frames) std::cout << " " << fr;
-            std::cout << std::endl;
-#endif
         }
         if (m.v == nullptr) {
             continue;
@@ -249,28 +119,17 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
 
     stim::simd_bits<SIMD_WIDTH> corr1(corr),
                                 corr2(corr);
-    fp_t log_p1 = lifting(corr1, best_rep_map);
-#ifdef MEMORY_DEBUG
-    std::cout << "corr1 = ";
-    for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
-    std::cout << std::endl;
-#endif
+    stim::simd_bits<SIMD_WIDTH> syndrome_delta(syndrome.num_bits_padded());
+    fp_t log_p1 = lifting(corr1, syndrome_delta, best_rep_map);
     // If there are no triggered flag edges. Return here.
     if (triggered_flag_edges.empty() || chamberland) {
+        syndrome_delta ^= syndrome;
+        if (syndrome_delta.not_zero()) {
+            auto res = decode_error(syndrome_delta);
+            corr1 ^= res.corr;
+        }
         return { 0.0, corr1 };
     }
-#ifdef MEMORY_DEBUG
-    std::cout << "Triggered flag edges:" << std::endl;
-    for (auto& [e, path, map_ref] : triggered_flag_edges) {
-        std::cout << "\t[";
-        for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v->get_base());
-        std::cout << " ], frames =";
-        for (uint64_t fr : e->frames) std::cout << " " << fr;
-        std::cout << ", path = [";
-        for (sptr<vertex_t> v : path) std::cout << " " << print_v(v->get_base());
-        std::cout << " ]" << std::endl;
-    }
-#endif
     // Otherwise, perform the lifting procedure again, this time removing all edges corresponding
     // to triggered flag edges. Also update corr for each removed flag edge.
     in_cc_map = std::move(_in_cc_map);
@@ -284,7 +143,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             sptr<vertex_t> v = vlist.at(i-1)->get_base(),
                            w = vlist.at(i)->get_base();
             vpair_t e = make_vpair(v, w);
-            erase_from_incidence_map(e, inc_map_ref);
+            erase_from_incidence_map(inc_map_ref, e);
         }
         // Check if there is a similar hyperedge.
         bool found_similar = false;
@@ -295,19 +154,7 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
             visited_flag_edges.insert(he);
         }
     }
-    log_p2 += lifting(corr2, best_rep_map);
-#ifdef MEMORY_DEBUG
-    std::cout << "corr1 = ";
-    for (size_t i = 0; i < n_obs; i++) std::cout << corr1[i]+0;
-    std::cout << std::endl;
-
-    std::cout << "corr2 = ";
-    for (size_t i = 0; i < n_obs; i++) std::cout << corr2[i]+0;
-    std::cout << std::endl;
-
-    std::cout << "log probs: " << log_p1 << " , " << log_p2 << std::endl;
-    if (corr1 != corr2) std::cout << "correction mismatch detected.\n";
-#endif
+    log_p2 += lifting(corr2, syndrome_delta, best_rep_map);
     corr = std::move(log_p1 > log_p2 ? corr1 : corr2);
     return { 0.0, corr };
 }
@@ -317,19 +164,9 @@ RestrictionDecoder::compute_matchings(stim::simd_bits_range_ref<SIMD_WIDTH> synd
     std::vector<assign_t> matchings;
     for (int c1 = 0; c1 < decoding_graph->number_of_colors; c1++) {
         for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
-#ifdef MEMORY_DEBUG
-            std::cout << "Matchings on L(" << c1 << ", " << c2 << ")-----------" << std::endl;
-#endif
             load_syndrome(syndrome, c1, c2, false);
             std::vector<assign_t> _matchings = compute_matching(c1, c2);
             vtils::push_back_range(matchings, _matchings);
-#ifdef MEMORY_DEBUG
-            for (assign_t x : _matchings) {
-                std::cout << "\t" << print_v(x.v) << " <---> " << print_v(x.w) << ", path:";
-                for (sptr<vertex_t> v : x.path) std::cout << " " << print_v(v);
-                std::cout << std::endl;
-            }
-#endif
         }
     }
     return matchings;
@@ -349,11 +186,6 @@ RestrictionDecoder::split_assignment(
     curr.path = {m.v};
 
     bool contains_only_boundaries = m.v->is_boundary_vertex;
-#ifdef MEMORY_DEBUG
-    std::cout << "In expansion of " << print_v(m.v) << ", " << print_v(m.w) << ":";
-    for (sptr<vertex_t> v : m.path) std::cout << " " << print_v(v);
-    std::cout << std::endl;
-#endif
     for (size_t i = 1; i < m.path.size(); i++) {
         sptr<vertex_t> v = m.path.at(i-1),
                         w = m.path.at(i);
@@ -476,11 +308,6 @@ RestrictionDecoder::compute_connected_components(const std::vector<assign_t>& as
             int cc_color = get_complementary_colors_to(
                                 {vrb->color, v->color}, decoding_graph->number_of_colors)[0];
             components.push_back({assign_list, cc_color});
-#ifdef MEMORY_DEBUG
-            std::cout << "Connected component:";
-            for (sptr<vertex_t> x : path) std::cout << " " << print_v(x);
-            std::cout << std::endl;
-#endif
             continue;
         }
         // Move to the neighbors of v. If any of them are visited, then it implies we have a loop
@@ -539,6 +366,7 @@ RestrictionDecoder::insert_error_chain_into(
 fp_t
 RestrictionDecoder::lifting(
         stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+        stim::simd_bits_range_ref<SIMD_WIDTH> syndrome_delta,
         const std::map<sptr<hyperedge_t>, sptr<hyperedge_t>>& best_rep_map,
         size_t tr) 
 {
@@ -561,34 +389,8 @@ RestrictionDecoder::lifting(
     std::set<sptr<vertex_t>> all_incident(not_cc_incident);
     vtils::insert_range(all_incident, in_cc_incident);
 
-#ifdef MEMORY_DEBUG
-    std::cout << "Edges in CC:" << std::endl;
-    for (auto& [e, cnt] : in_cc_map) {
-        std::cout << "\t[ " << print_v(e.first) << " "
-            << print_v(e.second) << " ], count = " << cnt << std::endl;
-    }
-    std::cout << "Edges not in CC:" << std::endl;
-    for (auto& [e, cnt] : not_cc_map) {
-        std::cout << "\t[ " << print_v(e.first) << " "
-            << print_v(e.second) << " ], count = " << cnt << std::endl;
-    }
-#endif
-
     for (sptr<vertex_t> v : all_incident) {
         std::set<face_t> faces = get_faces(v, best_rep_map);
-        const size_t nf = faces.size();
-        const uint64_t enf = 1L << nf;
-
-#ifdef MEMORY_DEBUG
-        std::cout << "Faces of " << print_v(v) << ":" << std::endl;
-        for (face_t fc : faces) {
-            std::cout << "\t<";
-            for (sptr<vertex_t> x : fc.vertices) std::cout << " " << print_v(x);
-            std::cout << " >, frames =";
-            for (uint64_t fr : fc.frames) std::cout << " " << fr;
-            std::cout << std::endl;
-        }
-#endif
         // Track intersections with connected components and outside of
         // connected components.
         std::set<vpair_t> best_cc_boundary,
@@ -597,61 +399,43 @@ RestrictionDecoder::lifting(
                                     best_no_cc_corr(corr.num_bits_padded());
         fp_t best_log_prob_cc = std::numeric_limits<fp_t>::lowest(),
              best_log_prob_no_cc = std::numeric_limits<fp_t>::lowest();
-        for (uint64_t i = 0; i < enf; i++) {
-            std::set<vpair_t> boundary;
-            stim::simd_bits<SIMD_WIDTH> local_corr(corr.num_bits_padded());
-            fp_t log_pr = 0.0;
-
-            uint64_t ii = i;
-            for (auto it = faces.begin(); it != faces.end() && ii; it++) {
-                if (ii & 1) {
-                    intersect_with_boundary(boundary, local_corr, log_pr, *it, v);
-                }
-                ii >>= 1;
-            }
-            // Now, we need to check how much boundary intersects with connected components
-            // or anything not in the connected components. Note that this intersection is
-            // in the neighborhood of v.
-            size_t int_in_cc = locally_matches(in_cc_map, boundary, v),
-                   int_not_cc = locally_matches(not_cc_map, boundary, v);
-            update_best_boundary(
-                    int_in_cc,
-                    best_log_prob_cc,
-                    best_cc_boundary,
-                    best_cc_corr, 
-                    log_pr,
-                    boundary,
-                    local_corr);
-            update_best_boundary(
-                    int_not_cc,
-                    best_log_prob_no_cc,
-                    best_no_cc_boundary,
-                    best_no_cc_corr,
-                    log_pr,
-                    boundary,
-                    local_corr);
-        }
+        std::vector<face_t> applied_faces;
+        best_cc_boundary = find_face_subset_given_cc_map(
+                                in_cc_map, 
+                                faces,
+                                best_cc_corr,
+                                best_log_prob_cc, 
+                                applied_faces,
+                                v);
+        best_no_cc_boundary = find_face_subset_given_cc_map(
+                                not_cc_map,
+                                faces,
+                                best_no_cc_corr,
+                                best_log_prob_no_cc,
+                                applied_faces,
+                                v);
         if (best_cc_boundary.empty() && best_no_cc_boundary.empty()) continue;
         if (best_log_prob_cc > best_log_prob_no_cc) {
             update_correction(
-                in_cc_map, corr, out_log_pr, best_cc_corr, best_cc_boundary, best_log_prob_cc);
-#ifdef MEMORY_DEBUG
-                std::cout << "Matched " << print_v(v) << " to CCs with boundary:";
-                for (vpair_t e : best_cc_boundary) {
-                    std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
-                }
-                std::cout << std::endl;
-#endif
+                in_cc_map,
+                corr,
+                out_log_pr,
+                best_cc_corr,
+                best_cc_boundary,
+                best_log_prob_cc);
         } else {
             update_correction(
-                not_cc_map, corr, out_log_pr, best_no_cc_corr, best_no_cc_boundary, best_log_prob_no_cc);
-#ifdef MEMORY_DEBUG
-            std::cout << "Matched " << print_v(v) << " to bulk with boundary:";
-            for (vpair_t e : best_no_cc_boundary) {
-                std::cout << " (" << print_v(e.first) << ", " << print_v(e.second) << ")";
+                not_cc_map,
+                corr,
+                out_log_pr,
+                best_no_cc_corr,
+                best_no_cc_boundary,
+                best_log_prob_no_cc);
+        }
+        for (const face_t& f : applied_faces) {
+            for (sptr<vertex_t> v : f.vertices) {
+                if (!v->is_boundary_vertex) syndrome_delta[v->id] ^= 1;
             }
-            std::cout << std::endl;
-#endif
         }
     }
     // Remove any widowed edges, as these can cause the decoder to loop infinitely.
@@ -660,7 +444,7 @@ RestrictionDecoder::lifting(
     }
     if (in_cc_map.size() > 1 || not_cc_map.size() > 1) {
         if (tr < MAX_TRIES) {
-            return out_log_pr + lifting(corr, best_rep_map, tr+1);
+            return out_log_pr + lifting(corr, syndrome_delta, best_rep_map, tr+1);
         }
     }
     return out_log_pr;
@@ -718,28 +502,4 @@ make_face(sptr<hyperedge_t> e) {
     std::sort(fc.vertices.begin(), fc.vertices.end());
     return fc;
 }
-
-void
-intersect_with_boundary(
-            std::set<vpair_t>& boundary,
-            stim::simd_bits_range_ref<SIMD_WIDTH> corr,
-            fp_t& log_pr,
-            const face_t& fc,
-            sptr<vertex_t> v)
-{
-    // Get edges of the hyperedge.
-    for (size_t j = 0; j < fc.vertices.size(); j++) {
-        auto x = fc.vertices.at(j);
-        for (size_t k = j+1; k < fc.vertices.size(); k++) {
-            auto y = fc.vertices.at(k);
-            // Make sure that one of x or y is v.
-            if (x != v && y != v) continue;
-            vpair_t xy = make_vpair(x, y);
-            boundary ^= xy;
-        }
-    }
-    for (uint64_t fr : fc.frames) corr[fr] ^= 1;
-    log_pr += log(fc.probability);
-}
-
 }   // qontra

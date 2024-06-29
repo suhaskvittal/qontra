@@ -131,6 +131,6 @@ private:
 }   // graph
 }   // qontra
 
-#include "graph.inl"
+#include "inl/graph.inl"
 
 #endif  // QONTRA_GRAPH_h

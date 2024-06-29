@@ -34,6 +34,10 @@ if (COMPILE_PROTEAN)
     include(${CMAKE_SOURCE_DIR}/cmake/executables/Protean.cmake)
 endif()
 
+if (COMPILE_COLOR_CODES)
+    include(${CMAKE_SOURCE_DIR}/cmake/executables/ColorCodes.cmake)
+endif()
+
 if (COMPILE_TESTS)
     include(${CMAKE_SOURCE_DIR}/cmake/executables/Test.cmake)
 endif()

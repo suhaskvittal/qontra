@@ -117,6 +117,4 @@ std::string print_v(sptr<tanner::vertex_t>);
 }   // graph
 }   // qontra
 
-#include "tanner_graph.inl"
-
 #endif  // QONTRA_TANNER_GRAPH_h

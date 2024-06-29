@@ -18,10 +18,7 @@ chromobius::Decoder init_chromobius(stim::Circuit);
 
 class Chromobius : public Decoder {
 public:
-    Chromobius(DetailedStimCircuit circuit)
-        :Decoder(circuit),
-        backing_decoder(init_chromobius(circuit))
-    {}
+    Chromobius(const DetailedStimCircuit&);
         
     Decoder::result_t decode_error(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
 private:
@@ -29,7 +26,5 @@ private:
 };
 
 }   // qontra
-
-#include "chromobius.inl"
 
 #endif  // QONTRA_CHROMOBIUS_h

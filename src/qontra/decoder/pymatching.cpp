@@ -3,9 +3,12 @@
  *  date:   22 January 2024
  * */
 
+#include "qontra/decoder/pymatching.h"
+
 namespace qontra {
 
-inline pm::Mwpm init_solver_from_circuit(stim::Circuit circuit) {
+pm::Mwpm
+init_solver_from_circuit(stim::Circuit circuit) {
     stim::DetectorErrorModel dem = 
         stim::ErrorAnalyzer::circuit_to_detector_error_model(
             circuit,
@@ -19,7 +22,12 @@ inline pm::Mwpm init_solver_from_circuit(stim::Circuit circuit) {
     return pm::detector_error_model_to_mwpm(dem, pm::NUM_DISTINCT_WEIGHTS);
 }
 
-inline Decoder::result_t
+PyMatching::PyMatching(const DetailedStimCircuit& circuit)
+    :Decoder(circuit),
+    solver(init_solver_from_circuit(circuit))
+{}
+
+Decoder::result_t
 PyMatching::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     const size_t n_observables = circuit.count_observables();
 
@@ -39,3 +47,4 @@ PyMatching::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
 }
 
 }   // qontra
+

@@ -3,9 +3,16 @@
  *  date:   25 December 2023
  * */
 
+#include "qontra/decoder/chromobius.h"
+
 namespace qontra {
 
-inline chromobius::Decoder
+Chromobius::Chromobius(const DetailedStimCircuit& circuit)
+    :Decoder(circuit),
+    backing_decoder(init_chromobius(circuit))
+{}
+
+chromobius::Decoder
 init_chromobius(stim::Circuit circuit) {
     const chromobius::DecoderConfigOptions options;
 
@@ -22,11 +29,11 @@ init_chromobius(stim::Circuit circuit) {
     return chromobius::Decoder::from_dem(dem, options);
 }
 
-inline Decoder::result_t
+Decoder::result_t
 Chromobius::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     timer.clk_start();
-    uint64_t _corr = 
-        backing_decoder.decode_detection_events({syndrome.u8, syndrome.u8 + syndrome.num_u8_padded()});
+    uint64_t _corr = backing_decoder.decode_detection_events(
+                        {syndrome.u8, syndrome.u8 + syndrome.num_u8_padded()});
     stim::simd_bits<SIMD_WIDTH> corr(1);
     *corr.u64 = _corr;
     fp_t t = (fp_t) timer.clk_end();
@@ -36,5 +43,5 @@ Chromobius::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     };
 }
 
-
 }   // qontra
+

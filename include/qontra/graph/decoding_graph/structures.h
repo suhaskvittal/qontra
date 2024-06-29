@@ -42,6 +42,6 @@ struct hyperedge_t : base::hyperedge_t {
 }   // graph
 }   // qontra
 
-#include "structures.inl"
+#include "inl/structures.inl"
 
 #endif  // QONTRA_DECODING_GRAPH_STRUCTURES_h

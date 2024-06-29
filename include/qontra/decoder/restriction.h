@@ -13,6 +13,9 @@
 
 namespace qontra {
 
+const int COLOR_RED = 0;
+const int COLOR_GREEN = 1;
+
 namespace gd = graph::decoding;
 
 typedef std::pair<sptr<gd::vertex_t>, sptr<gd::vertex_t>> vpair_t;
@@ -62,6 +65,7 @@ protected:
     // Returns log probability of correction.
     fp_t lifting(
             stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+            stim::simd_bits_range_ref<SIMD_WIDTH> syndrome_delta,
             const std::map<sptr<gd::hyperedge_t>, sptr<gd::hyperedge_t>>& best_rep_map,
             size_t tries=0);
 
@@ -92,19 +96,35 @@ protected:
 
 vpair_t make_vpair(sptr<gd::vertex_t>, sptr<gd::vertex_t>);
 face_t make_face(sptr<gd::hyperedge_t>);
-
 int color_plus_offset(int, int);
 
-void intersect_with_boundary(
-            std::set<vpair_t>&,
-            stim::simd_bits_range_ref<SIMD_WIDTH>,
-            fp_t& probability,
-            const face_t&,
-            sptr<gd::vertex_t> incident_vertex);
+// Helper functions:
+void push_back_assignment(std::vector<assign_t>&, const assign_t&);
+void erase_from_incidence_map(std::map<vpair_t, size_t>&, const vpair_t&);
 
+void update_correction(
+        // To be updated:
+        std::map<vpair_t, size_t>& inc_map,
+        stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+        fp_t& corr_log_pr,
+        // Updated by:
+        stim::simd_bits_range_ref<SIMD_WIDTH> local_corr,
+        const std::set<vpair_t>& local_boundary,
+        fp_t local_log_pr);
+
+bool remove_widowed_edges(std::map<vpair_t, size_t>&);
+
+std::set<vpair_t>
+find_face_subset_given_cc_map(
+        const std::map<vpair_t, size_t>& x_cc_map,
+        const std::set<face_t>& faces,
+        stim::simd_bits_range_ref<SIMD_WIDTH>,
+        fp_t& probability,
+        std::vector<face_t>& applied_faces,
+        sptr<gd::vertex_t> incident_vertex);
 
 }   // qontra
 
-#include "restriction.inl"
+#include "inl/restriction.inl"
 
 #endif  // DECODER_RESTRICTION_h

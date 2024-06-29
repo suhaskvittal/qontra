@@ -22,7 +22,6 @@ if (COMPILE_PROTEAN_LIB)
     target_link_libraries(libprotean PUBLIC qontra 
                                             ${CPLEX_LIBRARIES}
                                             ${GRAPHVIZ_LIBRARIES})
-
 endif()
 
 if (COMPILE_PROTEAN_MAIN)
@@ -32,11 +31,17 @@ if (COMPILE_PROTEAN_MAIN)
 endif()
 
 if (COMPILE_PROTEAN_EXPERIMENTS)
-    add_executable(pr_base_memory 
+    add_executable(base_memory 
         main/protean/experiments/base/memory.cpp
         src/protean/experiments.cpp)
-    add_executable(pr_planar_memory
+    add_executable(planar_memory
         main/protean/experiments/base/run_planar_code.cpp)
-    target_link_libraries(pr_base_memory PRIVATE qontra)
-    target_link_libraries(pr_planar_memory PRIVATE qontra)
+    target_link_libraries(base_memory PRIVATE qontra)
+    target_link_libraries(planar_memory PRIVATE qontra)
+
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/protean)
+    set_target_properties(
+        base_memory planar_memory
+        PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/pr)
 endif()
