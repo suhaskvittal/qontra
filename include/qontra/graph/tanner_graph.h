@@ -94,6 +94,7 @@ public:
     int compute_code_distance(bool for_x) const;
 
     std::vector<obs_t> get_obs(bool get_x_obs) const;
+    std::vector<obs_t>& get_obs_ref(bool get_x_obs);
 private:
     std::vector<sptr<tanner::vertex_t>>& get_vertices_by_type_(tanner::vertex_t::type);
 

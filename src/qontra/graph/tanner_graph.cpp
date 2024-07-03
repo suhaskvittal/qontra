@@ -61,6 +61,12 @@ TannerGraph::get_obs(bool get_x_obs) const {
     else            return z_obs_list;
 }
 
+std::vector<TannerGraph::obs_t>&
+TannerGraph::get_obs_ref(bool get_x_obs) {
+    if (get_x_obs)  return x_obs_list;
+    else            return z_obs_list;
+}
+
 std::vector<sptr<vertex_t>>&
 TannerGraph::get_vertices_by_type_(vertex_t::type t) {
     if (t == vertex_t::type::data) return data_qubits;
