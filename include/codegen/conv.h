@@ -8,6 +8,7 @@
 
 #include "codegen/tiling.h"
 
+#include <qontra/graph/tanner_graph.h>
 #include <vtils/mat2.h>
 
 namespace qg=qontra::graph;

@@ -51,6 +51,14 @@ if (COMPILE_NEURAL_DECODER)
             src/qontra/decoder/neural.cpp)
 endif()
 
+if (COMPILE_PYMATCHING)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/pymatching.cpp)
+endif()
+
+if (COMPILE_CHROMOBIUS)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/chromobius.cpp)
+endif()
+
 find_package(MPI REQUIRED)
 
 add_library(qontra ${QONTRA_FILES})

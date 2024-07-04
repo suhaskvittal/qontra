@@ -15,9 +15,28 @@ namespace cct {
 struct shape_t : qg::base::vertex_t {
     size_t sides;
     std::vector<uint64_t> qubits;
-    std::set<size_t> occupied_sides;
-
+    // Neighbors is an array. Position of elements matters. The adjacency list
+    // in TilingGraph does not have this property.
+    std::vector<sptr<shape_t>> neighbors;
+    size_t fptr;
+    size_t bptr;
     int color;
+
+    inline uint64_t get_qubit(int i) const {
+        return qubits.at( i % sides );
+    }
+
+    inline void set_qubit(int i, uint64_t x) {
+        qubits[i % sides] = x;
+    }
+
+    inline sptr<shape_t> get_neighbor(int i) const {
+        return neighbors.at( i % sides );
+    }
+
+    inline void set_neighbor(int i, sptr<shape_t> s) {
+        neighbors[i % sides] = s;
+    }
 };
 
 struct edge_t : qg::base::edge_t {
@@ -39,5 +58,19 @@ uptr<TilingGraph>
     make_random_tiling(uint64_t max_qubits, tiling_config_t, int seed=0);
 
 }   // cct
+
+namespace qontra {
+namespace graph {
+
+template <> inline std::string
+print_v(sptr<cct::shape_t> v) {
+    std::string s = "[";
+    for (uint64_t q : v->qubits) s += " " + std::to_string(q);
+    s += " ]";
+    return s;
+}
+
+}
+}
 
 #endif  // CODEGEN_TILING_h
