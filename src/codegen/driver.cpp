@@ -34,8 +34,8 @@ get_sample(uint64_t max_qubits, tiling_config_t conf, int seed) {
     // Convert this to a parity matrix.
     uptr<TannerGraph> g2 = to_tanner_graph(g1);
     Mat2 m1 = to_parity_matrix(g2);
-    // Check anticommutation.
     std::cout << m1;
+    // Check anticommutation.
     assert_commuting(m1, m1, "m1");
     // Compute the basis vectors of m. These are the stabilizer generators.
     auto v1 = get_basis_vectors(m1.trr());
@@ -45,6 +45,8 @@ get_sample(uint64_t max_qubits, tiling_config_t conf, int seed) {
     // Now compute the logical operators.
     auto v2 = get_null_basis_vectors(m2);
     assert_commuting(m1, Mat2::from_rows(v2), "m1 vs null");
+
+    std::cout << Mat2::from_rows(v2);
 
     Mat2 m3(v1.size()+v2.size(), m1.n_cols);
     m3.copy_rows_from(0, v1);

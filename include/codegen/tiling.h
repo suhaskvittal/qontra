@@ -18,6 +18,7 @@ struct shape_t : qg::base::vertex_t {
     // Neighbors is an array. Position of elements matters. The adjacency list
     // in TilingGraph does not have this property.
     std::vector<sptr<shape_t>> neighbors;
+    size_t cnt;
     size_t fptr;
     size_t bptr;
     int color;
@@ -35,6 +36,7 @@ struct shape_t : qg::base::vertex_t {
     }
 
     inline void set_neighbor(int i, sptr<shape_t> s) {
+        cnt += neighbors[i%sides] == nullptr && s != nullptr;
         neighbors[i % sides] = s;
     }
 };
@@ -51,7 +53,7 @@ struct tiling_config_t {
     
     int max_oop_allowed_radius =2;
 
-    fp_t base_oop_prob  =0.01;
+    fp_t base_oop_prob  =0.1;
 };
 
 uptr<TilingGraph>
@@ -64,10 +66,8 @@ namespace graph {
 
 template <> inline std::string
 print_v(sptr<cct::shape_t> v) {
-    std::string s = "[";
-    for (uint64_t q : v->qubits) s += " " + std::to_string(q);
-    s += " ]";
-    return s;
+    if (v == nullptr) return "<nil>";
+    return std::to_string(v->id);
 }
 
 }

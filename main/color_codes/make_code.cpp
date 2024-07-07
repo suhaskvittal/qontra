@@ -20,6 +20,9 @@ int main(int argc, char* argv[]) {
     uint64_t nmax = atoll(argv[1]);
 
     tiling_config_t conf;
+    conf.min_sides = 8;
+    conf.max_sides = 8;
+    conf.base_oop_prob = 1.0;
     uptr<TannerGraph> gr = get_sample(nmax, conf, 0);
     // Compute code params.
     const uint64_t n = gr->get_vertices_by_type( tanner::vertex_t::type::data ).size();
