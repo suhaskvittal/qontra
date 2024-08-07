@@ -49,7 +49,7 @@ make_and_add_shape(uptr<TilingGraph>& g, uint64_t& sctr, size_t p, int c) {
     return s;
 }
 
-inline sptr<edge_t>
+sptr<edge_t>
 make_and_add_edge(uptr<TilingGraph>& g, sptr<shape_t> s, sptr<shape_t> t, bool sf, bool tf) {
     if (s->cnt == s->sides) {
         std::cerr << "s(" << print_v(s) << ") degree overflow error." << std::endl;
@@ -61,10 +61,14 @@ make_and_add_edge(uptr<TilingGraph>& g, sptr<shape_t> s, sptr<shape_t> t, bool s
     }
     if (s->get_neighbor(s->fptr) != nullptr) {
         std::cerr << "s(" << print_v(s) << ") neighbor already exists." << std::endl;
+        std::cerr << "\tneighbor = " << print_v(s->get_neighbor(s->fptr))
+            << ", (" << s->fptr << ")" << std::endl;
         exit(1);
     }
     if (t->get_neighbor(t->fptr) != nullptr) {
         std::cerr << "t(" << print_v(t) << ") neighbor already exists." << std::endl;
+        std::cerr << "\tneighbor = " << print_v(t->get_neighbor(t->fptr))
+            << ", (" << t->fptr << ")" << std::endl;
         exit(1);
     }
     if (sf) s->set_neighbor(s->fptr++, t);
@@ -72,6 +76,35 @@ make_and_add_edge(uptr<TilingGraph>& g, sptr<shape_t> s, sptr<shape_t> t, bool s
     if (tf) t->set_neighbor(t->fptr++, s);
     else    t->set_neighbor(t->bptr--, s);
     return g->make_and_add_edge(s,t);
+}
+
+void
+make_and_add_edges(uptr<TilingGraph>& g, sptr<shape_t> s, sptr<shape_t> t, sptr<shape_t> u) {
+    auto uit = std::find(u->neighbors.begin(), u->neighbors.end(), s);
+    if (!g->contains(s,t)) {
+        make_and_add_edge(g, s, t, true, *(uit-1) != nullptr);
+    }
+    if (!g->contains(t,u)) {
+        make_and_add_edge(g, t, u, *(uit-1) == nullptr, *(uit-1) != nullptr);
+    }
+}
+
+void
+make_and_add_nonlocal_edges(uptr<TilingGraph>& g, sptr<shape_t> s, sptr<shape_t> t, sptr<shape_t> u) {
+    auto uit = std::find(u->neighbors.begin(), u->neighbors.end(), s);
+
+    s->set_neighbor(s->fptr++, t);
+    if (*(uit-1) == nullptr) {
+        t->fptr++;
+        t->set_neighbor(t->fptr++, u);
+        t->set_neighbor(t->fptr++, s);
+        u->set_neighbor(u->bptr--, t);
+    } else {
+        t->bptr--;
+        t->set_neighbor(t->bptr--, u);
+        t->set_neighbor(t->bptr--, s);
+        u->set_neighbor(u->fptr++, t);
+    }
 }
 
 inline face_t
@@ -204,28 +237,17 @@ make_random_tiling(uint64_t max_qubits, tiling_config_t conf, int seed) {
                         && (t=select_random_plaquette(gr,s,c,rng,conf)) != nullptr) 
                 {
                     std::cout << " " << print_v(t) << "(r)";
-                    // For t, we may do something a bit more manual.
-                    gr->make_and_add_edge(s,t);
-                    gr->make_and_add_edge(t,u);
-
-                    s->set_neighbor(s->fptr++, t);
-                    t->set_neighbor(t->bptr+1, s);
-                    t->set_neighbor(t->bptr+2, u);
-                    if (last_was_nonlocal) {
-                        u->set_neighbor(u->bptr--, t);
-                    } else {
-                        u->set_neighbor(u->fptr++, t);
-                    }
+                    make_and_add_nonlocal_edges(gr, s, t, u);
+                    last_was_nonlocal = true;
                 } else {
                     t = make_and_add_shape(gr, sctr, next_polygon(rng,conf), c);
                     std::cout << " " << print_v(t) << "(n)";
-                    make_and_add_edge(gr, s, t, true, true);
-                    make_and_add_edge(gr, t, u, false, !last_was_nonlocal);
+                    make_and_add_edges(gr, s, t, u);
                     last_was_nonlocal = false;
                 }
             } else if (!gr->contains(t,u)) {
                 std::cout << " " << print_v(t) << "(o)";
-                make_and_add_edge(gr, t, u, false, !last_was_nonlocal);
+                make_and_add_edges(gr, s, t, u);
                 last_was_nonlocal = false;
             } else {
                 std::cout << " " << print_v(t) << "(x)";

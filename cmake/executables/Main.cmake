@@ -22,6 +22,8 @@ make_main(TARGET compute_code_distance SOURCE_FILES main/compute_code_distance.c
 make_main(TARGET compute_circuit_distance SOURCE_FILES main/compute_circuit_distance.cpp)
 make_main(TARGET decoder_debugger SOURCE_FILES main/decoder_debugger.cpp)
 
+make_main(TARGET sim_sc_sgate_inject SOURCE_FILES main/sim_sc_sgate_inject.cpp)
+
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/utils)
 set_target_properties(
     converter generate_syndromes

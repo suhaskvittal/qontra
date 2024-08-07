@@ -160,7 +160,7 @@ DetailedStimCircuit::from_qes(
         // Now do idling errors and update elapsed_time.
         if (!takes_no_time) {
             // Use uint32_t as Stim uses that (saves a cast).
-            if (is_2q_gate(inst)) {
+            if (is_2q_gate(inst) && !is_error_free) {
                 for (uint64_t q : all_qubits) {
                     if (std::find(qubits.begin(), qubits.end(), q) == qubits.end()) {
                         // This will have an idling error.
