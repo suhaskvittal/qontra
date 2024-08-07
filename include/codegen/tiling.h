@@ -1,76 +1,57 @@
 /*
  *  author: Suhas Vittal
- *  date:   29 June 2024
+ *  date:   7 August 2024
  * */
 
 #ifndef CODEGEN_TILING_h
 #define CODEGEN_TILING_h
 
-#include <qontra/graph.h>
+#include <qontra/defs.h>
 
-namespace qg=qontra::graph;
+#include <array>
+#include <vector>
 
-namespace cct {
+// CONSISTENCY RULES:
+//  Red checks --> even sides = green, odd sides = blue
+//  Green checks --> even sides = red, odd sides = green
+//  Blue checks --> even sides = red, odd sides = green
 
-struct shape_t : qg::base::vertex_t {
-    size_t sides;
-    std::vector<uint64_t> qubits;
-    // Neighbors is an array. Position of elements matters. The adjacency list
-    // in TilingGraph does not have this property.
-    std::vector<sptr<shape_t>> neighbors;
-    size_t cnt;
-    size_t fptr;
-    size_t bptr;
+namespace cgen {
+
+struct check_t {
+    check_t(int color);
+
     int color;
-
-    inline uint64_t get_qubit(int i) const {
-        return qubits.at( i % sides );
-    }
-
-    inline void set_qubit(int i, uint64_t x) {
-        qubits[i % sides] = x;
-    }
-
-    inline sptr<shape_t> get_neighbor(int i) const {
-        return neighbors.at( i % sides );
-    }
-
-    inline void set_neighbor(int i, sptr<shape_t> s) {
-        cnt += neighbors[i%sides] == nullptr && s != nullptr;
-        neighbors[i % sides] = s;
-    }
+    std::array<sptr<check_t>, 8> sides;
 };
 
-struct edge_t : qg::base::edge_t {
-    bool is_nonlocal =false;
+void link(sptr<check_t> c1, int c1s, sptr<check_t> c2, int c2s);
+
+class Tiling {
+public:
+    Tiling(int, int);
+    Tiling(const Tiling&) =default;
+
+    std::vector<Tiling> generate_sample_tilings(uint64_t samples, int seed) const;
+
+    sptr<check_t>& operator()(int i, int j);
+    sptr<check_t> at(int i, int j) const;
+
+    sptr<check_t> add_check_at(int color, int i=-1, int j=-1);
+    std::vector<check_t> get_all_checks(void) const;
+
+    const int r;
+    const int c;
+private:
+    std::vector<std::vector<sptr<check_t>>> in_plane;
+    std::vector<sptr<check_t>> out_of_plane;
+
+    std::vector<sptr<check_t>> all;
 };
 
-typedef qg::Graph<shape_t, edge_t> TilingGraph;
+std::vector<Tiling>
+generate_sample_tilings_from_base(uint64_t samples, const Tiling&, int seed);
 
-struct tiling_config_t {
-    size_t min_sides    =4;
-    size_t max_sides    =12;
-    
-    int max_oop_allowed_radius =2;
-
-    fp_t base_oop_prob  =0.1;
-};
-
-uptr<TilingGraph>
-    make_random_tiling(uint64_t max_qubits, tiling_config_t, int seed=0);
-
-}   // cct
-
-namespace qontra {
-namespace graph {
-
-template <> inline std::string
-print_v(sptr<cct::shape_t> v) {
-    if (v == nullptr) return "<nil>";
-    return std::to_string(v->id);
-}
-
-}
-}
+}   // cgen
 
 #endif  // CODEGEN_TILING_h

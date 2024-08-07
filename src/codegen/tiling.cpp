@@ -1,265 +1,163 @@
 /*
  *  author: Suhas Vittal
- *  date:   2 July 2024
+ *  date:   7 August 2024
  * */
 
 #include "codegen/tiling.h"
 
-#include <qontra/graph/algorithms/distance.h>
-#include <qontra/graph/decoding_graph.h>
-
-#include <vtils/utility.h>
-
-#include <algorithm>
-#include <deque>
 #include <random>
 
-using namespace qontra;
-using namespace graph;
-using namespace vtils;
+namespace cgen {
 
-namespace cct {
-
-typedef std::tuple<sptr<shape_t>, sptr<shape_t>, sptr<shape_t>> face_t;
-
-inline size_t
-next_polygon(std::mt19937_64& rng, const tiling_config_t& conf) {
-    if (conf.max_sides == conf.min_sides) return conf.max_sides;
-    const size_t ds = (conf.max_sides-conf.min_sides)/2;
-    const size_t ms = conf.min_sides/2;
-    return 2 * static_cast<size_t>( (rng()%ds)+ms );
+template <class CONTAINER, ITER> inline ITER
+get_rand_it(const CONTAINER& x, std::mt19937_64& rng) {
+    return x.begin() + (rng() % x.size());
 }
 
-inline fp_t
-get_qcnt_ratio(uint64_t max_qubits, uint64_t q) {
-    fp_t x = static_cast<fp_t>(q) / static_cast<fp_t>(max_qubits);
-    return std::min(x, 1.0);
+inline int
+get_next_side(sptr<check_t>& c, int parity=-1) {
+    const int offset = (parity == 1) ? 1 : 0;
+    const int stride = parity >= 0 : 2 : 1;
+    for (int s = offset; s < c->sides; s += stride) { 
+        if (c->sides[s] == nullptr) return s;
+    }
+    return -1;
 }
 
-inline sptr<shape_t>
-make_and_add_shape(uptr<TilingGraph>& g, uint64_t& sctr, size_t p, int c) {
-    sptr<shape_t> s = g->make_and_add_vertex(sctr++);
-    s->sides = p;
-    s->qubits = std::vector<uint64_t>(p);
-    s->neighbors = std::vector<sptr<shape_t>>(p, nullptr);
-    s->cnt = 0;
-    s->fptr = 0;
-    s->bptr = p-1;
-    s->color = c;
-    return s;
-}
-
-sptr<edge_t>
-make_and_add_edge(uptr<TilingGraph>& g, sptr<shape_t> s, sptr<shape_t> t, bool sf, bool tf) {
-    if (s->cnt == s->sides) {
-        std::cerr << "s(" << print_v(s) << ") degree overflow error." << std::endl;
-        exit(1);
-    }
-    if (t->cnt == t->sides) {
-        std::cerr << "t(" << print_v(t) << ") degree overflow error." << std::endl;
-        exit(1);
-    }
-    if (s->get_neighbor(s->fptr) != nullptr) {
-        std::cerr << "s(" << print_v(s) << ") neighbor already exists." << std::endl;
-        std::cerr << "\tneighbor = " << print_v(s->get_neighbor(s->fptr))
-            << ", (" << s->fptr << ")" << std::endl;
-        exit(1);
-    }
-    if (t->get_neighbor(t->fptr) != nullptr) {
-        std::cerr << "t(" << print_v(t) << ") neighbor already exists." << std::endl;
-        std::cerr << "\tneighbor = " << print_v(t->get_neighbor(t->fptr))
-            << ", (" << t->fptr << ")" << std::endl;
-        exit(1);
-    }
-    if (sf) s->set_neighbor(s->fptr++, t);
-    else    s->set_neighbor(s->bptr--, t);
-    if (tf) t->set_neighbor(t->fptr++, s);
-    else    t->set_neighbor(t->bptr--, s);
-    return g->make_and_add_edge(s,t);
-}
-
-void
-make_and_add_edges(uptr<TilingGraph>& g, sptr<shape_t> s, sptr<shape_t> t, sptr<shape_t> u) {
-    auto uit = std::find(u->neighbors.begin(), u->neighbors.end(), s);
-    if (!g->contains(s,t)) {
-        make_and_add_edge(g, s, t, true, *(uit-1) != nullptr);
-    }
-    if (!g->contains(t,u)) {
-        make_and_add_edge(g, t, u, *(uit-1) == nullptr, *(uit-1) != nullptr);
-    }
-}
-
-void
-make_and_add_nonlocal_edges(uptr<TilingGraph>& g, sptr<shape_t> s, sptr<shape_t> t, sptr<shape_t> u) {
-    auto uit = std::find(u->neighbors.begin(), u->neighbors.end(), s);
-
-    s->set_neighbor(s->fptr++, t);
-    if (*(uit-1) == nullptr) {
-        t->fptr++;
-        t->set_neighbor(t->fptr++, u);
-        t->set_neighbor(t->fptr++, s);
-        u->set_neighbor(u->bptr--, t);
-    } else {
-        t->bptr--;
-        t->set_neighbor(t->bptr--, u);
-        t->set_neighbor(t->bptr--, s);
-        u->set_neighbor(u->fptr++, t);
-    }
-}
-
-inline face_t
-make_face(sptr<shape_t> x, sptr<shape_t> y, sptr<shape_t> z) {
-    if (x < y && y < z)         return std::make_tuple(x,y,z);
-    else if (x < z && z < y)    return std::make_tuple(x,z,y);
-    else if (y < x && x < z)    return std::make_tuple(y,x,z);
-    else if (y < z && z < x)    return std::make_tuple(y,z,x);
-    else if (z < x && x < y)    return std::make_tuple(z,x,y);
-    else                        return std::make_tuple(z,y,x);
-}
-
-sptr<shape_t>
-select_random_plaquette(
-        uptr<TilingGraph>& g, sptr<shape_t> s, int color,
-        std::mt19937_64& rng, const tiling_config_t& conf)
+check_t::check_t(int color)
+    :color(color),
+    sides()
 {
-    std::vector<sptr<shape_t>> candidates;
-    sptr<shape_t> t = s->get_neighbor(s->fptr-1);
-
-    if (s->cnt > s->sides - 3) return nullptr;
-    if (t->cnt > t->sides - 2) return nullptr;
-
-    for (sptr<shape_t> x : g->get_vertices()) {
-        // TODO: test locality.
-        if (x->color != color
-            || x->cnt > x->sides-3
-            || (g->contains(x,s) && g->contains(x,t)))
-        {
-            continue;
-        }
-        sptr<shape_t> y = s->get_neighbor(x->bptr+1);
-
-        candidates.push_back(x);
-    }
-    if (candidates.empty()) return nullptr;
-    return candidates[rng() % candidates.size()];
+    sides.fill(nullptr);
 }
 
 void
-assign_qubits(uptr<TilingGraph>& g) {
-    std::map<face_t, uint64_t> face_qubit_map;
-    uint64_t qctr = 0;
-    auto vertices = g->get_vertices();
-    for (sptr<shape_t> s : vertices) {
-        for (size_t i = 0; i < s->sides; i++) {
-            sptr<shape_t> t = s->get_neighbor(i);
-            sptr<shape_t> u = s->get_neighbor(i+1);
-            face_t f = make_face(s,t,u);
-            if (t == nullptr || u == nullptr) {
-                std::cerr << "found null element in face" << std::endl;
-                exit(1);
-            }
+link(sptr<check_t> c1, int c1s, sptr<check_t> c2, int c2s) {
+    c1->sides[c1s] = c2;
+    c2->sides[c2s] = c1;
+}
 
-            if (!face_qubit_map.count(f)) {
-                std::cout << "face " << print_v(std::get<0>(f)) << "|" 
-                    << print_v(std::get<1>(f)) << "|" 
-                    << print_v(std::get<2>(f)) << " --> " << qctr << std::endl;
-                face_qubit_map[f] = qctr++;
+Tiling::Tiling(int r, int c)
+    :r(r),
+    c(c),
+    in_plane( r, std::vector<sptr<check_t>>(c, nullptr) ),
+    out_of_plane(),
+    all()
+{
+    for (int j = 0; j < c; j++) {
+        for (int i = 0; i < r; i++) {
+            sptr<check_t> c1 = add_check_at((i+j)%2, i, j)
+            if (i > 0) {
+                // Create link to previous check.
+                sptr<check_t> c2 = at(i-1, j);
+                link(c1, 0, c2, 4);
             }
-            s->qubits[i] = face_qubit_map[f];
+        }
+        if (j == 0) continue;
+        for (int i : {0,r-1}) {
+            // Create link to check in previous column across row i.
+            sptr<check_t> c1 = at(0,j),
+                          c2 = at(0,j-1);
+            link(c1, 6, c2, 2);
+            // Create a blue check that is connected to both of these.
+            sptr<check_t> c3 = add_check_at(2);
+            int s1 = (i==0) : 7 : 5,
+                s2 = (i==0) : 1 : 3;
+                // Then s1 is green. Link it to an odd side.
+            link(c1, s1, c3, (j&1));
+            link(c2, s2, c3, (j&1)^1);
         }
     }
 }
 
-uptr<TilingGraph>
-make_random_tiling(uint64_t max_qubits, tiling_config_t conf, int seed) {
-    // Initialize RNG:
+std::vector<Tiling>
+Tiling::generate_sample_tilings(uint64_t samples, const Tiling& base, int seed) const {
     std::mt19937_64 rng(seed);
-    std::uniform_real_distribution<> fpdist(0.0, 1.0);
 
-    uptr<TilingGraph> gr = std::make_unique<TilingGraph>();
-
-    uint64_t sctr = 0;
-    // Make initial polygon.
-    sptr<shape_t> s0 = make_and_add_shape(gr, sctr, next_polygon(rng, conf), 0);
-
-    std::deque<sptr<shape_t>> fifo{ s0 };
-    std::set<sptr<shape_t>> visited;
-    while (fifo.size()) {
-        sptr<shape_t> s = fifo.front();
-        fifo.pop_front();
-        if (visited.count(s)) continue;
-
-        std::vector<int> color_array(s->sides);
-        if (s->cnt == 0) {
-            std::vector<int> cc = get_complementary_colors_to({s->color}, 3);
-            for (size_t i = 0; i < s->sides; i++) {
-                color_array[i] = cc.at(i&1);
-            }
-            // Also make an initial neighboring plaquette.
-            sptr<shape_t> t0 = 
-                make_and_add_shape(gr, sctr, next_polygon(rng,conf), color_array[0]);
-            make_and_add_edge(gr, s, t0, true, true);
-        } else {
-            int c = s->get_neighbor(s->fptr-1)->color;
-            color_array[s->fptr-1] = c;
-            for (size_t i = 1; i < s->sides; i++) {
-                int x = i&1 ? get_complementary_colors_to({s->color,c},3)[0] : c;
-                color_array[(s->fptr+i-1) % s->sides] = x;
-            } 
+    // Track remaining checks that can be connected to. We keep a base vector for
+    // copying to each sample.
+    std::vector<std::pair<int,int>> base_remaining_in_plane;
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < c; j++) {
+            base_remaining_in_plane.emplace_back(i,j);
         }
-
-        // Now that we know the colors in the plaquettes, it's time to make the
-        // neighboring plaquettes.
-        bool last_was_nonlocal = false;
-        size_t init_fptr = s->fptr;
-
-        std::cout << print_v(s) << ":" << std::endl;
-        std::cout << "\tPREV:";
-        for (size_t i = init_fptr; i < init_fptr+s->sides; i++) {
-            std::cout << " " << print_v(s->get_neighbor(i));
-        }
-        std::cout << std::endl;
-
-        std::cout << "\tNEW:";
-
-        for (size_t i = init_fptr; i < init_fptr+s->sides; i++) {
-            int c = color_array.at(i % s->sides);
-            sptr<shape_t> t = s->get_neighbor(i);
-            sptr<shape_t> u = s->get_neighbor(i-1);
-
-            if (t == nullptr) {
-                // Select whether or not we want to use an existing plaquette or
-                // make a new one.
-                fp_t pth = conf.base_oop_prob 
-                            + (1.0-conf.base_oop_prob)
-                                *get_qcnt_ratio(max_qubits, gr->m()/2);
-                if (fpdist(rng) < pth
-                        && (t=select_random_plaquette(gr,s,c,rng,conf)) != nullptr) 
-                {
-                    std::cout << " " << print_v(t) << "(r)";
-                    make_and_add_nonlocal_edges(gr, s, t, u);
-                    last_was_nonlocal = true;
-                } else {
-                    t = make_and_add_shape(gr, sctr, next_polygon(rng,conf), c);
-                    std::cout << " " << print_v(t) << "(n)";
-                    make_and_add_edges(gr, s, t, u);
-                    last_was_nonlocal = false;
-                }
-            } else if (!gr->contains(t,u)) {
-                std::cout << " " << print_v(t) << "(o)";
-                make_and_add_edges(gr, s, t, u);
-                last_was_nonlocal = false;
-            } else {
-                std::cout << " " << print_v(t) << "(x)";
-            }
-            fifo.push_back(t);
-        }
-        std::cout << std::endl;
-        visited.insert(s);
     }
-    // Assign qubits to each plaquette.
-    assign_qubits(gr);
-    return gr;
+
+    std::vector<Tiling> out(samples, *this);
+    for (Tiling& til : out) {
+        std::vector<std::pair<int,int>> remaining_in_plane(base_remaining_in_plane);
+        std::vector<sptr<check_t>> remaining_out_of_plane(til.out_of_plane);
+        while (remaining_in_plane.size()) {
+            // Randomly get one of the remaining_in_plane checks.
+            auto a_it = get_rand_it(remaining_in_plane, rng);
+            sptr<check_t>& ca = til(a_it->first, a_it->second);
+            // Get first incomplete side.
+            int sa;
+            if ( (sa=get_next_side(c)) < 0
+                || (remaining_in_plane.size()==1 && !(s&1)) ) 
+                // The second part is to check that we are not rolling even edges
+                // with a single entry (this results in an infinite loop as we
+                // cannot connect something to itself).
+            {
+                // If we have not found a side, then this check is complete.
+                remaining_in_plane.erase(a_it);
+                continue;
+            }
+            if (sa & 1) {
+                // Then connect to a blue check.
+                if (remaining_out_of_plane.empty()) {
+                    remaining_out_of_plane.push_back( add_check_at(2) );
+                }
+                auto b_it = get_rand_it(remaining_out_of_plane, rng);
+                sptr<check_t>& cb = *b_it;
+                int sb;
+                if ((sb=get_next_side(cb, ca->color)) < 0) {
+                    remaining_out_of_plane.erase(b_it);
+                    continue;
+                }
+                link(ca, sa, cb, sb);
+            } else {
+                // Then connect to a red/green check.
+                auto b_it = get_rand_it(remaining_in_plane, rng);
+                sptr<check_t>& cb = til(b_it->first, b_it->second);
+                if (ca->color == cb->color) continue;
+                if ((sb=get_next_side(cb, 0)) < 0) {
+                    remaining_in_plane.erase(b_it);
+                    continue;
+                }
+                link(ca, sa, cb, sb);
+            }
+        }
+    }
+    return out;
 }
 
-}   // ct
+
+sptr<check_t>&
+Tiling::operator()(int i, int j) {
+    return in_plane[i][j];
+}
+
+sptr<check_t>
+Tiling::at(int i, int j) const {
+    return in_plane.at(i).at(j);
+}
+
+sptr<check_t>
+Tiling::add_check_at(int color, int i, int j) {
+    sptr<check_t> c = std::make_shared<check_t>(color);
+    if (i < 0 || j < 0) {
+        out_of_plane.push_back(c);
+    } else {
+        in_plane[i][j] = c;
+    }
+    all.push_back(c);
+    return c;
+}
+
+std::vector<check_t>
+Tiling::get_all_checks() const {
+    return all;
+}
+
+}   // cgen
