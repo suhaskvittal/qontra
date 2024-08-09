@@ -10,9 +10,9 @@ target_link_libraries(c2db PRIVATE qontra)
 target_link_libraries(mat2 PRIVATE qontra)
 
 add_executable(c2make main/color_codes/make_code.cpp
-                        src/codegen/conv.cpp
-                        src/codegen/driver.cpp
-                        src/codegen/tiling.cpp)
+                        src/codegen/tiling.cpp
+                        src/codegen/convert.cpp
+                        src/codegen/monte_carlo.cpp)
 target_link_libraries(c2make PRIVATE qontra)
 target_include_directories(c2make PRIVATE "include")
 
