@@ -13,7 +13,7 @@
 
 namespace cgen {
 
-#define GET_RAND_IT(arr, rng) arr.begin() + rng()
+#define GET_RAND_IT(arr, rng) arr.begin() + (rng()%arr.size())
 
 typedef std::vector<sptr<check_t>> cycle_t;
 
@@ -21,11 +21,16 @@ class MonteCarloManager {
 public:
     MonteCarloManager(int seed);
 
+    Tiling make_rand_init_tiling(void);
     std::vector<Tiling> run(uint64_t samples);
 
     struct {
         int r = 4;
         int c = 4;
+
+        int link_radius = 2;
+
+        fp_t planar_link_rate = 0.7;
     } config;
 private:
     bool is_sample_good(Tiling&);
@@ -38,6 +43,7 @@ private:
         get_candidates_where(Tiling&, sptr<check_t> root, int side, int color);
     
     std::mt19937_64 rng;
+    std::uniform_real_distribution<> fp_distr;
 };
 
 }   // cgen

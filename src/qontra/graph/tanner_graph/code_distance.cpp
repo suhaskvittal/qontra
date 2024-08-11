@@ -35,20 +35,31 @@ void measure_stabilizers(stim::Circuit& circuit, const TannerGraph* gr) {
     }
 }
 
-void measure_logical_qubits(stim::Circuit& circuit, const TannerGraph* gr, bool is_x) {
+void measure_logical_qubits(
+        stim::Circuit& circuit, const TannerGraph* gr, bool is_x, int for_obs) 
+{
     size_t obsno = 0;
     auto obs_list = gr->get_obs(is_x);
-    for (auto& obs : obs_list) {
+    if (for_obs < 0) {
+        for (auto& obs : obs_list) {
+            push_back_operator(circuit, obs, is_x);
+            std::vector<uint32_t> obs_targets{ 1 | stim::TARGET_RECORD_BIT };
+            circuit.safe_append_ua("OBSERVABLE_INCLUDE", obs_targets,
+                    static_cast<double>(obsno));
+            obsno++;
+        }
+    } else {
+        auto& obs = obs_list[for_obs];
         push_back_operator(circuit, obs, is_x);
         std::vector<uint32_t> obs_targets{ 1 | stim::TARGET_RECORD_BIT };
-        circuit.safe_append_ua("OBSERVABLE_INCLUDE", obs_targets, static_cast<double>(obsno));
-        obsno++;
+        circuit.safe_append_ua("OBSERVABLE_INCLUDE", obs_targets,
+                static_cast<double>(0));
     }
 }
 int
-TannerGraph::compute_code_distance(bool is_x) const {
+TannerGraph::compute_code_distance(bool is_x, int for_obs) const {
     stim::Circuit mem;
-    measure_logical_qubits(mem, this, is_x);
+    measure_logical_qubits(mem, this, is_x, for_obs);
     measure_stabilizers(mem, this);
     // Inject errors.
     std::vector<uint32_t> targets;
@@ -66,7 +77,7 @@ TannerGraph::compute_code_distance(bool is_x) const {
                     };
         mem.safe_append_ua("DETECTOR", targets, static_cast<double>(i));
     }
-    measure_logical_qubits(mem, this, is_x);
+    measure_logical_qubits(mem, this, is_x, for_obs);
     // Analyze errors and get distance.
     auto dem =
         stim::ErrorAnalyzer::circuit_to_detector_error_model(
@@ -78,7 +89,7 @@ TannerGraph::compute_code_distance(bool is_x) const {
                 false,  // ignore decomposition failures
                 false
             );
-    auto errors = stim::find_undetectable_logical_error(dem, 100, 10, false);
+    auto errors = stim::find_undetectable_logical_error(dem, 3, 3, false);
     return errors.count_errors();
 }
 

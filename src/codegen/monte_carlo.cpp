@@ -23,14 +23,43 @@ inline bool has_free_odd_side(sptr<check_t> c) {
 }
 
 MonteCarloManager::MonteCarloManager(int seed)
-    :rng(seed)
+    :rng(seed),
+    fp_distr(0.0, 1.0)
 {}
+
+Tiling
+MonteCarloManager::make_rand_init_tiling() {
+    const int& r = config.r;
+    const int& c = config.c;
+    Tiling t(r, c);
+
+    for (int j = 0; j < c; j++) {
+        for (int i = 0; i < r; i++) {
+            sptr<check_t> c1 = t.add_check_at((i+j)%2, 8, i, j);
+            if (i > 0 && fp_distr(rng) <= config.planar_link_rate) {
+                // Create link to previous check.
+                sptr<check_t> c2 = t.at(i-1, j);
+                link(c1, 0, c2, 4);
+            }
+        }
+        if (j == 0) continue;
+        for (int i = 0; i < r; i++) {
+            if (fp_distr(rng) <= config.planar_link_rate) {
+                // Create link to check in previous column across row i.
+                sptr<check_t> c1 = t.at(i,j),
+                              c2 = t.at(i,j-1);
+                link(c1, 6, c2, 2);
+            }
+        }
+    }
+    return t;
+}
 
 std::vector<Tiling>
 MonteCarloManager::run(uint64_t n) {
     std::vector<Tiling> samples;
     for (uint64_t i = 0; i < n; i++) {
-        Tiling t(config.r, config.c);
+        Tiling t = make_rand_init_tiling();
 
         bool found_empty = false;
         for (sptr<check_t> c_main : t.get_all_checks_ref()) {
@@ -45,6 +74,8 @@ MonteCarloManager::run(uint64_t n) {
             auto arr = get_cycles_on_check(t,c);
             vtils::push_back_range(cycles, arr.begin(), arr.end());
         }
+        std::sort(cycles.begin(), cycles.end(),
+                [] (auto a, auto b) { return a.size() < b.size(); });
         // Now make the blue checks.
         int k = -1;
         int cycles_applied = 0;
@@ -54,7 +85,6 @@ MonteCarloManager::run(uint64_t n) {
             // Make sure the cycle is free.
             bool is_free = true;
             std::vector<int> sides;
-            int subcyccnt = 0; // Count how much we can complete.
             for (int s = 0; s < cyc.size(); s++) {
                 sptr<check_t> c_curr = cyc.at(s),
                               c_prev = (s==0) ? cyc.back() : cyc.at(s-1),
@@ -74,7 +104,6 @@ MonteCarloManager::run(uint64_t n) {
                     break;
                 }
                 sides.push_back(_s);
-                if (s % 2 == 1) subcyccnt = s+1;
             }
             if (!is_free) {
                 continue;
@@ -119,6 +148,7 @@ MonteCarloManager::handle_even_sides(Tiling& t, sptr<check_t>& c_main) {
     for (int side = 0; side < 8; side += 2) {
         if (c_main->get(side) != nullptr) continue;
         // Find candidate with free side.
+//      int _side = (side + 2*(rng()%3)+2) % 8;
         int _side = (side+4) % 8;
         auto arr = get_candidates_where(t, c_main, _side, 1-c_main->color);
         if (arr.empty()) return false;  // Bad sample.
@@ -174,9 +204,24 @@ std::vector<sptr<check_t>>
 MonteCarloManager::get_candidates_where(
         Tiling& t, sptr<check_t> root, int side, int color) 
 {
+    const int LR2 = config.link_radius*config.link_radius;
+
+    const bool root_is_row_edge = (root->i == 0) || (root->i == config.r-1);
+    const bool root_is_col_edge = (root->j == 0) || (root->j == config.c-1);
+
     std::vector<sptr<check_t>> arr( t.get_checks_ref(color) );
     for (auto it = arr.begin(); it != arr.end(); ) {
-        if ((*it)->get(side) != nullptr
+        const bool is_row_edge = ((*it)->i == 0) || ((*it)->i == config.r-1);
+        const bool is_col_edge = ((*it)->j == 0) || ((*it)->j == config.c-1);
+        // Check distance from root.
+        int di = root->i - (*it)->i,
+            dj = root->j - (*it)->j;
+        if (root_is_row_edge && is_row_edge) di = 0;
+        if (root_is_col_edge && is_col_edge) dj = 0;
+        const int r2 = di*di + dj*dj;
+        if (r2 > LR2 
+//              || (r2 == 1 && (!root_is_row_edge || !root_is_col_edge))
+                || (*it)->get(side) != nullptr
                 || *it == root
                 || (*it)->get(side-2) == root
                 || (*it)->get(side+2) == root) 

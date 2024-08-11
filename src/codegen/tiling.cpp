@@ -37,25 +37,7 @@ Tiling::Tiling(int r, int c)
     in_plane( r, std::vector<sptr<check_t>>(c, nullptr) ),
     checks_by_color(),
     all()
-{
-    for (int j = 0; j < c; j++) {
-        for (int i = 0; i < r; i++) {
-            sptr<check_t> c1 = add_check_at((i+j)%2, 8, i, j);
-            if (i > 0) {
-                // Create link to previous check.
-                sptr<check_t> c2 = at(i-1, j);
-                link(c1, 0, c2, 4);
-            }
-        }
-        if (j == 0) continue;
-        for (int i : {0,r-1}) {
-            // Create link to check in previous column across row i.
-            sptr<check_t> c1 = at(i,j),
-                          c2 = at(i,j-1);
-            link(c1, 6, c2, 2);
-        }
-    }
-}
+{}
 
 sptr<check_t>
 Tiling::add_check_at(int color, int sides, int i, int j) {
