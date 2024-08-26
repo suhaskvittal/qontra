@@ -188,7 +188,15 @@ MatchingBase::identify_flag_edges_in_path(assign_t& m) {
 
 sptr<hyperedge_t>
 MatchingBase::get_flag_edge_for(std::vector<sptr<vertex_t>> vlist) {
-    for (sptr<hyperedge_t> e : flag_edges) {
+    return get_flag_edge_for(vlist, flag_edges);
+}
+
+sptr<hyperedge_t>
+MatchingBase::get_flag_edge_for(
+        std::vector<sptr<vertex_t>> vlist,
+        const std::vector<sptr<hyperedge_t>>& from_flag_edges) 
+{
+    for (sptr<hyperedge_t> e : from_flag_edges) {
         if (e->get_order() != vlist.size()) continue;
 
         bool all_match = true;

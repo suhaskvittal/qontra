@@ -7,6 +7,7 @@
 #include "qontra/decoder/mwpm.h"
 #include "qontra/decoder/restriction.h"
 #include "qontra/decoder/mobius.h"
+#include "qontra/decoder/concat_mwpm.h"
 #include "qontra/graph/decoding_graph.h"
 
 #include "qontra/experiments/memory.h"
@@ -78,7 +79,7 @@ int main(int argc, char* argv[]) {
     int error_weight = atoi(argv[3]);
     uint64_t shots = atoll(argv[4]);
 
-    DetailedStimCircuit circuit = make_default_circuit(qes_file, 1e-3, true, "cap");
+    DetailedStimCircuit circuit = make_default_circuit(qes_file, 1e-3, true, "circuit");
     uptr<Decoder> dec = nullptr;
     if (decoder_name == "mwpm") {
         dec = std::make_unique<MWPMDecoder>(circuit);
@@ -86,6 +87,8 @@ int main(int argc, char* argv[]) {
         dec = std::make_unique<RestrictionDecoder>(circuit);
     } else if (decoder_name == "mobius") {
         dec = std::make_unique<MobiusDecoder>(circuit);
+    } else if (decoder_name == "cmwpm") {
+        dec = std::make_unique<ConcatMWPMDecoder>(circuit);
     }
     // The number of errors does not matter as we don't care about boundaries.
     DecodingGraph gr(circuit, 1000);

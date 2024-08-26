@@ -8,6 +8,7 @@
 #include <qontra/decoder/pymatching.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/decoder/mobius.h>
+#include <qontra/decoder/concat_mwpm.h>
 #include <qontra/experiments.h>
 #include <qontra/experiments/memory.h>
 #include <qontra/ext/stim.h>
@@ -55,7 +56,8 @@ int main(int argc, char* argv[]) {
     qes::Program<> program = qes::from_file(qes_file);
 
     DetailedStimCircuit _circuit = make_default_circuit(qes_file, pmax, true, "circuit");
-    PyMatching dec(_circuit);
+//  PyMatching dec(_circuit);
+    ConcatMWPMDecoder dec(_circuit);
 
     memory_config_t config;
     config.errors_until_stop = errors_until_stop;

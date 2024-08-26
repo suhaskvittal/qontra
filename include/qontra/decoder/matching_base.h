@@ -58,7 +58,8 @@ public:
     virtual std::vector<assign_t> compute_matching(int=graph::COLOR_ANY, int=graph::COLOR_ANY);
 
     Decoder::result_t ret_no_detectors(void);
-    sptr<graph::decoding::hyperedge_t> get_flag_edge_for(std::vector<sptr<gd::vertex_t>>);
+    sptr<gd::hyperedge_t> get_flag_edge_for(std::vector<sptr<gd::vertex_t>>);
+    sptr<gd::hyperedge_t> get_flag_edge_for(std::vector<sptr<gd::vertex_t>>, const std::vector<sptr<gd::hyperedge_t>>&);
 protected:
     void identify_flag_edges_in_path(assign_t&);
 

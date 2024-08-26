@@ -123,11 +123,13 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     fp_t log_p1 = lifting(corr1, syndrome_delta, best_rep_map);
     // If there are no triggered flag edges. Return here.
     if (triggered_flag_edges.empty() || chamberland) {
+        /*
         syndrome_delta ^= syndrome;
         if (syndrome_delta.not_zero()) {
             auto res = decode_error(syndrome_delta);
             corr1 ^= res.corr;
         }
+        */
         return { 0.0, corr1 };
     }
     // Otherwise, perform the lifting procedure again, this time removing all edges corresponding
