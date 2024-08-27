@@ -38,6 +38,10 @@ if (COMPILE_COLOR_CODES)
     include(${CMAKE_SOURCE_DIR}/cmake/executables/ColorCodes.cmake)
 endif()
 
+if (COMPILE_CODEGEN)
+    include(${CMAKE_SOURCE_DIR}/cmake/executables/Codegen.cmake)
+endif()
+
 if (COMPILE_TESTS)
     include(${CMAKE_SOURCE_DIR}/cmake/executables/Test.cmake)
 endif()
