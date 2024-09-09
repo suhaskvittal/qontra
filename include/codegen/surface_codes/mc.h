@@ -8,17 +8,21 @@
 
 #include "codegen/surface_codes/utils.h"
 #include "codegen/surface_codes/coord.h"
+#include "codegen/surface_codes/cycles.h"
 
 #include <vtils/timer.h>
 
 #include <array>
-#include <map>
+#include <unordered_map>
 #include <random>
 #include <tuple>
+#include <unordered_set>
 #include <vector>
-#include <utility>
+
+#include <cstdio>
 
 namespace cgen {
+
 
 template <int R, int S, size_t W, size_t H>
 struct StarClass {
@@ -43,11 +47,14 @@ struct StarClass {
         }
     }
 
-    void connect_with_delta(StarClass<R,S,W,H>*, const coord_t& delta, uint8_t qi, uint8_t qj);
+    void connect_with_delta(
+            StarClass<R,S,W,H>*,
+            const coord_t& delta,
+            cycle_table_t<R,S>&);
 
     Star<R,S>* repr;
     coord_t repr_loc;
-    std::map<Star<R,S>*, coord_t> coord_map;
+    std::unordered_map<Star<R,S>*, coord_t> coord_map;
     std::array<Star<R,S>*, TOTAL_COUNT> elements;
 };
 
@@ -67,25 +74,28 @@ public:
     {}
 
     typedef StarClass<R,S,CBW,CBH>  S_eqc_t;
-
+    
     struct sample_t {
+        sample_t()
+            :min_star_cycle(std::numeric_limits<size_t>::max())
+        {}
+
         ~sample_t() {
             for (S_eqc_t* x : star_classes) delete x;
             for (Star<R,S>* x : star_checks) delete x;
         }
 
-        coord_t get_loc(Star<R,S>* x) {
-            S_eqc_t* c_p = s_eqc_map.at(x);
-            return c_add(c_p->repr_loc, c_p->coord_map.at(x));
-        }
-
-        std::map< Star<R,S>*, S_eqc_t* > s_eqc_map;
+        std::unordered_map< Star<R,S>*, S_eqc_t* > s_eqc_map;
+        cycle_table_t<R,S> cycle_table;
+        size_t min_star_cycle;
+        std::unordered_map<Star<R,S>*, size_t> star_max_cycle_map;
         // Holding structures:
         std::vector< S_eqc_t* > star_classes;
         std::vector< Star<R,S>* > star_checks;
     };
 
     sample_t make_sample(void);
+    void dump_sample_to_file(FILE*, const sample_t&);
 
     struct {
         fp_t star_init_prob = 0.7;
@@ -94,14 +104,25 @@ public:
     } config;
 
     struct {
-        uint64_t total_time_in_init = 0.0;
-        uint64_t total_time_overall = 0.0;
+        uint32_t total_time_in_init = 0;
+        uint32_t total_time_overall = 0;
+        uint32_t total_time_in_cycle_comp = 0;
+
+        uint32_t empty_samples = 0;
+        uint32_t no_cycles_found = 0;
     } stats;
 private:
     sample_t init_sample(void);
+    void add_face_checks(sample_t&);
 
     std::vector< std::tuple<Star<R,S>*, S_eqc_t*, coord_t> >  // candidate, class, delta
-        get_candidates_for_star_check(Star<R,S>* rt, const coord_t& rt_loc, const sample_t&);
+        get_candidates_for_star_check(Star<R,S>* rt, const coord_t& rt_loc, sample_t&);
+
+    size_t speculate_star_tie_and_get_cycle_size(
+            Star<R,S>*, Star<R,S>*, Star<R,S>** star_with_cyc_p, const sample_t&);
+
+    CycleBuffer<R,S> search_for_simple_cycles_upto(
+            size_t max_cycle_len, Star<R,S>* from, const sample_t&);
 
     std::uniform_real_distribution<> fpdst;
     std::mt19937_64 rng;
@@ -113,5 +134,6 @@ private:
 }   // cgen
 
 #include "mc.inl"
+#include "mc/helpers.inl"
 
 #endif  // CGEN_SC_MC_h

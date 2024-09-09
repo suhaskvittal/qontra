@@ -16,7 +16,7 @@ inline coord_t make_coord(uint8_t x, uint8_t y) {
 }
 
 inline uint8_t gx16(const coord_t& p) { return p & 0x00ff; }
-inline uint8_t gy16(const coord_t& p) { return p & 0xff00; }
+inline uint8_t gy16(const coord_t& p) { return (p & 0xff00) >> 8; }
 inline uint8_t gx8(const coord_t& p) { return static_cast<uint8_t>( gx16(p) ); }
 inline uint8_t gy8(const coord_t& p) { return static_cast<uint8_t>( gy16(p) ); }
 
@@ -29,6 +29,10 @@ inline coord_t c_add(coord_t a, coord_t b) {
 
 inline coord_t c_sub(coord_t a, coord_t b) {
     return make_coord( gx8(a)-gx8(b), gy8(a)-gy8(b) );
+}
+
+inline std::string print_coord(coord_t a) {
+    return "(" + std::to_string(gx16(a)) + "," + std::to_string(gy16(a)) + ")";
 }
 
 }   // cgen

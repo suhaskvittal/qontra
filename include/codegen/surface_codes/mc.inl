@@ -3,6 +3,11 @@
  *  date:   26 August 2024
  * */
 
+#include <algorithm>
+#include <deque>
+#include <limits>
+#include <iostream>
+
 namespace cgen {
 
 #define MCM MonteCarloManager<R,S,GW,GH,CW,CH>
@@ -14,14 +19,29 @@ template <int R, int S, size_t W, size_t H> void
 StarClass<R,S,W,H>::connect_with_delta(
         StarClass<R,S,W,H>* other,
         const coord_t& delta,
-        uint8_t qi,
-        uint8_t qj) 
+        cycle_table_t<R,S>& cycle_table) 
 {
+#ifdef SC_DEBUG
+    std::cout << "Connecting C" << print_coord(repr_loc) << " to C" << print_coord(other->repr_loc)
+        << " with delta " << print_coord(delta) << "\n";
+#endif
     uint16_t off = dim<static_cast<uint16_t>(H)>(delta);
+    std::array<size_t, TOTAL_COUNT> visited;
+    visited.fill(std::numeric_limits<size_t>::max());
     for (size_t i = 0; i < TOTAL_COUNT; i++) {
+        size_t j = (i+off) % TOTAL_COUNT;
+        if (this == other && visited[j] == i) break;  // Do not double count.
         Star<R,S>* a = elements.at(i),
-                 * b = other->elements.at( (i+off)%TOTAL_COUNT );
-        a->tie(b, qi, qj);
+                 * b = other->elements.at(j);
+        a->tie(b);
+        visited[i] = j;
+        
+        const auto& cte_a = cycle_table.at(a);
+        for (const auto& [x, cnt] : cte_a) {
+            if (!cycle_table[b].count(x)) {
+                cycle_table[b][x] = cnt+1;
+            }
+        }
     }
 }
 
@@ -30,9 +50,50 @@ MCM::make_sample() {
     global_timer.clk_start();
 
     sample_t s = init_sample();
+    if (s.star_checks.empty()) {
+        stats.empty_samples++;
+        goto ms_end;
+    }
+    add_face_checks(s);
 
+ms_end:
     stats.total_time_overall += global_timer.clk_end();
     return s;
+}
+
+template <int R, int S, size_t GW, size_t GH, size_t CW, size_t CH> void
+MCM::dump_sample_to_file(FILE* fout, const sample_t& samp) {
+    std::unordered_map<sptr<Qubit<R,S>>, size_t> qubit_enum_map;
+    std::unordered_map<Star<R,S>*, size_t> star_enum_map;
+
+    size_t n = 0;
+    for (Star<R,S>* x : samp.star_checks) {
+        star_enum_map[x] = n++;
+        // Enumerate the qubits.
+        for (size_t i = 0; i < x->get_size(); i++) {
+            sptr<Qubit<R,S>> q = x->at(i);
+            if (!qubit_enum_map.count(q)) {
+                qubit_enum_map[q] = n++;
+            }
+        }
+    }
+    // First, write S_eqc_t data.
+    for (size_t i = 0; i < samp.star_classes.size(); i++) {
+        S_eqc_t* c_p = samp.star_classes[i];
+        fprintf(fout, "c%d,%d,%d", i, gx16(c_p->repr_loc), gy16(c_p->repr_loc));
+        for (Star<R,S>* x : c_p->elements) {
+            fprintf(fout, ",%d", star_enum_map[x]);
+        }
+        fprintf(fout, "\n");
+    }
+    // Add connections.
+    for (const auto& [q,qi] : qubit_enum_map) {
+        fprintf(fout, "d%d", qi);
+        for (size_t i = 0; i < q->x_ptr; i++) {
+            fprintf(fout, ",%d", star_enum_map[q->x_checks[i]]);
+        }
+        fprintf(fout, "\n");
+    }
 }
 
 template <int R, int S, size_t GW, size_t GH, size_t CW, size_t CH> MCM::sample_t
@@ -51,6 +112,8 @@ MCM::init_sample() {
             for (Star<R,S>* x : c_p->elements) {
                 samp.star_checks.push_back(x);
                 samp.s_eqc_map[x] = c_p;
+                // Initialize other structures.
+                samp.cycle_table[x][x] = 0;
             }
             samp.star_classes.push_back(std::move(c_p));
         }
@@ -65,7 +128,7 @@ MCM::init_sample() {
             // Connect the two checks.
             auto& [ch2, ch2_c_p, delta] = *r_it;
             // Compute delta between ch1 and ch2.
-            c_p->connect_with_delta(ch2_c_p, delta, j, ch2->get_size());
+            c_p->connect_with_delta(ch2_c_p, delta, samp.cycle_table);
             cand.erase(r_it);
         }
     }
@@ -74,41 +137,23 @@ MCM::init_sample() {
     return samp;
 }
 
-template <int R, int S, size_t GW, size_t GH, size_t CW, size_t CH>
-std::vector< std::tuple<Star<R,S>*, typename MCM::S_eqc_t*, coord_t> >
-MCM::get_candidates_for_star_check( Star<R,S>* rt, const coord_t& rt_loc, const sample_t& samp) {
-    std::vector< std::tuple<Star<R,S>*, S_eqc_t*, coord_t> > cand;
+template <int R, int S, size_t GW, size_t GH, size_t CW, size_t CH> void
+MCM::add_face_checks(sample_t& samp) {
+    local_timer.clk_start();
 
-    const uint16_t mllsq = static_cast<uint16_t>( SQR(config.max_link_len) );
-    constexpr uint16_t cwsq = SQR(CW), chsq = SQR(CH);
-    constexpr int CBWdiv2 = static_cast<int>(CBW) / 2;
-    constexpr int CBHdiv2 = static_cast<int>(CBH) / 2;
-    for (S_eqc_t* c_p : samp.star_classes) {
-        coord_t base_delta = c_sub(c_p->repr_loc, rt_loc);
-        uint16_t init_dsq = SQR(gx16(base_delta)) + SQR(gy16(base_delta));
-        if (init_dsq > mllsq) continue;  // No slack.
-        uint16_t remaining_slack = mllsq - init_dsq;
-        // Add the representative to the candidate list.
-        if (c_p->repr != rt) cand.emplace_back(c_p->repr, c_p, PZERO);
-        // Now try to move to other cells.
-        // Distance is toroidal (for now).
-        for (int i = -CBWdiv2; i < CBWdiv2; i++) {
-            uint8_t ui = static_cast<uint8_t>( i < 0 ? CBW+i : i );
-            if (SQR(i) > remaining_slack) continue;
-            for (int j = -CBHdiv2; j < CBHdiv2; j++) {
-                if (i == 0 && j == 0) continue;
-                uint8_t uj = static_cast<uint8_t>( j < 0 ? CBH+j : j );
-                size_t k = ui*CBH + uj;
-                if (SQR(i) + SQR(j) <= remaining_slack
-                    && k < c_p->elements.size())
-                {
-                    coord_t off = make_coord(ui, uj);
-                    cand.emplace_back(c_p->elements.at(k), c_p, off);
-                }
-            }
-        }
+    CycleBuffer<R,S> buf = search_for_simple_cycles_upto(8, samp.star_checks[0], samp);
+#ifdef SC_DEBUG
+    std::cout << "[ MCM::add_face_checks ] number of cycle buffer entries: " << buf.data.size() << std::endl;
+#endif
+    if (buf.data.empty()) {
+        stats.no_cycles_found++;
+        return;
     }
-    return cand;
+    // Peek the next cycle buffer entry.
+    std::cout << "Cycle size: " << buf.data.back().size+0 << "\n";
+    cycle_t<R,S> cyc = buf.pop_next_buf();
+
+    stats.total_time_in_cycle_comp += local_timer.clk_end();
 }
 
 }   // cgen

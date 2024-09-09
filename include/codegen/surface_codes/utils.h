@@ -42,6 +42,7 @@ public:
 
     inline sptr<Qubit<R,S>>& operator[](size_t i) { return qubits[ isan(i) ]; }
     inline const sptr<Qubit<R,S>>& at(size_t i) const { return qubits.at( isan(i) ); }
+    inline const std::array< sptr<Qubit<R,S>>, R >& get_qubits_ref() const { return qubits; }
 
     inline uint8_t get_size(void) { return size; }
     inline bool is_full(void) { return size == MAX_SIZE; }
@@ -63,14 +64,7 @@ private:
 template <int R, int S>
 class Star : public Check<R, S, Star<R,S>, R> {
 public:
-    Star()
-        :Check<R,S,Star<R,S>,R>()
-    {
-        for (uint8_t i = 0; i < R; i++) this->add_qubit( std::make_shared<Qubit<R,S>>() );
-    }
-
-    void tie(Star<R,S>* other, uint8_t i, uint8_t j);
-    
+    void tie(Star<R,S>* other);
     bool update_qubit(sptr<Qubit<R,S>>);
 private:
 };
