@@ -21,10 +21,3 @@ make_main(TARGET explain_degenerate_errors SOURCE_FILES main/explain_degenerate_
 make_main(TARGET compute_code_distance SOURCE_FILES main/compute_code_distance.cpp)
 make_main(TARGET compute_circuit_distance SOURCE_FILES main/compute_circuit_distance.cpp)
 make_main(TARGET decoder_debugger SOURCE_FILES main/decoder_debugger.cpp)
-
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/utils)
-set_target_properties(
-    converter generate_syndromes
-    print_error_stats explain_degenerate_errors compute_code_distance compute_circuit_distance decoder_debugger
-    PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/utils)
