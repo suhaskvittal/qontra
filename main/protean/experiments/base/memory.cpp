@@ -47,6 +47,10 @@ int main(int argc, char* argv[]) {
     std::string output_file = pp.option_set("mx") ?
                                 protean_folder + "/output/basic_memory_x.csv"
                                 : protean_folder + "/output/basic_memory_z.csv";
+    if (world_rank == 0) {
+        std::cout << "Running on: " << protean_folder << ", argc = " << argc << std::endl;
+        pp.print_all_set_options(std::cout);
+    }
 
     std::string decoder_name;
 
@@ -56,6 +60,10 @@ int main(int argc, char* argv[]) {
     uint64_t    step_size = 1;
 
     pp.get("decoder", decoder_name, true);
+
+    if (world_rank == 0) {
+        std::cout << "Got decoder " << decoder_name << "\n";
+    }
 
     pp.get("e", errors_until_stop);
     pp.get("pmin", pmin);
@@ -84,12 +92,12 @@ int main(int argc, char* argv[]) {
 
     ErrorTable errors;
     TimeTable timing;
-    make_error_and_timing_from_coupling_graph(coupling_file, errors, timing);
 
     DetailedStimCircuit base_circuit;
     if (pp.option_set("fix-error")) {
         base_circuit = make_default_circuit(program, pmax);
     } else {
+        make_error_and_timing_from_coupling_graph(coupling_file, errors, timing);
         ErrorTable errors_base = errors * 1e-3;
         TimeTable timing_base = timing * 1e-3;
         base_circuit = DetailedStimCircuit::from_qes(program, errors_base, timing_base);

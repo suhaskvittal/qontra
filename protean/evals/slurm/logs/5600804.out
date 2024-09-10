@@ -1,0 +1,209 @@
+---------------------------------------
+Begin Slurm Prolog: Apr-08-2024 23:41:04
+Job ID:    5600804
+User ID:   svittal8
+Account:   gts-mqureshi4-rg
+Job name:  96_20_6_6_MX_5e-4_1e-3
+Partition: cpu-small
+QOS:       inferno
+---------------------------------------
+-------------------------------------------------------------------------------
+The following dependent module(s) are not currently loaded: libxml2/2.9.13-pd4huc (required by: gettext/0.21-rhfhqk), xz/5.2.2-kbeci4 (required by: tar/1.34-ezhzda, gettext/0.21-rhfhqk), zlib/1.2.12-xrmq2i (required by: pigz/2.7-yva4ki, binutils/2.38-c7qji3, gcc/12.1.0-qgxpzk)
+-------------------------------------------------------------------------------
+
+The following have been reloaded with a version change:
+  1) gcc/10.3.0-o57x6h => gcc/12.1.0-qgxpzk
+  2) libpciaccess/0.16-wfowrn => libpciaccess/0.16-u7yjrc
+  3) libxml2/2.9.13-d4fgiv => libxml2/2.9.13-thqyhy
+  4) mvapich2/2.3.6-ouywal => mvapich2/2.3.7-733lcv
+  5) slurm/current-4bdz7m => slurm/current-ihvxtz
+  6) xz/5.2.2-kbeci4 => xz/5.2.5-thedrn
+  7) zlib/1.2.7-s3gked => zlib/1.2.12-2qae3b
+
+-------------------------------------------------------------------------------
+The following dependent module(s) are not currently loaded: libxml2/2.9.13-pd4huc (required by: gettext/0.21-rhfhqk), xz/5.2.2-kbeci4 (required by: tar/1.34-ezhzda, gettext/0.21-rhfhqk), zlib/1.2.12-xrmq2i (required by: pigz/2.7-yva4ki, binutils/2.38-c7qji3, gcc/12.1.0-qgxpzk)
+-------------------------------------------------------------------------------
+Running restriction for ../data/protean/hycc/4_6/96_20_6_6/v4.4
+mkdir ../data/protean/hycc/4_6/96_20_6_6/v4.4/output
+Running on: ../data/protean/hycc/4_6/96_20_6_6/v4.4, argc = 12
+[atl1-1-02-015-27-2.pace.gatech.edu:mpi_rank_428][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-15-1.pace.gatech.edu:mpi_rank_229][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-6-2.pace.gatech.edu:mpi_rank_91][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-16-2.pace.gatech.edu:mpi_rank_254][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-13-2.pace.gatech.edu:mpi_rank_203][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-8-2.pace.gatech.edu:mpi_rank_125][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-11-1.pace.gatech.edu:mpi_rank_162][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-25-2.pace.gatech.edu:mpi_rank_392][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-16-1.pace.gatech.edu:mpi_rank_247][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-23-1.pace.gatech.edu:mpi_rank_352][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-11-1.pace.gatech.edu:mpi_rank_160][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-12-1.pace.gatech.edu:mpi_rank_179][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-1-2.pace.gatech.edu:mpi_rank_8][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-12-2.pace.gatech.edu:mpi_rank_188][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-27-1.pace.gatech.edu:mpi_rank_418][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-27-2.pace.gatech.edu:mpi_rank_426][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-16-2.pace.gatech.edu:mpi_rank_248][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-14-1.pace.gatech.edu:mpi_rank_214][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-5-1.pace.gatech.edu:mpi_rank_64][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-1-1.pace.gatech.edu:mpi_rank_7][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-4-1.pace.gatech.edu:mpi_rank_55][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-27-2: task 428: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-15-1: task 229: Segmentation fault (core dumped)
+[atl1-1-02-015-5-2.pace.gatech.edu:mpi_rank_78][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-6-2: task 91: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-13-2: task 203: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-16-2: task 254: Segmentation fault (core dumped)
+[atl1-1-02-015-25-2.pace.gatech.edu:mpi_rank_396][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-24-2.pace.gatech.edu:mpi_rank_381][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-8-2: task 125: Segmentation fault (core dumped)
+[atl1-1-02-015-28-1.pace.gatech.edu:mpi_rank_438][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-17-1.pace.gatech.edu:mpi_rank_260][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-1-1.pace.gatech.edu:mpi_rank_1][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-18-2.pace.gatech.edu:mpi_rank_284][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-11-1: task 162: Segmentation fault (core dumped)
+[atl1-1-02-015-6-2.pace.gatech.edu:mpi_rank_88][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-25-2: task 392: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-16-1: task 247: Segmentation fault (core dumped)
+[atl1-1-02-015-21-2.pace.gatech.edu:mpi_rank_331][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-22-1.pace.gatech.edu:mpi_rank_343][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-11-1: task 160: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-1-2: task 8: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-23-1: task 352: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-12-1: task 179: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-27-1: task 418: Segmentation fault (core dumped)
+[atl1-1-02-015-9-1.pace.gatech.edu:mpi_rank_129][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-12-2: task 188: Segmentation fault (core dumped)
+[atl1-1-02-015-20-1.pace.gatech.edu:mpi_rank_310][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-12-2.pace.gatech.edu:mpi_rank_185][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-16-2: task 248: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-27-2: task 426: Segmentation fault (core dumped)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-15-1 [28]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:229]
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+slurmstepd: error: *** STEP 5600804.0 ON atl1-1-02-015-1-1 CANCELLED AT 2024-04-08T23:41:10 ***
+srun: error: atl1-1-02-015-14-1: task 214: Segmentation fault (core dumped)
+[atl1-1-02-015-21-2.pace.gatech.edu:mpi_rank_334][error_sighandler] Caught error: Segmentation fault (signal 11)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-6-2 [11]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:91]
+[atl1-1-02-015-6-2.pace.gatech.edu:mpi_rank_92][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-4-1: task 55: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-5-1: task 64: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-1-1: task 7: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-7-1: tasks 96-103: Killed
+srun: error: atl1-1-02-015-22-2: tasks 344-351: Killed
+srun: error: atl1-1-02-015-23-2: tasks 360-367: Killed
+srun: error: atl1-1-02-015-9-2: tasks 136-143: Killed
+srun: error: atl1-1-02-015-15-2: tasks 232-239: Killed
+srun: error: atl1-1-02-015-32-2: tasks 504-511: Killed
+srun: error: atl1-1-02-015-28-2: tasks 440-447: Killed
+srun: error: atl1-1-02-015-3-2: tasks 40-47: Killed
+[atl1-1-02-015-4-1.pace.gatech.edu:mpi_rank_52][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-19-2: tasks 296-303: Killed
+srun: error: atl1-1-02-015-31-1: tasks 480-487: Killed
+srun: error: atl1-1-02-015-30-1: tasks 464-471: Killed
+srun: error: atl1-1-02-015-26-2: tasks 408-415: Killed
+srun: error: atl1-1-02-015-8-1: tasks 112-119: Killed
+srun: error: atl1-1-02-015-14-2: tasks 216-223: Killed
+srun: error: atl1-1-02-015-19-1: tasks 288-295: Killed
+srun: error: atl1-1-02-015-7-2: tasks 104-111: Killed
+srun: error: atl1-1-02-015-32-1: tasks 496-503: Killed
+srun: error: atl1-1-02-015-10-2: tasks 152-159: Killed
+srun: error: atl1-1-02-015-21-1: tasks 320-327: Killed
+srun: error: atl1-1-02-015-29-1: tasks 448-455: Killed
+srun: error: atl1-1-02-015-11-2: tasks 168-175: Killed
+srun: error: atl1-1-02-015-6-1: tasks 80-87: Killed
+srun: error: atl1-1-02-015-31-2: tasks 488-495: Killed
+srun: error: atl1-1-02-015-3-1: tasks 32-39: Killed
+srun: error: atl1-1-02-015-20-2: tasks 312-319: Killed
+srun: error: atl1-1-02-015-10-1: tasks 144-151: Killed
+srun: error: atl1-1-02-015-2-2: tasks 24-31: Killed
+srun: error: atl1-1-02-015-24-1: tasks 368-375: Killed
+srun: error: atl1-1-02-015-29-2: tasks 456-463: Killed
+srun: error: atl1-1-02-015-2-1: tasks 16-23: Killed
+srun: error: atl1-1-02-015-4-2: tasks 56-63: Killed
+srun: error: atl1-1-02-015-13-1: tasks 192-199: Killed
+srun: error: atl1-1-02-015-30-2: tasks 472-479: Killed
+srun: error: atl1-1-02-015-18-1: tasks 272-279: Killed
+srun: error: atl1-1-02-015-5-2: task 78: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-17-2: tasks 264-271: Killed
+srun: error: atl1-1-02-015-25-1: tasks 384-391: Killed
+srun: error: atl1-1-02-015-26-1: tasks 400-407: Killed
+srun: error: atl1-1-02-015-27-1: tasks 416-417,419-423: Killed
+srun: error: atl1-1-02-015-12-1: tasks 176-178,180-183: Killed
+srun: error: atl1-1-02-015-23-1: tasks 353-359: Killed
+srun: error: atl1-1-02-015-13-2: tasks 200-202,204-207: Killed
+srun: error: atl1-1-02-015-16-1: tasks 240-246: Killed
+srun: error: atl1-1-02-015-1-2: tasks 9-15: Killed
+srun: error: atl1-1-02-015-15-1: tasks 224-228,230-231: Killed
+srun: error: atl1-1-02-015-8-2: tasks 120-124,126-127: Killed
+srun: error: atl1-1-02-015-14-1: tasks 208-213,215: Killed
+srun: error: atl1-1-02-015-16-2: tasks 249-253,255: Killed
+srun: error: atl1-1-02-015-27-2: tasks 424-425,427,429-431: Killed
+srun: error: atl1-1-02-015-11-1: tasks 161,163-167: Killed
+srun: error: atl1-1-02-015-25-2: task 396: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-24-2: task 381: Segmentation fault (core dumped)
+[atl1-1-02-015-22-1.pace.gatech.edu:mpi_rank_338][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-28-1: task 438: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-17-1: task 260: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-18-2: task 284: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-1-1: task 1: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-6-2: task 88: Segmentation fault (core dumped)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-12-2 [23]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:188]
+[atl1-1-02-015-6-2.pace.gatech.edu:mpi_rank_93][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-21-2: task 331: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-22-1: task 343: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-9-1: task 129: Segmentation fault (core dumped)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-4-1 [6]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:55]
+[atl1-1-02-015-22-1.pace.gatech.edu:mpi_rank_339][error_sighandler] Caught error: Segmentation fault (signal 11)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-5-1 [8]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:64]
+srun: error: atl1-1-02-015-20-1: task 310: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-12-2: task 185: Segmentation fault (core dumped)
+[atl1-1-02-015-21-2.pace.gatech.edu:mpi_rank_335][error_sighandler] Caught error: Segmentation fault (signal 11)
+[atl1-1-02-015-20-1.pace.gatech.edu:mpi_rank_307][error_sighandler] Caught error: Segmentation fault (signal 11)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-5-2 [9]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:78]
+[atl1-1-02-015-4-1.pace.gatech.edu:mpi_rank_54][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-21-2: task 334: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-6-2: task 92: Segmentation fault (core dumped)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-25-2 [49]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:392]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-24-2 [47]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:381]
+srun: error: atl1-1-02-015-4-1: task 52: Segmentation fault (core dumped)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-28-1 [54]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:438]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-17-1 [32]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:260]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-18-2 [35]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:284]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-1-1 [0]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:7]
+srun: error: atl1-1-02-015-22-1: task 338: Segmentation fault (core dumped)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-9-1 [16]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:129]
+srun: error: atl1-1-02-015-6-2: task 93: Segmentation fault (core dumped)
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-20-1 [38]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:310]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-015-12-2 [23]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600804.0:185]
+[atl1-1-02-015-18-2.pace.gatech.edu:mpi_rank_282][error_sighandler] Caught error: Segmentation fault (signal 11)
+srun: error: atl1-1-02-015-22-1: task 339: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-21-2: task 335: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-20-1: task 307: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-4-1: tasks 48-51,53: Killed
+srun: error: atl1-1-02-015-4-1: task 54: Segmentation fault (core dumped)
+srun: error: atl1-1-02-015-5-2: tasks 72-77,79: Killed
+srun: error: atl1-1-02-015-17-1: tasks 256-259,261-263: Killed
+srun: error: atl1-1-02-015-28-1: tasks 432-437,439: Killed
+srun: error: atl1-1-02-015-5-1: tasks 65-71: Killed
+srun: error: atl1-1-02-015-9-1: tasks 128,130-135: Killed
+srun: error: atl1-1-02-015-24-2: tasks 376-380,382-383: Killed
+srun: error: atl1-1-02-015-18-2: tasks 280-283,285-287: Killed
+srun: error: atl1-1-02-015-25-2: tasks 393-395,397-399: Killed
+srun: error: atl1-1-02-015-1-1: tasks 0,2-6: Killed
+srun: error: atl1-1-02-015-12-2: tasks 184,186-187,189-191: Killed
+srun: error: atl1-1-02-015-20-1: tasks 304-306,308-309,311: Killed
+srun: error: atl1-1-02-015-22-1: tasks 336-337,340-342: Killed
+srun: error: atl1-1-02-015-21-2: tasks 328-330,332-333: Killed
+srun: error: atl1-1-02-015-6-2: tasks 89-90,94-95: Killed
+---------------------------------------
+Begin Slurm Epilog: Apr-08-2024 23:41:15
+Job ID:        5600804
+Array Job ID:  _4294967294
+User ID:       svittal8
+Account:       gts-mqureshi4-rg
+Job name:      96_20_6_6_MX_5e-4_1e-3
+Resources:     cpu=512,mem=1T,node=64
+Rsrc Used:     cput=01:08:16,vmem=24K,walltime=00:00:08,mem=0,energy_used=0
+Partition:     cpu-small
+QOS:           inferno
+Nodes:         atl1-1-02-015-1-[1-2],atl1-1-02-015-2-[1-2],atl1-1-02-015-3-[1-2],atl1-1-02-015-4-[1-2],atl1-1-02-015-5-[1-2],atl1-1-02-015-6-[1-2],atl1-1-02-015-7-[1-2],atl1-1-02-015-8-[1-2],atl1-1-02-015-9-[1-2],atl1-1-02-015-10-[1-2],atl1-1-02-015-11-[1-2],atl1-1-02-015-12-[1-2],atl1-1-02-015-13-[1-2],atl1-1-02-015-14-[1-2],atl1-1-02-015-15-[1-2],atl1-1-02-015-16-[1-2],atl1-1-02-015-17-[1-2],atl1-1-02-015-18-[1-2],atl1-1-02-015-19-[1-2],atl1-1-02-015-20-[1-2],atl1-1-02-015-21-[1-2],atl1-1-02-015-22-[1-2],atl1-1-02-015-23-[1-2],atl1-1-02-015-24-[1-2],atl1-1-02-015-25-[1-2],atl1-1-02-015-26-[1-2],atl1-1-02-015-27-[1-2],atl1-1-02-015-28-[1-2],atl1-1-02-015-29-[1-2],atl1-1-02-015-30-[1-2],atl1-1-02-015-31-[1-2],atl1-1-02-015-32-[1-2]
+---------------------------------------

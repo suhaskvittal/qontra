@@ -1,0 +1,183 @@
+---------------------------------------
+Begin Slurm Prolog: Apr-09-2024 00:12:16
+Job ID:    5600896
+User ID:   svittal8
+Account:   gts-mqureshi4-rg
+Job name:  480_148_6_6_MX_5e-4_1e-3
+Partition: cpu-small
+QOS:       inferno
+---------------------------------------
+-------------------------------------------------------------------------------
+The following dependent module(s) are not currently loaded: libxml2/2.9.13-pd4huc (required by: gettext/0.21-rhfhqk), xz/5.2.2-kbeci4 (required by: tar/1.34-ezhzda, gettext/0.21-rhfhqk), zlib/1.2.12-xrmq2i (required by: pigz/2.7-yva4ki, binutils/2.38-c7qji3, gcc/12.1.0-qgxpzk)
+-------------------------------------------------------------------------------
+
+The following have been reloaded with a version change:
+  1) gcc/10.3.0-o57x6h => gcc/12.1.0-qgxpzk
+  2) libpciaccess/0.16-wfowrn => libpciaccess/0.16-u7yjrc
+  3) libxml2/2.9.13-d4fgiv => libxml2/2.9.13-thqyhy
+  4) mvapich2/2.3.6-ouywal => mvapich2/2.3.7-733lcv
+  5) slurm/current-4bdz7m => slurm/current-ihvxtz
+  6) xz/5.2.2-kbeci4 => xz/5.2.5-thedrn
+  7) zlib/1.2.7-s3gked => zlib/1.2.12-2qae3b
+
+-------------------------------------------------------------------------------
+The following dependent module(s) are not currently loaded: libxml2/2.9.13-pd4huc (required by: gettext/0.21-rhfhqk), xz/5.2.2-kbeci4 (required by: tar/1.34-ezhzda, gettext/0.21-rhfhqk), zlib/1.2.12-xrmq2i (required by: pigz/2.7-yva4ki, binutils/2.38-c7qji3, gcc/12.1.0-qgxpzk)
+-------------------------------------------------------------------------------
+Running restriction for ../data/protean/hycc/4_10/480_148_6_6/v4.4
+mkdir: cannot create directory ‘../data/protean/hycc/4_10/480_148_6_6/v4.4/output’: File exists
+mkdir ../data/protean/hycc/4_10/480_148_6_6/v4.4/output
+Running on: ../data/protean/hycc/4_10/480_148_6_6/v4.4, argc = 12
+decoder: restriction
+e: 50
+fix-error
+mx
+pmax: 1e-3
+pmin: 5e-4
+Got decoder restriction
+found 3963 errors within 262144 shots
+[ pr_base_memory ] Writing p = 0.0005
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 26 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 45 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 31 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 27 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+srun: error: atl1-1-02-017-28-1: task 435: Out Of Memory
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 29 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 30 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 26 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 29 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 2 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 28 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 31 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 15 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 20 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 29 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 31 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 25 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 14 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 33 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 28 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 22 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 30 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 19 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 26 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 24 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 23 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error: Detected 2 oom_kill events in StepId=5600896.0. Some of the step tasks have been OOM Killed.
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-28-1 [54]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:435]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-8-1 [14]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:117]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-30-1 [58]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:469]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-10-2 [19]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:156]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-29-2 [57]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:461]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-23-1 [44]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:359]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-12-2 [23]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:185]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-19-1 [36]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:293]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-7-1 [12]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:99]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-25-2 [49]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:395]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-20-2 [39]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:316]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-3-2 [5]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:41]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-15-2 [29]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:237]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-4-2 [7]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:63]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-11-2 [21]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:174]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-32-1 [62]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:502]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-7-2 [13]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:106]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-6-1 [10]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:81]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-24-2 [47]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:382]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-14-1 [26]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:213]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-18-1 [34]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:273]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-24-1 [46]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:375]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-14-2 [27]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:222]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-16-1 [30]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:241]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-10-1 [18]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:147]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-21-2 [41]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:332]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-22-2 [43]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:348]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-28-2 [55]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:447]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-9-2 [17]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:139]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-31-1 [60]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:481]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-19-2 [37]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:300]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-8-2 [15]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:122]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-25-1 [48]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:389]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-15-1 [28]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:227]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-1-1 [0]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:6]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-1-2 [1]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:9]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-17-1 [32]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:258]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-9-1 [16]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:130]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-23-2 [45]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:367]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-5-2 [9]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:75]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-17-2 [33]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:271]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-6-2 [11]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:94]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-2-1 [2]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:19]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-21-1 [40]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:325]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-18-2 [35]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:284]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-31-2 [61]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:493]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-5-1 [8]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:70]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-26-2 [51]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:414]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-30-2 [59]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:479]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-27-1 [52]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:418]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-22-1 [42]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:338]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-27-2 [53]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:427]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-12-1 [22]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:179]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-13-1 [24]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:199]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-3-1 [4]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:38]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-16-2 [31]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:253]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-4-1 [6]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:51]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-26-1 [50]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:406]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-13-2 [25]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:203]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-32-2 [63]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:510]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-2-2 [3]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:24]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-20-1 [38]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:307]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-11-1 [20]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:164]
+slurmstepd: error:  mpi/pmix_v3: _errhandler: atl1-1-02-017-29-1 [56]: pmixp_client_v2.c:212: Error handler invoked: status = -25, source = [slurm.pmix.5600896.0:449]
+slurmstepd: error: *** STEP 5600896.0 ON atl1-1-02-017-1-1 CANCELLED AT 2024-04-09T02:22:50 ***
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+slurmstepd: error: Detected 1 oom_kill event in StepId=5600896.batch. Some of the step tasks have been OOM Killed.
+---------------------------------------
+Begin Slurm Epilog: Apr-09-2024 02:22:51
+Job ID:        5600896
+Array Job ID:  _4294967294
+User ID:       svittal8
+Account:       gts-mqureshi4-rg
+Job name:      480_148_6_6_MX_5e-4_1e-3
+Resources:     cpu=512,mem=1T,node=64
+Rsrc Used:     cput=46-10:27:12,vmem=8280K,walltime=02:10:36,mem=8268K,energy_used=0
+Partition:     cpu-small
+QOS:           inferno
+Nodes:         atl1-1-02-017-1-[1-2],atl1-1-02-017-2-[1-2],atl1-1-02-017-3-[1-2],atl1-1-02-017-4-[1-2],atl1-1-02-017-5-[1-2],atl1-1-02-017-6-[1-2],atl1-1-02-017-7-[1-2],atl1-1-02-017-8-[1-2],atl1-1-02-017-9-[1-2],atl1-1-02-017-10-[1-2],atl1-1-02-017-11-[1-2],atl1-1-02-017-12-[1-2],atl1-1-02-017-13-[1-2],atl1-1-02-017-14-[1-2],atl1-1-02-017-15-[1-2],atl1-1-02-017-16-[1-2],atl1-1-02-017-17-[1-2],atl1-1-02-017-18-[1-2],atl1-1-02-017-19-[1-2],atl1-1-02-017-20-[1-2],atl1-1-02-017-21-[1-2],atl1-1-02-017-22-[1-2],atl1-1-02-017-23-[1-2],atl1-1-02-017-24-[1-2],atl1-1-02-017-25-[1-2],atl1-1-02-017-26-[1-2],atl1-1-02-017-27-[1-2],atl1-1-02-017-28-[1-2],atl1-1-02-017-29-[1-2],atl1-1-02-017-30-[1-2],atl1-1-02-017-31-[1-2],atl1-1-02-017-32-[1-2]
+---------------------------------------

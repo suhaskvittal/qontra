@@ -87,10 +87,6 @@ DecodingGraph::activate_detectors(const std::vector<uint64_t>& nonflags, const s
 
 inline void
 DecodingGraph::deactivate_detectors() {
-    if (reweigh_for_detectors) {
-        distance_matrix_map.clear();
-        dijkstra_graph_map.clear();
-    }
     flagged_distance_matrix_map.clear();
     flagged_dijkstra_graph_map.clear();
     active_flags.clear();
