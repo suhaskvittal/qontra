@@ -16,7 +16,8 @@ namespace qontra {
     
 typedef std::vector<uint64_t> histogram_key_t;
 
-template <class NUMBER> using histogram_t=std::map<histogram_key_t, NUMBER>;
+template <class NUMBER>
+using histogram_t=std::map<histogram_key_t, NUMBER>;
 
 std::string histogram_key_to_hex(histogram_key_t);
 

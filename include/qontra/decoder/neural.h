@@ -6,7 +6,7 @@
 #ifndef NEURAL_DECODER_h
 #define NEURAL_DECODER_h
 
-#define MLPACK_ENABLE_ANN_SERIALIZATION
+//#define MLPACK_ENABLE_ANN_SERIALIZATION
 
 #include "qontra/decoder.h"
 
@@ -32,7 +32,5 @@ public:
 };
 
 }   // qontra
-
-#include "neural.inl"
 
 #endif  // NEURAL_DECODER_h

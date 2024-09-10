@@ -8,7 +8,7 @@
 
 #include "qontra/graph.h"
 
-#include <map>
+#include <unordered_map>
 #include <vector>
 
 namespace qontra {
@@ -71,9 +71,9 @@ public:
     void    rule_2(sptr<m_vertex_t<V>>, sptr<m_vertex_t<V>>);
     void    rule_12(sptr<m_vertex_t<V>>, sptr<m_vertex_t<V>>);
 
-    std::map<sptr<m_vertex_t<V>>, sptr<m_vertex_t<V>>> matching;
+    std::unordered_map<sptr<m_vertex_t<V>>, sptr<m_vertex_t<V>>> matching;
 private:
-    std::map<sptr<V>, sptr<m_vertex_t>> v_orig_to_m;
+    std::unordered_map<sptr<V>, sptr<m_vertex_t>> v_orig_to_m;
 
     const uint64_t BLOSSOM_ID_FLAG = 1l << 48;
 };
@@ -92,7 +92,7 @@ private:
 };
 
 template <class V, class E>
-std::map<V, V> max_cardinality_matching(Graph<V, E>*);
+std::unordered_map<V, V> max_cardinality_matching(Graph<V, E>*);
 
 }   // graph
 }   // qontra

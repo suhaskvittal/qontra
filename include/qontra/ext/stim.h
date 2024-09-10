@@ -11,8 +11,8 @@
 #include <stim.h>
 #include <qes.h>
 
-#include <map>
-#include <set>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace qontra {
 
@@ -40,9 +40,9 @@ struct DetailedStimCircuit : public stim::Circuit {
     void    apply_errors(std::string, std::vector<uint64_t>, std::vector<fp_t>, bool is_2q);
 
     int                             number_of_colors_in_circuit;
-    std::map<uint64_t, uint64_t>    detector_base_map;
-    std::map<uint64_t, int>         detector_color_map;
-    std::set<uint64_t>              flag_detectors;
+    std::unordered_map<uint64_t, uint64_t>    detector_base_map;
+    std::unordered_map<uint64_t, int>         detector_color_map;
+    std::unordered_set<uint64_t>              flag_detectors;
 };
 
 // Extension of stim::simd_bits_range_ref for_each_word function.

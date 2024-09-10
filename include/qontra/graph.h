@@ -14,7 +14,7 @@
 
 #include <vtils/two_level_map.h>
 
-#include <map>
+#include <unordered_map>
 #include <vector>
 
 namespace qontra {
@@ -82,7 +82,7 @@ public:
     std::vector<sptr<V>>    get_vertices(void) const;
     std::vector<sptr<E>>    get_edges(void) const;
 
-    const std::map<sptr<V>, size_t>& get_enumeration_map(void) const;
+    const std::unordered_map<sptr<V>, size_t>& get_enumeration_map(void) const;
 
     size_t  n(void) const;
     size_t  m(void) const;
@@ -115,12 +115,12 @@ protected:
     std::vector<sptr<E>>   edges;
 
     vtils::TwoLevelMap<sptr<V>, sptr<V>, sptr<E>>   adjacency_matrix;
-    std::map<sptr<V>, std::vector<sptr<V>>>         adjacency_lists;
+    std::unordered_map<sptr<V>, std::vector<sptr<V>>>         adjacency_lists;
     // For directed graphs, maintain reverse adjacency lists as well.
-    std::map<sptr<V>, std::vector<sptr<V>>>         r_adjacency_lists;
+    std::unordered_map<sptr<V>, std::vector<sptr<V>>>         r_adjacency_lists;
 
-    std::map<uint64_t, sptr<V>> id_to_vertex;
-    std::map<sptr<V>, size_t> vertex_enum_map;
+    std::unordered_map<uint64_t, sptr<V>> id_to_vertex;
+    std::unordered_map<sptr<V>, size_t> vertex_enum_map;
 
     bool    graph_has_changed;  // Tracks if the graph has changed. May be useful
                                 // for subclasses that need to track state.
@@ -131,6 +131,6 @@ private:
 }   // graph
 }   // qontra
 
-#include "graph.inl"
+#include "inl/graph.inl"
 
 #endif  // QONTRA_GRAPH_h

@@ -17,8 +17,8 @@ template <class V, class E, class W_FUNC> void
 dijkstra(
     Graph<V, E>* graph, 
     sptr<V> src,
-    std::map<sptr<V>, fp_t>& distances,
-    std::map<sptr<V>, sptr<V>>& predecessors,
+    std::unordered_map<sptr<V>, fp_t>& distances,
+    std::unordered_map<sptr<V>, sptr<V>>& predecessors,
     W_FUNC edge_w_func,
     sptr<V> target)
 {
@@ -37,7 +37,7 @@ dijkstra(
 
 //  const auto& enum_map = graph->get_enumeration_map();
     auto vertices = graph->get_vertices();
-    std::map<sptr<V>, int> enum_map;
+    std::unordered_map<sptr<V>, int> enum_map;
     for (size_t i =0; i < vertices.size(); i++) enum_map[vertices[i]] = i;
 
     _dist[enum_map.at(src)] = 0;
@@ -147,8 +147,8 @@ create_distance_matrix(Graph<V, E>* graph, W_FUNC edge_w_func, DATA_FUNC cb) {
     std::vector<sptr<V>> vertices = graph->get_vertices();
     for (size_t i = 0; i < vertices.size(); i++) {
         sptr<V> src = vertices[i];
-        std::map<sptr<V>, sptr<V>> pred;
-        std::map<sptr<V>, fp_t> dist;
+        std::unordered_map<sptr<V>, sptr<V>> pred;
+        std::unordered_map<sptr<V>, fp_t> dist;
         dijkstra(graph, src, dist, pred, edge_w_func);
         for (size_t j = 0; j < vertices.size(); j++) {
             if (i == j) continue;

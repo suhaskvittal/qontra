@@ -7,11 +7,14 @@
 #define MEMORY_DEBUG
 #endif
 
+#include <protean/experiments.h>
+
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
+#include <qontra/decoder/chromobius.h>
+#include <qontra/decoder/pymatching.h>
 #include <qontra/ext/stim.h>
 
-#include <qontra/protean/experiments.h>
 #include <qontra/experiments.h>
 #include <qontra/experiments/memory.h>
 
@@ -106,8 +109,14 @@ int main(int argc, char* argv[]) {
     uptr<Decoder> dec = nullptr;
     if (decoder_name == "mwpm") {
         dec = std::make_unique<MWPMDecoder>(base_circuit);
+    } else if (decoder_name == "pym") {
+        dec = std::make_unique<PyMatching>(base_circuit);
     } else if (decoder_name == "restriction") {
         dec = std::make_unique<RestrictionDecoder>(base_circuit);
+    } else if (decoder_name == "chromobius") {
+        dec = std::make_unique<Chromobius>(base_circuit);
+    } else if (decoder_name == "chamberland") {
+        dec = std::make_unique<RestrictionDecoder>(base_circuit, true);
     } else {
         std::cerr << "Unsupported decoder type: " << decoder_name << std::endl;
     }

@@ -9,7 +9,7 @@
 #include "qontra/hypergraph.h"
 
 #include <limits>
-#include <set>
+#include <unordered_set>
 
 namespace qontra {
 namespace graph {
@@ -34,14 +34,14 @@ struct edge_t : base::edge_t {
 struct hyperedge_t : base::hyperedge_t {
     fp_t                probability;
     fp_t                power = 1.0;
-    std::set<uint64_t>  flags;
-    std::set<uint64_t>  frames;
+    std::unordered_set<uint64_t>  flags;
+    std::unordered_set<uint64_t>  frames;
 };
 
 }   // decoding
 }   // graph
 }   // qontra
 
-#include "structures.inl"
+#include "inl/structures.inl"
 
 #endif  // QONTRA_DECODING_GRAPH_STRUCTURES_h

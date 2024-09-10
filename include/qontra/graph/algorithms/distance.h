@@ -22,8 +22,8 @@ template <class V, class E, class W_FUNC>
 void dijkstra(
         Graph<V, E>*,
         sptr<V> src,
-        std::map<sptr<V>, fp_t>& dist,
-        std::map<sptr<V>, sptr<V>>& pred,
+        std::unordered_map<sptr<V>, fp_t>& dist,
+        std::unordered_map<sptr<V>, sptr<V>>& pred,
         W_FUNC,
         sptr<V> target=nullptr);
 

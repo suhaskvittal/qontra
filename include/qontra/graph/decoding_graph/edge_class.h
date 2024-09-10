@@ -34,6 +34,6 @@ bool are_in_same_class(sptr<decoding::hyperedge_t>, sptr<decoding::hyperedge_t>)
 }   // graph
 }   // qontra
 
-#include "edge_class.inl"
+#include "inl/edge_class.inl"
 
 #endif  // QONTRA_DECODING_GRAPH_EDGE_CLASS_h

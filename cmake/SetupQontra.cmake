@@ -10,15 +10,25 @@ set(QONTRA_FILES
     src/qontra/ext/qes.cpp
     src/qontra/ext/stim.cpp
     # Decoders
-    src/qontra/decoder/mwpm.cpp
+    src/qontra/decoder/concat_mwpm.cpp
     src/qontra/decoder/matching_base.cpp
-    src/qontra/decoder/restriction.cpp
     src/qontra/decoder/mobius.cpp
+    src/qontra/decoder/mwpm.cpp
+    src/qontra/decoder/restriction.cpp
+    src/qontra/decoder/restriction/helpers.cpp
+    src/qontra/decoder/restriction/incident_vertices.cpp
     # Graphs
     src/qontra/graph/decoding_graph.cpp 
+    src/qontra/graph/decoding_graph/detectors.cpp
+    src/qontra/graph/decoding_graph/distance.cpp
     src/qontra/graph/decoding_graph/edge_class.cpp
+    src/qontra/graph/decoding_graph/helpers.cpp
+    src/qontra/graph/decoding_graph/init.cpp
+    src/qontra/graph/decoding_graph/rgb_only_lattice.cpp
     src/qontra/graph/decoding_graph/unified_lattice.cpp
     src/qontra/graph/tanner_graph.cpp
+    src/qontra/graph/tanner_graph/code_distance.cpp
+    src/qontra/graph/tanner_graph/io.cpp
     # Simulators
     src/qontra/sim/base/frame_sim.cpp
     src/qontra/sim/base/state_sim.cpp
@@ -30,6 +40,13 @@ set(QONTRA_FILES
 
 # Each extension may have its own source files. So, we will need to update
 # the source files based on that.
+if (COMPILE_PYMATCHING)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/pymatching.cpp)
+endif()
+
+if (COMPILE_CHROMOBIUS)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/chromobius.cpp)
+endif()
 
 if (COMPILE_NEURAL_DECODER)
     message(STATUS "Will compile neural network decoder. "
@@ -38,8 +55,7 @@ if (COMPILE_NEURAL_DECODER)
     find_package(Armadillo REQUIRED)
     find_package(OpenMP REQUIRED)
     set(QONTRA_FILES ${QONTRA_FILES} 
-            src/qontra/decoder/neural.cpp
-            src/qontra/decoder/neural_assisted.cpp)
+            src/qontra/decoder/neural.cpp)
 endif()
 
 find_package(MPI REQUIRED)

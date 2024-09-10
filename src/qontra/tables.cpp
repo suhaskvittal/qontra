@@ -11,7 +11,7 @@
 namespace qontra {
 
 template <class K> inline void
-inplace_mul(std::map<K, fp_t>& m, fp_t x) {
+inplace_mul(std::unordered_map<K, fp_t>& m, fp_t x) {
     for (auto& [k, p] : m) {
         p *= x;
     }
@@ -58,14 +58,14 @@ ErrorAndTiming::operator*=(fp_t x) {
 }
 
 inline void
-set_all_1q(uint64_t n_qubits, fp_t value, std::map<uint64_t, fp_t>& row) {
+set_all_1q(uint64_t n_qubits, fp_t value, std::unordered_map<uint64_t, fp_t>& row) {
     for (uint64_t i = 0; i < n_qubits; i++) {
         row[i] = value;
     }
 }
 
 inline void
-set_all_2q(uint64_t n_qubits, fp_t value, std::map<std::pair<uint64_t, uint64_t>, fp_t>& row) {
+set_all_2q(uint64_t n_qubits, fp_t value, std::unordered_map<std::pair<uint64_t, uint64_t>, fp_t>& row) {
     for (uint64_t i = 0; i < n_qubits; i++) {
         for (uint64_t j = 0; j < n_qubits; j++) {
             if (i == j) continue;

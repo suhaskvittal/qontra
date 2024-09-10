@@ -11,9 +11,9 @@
 namespace qontra {
 
 static bool ISA_INITIALIZED = false;
-static std::map<std::string, isa_data_t> ISA;
+static std::unordered_map<std::string, isa_data_t> ISA;
 
-const std::map<std::string, isa_data_t>& isa() {
+const std::unordered_map<std::string, isa_data_t>& isa() {
     return ISA; 
 }
 

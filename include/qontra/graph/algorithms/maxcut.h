@@ -8,13 +8,13 @@
 #include "qontra/graph.h"
 
 #include <array>
-#include <set>
+#include <unordered_set>
 
 namespace qontra {
 namespace graph {
 
 template <class V, size_t K=2>
-using partition_t = std::array<std::set<V*>, K>;
+using partition_t = std::array<std::unordered_set<V*>, K>;
 
 // Algorithms for computing the max-cut of a graph:
 //
