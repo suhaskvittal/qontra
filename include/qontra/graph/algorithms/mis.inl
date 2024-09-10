@@ -8,10 +8,10 @@
 namespace qontra {
 namespace graph {
 
-template <class V, class E> std::set<sptr<V>>
+template <class V, class E> std::unordered_set<sptr<V>>
 mis_greedy(Graph<V, E>* graph) {
     std::vector<sptr<V>> vertices = graph->get_vertices();
-    std::set<sptr<V>> marked;
+    std::unordered_set<sptr<V>> marked;
 
     auto cmp = [&] (sptr<V> x, sptr<V> y) 
     {
@@ -19,7 +19,7 @@ mis_greedy(Graph<V, E>* graph) {
     };
     std::sort(vertices.begin(), vertices.end(), cmp);
 
-    std::set<sptr<V>> indep;
+    std::unordered_set<sptr<V>> indep;
     for (sptr<V> v : vertices) {
         if (marked.count(v))    continue;
         // Otherwise, add v to the IS and mark its neighbors.

@@ -98,7 +98,7 @@ MatchingGraph<V, E>::backtrack(sptr<m_vertex_t<V>> v, sptr<m_vertex_t<V>> w) {
     };
 
     // Compute everything via controlled backtracking.
-    std::set<sptr<m_vertex_t<V>>> visited;
+    std::unordered_set<sptr<m_vertex_t<V>>> visited;
     while (v_curr != nullptr || w_curr != nullptr) {
         v_curr = update(v_curr, res.augmenting_path_1, v_cycle);
         w_curr = update(w_curr, res.augmenting_path_2, r_w_cycle);

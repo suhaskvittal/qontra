@@ -10,7 +10,7 @@
 
 #include <limits>
 #include <tuple>
-#include <set>
+#include <unordered_set>
 #include <vector>
 
 namespace qontra {
@@ -90,25 +90,25 @@ private:
     Graph<V, E>*            input_graph;
     std::vector<sptr<V>>    roots;
 
-    std::map<sptr<V>, sptr<E>>          parent_edge_map;
-    std::map<sptr<E>, oriented_edge_t>  orientation_map;
+    std::unordered_map<sptr<V>, sptr<E>>          parent_edge_map;
+    std::unordered_map<sptr<E>, oriented_edge_t>  orientation_map;
 
-    std::map<sptr<V>, std::vector<sptr<E>>> outgoing_edge_map;
+    std::unordered_map<sptr<V>, std::vector<sptr<E>>> outgoing_edge_map;
     // Phase-1 Variables:
     //
     // height: tree-path distance from root.
-    std::map<sptr<V>, size_t>   height;
-    std::map<sptr<E>, size_t>   lowpt;
-    std::map<sptr<E>, size_t>   lowpt2;
-    std::map<sptr<E>, size_t>   nesting_depth;
+    std::unordered_map<sptr<V>, size_t>   height;
+    std::unordered_map<sptr<E>, size_t>   lowpt;
+    std::unordered_map<sptr<E>, size_t>   lowpt2;
+    std::unordered_map<sptr<E>, size_t>   nesting_depth;
     // Phase-2 Variables:
     //
     //
-    std::map<sptr<E>, sptr<E>>  ref;
-    std::set<sptr<E>>           neg_side;
-    std::vector<cpair_t>        conflict_pair_stack;
-    std::map<sptr<E>, cpair_t>  stack_bottom;
-    std::map<sptr<E>, sptr<E>>  lowpt_edge;
+    std::unordered_map<sptr<E>, sptr<E>>  ref;
+    std::unordered_set<sptr<E>>           neg_side;
+    std::vector<cpair_t>                  conflict_pair_stack;
+    std::unordered_map<sptr<E>, cpair_t>  stack_bottom;
+    std::unordered_map<sptr<E>, sptr<E>>  lowpt_edge;
 
     template <class NUMBER> inline NUMBER inf() { return std::numeric_limits<NUMBER>::max(); }
 

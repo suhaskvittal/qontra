@@ -46,6 +46,6 @@ protected:
 
 }   // qontra
 
-#include "decoder.inl"
+#include "inl/decoder.inl"
 
 #endif

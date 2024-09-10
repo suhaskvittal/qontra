@@ -39,7 +39,7 @@ update_network(std::string pass_string, PhysicalNetwork* network, bool verbose) 
 
 #define PAIR(x, y) std::make_pair<std::string, pass_t>(x, &y)
     
-    const std::map<std::string, pass_t> PASSES{
+    const std::unordered_map<std::string, pass_t> PASSES{
         PAIR("jid", PhysicalNetwork::join_qubits_with_identical_support),
         PAIR("jpa", PhysicalNetwork::join_qubits_with_partial_support),
         PAIR("fla", PhysicalNetwork::make_flags),
@@ -231,7 +231,7 @@ PhysicalNetwork::write_flag_assignment_file(std::string output_file) {
         }
         fout << rpq->id << ",";
 
-        std::map<sptr<raw_vertex_t>, sptr<raw_vertex_t>>
+        std::unordered_map<sptr<raw_vertex_t>, sptr<raw_vertex_t>>
             flag_to_first_data;
         std::string flag_string;
         bool first = true;

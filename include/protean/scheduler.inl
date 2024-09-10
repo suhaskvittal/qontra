@@ -49,7 +49,7 @@ Scheduler::declare_event_for_qubit(sptr<net::raw_vertex_t> rv) {
 template <class FUNC> bool
 Scheduler::try_and_push_back_cx_operands(
         std::vector<int64_t>& cx_operands,
-        std::set<int64_t>& in_use,
+        std::unordered_set<int64_t>& in_use,
         const std::vector<sptr<net::raw_vertex_t>>& path,
         size_t k,
         FUNC additional_test,

@@ -10,7 +10,7 @@
 
 #include <vtils/two_level_map.h>
 
-#include <map>
+#include <unordered_map>
 #include <string>
 #include <utility>
 
@@ -28,10 +28,10 @@ public:
     vtils::TwoLevelMap<std::string, uint64_t, fp_t> op1q;
     vtils::TwoLevelMap<std::string, std::pair<uint64_t, uint64_t>, fp_t> op2q;
 
-    std::map<uint64_t, fp_t> idling;
+    std::unordered_map<uint64_t, fp_t> idling;
 
-    std::map<uint64_t, fp_t> m1w0;
-    std::map<uint64_t, fp_t> m0w1;
+    std::unordered_map<uint64_t, fp_t> m1w0;
+    std::unordered_map<uint64_t, fp_t> m0w1;
 
     // Other errors: not set by default.
     vtils::TwoLevelMap<std::string, std::pair<uint64_t, uint64_t>, fp_t> 
@@ -51,8 +51,8 @@ public:
 
     vtils::TwoLevelMap<std::string, uint64_t, fp_t> op1q;
     vtils::TwoLevelMap<std::string, std::pair<uint64_t, uint64_t>, fp_t> op2q;
-    std::map<uint64_t, fp_t> t1;
-    std::map<uint64_t, fp_t> t2;
+    std::unordered_map<uint64_t, fp_t> t1;
+    std::unordered_map<uint64_t, fp_t> t2;
 };
 
 ErrorTable operator*(ErrorTable, fp_t);

@@ -4,7 +4,7 @@
  * */
 
 #include <algorithm>
-#include <set>
+#include <unordered_set>
 
 namespace qontra {
 
@@ -44,7 +44,7 @@ get_number_of_qubits(const qes::Program<>& program) {
 inline size_t
 get_number_of_qubits(const qes::Program<>& program, std::vector<uint64_t>& qubits) {
     uint64_t max_qubit = 0;
-    std::set<uint64_t> visited;
+    std::unordered_set<uint64_t> visited;
     for (const auto& inst : program) {
         auto _qubits = get_qubits(inst);
         for (uint64_t q : _qubits) {

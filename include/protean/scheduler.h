@@ -12,7 +12,7 @@
 #include <vtils/two_level_map.h>
 
 #include <deque>
-#include <set>
+#include <unordered_set>
 #include <tuple>
 
 #include "protean/network.h"
@@ -63,12 +63,12 @@ private:
     void push_back_measurement(std::vector<int64_t>&, sptr<net::raw_vertex_t>);
     void declare_event_for_qubit(sptr<net::raw_vertex_t>);
 
-    std::map<sptr<net::raw_vertex_t>, sch_data_t> compute_schedules(void);
+    std::unordered_map<sptr<net::raw_vertex_t>, sch_data_t> compute_schedules(void);
 
     template <class FUNC>
     bool try_and_push_back_cx_operands(
             std::vector<int64_t>& cx_operands,
-            std::set<int64_t>& in_use,
+            std::unordered_set<int64_t>& in_use,
             const std::vector<sptr<net::raw_vertex_t>>& path,
             size_t k,
             FUNC additional_test,
@@ -83,9 +83,9 @@ private:
     void test_and_set_exit_on_fail(sptr<net::raw_vertex_t>, std::string caller);
     void print_test_and_set_debug_and_exit(sptr<net::raw_vertex_t>, std::string caller);
 
-    std::map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>> active_role_map;
+    std::unordered_map<sptr<net::phys_vertex_t>, sptr<net::raw_vertex_t>> active_role_map;
     std::vector<sptr<net::raw_vertex_t>> checks_this_cycle;
-    std::map<sptr<net::raw_vertex_t>, size_t> meas_ctr_map;
+    std::unordered_map<sptr<net::raw_vertex_t>, size_t> meas_ctr_map;
     std::vector<event_t> event_queue;
     
     size_t cycle;

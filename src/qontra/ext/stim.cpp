@@ -52,7 +52,7 @@ DetailedStimCircuit::from_qes(
 {
     DetailedStimCircuit circuit;
 
-    std::set<int> all_colors;
+    std::unordered_set<int> all_colors;
 
     std::vector<uint64_t> all_qubits;
     get_number_of_qubits(program, all_qubits);

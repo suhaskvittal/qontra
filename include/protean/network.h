@@ -14,6 +14,8 @@
 
 #include "protean/defs.h"
 
+#include <unordered_map>
+
 namespace protean {
 
 // We will have two types of networks:
@@ -34,7 +36,7 @@ struct raw_vertex_t : qgr::base::vertex_t {
 struct raw_edge_t : qgr::base::edge_t {};
 
 struct phys_vertex_t : qgr::base::vertex_t {
-    std::set<sptr<raw_vertex_t>> role_set;
+    std::unordered_set<sptr<raw_vertex_t>> role_set;
     vtils::BijectiveMap<size_t, sptr<raw_vertex_t>> cycle_role_map;
 
     void consume(sptr<phys_vertex_t>);
@@ -47,7 +49,7 @@ struct phys_vertex_t : qgr::base::vertex_t {
     
     void clear_roles(void);
 private:
-    std::map<raw_vertex_t::type, size_t> role_type_map;
+    std::unordered_map<raw_vertex_t::type, size_t> role_type_map;
 };
 
 struct phys_edge_t : qgr::base::edge_t {
@@ -65,11 +67,11 @@ public:
     struct parity_support_t {
         sptr<net::raw_vertex_t> check;
 
-        std::set<sptr<net::raw_vertex_t>>   data;
-        std::set<sptr<net::raw_vertex_t>>   flags;
-        std::set<sptr<net::raw_vertex_t>>   proxies;
+        std::unordered_set<sptr<net::raw_vertex_t>>   data;
+        std::unordered_set<sptr<net::raw_vertex_t>>   flags;
+        std::unordered_set<sptr<net::raw_vertex_t>>   proxies;
 
-        std::set<sptr<net::raw_vertex_t>>   all;
+        std::unordered_set<sptr<net::raw_vertex_t>>   all;
     };
 
     RawNetwork(qgr::TannerGraph*);
@@ -120,19 +122,19 @@ public:
     // Flag tracking structures:
     //
     // parity qubit --> list of flag qubits used in syndrome extraction of check.
-    std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>> 
+    std::unordered_map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>> 
         flag_ownership_map;
     // parity qubit --> data qubit --> flag qubit used in syndrome extraction of check.
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
         flag_assignment_map;
-    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::set<sptr<net::raw_vertex_t>>>
+    vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::unordered_set<sptr<net::raw_vertex_t>>>
         flag_support_map;
-    std::set<sptr<net::raw_vertex_t>> x_flag_set;
+    std::unordered_set<sptr<net::raw_vertex_t>> x_flag_set;
 
     // Scheduling structures:
     // 
     // parity qubit --> list of data qubits (or nullptr) in the order of syndrome extraction CNOTs.
-    std::map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
+    std::unordered_map<sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
         schedule_order_map;
 
     qgr::TannerGraph* tanner_graph;
@@ -153,7 +155,7 @@ private:
 
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, std::vector<sptr<net::raw_vertex_t>>>
         proxy_memo_map;
-    std::map<sptr<net::raw_vertex_t>, parity_support_t>
+    std::unordered_map<sptr<net::raw_vertex_t>, parity_support_t>
         support_memo_map;
     vtils::TwoLevelMap<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>
         same_support_memo_map;
@@ -273,7 +275,7 @@ private:
     // As the traversal is at worst exponential time in the size of the code, we will just do all flags
     // at once.
     stim::simd_bits<SIMD_WIDTH> do_flags_protect_weight_two_error(
-            std::set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>>, 
+            std::unordered_set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>>, 
             bool is_x_error);
 
     // Allocates a new processor layer.
@@ -290,14 +292,14 @@ private:
     // raw_connection_network contains all roles in the network, from proxy to flag to data (etc.).
     // Each phys_vertex_t corresponds to at least one raw_vertex_t (if not more).
     uptr<RawNetwork> raw_connection_network;
-    std::map<sptr<net::raw_vertex_t>, sptr<net::phys_vertex_t>> role_to_phys;
+    std::unordered_map<sptr<net::raw_vertex_t>, sptr<net::phys_vertex_t>> role_to_phys;
 
     // processor_layers contains the physical placement of edges in the processor. processor_layers[0]
     // always corresponds to the processor bulk (lowest layer), and other layers are the TSV layers.
     std::vector<uptr<ProcessorLayer>> processor_layers;
 
     // Other tracking structures:
-    std::map<sptr<net::raw_vertex_t>, int> check_color_map;
+    std::unordered_map<sptr<net::raw_vertex_t>, int> check_color_map;
     // Id tracking for make_and_add_vertex 
     uint64_t id_ctr;
 

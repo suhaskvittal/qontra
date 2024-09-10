@@ -153,7 +153,7 @@ LRPlanarity<V, E>::r_dfs_2(sptr<V> v) {
         cpair_t P = conflict_pair_stack.back();
         conflict_pair_stack.pop_back();
         if (P.left.low != nullptr) {
-            neg_side += P.left.low;
+            neg_side.insert(P.left.low);
         }
     }
     // Check if we have any more conflict pairs (at most one).
@@ -166,7 +166,7 @@ LRPlanarity<V, E>::r_dfs_2(sptr<V> v) {
         }
         if (P.left.high == nullptr && P.left.low != nullptr) {
             ref[P.left.low] = P.right.low;
-            neg_side += P.left.low;
+            neg_side.insert(P.left.low);
             P.left.low = nullptr;
         }
         // Trim right interval.
@@ -175,7 +175,7 @@ LRPlanarity<V, E>::r_dfs_2(sptr<V> v) {
         }
         if (P.right.high == nullptr && P.right.low != nullptr) {
             ref[P.right.low] = P.left.low;
-            neg_side += P.right.low;
+            neg_side.insert(P.right.low);
             P.right.low = nullptr;
         }
         conflict_pair_stack.push_back(P);

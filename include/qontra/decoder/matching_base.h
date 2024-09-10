@@ -46,7 +46,10 @@ private:
 
 class MatchingBase : public Decoder {
 public:
-    MatchingBase(const DetailedStimCircuit&, int flips_per_error, bool reweigh_for_detectors=false);
+    MatchingBase(
+        const DetailedStimCircuit&,
+        int flips_per_error,
+        bool reweigh_for_detectors=false);
 
     virtual void load_syndrome(
             stim::simd_bits_range_ref<SIMD_WIDTH>, int=graph::COLOR_ANY, int=graph::COLOR_ANY,
@@ -54,7 +57,6 @@ public:
 
     virtual std::vector<assign_t> compute_matching(int=graph::COLOR_ANY, int=graph::COLOR_ANY);
 
-    stim::simd_bits<SIMD_WIDTH> get_base_corr(void);
     Decoder::result_t ret_no_detectors(void);
     sptr<graph::decoding::hyperedge_t> get_flag_edge_for(std::vector<sptr<gd::vertex_t>>);
 protected:
@@ -69,5 +71,5 @@ private:
 };
 
 }   // qontra
- 
+
 #endif  // QONTRA_DECODER_MATCHING_BASE_h

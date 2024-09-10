@@ -73,7 +73,7 @@ bool
 PhysicalNetwork::join_qubits_with_identical_support() {
     bool mod = false;
     // These are vertices that are consumed by another.
-    std::set<sptr<phys_vertex_t>> deleted_vertices;
+    std::unordered_set<sptr<phys_vertex_t>> deleted_vertices;
 
     for (size_t i = 0; i < vertices.size(); i++) {
         sptr<phys_vertex_t> pv = vertices[i];
@@ -106,7 +106,7 @@ bool
 PhysicalNetwork::join_qubits_with_partial_support() {
     bool mod = false;
     // These are vertices that are consumed by another.
-    std::set<sptr<phys_vertex_t>> deleted_vertices;
+    std::unordered_set<sptr<phys_vertex_t>> deleted_vertices;
 
     std::vector<sptr<phys_vertex_t>> _vertices(vertices);
     // Sort these vertices by degree.
@@ -153,13 +153,13 @@ PhysicalNetwork::join_qubits_with_partial_support() {
 
 bool
 PhysicalNetwork::make_flags() {
-    typedef std::set<v_pair_t<raw_vertex_t>>    flag_pair_set_t;
+    typedef std::unordered_set<v_pair_t<raw_vertex_t>>    flag_pair_set_t;
 
     // Track flag pairs by check role.
-    std::map<sptr<raw_vertex_t>, flag_pair_set_t> proposed_flag_pair_map;
+    std::unordered_map<sptr<raw_vertex_t>, flag_pair_set_t> proposed_flag_pair_map;
     // Because we want minimize resource usage, also track the flags incident upon a physical qubit.
     // Checks on the same qubit will use the same flag pairs.
-    std::map<sptr<phys_vertex_t>, flag_pair_set_t> phys_proposed_flag_pair_map;
+    std::unordered_map<sptr<phys_vertex_t>, flag_pair_set_t> phys_proposed_flag_pair_map;
     // Finally, track all flag pairs.
     flag_pair_set_t all_proposed_flag_pairs;
     flag_pair_set_t x_flags, z_flags;
@@ -174,10 +174,10 @@ PhysicalNetwork::make_flags() {
         if (!rpq->is_check()) continue;
         // So, first we will use _support, which is the set of data qubits. Then, we will
         // convert it to a vector.
-        std::set<sptr<raw_vertex_t>> _support(raw_connection_network->get_support(rpq).data);
+        std::unordered_set<sptr<raw_vertex_t>> _support(raw_connection_network->get_support(rpq).data);
 
         flag_pair_set_t flag_pairs;
-        std::set<sptr<raw_vertex_t>> already_matched;
+        std::unordered_set<sptr<raw_vertex_t>> already_matched;
         // Check if rpq's physical qubit has another role that has already given flags in
         // the proposed_flag_pair_map.
         sptr<phys_vertex_t> ppq = role_to_phys.at(rpq);
@@ -207,7 +207,7 @@ edge_build_outer_loop_start:
             // We will the physical qubit (specifically its neighbors) each tick of the
             // inner loop.
             // Note that we only care about neighbors that are parity qubits.
-            std::set<sptr<phys_vertex_t>> p_neighbors;
+            std::unordered_set<sptr<phys_vertex_t>> p_neighbors;
             for (sptr<raw_vertex_t> rx : raw_connection_network->get_neighbors(rv)) {
                 if (rx->is_check()) {
                     p_neighbors.insert(role_to_phys.at(rx));
@@ -306,7 +306,7 @@ edge_build_outer_loop_start:
                 if (indicator_bits[k]) {
                     it++;
                 } else {
-                    all_proposed_flag_pairs -= *it;
+                    all_proposed_flag_pairs.erase(*it);
                     it = flags.erase(it);
                     flags_removed++;
                 }
@@ -325,7 +325,7 @@ edge_build_outer_loop_start:
     // roles here. These common roles will eventually be compacted into one flag.
     //
     // We track common roles in the following structure. The values are a parity-qubit and flag-qubit pair.
-    std::map<v_pair_t<raw_vertex_t>, std::set<v_pair_t<raw_vertex_t>>>
+    std::unordered_map<v_pair_t<raw_vertex_t>, std::unordered_set<v_pair_t<raw_vertex_t>>>
         flag_pairs_to_flag_roles;
 
     for (auto& [ rpq, flags ] : proposed_flag_pair_map) {
@@ -344,8 +344,8 @@ edge_build_outer_loop_start:
         }
     }
     // Now, we can make the physical qubits and update the connectivity.
-    std::set<sptr<phys_edge_t>> deleted_edges;
-    std::set<sptr<phys_edge_t>> new_edges;
+    std::unordered_set<sptr<phys_edge_t>> deleted_edges;
+    std::unordered_set<sptr<phys_edge_t>> new_edges;
     for (auto& [ rv_pair, role_set ] : flag_pairs_to_flag_roles) {
         auto [ rv, rw ] = rv_pair;
         sptr<phys_vertex_t> pv = role_to_phys.at(rv),
@@ -357,8 +357,8 @@ edge_build_outer_loop_start:
                 pfq = make_vertex(id_ctr++);
             }
             // Track connected qubits and deleted edges.
-            std::set<sptr<phys_edge_t>> local_deleted_edges;
-            std::set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv, pw};
+            std::unordered_set<sptr<phys_edge_t>> local_deleted_edges;
+            std::unordered_set<sptr<phys_vertex_t>> qubits_connected_to_pfq{pv, pw};
             for (auto& [ rpq, rfq ] : role_set) {
                 if (!config.force_xz_flag_merge && 
                         ((i == 0) ^ (rpq->qubit_type == raw_vertex_t::type::xparity))) 
@@ -425,7 +425,7 @@ PhysicalNetwork::add_connectivity_reducing_proxies() {
         sptr<phys_vertex_t> pprx = make_and_add_vertex();
         // Let k = slack_violation. Then the top k+1 neighbors will
         // be serviced by the proxy.
-        std::set<sptr<phys_vertex_t>> visited;
+        std::unordered_set<sptr<phys_vertex_t>> visited;
         std::vector<sptr<phys_vertex_t>> share_an_edge_with_pprx{pv};
         std::vector<sptr<phys_edge_t>> deleted_edges;
         slack_violation++;
@@ -585,7 +585,7 @@ PhysicalNetwork::reallocate_edges() {
 
 stim::simd_bits<SIMD_WIDTH>
 PhysicalNetwork::do_flags_protect_weight_two_error(
-        std::set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>> flag_pairs,
+        std::unordered_set<std::pair<sptr<net::raw_vertex_t>, sptr<net::raw_vertex_t>>> flag_pairs,
         bool is_x_error) 
 {
     // For the purposes of this algorithm, have the bitvectors be active-low.
@@ -605,14 +605,14 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
 
     // The first entry are the qubits in the operator.
     // THe second entry is a simple hash that allows us to check if two operators are equivalent.
-    typedef std::tuple<std::set<sptr<raw_vertex_t>>, stim::simd_bits<SIMD_WIDTH>> quop_t;
+    typedef std::tuple<std::unordered_set<sptr<raw_vertex_t>>, stim::simd_bits<SIMD_WIDTH>> quop_t;
     std::vector<quop_t> curr_operator_tree_level;
 
     const size_t HASH_SIZE = obs_list.size() + tanner_graph->get_checks().size()/2;
     const size_t HASH_STABILIZER_OFFSET = obs_list.size();
     // Populate the lowest level with the observables.
     for (size_t i = 0; i < obs_list.size(); i++) {
-        std::set<sptr<raw_vertex_t>> obs;
+        std::unordered_set<sptr<raw_vertex_t>> obs;
         for (sptr<tanner::vertex_t> x : obs_list[i]) {
             obs.insert(raw_connection_network->v_tanner_raw_map.at(x));
         }
@@ -627,7 +627,7 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
     for (size_t i = 0; i < _checks.size(); i++) {
         sptr<tanner::vertex_t> tpq = _checks[i];
         // Get the support of the check.
-        std::set<sptr<raw_vertex_t>> stabilizer;
+        std::unordered_set<sptr<raw_vertex_t>> stabilizer;
         for (sptr<tanner::vertex_t> tx : tanner_graph->get_neighbors(tpq)) {
             stabilizer.insert(raw_connection_network->v_tanner_raw_map.at(tx));
         }
@@ -655,7 +655,8 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
                     }
                 }
                 // Check if op | v1 | v2 forms a stabilizer.
-                std::set<sptr<raw_vertex_t>> op_v1_v2 = op_qubits ^ std::set<sptr<raw_vertex_t>>{v1, v2};
+                std::unordered_set<sptr<raw_vertex_t>> op_v1_v2 = 
+                    immd_set_symdiff(op_qubits, std::unordered_set<sptr<raw_vertex_t>>{v1,v2});
                 for (quop_t ch : checks) {
                     if (std::get<0>(ch) == op_v1_v2) is_stabilizer[k] = 0;
                 }
@@ -674,11 +675,11 @@ PhysicalNetwork::do_flags_protect_weight_two_error(
                 stim::simd_bits<SIMD_WIDTH> common_hash_bits = op_hash & stab_hash;
                 if (common_hash_bits.not_zero()) continue;
 
-                std::set<sptr<raw_vertex_t>> common_qubits = op_qubits * stab_qubits;
+                std::unordered_set<sptr<raw_vertex_t>> common_qubits = immd_set_intersect(op_qubits, stab_qubits);
                 if (common_qubits.empty()) continue;
 
                 // Otherwise, everything is fine.
-                std::set<sptr<raw_vertex_t>> new_qubits = op_qubits ^ stab_qubits;
+                std::unordered_set<sptr<raw_vertex_t>> new_qubits = immd_set_symdiff(op_qubits, stab_qubits);
                 stim::simd_bits<SIMD_WIDTH> new_hash = op_hash | stab_hash;
                 if (new_qubits.size() < 12) {
                     next_level.emplace_back(new_qubits, new_hash);
@@ -715,7 +716,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
         if (!rpq->is_check()) continue;
         auto& support = raw_connection_network->get_support(rpq);
 
-        std::set<sptr<raw_vertex_t>> deleted_vertices;
+        std::unordered_set<sptr<raw_vertex_t>> deleted_vertices;
         for (sptr<raw_vertex_t> rx : support.all) {
             if (deleted_vertices.count(rx)) continue;
             sptr<phys_vertex_t> px = role_to_phys.at(rx);
@@ -759,7 +760,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
 
     struct int_v_t : public base::vertex_t {
         sptr<raw_vertex_t>              check;
-        std::set<sptr<raw_vertex_t>>    support;
+        std::unordered_set<sptr<raw_vertex_t>>    support;
     };
 
     struct int_e_t : public base::edge_t {
@@ -790,7 +791,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
             sptr<int_e_t> ie = interaction_graph->make_edge(iv, iw);
             for (sptr<raw_vertex_t> rx : iv->support) {
                 if (rx->qubit_type == raw_vertex_t::type::data) continue;
-                std::set<sptr<raw_vertex_t>> data_support;
+                std::unordered_set<sptr<raw_vertex_t>> data_support;
 
                 sptr<phys_vertex_t> px = role_to_phys.at(rx);
                 for (sptr<raw_vertex_t> ry : iw->support) {
@@ -808,7 +809,7 @@ PhysicalNetwork::recompute_cycle_role_maps() {
     // Clear all the cycle role maps for each physical qubit.
     for (sptr<phys_vertex_t> pv : get_vertices()) pv->clear_roles();
     // Color the interaction graph.
-    std::map<sptr<int_v_t>, int> color_map;
+    std::unordered_map<sptr<int_v_t>, int> color_map;
     size_t cycles = static_cast<size_t>(k_coloring_rlf(interaction_graph.get(), color_map));
     for (size_t c = 0; c <= cycles; c++) {
         for (sptr<int_v_t> iv : interaction_graph->get_vertices()) {

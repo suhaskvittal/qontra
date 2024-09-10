@@ -42,7 +42,7 @@ safe_emplace_back(qes::Program<>& program, std::string name, std::vector<int64_t
 }
 
 inline void
-safe_emplace_back(qes::Program<>& program, std::string name, std::set<int64_t> operands) {
+safe_emplace_back(qes::Program<>& program, std::string name, std::unordered_set<int64_t> operands) {
     if (operands.empty()) return;
     program.emplace_back(name, std::vector<int64_t>(operands.begin(), operands.end()));
 }
@@ -73,7 +73,7 @@ Scheduler::run(size_t rounds, bool is_memory_x) {
     // PROLOGUE
     //
     std::vector<int64_t> r_operands, h_operands, m_operands;
-    std::map<sptr<raw_vertex_t>, int64_t> data_meas_order_map;
+    std::unordered_map<sptr<raw_vertex_t>, int64_t> data_meas_order_map;
     for (sptr<phys_vertex_t> pv : network->get_vertices()) {
         int64_t q = static_cast<int64_t>(pv->id);
         r_operands.push_back(q);
@@ -196,7 +196,7 @@ void
 Scheduler::make_round() {
     if (round_has_been_generated) return;
     qes::Program<> program;
-    std::set<sptr<raw_vertex_t>> finished_checks;
+    std::unordered_set<sptr<raw_vertex_t>> finished_checks;
 
     // Reset all tracking values.
     cycle = 0;
@@ -212,8 +212,8 @@ Scheduler::make_round() {
     while (true) {
         std::cout << "============= CYCLE " << cycle << " ===============" << std::endl;
         checks_this_cycle.clear();
-        std::set<int64_t> r_operands;
-        std::set<sptr<raw_vertex_t>> roles_this_cycle;
+        std::unordered_set<int64_t> r_operands;
+        std::unordered_set<sptr<raw_vertex_t>> roles_this_cycle;
         for (sptr<raw_vertex_t> rv : raw_network->get_vertices()) {
             if (rv->is_check()) {
                 sptr<phys_vertex_t> pv = network->role_to_phys.at(rv);
@@ -260,14 +260,46 @@ Scheduler::make_round() {
         std::cout << "[ scheduler ] cycle " << cycle << " | teardown took " << t*1e-9 << "s" << std::endl;
         timer.clk_start();
 #endif
-        std::set<sptr<raw_vertex_t>> qubits_with_events;
+        std::unordered_set<sptr<raw_vertex_t>> visited;
         for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
+            if (visited.count(rpq)) {
+                std::cerr << "Unexpected: " << print_v(rpq) << " already visited when making events.\n";
+                exit(1);
+            }
+
             finished_checks.insert(rpq);
-            qubits_with_events.insert(rpq);
-            insert_range(qubits_with_events, raw_network->get_support(rpq).flags);
-        }
-        for (sptr<raw_vertex_t> rv : qubits_with_events) {
-            declare_event_for_qubit(rv);
+            visited.insert(rpq);
+
+            bool is_x_check = rpq->qubit_type==raw_vertex_t::type::xparity;
+            // Declare event for rpq.
+            event_queue.push_back({
+                    rpq,
+                    { static_cast<int64_t>(meas_ctr_map.at(rpq)) },
+                    true,
+                    is_x_check
+            });
+            for (sptr<raw_vertex_t> rfq : raw_network->get_support(rpq).flags) {
+                if (visited.count(rfq)) continue;
+                visited.insert(rfq);
+
+                event_queue.push_back({
+                    rfq,
+                    { static_cast<int64_t>(meas_ctr_map.at(rfq)) },
+                    false,
+                    !is_x_check
+                });
+            }
+            for (sptr<raw_vertex_t> rx : raw_network->get_support(rpq).proxies) {
+                if (visited.count(rx)) continue;
+                visited.insert(rx);
+
+                event_queue.push_back({
+                    rx,
+                    { static_cast<int64_t>(meas_ctr_map.at(rx)) },
+                    false,
+                    is_x_check
+                });
+            }
         }
         cycle++;
     }
@@ -329,6 +361,13 @@ Scheduler::build_teardown(qes::Program<>& program) {
                 release_qubit(rfq);
             }
         }
+
+        for (sptr<raw_vertex_t> rx : support.proxies) {
+            if (std::find(m_operands.begin(), m_operands.end(), qu(rx)) == m_operands.end()) {
+                push_back_measurement(m_operands, rx);
+                r_operands.push_back(qu(rx));
+            }
+        }
     }
     safe_emplace_back(program, "measure", m_operands);
 }
@@ -344,9 +383,9 @@ Scheduler::remove_redundant_gates(qes::Program<>& program) {
     //      used to detect redundant CX gates.
     //  (3) deleted_operand_map: tracks which operands to
     //      delete from the corresponding instructions.
-    std::map<int64_t, size_t> last_inst_index_map;
+    std::unordered_map<int64_t, size_t> last_inst_index_map;
     TwoLevelMap<size_t, int64_t, int64_t> cx_pair_map;
-    std::map<size_t, std::set<int64_t>> deleted_operand_map;
+    std::unordered_map<size_t, std::unordered_set<int64_t>> deleted_operand_map;
 
     size_t n_red = 0;
     for (size_t i = 0; i < program.size(); i++) {
@@ -418,16 +457,19 @@ Scheduler::remove_redundant_gates(qes::Program<>& program) {
 
 void
 Scheduler::prep_tear_h_gates(qes::Program<>& program) {
-    std::set<int64_t> h_operands;
+    std::unordered_set<int64_t> h_operands;
     for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
         test_and_set_exit_on_fail(rpq, "build_preparation");
-        // Perform an H gate if necessary.
         auto& support = get_support(rpq);
+        // Lock all flag qubits.
+        for (sptr<raw_vertex_t> rfq : support.flags) {
+            test_and_set_exit_on_fail(rfq, "build_preparation");
+        }
+        // Perform H gates.
         if (rpq->qubit_type == raw_vertex_t::type::xparity) {
             h_operands.insert(qu(rpq));
         } else {
             for (sptr<raw_vertex_t> rfq : support.flags) {
-                test_and_set_exit_on_fail(rfq, "build_preparation");
                 h_operands.insert(qu(rfq));
             }
         }
@@ -463,9 +505,9 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
     std::vector<bool> undo_is_for_x_check;
     std::vector<size_t> undo_k_arr;
     // Now perform CX along these paths.
-    std::set<sptr<raw_vertex_t>> proxies_in_use;
+    std::unordered_set<sptr<raw_vertex_t>> proxies_in_use;
     while (true) {
-        std::set<int64_t> in_use;
+        std::unordered_set<int64_t> in_use;
         std::vector<int64_t> h_pre_operands, h_post_operands, cx_operands, r_operands;
         for (size_t i = 0; i < cx_arr.size(); i++) {
             bool is_for_x_check = cx_arr.at(i).is_for_x_check;
@@ -535,9 +577,9 @@ Scheduler::schedule_cx_along_path(const std::vector<cx_t>& cx_arr, qes::Program<
     }
 }
 
-std::map<sptr<raw_vertex_t>, sch_data_t>
+std::unordered_map<sptr<raw_vertex_t>, sch_data_t>
 Scheduler::compute_schedules() {
-    std::map<sptr<raw_vertex_t>, sch_data_t> sch_map;
+    std::unordered_map<sptr<raw_vertex_t>, sch_data_t> sch_map;
     // Compute max operator weight.
     size_t max_operator_weight = 0;
     for (sptr<raw_vertex_t> rpq : checks_this_cycle) {
@@ -546,7 +588,7 @@ Scheduler::compute_schedules() {
     }
     const fp_t upper_bound = static_cast<fp_t>(2 * max_operator_weight);
     // Now, compute schedule using LPs:
-    std::map<sptr<raw_vertex_t>, std::vector<std::tuple<size_t, sptr<raw_vertex_t>>>>
+    std::unordered_map<sptr<raw_vertex_t>, std::vector<std::tuple<size_t, sptr<raw_vertex_t>>>>
         existing_cnot_times;
     TwoLevelMap<sptr<raw_vertex_t>, sptr<raw_vertex_t>, size_t>
         sch_time_map;
@@ -561,7 +603,7 @@ Scheduler::compute_schedules() {
         for (size_t j = i+1; j < checks_this_cycle.size(); j++) {
             auto y = checks_this_cycle.at(j);
             auto& ysupp = raw_network->get_support(y);
-            auto comm = xsupp.data * ysupp.data;
+            auto comm = immd_set_intersect(xsupp.data, ysupp.data);
             if (comm.size()) {
                 g.make_and_add_edge(x,y);
             }
@@ -579,11 +621,14 @@ Scheduler::compute_schedules() {
             });
 //  std::deque<sptr<raw_vertex_t>> dfs(checks_this_cycle.begin(), checks_this_cycle.end());
     std::deque<sptr<raw_vertex_t>> dfs{ checks_this_cycle[0] };
-    std::set<sptr<raw_vertex_t>> visited;
+    std::unordered_set<sptr<raw_vertex_t>> visited;
+    std::cout << "\tschedule order:";
     while (dfs.size()) {
-        sptr<raw_vertex_t> rpq = dfs.front();
-        dfs.pop_front();
+        sptr<raw_vertex_t> rpq = dfs.back();
+        dfs.pop_back();
         if (visited.count(rpq)) continue;
+
+        std::cout << " " << print_v(rpq);
 
         auto& support = get_support(rpq);
         // Make the LP:
@@ -724,6 +769,7 @@ Scheduler::compute_schedules() {
         }
         visited.insert(rpq);
     }
+    std::cout << "\n";
 #ifdef PROTEAN_PERF
     fp_t t = timer.clk_end();
     std::cout << "[ compute_schedules ] computing schedule took " << t*1e-9 << "s" << std::endl;

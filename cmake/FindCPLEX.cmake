@@ -9,8 +9,10 @@ if (APPLE)
     set(ARCH_STRING "arm64_osx")
 endif()
 
-set(CPLEX_LIBRARY_DIR "${CPLEX_HOME}/cplex/lib/${ARCH_STRING}/static_pic")
-set(CPLEX_INCLUDE_DIR "${CPLEX_HOME}/cplex/include/ilcplex")
+if (NOT CPLEX_LIBRARY_DIR)
+    set(CPLEX_LIBRARY_DIR "${CPLEX_HOME}/cplex/lib/${ARCH_STRING}/static_pic")
+    set(CPLEX_INCLUDE_DIR "${CPLEX_HOME}/cplex/include/ilcplex")
+endif()
 
 set(CPLEX_LIBRARIES ${CPLEX_LIBRARY_DIR}/libcplex.a
                     ${CPLEX_LIBRARY_DIR}/libilocplex.a)

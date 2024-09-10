@@ -5,7 +5,10 @@
 
 #include <protean/io.h>
 #include <protean/network.h>
+
+#ifdef GRAPHVIZ_ENABLED
 #include <protean/visualization.h>
+#endif
 
 #include <qontra/graph/io.h>
 #include <qontra/graph/tanner_graph.h>
@@ -27,7 +30,9 @@ int main(int argc, char* argv[]) {
     std::string tanner_graph_file(argv[1]);
     std::string data_output_folder(argv[2]);
 
+#ifdef GRAPHVIZ_ENABLED
     std::string render_output_folder = data_output_folder + "/render";
+#endif
 
     std::string pass_string = "Jid.Ral.Fla.Ral.Jpa.Ral.(Prx.Con.Jpa.Ral)+.Rlb.";
     std::string layout_engine = "neato";

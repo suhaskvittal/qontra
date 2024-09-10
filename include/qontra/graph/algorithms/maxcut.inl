@@ -11,7 +11,7 @@ maxcut_approx_greedy(Graph<V, E>* graph, W_FUNC edge_w_func) {
     std::vector<sptr<V>> vertices = graph->get_vertices();
 
     partition_t<V>  partition;
-    partition.fill(std::set<V>());
+    partition.fill(std::unordered_set<V>());
 
     for (sptr<V> v : vertices) {
         fp_t bias = 0;   // If bias < 0, then put v in the right set.

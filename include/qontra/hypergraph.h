@@ -8,7 +8,7 @@
 
 #include "qontra/graph.h"
 
-#include <set>
+#include <unordered_set>
 
 namespace qontra {
 namespace graph {
@@ -26,7 +26,8 @@ struct hyperedge_t {
 
 }   // base
 
-template <class V=void, class HE> std::string   print_he(sptr<HE>);
+template <class V=void, class HE>
+std::string print_he(sptr<HE>);
 
 typedef Graph<base::vertex_t, base::edge_t> IncidenceGraph;
 
@@ -116,12 +117,12 @@ protected:
     std::vector<sptr<HE>>   edges;
 
     uptr<IncidenceGraph> incidence_graph;
-    std::map<sptr<base::vertex_t>, sptr<void>> incidence_object_map;
-    std::map<sptr<void>, uint64_t> incidence_id_map;
-    std::map<sptr<V>, std::vector<sptr<V>>> adjacency_lists;
+    std::unordered_map<sptr<base::vertex_t>, sptr<void>> incidence_object_map;
+    std::unordered_map<sptr<void>, uint64_t> incidence_id_map;
+    std::unordered_map<sptr<V>, std::vector<sptr<V>>> adjacency_lists;
     vtils::TwoLevelMap<sptr<V>, sptr<V>, size_t> adjacency_mult_map;
 
-    std::map<uint64_t, sptr<V>> id_to_vertex;
+    std::unordered_map<uint64_t, sptr<V>> id_to_vertex;
 
     bool graph_has_changed;
 private:
@@ -136,6 +137,6 @@ private:
 }   // graph
 }   // qontra
 
-#include "hypergraph.inl"
+#include "inl/hypergraph.inl"
 
 #endif  // QONTRA_HYPERGRAPH_h

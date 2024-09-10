@@ -26,17 +26,7 @@ MWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
     auto _detectors = detectors;
     auto _flags = flags;
 
-    /*
-    std::cout << "syndrome: D[";
-    for (uint64_t d : _detectors) std::cout << " " << d;
-    std::cout << " ], F[";
-    for (uint64_t f : _flags) std::cout << " " << f;
-    std::cout << " ]" << std::endl;
-    */
-
     if (detectors.empty()) return ret_no_detectors();
-
-    corr ^= get_base_corr();
 
     timer.clk_start();
     std::vector<assign_t> assignments = compute_matching();

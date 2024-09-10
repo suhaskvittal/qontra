@@ -23,7 +23,7 @@ if (NOT COMPILE_OPTIONS)
         -Wunused
         -Wno-psabi)
     set(DEBUG_COMPILE_OPTIONS
-        -ggdb3
+        -g
         -Wno-template-id-cdtor
         -fno-strict-aliasing
         -Wall

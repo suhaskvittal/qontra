@@ -6,6 +6,8 @@
 #include "qontra/decoder/neural.h"
 #include "qontra/experiments.h"
 
+#include <vtils/filesystem.h>
+
 namespace qontra {
 
 static const uint64_t PER_HW_LIMIT = 100'000;
@@ -26,7 +28,7 @@ NeuralDecoder::train(uint64_t shots, bool verbose) {
 
     uint64_t shots_elapsed = 0;
     // We will train the model every batch.
-    std::map<size_t, uint64_t> hw_freq;
+    std::unordered_map<size_t, uint64_t> hw_freq;
     generate_syndromes(training_circuit, shots,
         [&] (shot_payload_t payload)
         {
@@ -87,6 +89,16 @@ NeuralDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) {
         corr
     };
     return res;
+}
+
+void
+NeuralDecoder::save_model_to_file(std::string fname) {
+    mlpack::data::Save(fname, "model", model, false);
+}
+
+void
+NeuralDecoder::load_model_from_file(std::string fname) {
+    mlpack::data::Load(fname, "model", model);
 }
 
 }   // qontra

@@ -28,7 +28,7 @@ protected:
     void read_ufl_error_chain(std::vector<assign_t>&, sptr<gd::vertex_t>, sptr<gd::vertex_t>);
 
     uptr<graph::DecodingGraph> ufl_graph;
-    std::map<sptr<gd::vertex_t>, sptr<gd::vertex_t>> ufl_to_orig_map;
+    std::unordered_map<sptr<gd::vertex_t>, sptr<gd::vertex_t>> ufl_to_orig_map;
     std::vector<uint64_t> ufl_detectors;
 };
 

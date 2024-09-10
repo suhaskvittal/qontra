@@ -3,6 +3,7 @@
  *  date:   28 February 2024
  * */
 
+#include "qontra/graph/decoding_graph.h"
 #include "qontra/graph/decoding_graph/edge_class.h"
 
 namespace qontra {
@@ -43,6 +44,23 @@ EdgeClass::from_edges(const std::vector<sptr<hyperedge_t>>& edges) {
         c.rep = r;
     }
     return eqs;
+}
+
+// DecodingGraph functions:
+
+sptr<hyperedge_t>
+DecodingGraph::get_best_edge_from_class_of(sptr<hyperedge_t> e) {
+    if (!edge_class_map.count(e)) {
+        return e;
+    }
+    const EdgeClass& c = edge_class_map.at(e);
+    sptr<hyperedge_t> _e = get_best_flag_edge(c.get_edges());
+    return _e == nullptr ? e : _e;
+}
+
+EdgeClass
+DecodingGraph::get_edge_class(sptr<hyperedge_t> e) {
+    return edge_class_map.at(e);
 }
 
 }   // graph

@@ -33,6 +33,12 @@ add_node_to_render_graph(
     cxx_agset(av, "label", attr.name);
     cxx_agset(av, "shape", attr.shape);
     cxx_agset(av, "style", attr.style);
+    
+    if (config.layout.count(pv)) {
+        const auto& [x, y] = config.layout.at(pv);
+        std::string ps = std::to_string(x) + "," + std::to_string(y) + "!";
+        cxx_agset(av, "pos", ps);
+    }
 }
 
 void
@@ -106,7 +112,7 @@ render_network_by_check(
         // physical qubits have been drawn.
         Agraph_t* gr = cxx_agopen("processor", Agundirected, NULL);
 
-        std::set<sptr<phys_vertex_t>> visited;
+        std::unordered_set<sptr<phys_vertex_t>> visited;
         for (sptr<raw_vertex_t> rv : support.all) {
             sptr<phys_vertex_t> pv = network->get_physical_qubit_for(rv);
             if (visited.count(pv)) continue;

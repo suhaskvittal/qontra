@@ -4,7 +4,7 @@
  * */
 
 #include <deque>
-#include <set>
+#include <unordered_set>
 
 namespace qontra {
 namespace graph {
@@ -15,7 +15,7 @@ namespace graph {
 template <class V, class E, class FUNC> void
 xfs(Graph<V, E>* graph, sptr<V> start, FUNC cb, bool dfs) {
     std::deque<sptr<V>> dq;
-    std::set<sptr<V>> visited;
+    std::unordered_set<sptr<V>> visited;
     dq.push_back(start);
 
     while (dq.size()) {

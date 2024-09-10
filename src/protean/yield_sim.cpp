@@ -6,7 +6,7 @@
 #include "qontra/protean/yield_sim.h"
 
 #include <deque>
-#include <set>
+#include <unordered_set>
 
 #include <math.h>
 
@@ -42,7 +42,7 @@ YieldSimulator::est_mean_collisions(
     if (v == nullptr) {
         vertices = network->get_vertices();
     } else {
-        std::set<sptr<phys_vertex_t>> _vertices{v};
+        std::unordered_set<sptr<phys_vertex_t>> _vertices{v};
         for (sptr<phys_vertex_t> w : network->get_neighbors(v)) {
             _vertices.insert(w);
             for (sptr<phys_vertex_t> u : network->get_neighbors(w)) {
@@ -57,7 +57,7 @@ YieldSimulator::est_mean_collisions(
     std::mt19937_64 rng(seed);
     std::normal_distribution noise{0.0, prec};
     for (uint64_t i = 0; i < trials; i++) {
-        std::map<sptr<phys_vertex_t>, fp_t> fmap;
+        std::unordered_map<sptr<phys_vertex_t>, fp_t> fmap;
         // Update the frequency map with noise.
         for (auto& [v, f] : freq_map) {
             fmap[v] = freq_map[v] + noise(rng);
@@ -72,7 +72,7 @@ void
 YieldSimulator::assign(fp_t prec, const std::vector<fp_t>& freq_list) {
     std::cout << "[ yield_sim ]\n";
     std::deque<sptr<phys_vertex_t>> bfs{vcenter};
-    std::set<sptr<phys_vertex_t>> visited;
+    std::unordered_set<sptr<phys_vertex_t>> visited;
     while (bfs.size()) {
         sptr<phys_vertex_t> v = bfs.front();
         bfs.pop_front();
@@ -111,7 +111,7 @@ YieldSimulator::assign(fp_t prec, const std::vector<fp_t>& freq_list) {
 size_t
 YieldSimulator::count_violations(
         sptr<phys_vertex_t> v,
-        const std::map<sptr<phys_vertex_t>, fp_t>& fmap) 
+        const std::unordered_map<sptr<phys_vertex_t>, fp_t>& fmap) 
 {
     size_t violations = 0;
     const auto adj = network->get_neighbors(v);
@@ -146,7 +146,7 @@ YieldSimulator::count_violations(
 
 size_t
 YieldSimulator::count_collisions(
-        const std::map<sptr<phys_vertex_t>, fp_t>& fmap,
+        const std::unordered_map<sptr<phys_vertex_t>, fp_t>& fmap,
         const std::vector<sptr<phys_vertex_t>>& vertices)
 {
     size_t coll = 0;

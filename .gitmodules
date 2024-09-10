@@ -1,6 +1,0 @@
-[submodule "dependencies/qes"]
-	path = dependencies/qes
-	url = git@github.com:suhaskvittal/qes.git
-[submodule "dependencies/vtils"]
-	path = dependencies/vtils
-	url = git@github.com:suhaskvittal/vtils.git

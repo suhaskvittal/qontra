@@ -21,7 +21,8 @@ namespace protean {
 // write_to_dot writes the PhysicalNetwork to an output_file.
 struct render_config_t {
     std::string layout_engine = "neato";
-
+    
+    std::unordered_map<sptr<net::phys_vertex_t>, std::pair<int, int>> layout;
     bool do_not_render_out_of_plane_edges=false;
 };
 
