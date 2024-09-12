@@ -31,3 +31,5 @@ memory_build/*
 
 */logs/
 */logs/*
+
+*.tar.gz
