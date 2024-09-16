@@ -58,6 +58,10 @@ remove_widowed_edges(std::unordered_map<vpair_t, size_t>& incidence_map) {
     for (auto it = incidence_map.begin(); it != incidence_map.end(); ) {
         const auto& [v1, v2] = it->first;
         if (vertex_inc_map.at(v1) == 1 && vertex_inc_map.at(v2) == 1) {
+#ifdef MEMORY_DEBUG
+            std::cout << "removed widowed edge [ " << print_v(v1) << " " << print_v(v2) << " ], cnt = "
+                << it->second << std::endl;
+#endif
             any_removed |= (it->second % 2 == 1);
             it = incidence_map.erase(it);
         } else {
