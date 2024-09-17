@@ -34,3 +34,5 @@ memory_build/*
 */logs/*
 
 *.tar.gz
+scripts/protean/evals/slurm/*.sbatch
+scripts/protean/evals/slurm/logs

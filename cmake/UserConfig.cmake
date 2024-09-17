@@ -9,8 +9,8 @@ set(GRAPHVIZ_INSTALL_DIR "/opt/homebrew/opt/graphviz")
 set(COMPILE_NEURAL_DECODER OFF)
 set(MLPACK_INCLUDE_DIRS "/Users/svittal/Documents/research/qon/pkgs/mlpack/include")
 
-set(COMPILE_PYMATCHING OFF)
-set(COMPILE_CHROMOBIUS OFF)
+set(COMPILE_PYMATCHING ON)
+set(COMPILE_CHROMOBIUS ON)
 
 set(COMPILE_PROTEAN ON)
 set(COMPILE_PROTEAN_LIB OFF)
