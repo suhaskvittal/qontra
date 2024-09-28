@@ -41,8 +41,8 @@ sample_from_graph(
             }
             syndrome[v->id] ^= 1;
         }
-        for (uint64_t f : e->flags)                 syndrome[f] = 1;
-        for (uint64_t fr : e->frames)               obs[fr] ^= 1;
+        for (uint64_t f : e->flags) syndrome[f] = 1;
+        for (uint64_t fr : e->frames) obs[fr] ^= 1;
         EdgeClass cl = gr.get_edge_class(e);
         visited.insert(cl.get_representative());
         

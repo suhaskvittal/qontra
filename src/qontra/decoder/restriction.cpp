@@ -2,6 +2,7 @@
  *  author: Suhas Vittal
  *  date:   17 February 2024
  * */
+#define MEMORY_DEBUG
 
 #include "qontra/decoder/restriction.h"
 
@@ -450,6 +451,10 @@ RestrictionDecoder::insert_error_chain_into(
         // of fv and fw which has a different color (call this fu). 
         // Add (fv, fu) and (fu, fw) instead.
         if (!decoding_graph->share_hyperedge({fv, fw})) {
+            std::cerr << "Two detectors don't share hyperedge: " 
+                << print_v(fv) << ", " << print_v(fw) 
+                << " | bases of " << print_v(v) << ", " << print_v(w)
+                << " | In expansion of " << print_v(path.front()) << " <--> " << print_v(path.back()) << "\n";
             std::cerr << "not supposed to happen anymore..." << std::endl;
             exit(1);
         } else {
