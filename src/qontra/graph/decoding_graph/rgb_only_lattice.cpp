@@ -74,7 +74,9 @@ translate_edge_to_lattice(
                 else                b2 = x;
             }
         }
-        if (a1 == nullptr || a2 == nullptr || b1 == nullptr || b2 == nullptr) return nullptr;
+        if (a1 == nullptr || a2 == nullptr || b1 == nullptr || b2 == nullptr) {
+            return nullptr;
+        }
         sptr<vertex_t> v, w;
         if (evm.count(make_ev_pair(a1, b1))) {
             v = evm.at(make_ev_pair(a1,b1));

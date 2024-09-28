@@ -15,6 +15,7 @@
 #include <qontra/decoder/mwpm.h>
 #include <qontra/decoder/restriction.h>
 #include <qontra/decoder/mobius.h>
+#include <qontra/decoder/concat_mwpm.h>
 #include <qontra/experiments.h>
 #include <qontra/experiments/memory.h>
 #include <qontra/ext/stim.h>
@@ -39,7 +40,7 @@ int main(int argc, char* argv[]) {
 
     CmdParser pp(argc, argv, 2);
     std::string HELP = 
-        "usage: ./memory --qes <file> --out <file>\n"
+        "usage: ./memory <qes-file> <output-file>\n"
         "optional:\n"
         "\t--e <errors until stopping, default=40>\n"
         "\t--pmin <error-rate, default=1e-3>\n"
@@ -70,7 +71,7 @@ int main(int argc, char* argv[]) {
     fp_t p = pmin;
     while (p <= 1.1*pmax) {
         // Load model from file and run memory experiment.
-        DetailedStimCircuit circuit = make_default_circuit(qes_file, p, true, "cap");
+        DetailedStimCircuit circuit = make_default_circuit(qes_file, p, true, "circuit");
         dec.set_circuit(circuit);
 
         auto res = run_memory_with_generated_syndromes(&dec, config);

@@ -30,13 +30,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     const size_t n_obs = circuit.count_observables();
     stim::simd_bits<SIMD_WIDTH> corr(n_obs);
     load_syndrome(syndrome);
-#ifdef MEMORY_DEBUG
-    std::cout << "syndrome: D[";
-    for (uint64_t d : detectors) std::cout << " " << d;
-    std::cout << " ], F[";
-    for (uint64_t f : flags) std::cout << " " << f;
-    std::cout << " ]" << std::endl;
-#endif
 
     if (detectors.empty()) return ret_no_detectors();
 
@@ -51,13 +44,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
     for (const assign_t& m : matchings) {
         for (sptr<hyperedge_t> e : m.flag_edges) {
             if ((++flag_edge_ctr_map[e]) == 2) {
-#ifdef MEMORY_DEBUG
-                std::cout << "Applying flag edge [";
-                for (sptr<vertex_t> v : e->get<vertex_t>()) {
-                    std::cout << " " << print_v(v);
-                }
-                std::cout << " ]" << std::endl;
-#endif
                 for (uint64_t fr : e->frames) corr[fr] ^= 1;
             }
         }
@@ -71,14 +57,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         split_assignment(new_matchings, m, flag_edge_ctr_map);
     }
     matchings = std::move(new_matchings);
-#ifdef MEMORY_DEBUG
-    for (assign_t x : matchings) {
-        std::cout << "L(" << x.c1 << "," << x.c2 << "):" << print_v(x.v) << 
-            " <---> " << print_v(x.w) << ", path:";
-        for (sptr<vertex_t> v : x.path) std::cout << " " << print_v(v);
-        std::cout << std::endl;
-    }
-#endif
 #ifdef DECODER_PERF
     t = timer.clk_end();
     std::cout << "[ RestrictionDecoder ] took " << t*1e-9 << "s to match restricted lattices" << std::endl;
@@ -178,18 +156,6 @@ RestrictionDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome)
         */
         return { 0.0, corr1 };
     }
-#ifdef MEMORY_DEBUG
-    std::cout << "Triggered flag edges:" << std::endl;
-    for (auto& [e, path, map_ref] : triggered_flag_edges) {
-        std::cout << "\t[";
-        for (sptr<vertex_t> v : e->get<vertex_t>()) std::cout << " " << print_v(v->get_base());
-        std::cout << " ], frames =";
-        for (uint64_t fr : e->frames) std::cout << " " << fr;
-        std::cout << ", path = [";
-        for (sptr<vertex_t> v : path) std::cout << " " << print_v(v->get_base());
-        std::cout << " ]" << std::endl;
-    }
-#endif
     // Otherwise, perform the lifting procedure again, this time removing all edges corresponding
     // to triggered flag edges. Also update corr for each removed flag edge.
     in_cc_map = std::move(_in_cc_map);
@@ -236,19 +202,9 @@ RestrictionDecoder::compute_matchings(stim::simd_bits_range_ref<SIMD_WIDTH> synd
     std::vector<assign_t> matchings;
     for (int c1 = 0; c1 < decoding_graph->number_of_colors; c1++) {
         for (int c2 = c1+1; c2 < decoding_graph->number_of_colors; c2++) {
-#ifdef MEMORY_DEBUG
-            std::cout << "Matchings on L(" << c1 << ", " << c2 << ")-----------" << std::endl;
-#endif
             load_syndrome(syndrome, c1, c2, false);
             std::vector<assign_t> _matchings = compute_matching(c1, c2);
             vtils::push_back_range(matchings, _matchings);
-#ifdef MEMORY_DEBUG
-            for (assign_t x : _matchings) {
-                std::cout << "\t" << print_v(x.v) << " <---> " << print_v(x.w) << ", path:";
-                for (sptr<vertex_t> v : x.path) std::cout << " " << print_v(v);
-                std::cout << std::endl;
-            }
-#endif
         }
     }
     return matchings;
@@ -268,11 +224,6 @@ RestrictionDecoder::split_assignment(
     curr.path = {m.v};
 
     bool contains_only_boundaries = m.v->is_boundary_vertex;
-#ifdef MEMORY_DEBUG
-    std::cout << "In expansion of " << print_v(m.v) << ", " << print_v(m.w) << ":";
-    for (sptr<vertex_t> v : m.path) std::cout << " " << print_v(v);
-    std::cout << std::endl;
-#endif
     for (size_t i = 1; i < m.path.size(); i++) {
         sptr<vertex_t> v = m.path.at(i-1),
                         w = m.path.at(i);

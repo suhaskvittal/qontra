@@ -58,6 +58,14 @@ if (COMPILE_NEURAL_DECODER)
             src/qontra/decoder/neural.cpp)
 endif()
 
+if (COMPILE_PYMATCHING)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/pymatching.cpp)
+endif()
+
+if (COMPILE_CHROMOBIUS)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/chromobius.cpp)
+endif()
+
 find_package(MPI REQUIRED)
 
 add_library(qontra ${QONTRA_FILES})
@@ -71,9 +79,11 @@ if (L1D_CACHE_LINE_SIZE)
 endif()
 
 if (COMPILE_PYMATCHING)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/pymatching.cpp)
     target_compile_definitions(qontra PUBLIC QONTRA_PYMATCHING_ENABLED) 
 endif()
 
 if (COMPILE_CHROMOBIUS)
+    set(QONTRA_FILES ${QONTRA_FILES} src/qontra/decoder/chromobius.cpp)
     target_compile_definitions(qontra PUBLIC QONTRA_CHROMOBIUS_ENABLED)
 endif()

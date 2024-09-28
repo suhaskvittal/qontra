@@ -38,6 +38,10 @@ public:
 
     void    snapshot(void) override;
     void    rollback_where(stim::simd_bits_range_ref<SIMD_WIDTH>) override;
+
+    stim::simd_bit_table<SIMD_WIDTH>    x_table;    // Has an extra row for scratch space.
+    stim::simd_bit_table<SIMD_WIDTH>    z_table;
+    stim::simd_bit_table<SIMD_WIDTH>    r_table;    // Has four extra rows for executing rowsum.
 private:
     uint64_t  get_index(uint64_t i, uint64_t j);
 
@@ -59,10 +63,6 @@ private:
     void    browsum(uint64_t h, uint64_t i, stim::simd_bits_range_ref<SIMD_WIDTH> pred);
                 // Performs rowsum on all trials at the same time, and 
                 // conditions the update based on the predicate.
-
-    stim::simd_bit_table<SIMD_WIDTH>    x_table;    // Has an extra row for scratch space.
-    stim::simd_bit_table<SIMD_WIDTH>    z_table;
-    stim::simd_bit_table<SIMD_WIDTH>    r_table;    // Has four extra rows for executing rowsum.
 
     stim::simd_bit_table<SIMD_WIDTH>    x_table_cpy;
     stim::simd_bit_table<SIMD_WIDTH>    z_table_cpy;

@@ -91,9 +91,10 @@ public:
 
     // Sets the map reference to the color map. Returns the max color used.
     int compute_check_color_map(std::unordered_map<sptr<tanner::vertex_t>, int>&) const;
-    int compute_code_distance(bool for_x) const;
+    int compute_code_distance(bool for_x, int obs=-1) const;
 
     std::vector<obs_t> get_obs(bool get_x_obs) const;
+    std::vector<obs_t>& get_obs_ref(bool get_x_obs);
 private:
     std::vector<sptr<tanner::vertex_t>>& get_vertices_by_type_(tanner::vertex_t::type);
 

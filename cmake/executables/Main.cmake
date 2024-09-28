@@ -21,3 +21,5 @@ make_main(TARGET explain_degenerate_errors SOURCE_FILES main/explain_degenerate_
 make_main(TARGET compute_code_distance SOURCE_FILES main/compute_code_distance.cpp)
 make_main(TARGET compute_circuit_distance SOURCE_FILES main/compute_circuit_distance.cpp)
 make_main(TARGET decoder_debugger SOURCE_FILES main/decoder_debugger.cpp)
+
+make_main(TARGET sim_sc_sgate_inject SOURCE_FILES main/sim_sc_sgate_inject.cpp)

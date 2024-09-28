@@ -53,6 +53,8 @@ ConcatMWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) 
     fp_t best_log_pr = std::numeric_limits<fp_t>::lowest();
     stim::simd_bits<SIMD_WIDTH> best_corr(n_obs);
     for (int c = 0; c < 3; c++) {
+        fp_t log_pr = 0.0;
+        stim::simd_bits<SIMD_WIDTH> corr(n_obs);
 #ifdef MEMORY_DEBUG
         std::cout << "COLOR = " << c << std::endl;
 #endif
@@ -62,52 +64,82 @@ ConcatMWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) 
         // Identify vertex-vertex and edge-vertex nodes from the matching.
         std::set<sptr<vertex_t>> _active_vertices;
         for (const assign_t& m : matchings) {
+#ifdef MEMORY_DEBUG
+            std::cout << "\t" << print_v(m.v) << " <---> " << print_v(m.w) << std::endl;
+#endif
             for (size_t i = 1; i < m.path.size(); i++) {
                 sptr<vertex_t> v = m.path.at(i-1),
                                 w = m.path.at(i);
                 if (!decoding_graph->share_hyperedge({v,w})) {
-                    // This is a flag edge. Get path between v and w.
-                    error_chain_t ec = decoding_graph->get_error_chain(v, w, cr1, cr2, true);
-                    if (ec.path.front() != v) std::reverse(ec.path.begin(), ec.path.end());
-                    for (size_t j = 1; j < ec.path.size(); j++) {
-                        sptr<vertex_t> x = ec.path.at(j-1),
-                                        y = ec.path.at(j);
-                        if (x->is_boundary_vertex && y->is_boundary_vertex) continue;
-                        auto xy = edge_vertex_map.at(make_ev_pair(x,y));
-                        _active_vertices.insert(xy);
+                    // Check if it is a 2-hyperedge.
+                    sptr<hyperedge_t> e = get_flag_edge_for({v,w});
+                    if (e == nullptr) {
+                        // This is a flag edge. Get path between v and w.
+                        error_chain_t ec = decoding_graph->get_error_chain(v, w, cr1, cr2, true);
+                        if (ec.path.front() != v) std::reverse(ec.path.begin(), ec.path.end());
+                        for (size_t j = 1; j < ec.path.size(); j++) {
+                            sptr<vertex_t> x = ec.path.at(j-1),
+                                            y = ec.path.at(j);
+                            if (x->is_boundary_vertex && y->is_boundary_vertex) continue;
+                            auto xy = edge_vertex_map.at(make_ev_pair(x,y));
+                            _active_vertices.insert(xy);
 #ifdef MEMORY_DEBUG
-                        std::cout << "\tMatching " << print_v(x)
-                            << " and " << print_v(y) << " --> "
-                            << print_v(xy) << std::endl;
+                            std::cout << "\t\tMatching " << print_v(x)
+                                << " and " << print_v(y) << " --> "
+                                << print_v(xy) << std::endl;
+#endif
+                        }
+                    } else {
+                        log_pr += log(e->probability);
+                        for (uint64_t fr : e->frames) corr[fr] ^= 1;
+#ifdef MEMORY_DEBUG
+                        std::cout << "\t\tMatched " << print_v(v) << " and " << print_v(w) << " and applied:";
+                        for (uint64_t fr : e->frames) std::cout << " " << fr;
+                        std::cout << std::endl;
 #endif
                     }
                 } else {
                     if (v->is_boundary_vertex && w->is_boundary_vertex) continue;
+                    if (v->color == w->color && v->get_base() == w->get_base()) {
+                        // Update log_pr but do not add this edge.
+                        sptr<hyperedge_t> e = decoding_graph->get_edge({v,w});
+                        log_pr += log(e->probability);
+                        for (uint64_t fr : e->frames) corr[fr] ^= 1;
+#ifdef MEMORY_DEBUG
+                        std::cout << "\t\tMatched " << print_v(v) << " and " << print_v(w) << " and applied:";
+                        for (uint64_t fr : e->frames) std::cout << " " << fr;
+                        std::cout << std::endl;
+#endif
+                        continue;
+                    }
                     auto vw = edge_vertex_map.at(make_ev_pair(v,w));
                     _active_vertices.insert(vw);
 #ifdef MEMORY_DEBUG
-                    std::cout << "\tMatching " << print_v(v) << " and " << print_v(w)
+                    std::cout << "\t\tMatching " << print_v(v) << " and " << print_v(w)
                         << " --> " << print_v(vw) << std::endl;
 #endif
                 }
             }
         }
-        if (_active_vertices.empty()) continue;
         std::vector<sptr<vertex_t>> 
             active_vertices(_active_vertices.begin(), _active_vertices.end());
         vtils::push_back_range(active_vertices, detectors_by_color[c]);
-        if (active_vertices.size() & 1) {
-            auto vb = decoding_graph->get_boundary_vertex(c);
-            // Check if the boundary is a false boundary (occur in even distance codes)
-            if (decoding_graph->get_degree(vb) <= 1) continue;
+        if (active_vertices.size()) {
+            if (active_vertices.size() & 1) {
+                auto vb = decoding_graph->get_boundary_vertex(c);
+                // Check if the boundary is a false boundary (occur in even distance codes)
+                if (decoding_graph->get_degree(vb) <= 1) continue;
 #ifdef MEMORY_DEBUG
-            std::cout << "\tAdding boundary vertex." << std::endl;
+                std::cout << "\tAdding boundary vertex." << std::endl;
 #endif
-            active_vertices.push_back(vb);
+                active_vertices.push_back(vb);
+            }
+            // Add red vertices as well.
+            log_pr += rgb_compute_matching(active_vertices, c, corr);
+#ifdef MEMORY_DEBUG
+            std::cout << "FINAL LOG PR = " << log_pr << std::endl;
+#endif
         }
-        // Add red vertices as well.
-        stim::simd_bits<SIMD_WIDTH> corr(n_obs);
-        fp_t log_pr = rgb_compute_matching(active_vertices, c, corr);
         if (log_pr > best_log_pr) {
             best_log_pr = log_pr;
             best_corr = corr;
@@ -127,11 +159,10 @@ ConcatMWPMDecoder::rgb_compute_matching(
 
     std::vector<uint64_t> local_dets;
     for (auto v : active) {
-        if (!v->is_boundary_vertex) {
-            local_dets.push_back(v->id);
-        }
+        local_dets.push_back(v->id);
     }
     gr->activate_detectors(local_dets, flags);
+    auto rgb_flag_edges = gr->get_flag_edges();
     // Now, create the matching graph.
 
     const size_t n = active.size();
@@ -163,12 +194,15 @@ ConcatMWPMDecoder::rgb_compute_matching(
             << ", probability = " << ec.probability << ", path size = "
             << ec.path.size() << std::endl;
 #endif
+        if (ec.path.size() == 0) continue;
         for (size_t k = 1; k < ec.path.size(); k++) {
             auto x = ec.path.at(k-1),
                  y = ec.path.at(k);
             auto e = gr->get_edge({x, y});
+            if (e == nullptr) {
+                e = get_flag_edge_for({x,y}, rgb_flag_edges);
+            }
             for (uint64_t fr : e->frames) corr[fr] ^= 1;
-            log_pr += log(e->probability);
 #ifdef MEMORY_DEBUG
             std::cout << "\t\tApplied correction between " << print_v(x) << " and "
                 << print_v(y) << ":";
@@ -176,8 +210,9 @@ ConcatMWPMDecoder::rgb_compute_matching(
             std::cout << std::endl;
 #endif
         }
+        log_pr += log(ec.probability);
     }
-    return log_pr;
+    return log_pr == 0.0 ? -1000.0 : log_pr;
 }
 
 }   // qontra

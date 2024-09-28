@@ -1,14 +1,14 @@
 /*
- *  author: Suhas Vittal
- *  date:   27 March 2024
+ * author:  Suhas Vittal
+ * date:    23 May 2024
  * */
+
+#include "gen.h"
 
 #include "qontra/decoder.h"
 #include "qontra/decoder/concat_mwpm.h"
-#include "qontra/decoder/mwpm.h"
-#include "qontra/decoder/mobius.h"
 #include "qontra/decoder/restriction.h"
-#include "qontra/decoder/concat_mwpm.h"
+#include "qontra/decoder/mobius.h"
 #include "qontra/graph/decoding_graph.h"
 
 #include "qontra/experiments/memory.h"
@@ -20,6 +20,8 @@
 using namespace qontra;
 using namespace graph;
 using namespace decoding;
+
+using namespace vtils;
 
 static std::mt19937_64 rng(0);
 
@@ -42,8 +44,8 @@ sample_from_graph(
             }
             syndrome[v->id] ^= 1;
         }
-        for (uint64_t f : e->flags) syndrome[f] = 1;
-        for (uint64_t fr : e->frames) obs[fr] ^= 1;
+        for (uint64_t f : e->flags)                 syndrome[f] = 1;
+        for (uint64_t fr : e->frames)               obs[fr] ^= 1;
         EdgeClass cl = gr.get_edge_class(e);
         visited.insert(cl.get_representative());
         
@@ -75,22 +77,19 @@ sample_from_graph(
 }
 
 int main(int argc, char* argv[]) {
-    std::string qes_file(argv[1]);
-    std::string decoder_name(argv[2]);
-    int error_weight = atoi(argv[3]);
-    uint64_t shots = atoll(argv[4]);
+    std::string tanner_graph_file(argv[1]);
+    int error_weight = atoi(argv[2]);
+    uint64_t shots = atoll(argv[3]);
 
-    DetailedStimCircuit circuit = make_default_circuit(qes_file, 1e-3, true, "circuit");
-    uptr<Decoder> dec = nullptr;
-    if (decoder_name == "mwpm") {
-        dec = std::make_unique<MWPMDecoder>(circuit);
-    } else if (decoder_name == "restriction") {
-        dec = std::make_unique<RestrictionDecoder>(circuit);
-    } else if (decoder_name == "mobius") {
-        dec = std::make_unique<MobiusDecoder>(circuit);
-    } else if (decoder_name == "concat_mwpm") {
-        dec = std::make_unique<ConcatMWPMDecoder>(circuit);
+    TannerGraph tgr = 
+        create_graph_from_file<TannerGraph>(tanner_graph_file, io::update_tanner_graph);
+    std::unordered_map<sptr<tanner::vertex_t>, int> color_map;
+    if (tgr.compute_check_color_map(color_map) > 2) {
+        std::cerr << "Found >3-coloring." << std::endl;
+        exit(1);
     }
+    DetailedStimCircuit circuit = make_capacity(&tgr, 1e-3, false, color_map);
+    uptr<Decoder> dec = std::make_unique<ConcatMWPMDecoder>(circuit);
     // The number of errors does not matter as we don't care about boundaries.
     DecodingGraph gr(circuit, 1000);
     auto edges = gr.get_all_edges();
