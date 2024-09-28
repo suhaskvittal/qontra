@@ -9,6 +9,7 @@
 #include "qontra/decoder/mobius.h"
 #include "qontra/decoder/restriction.h"
 #include "qontra/decoder/concat_mwpm.h"
+#include "qontra/decoder/jccd.h"
 #include "qontra/graph/decoding_graph.h"
 
 #include "qontra/experiments/memory.h"

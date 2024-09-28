@@ -12,6 +12,8 @@
 
 #include <qontra/decoder/chromobius.h>
 #include <qontra/decoder/concat_mwpm.h>
+#include <qontra/decoder/mobius.h>
+#include <qontra/decoder/jccd.h>
 #include <qontra/decoder/restriction.h>
 
 #include <vtils/cmd_parse.h>
@@ -36,6 +38,7 @@ int main(int argc, char* argv[]) {
         "usage: ./cc_capacity <tanner-graph-file> <output-file>\n"
         "optional:\n"
         "\t--e <errors until stopping, default=25>\n"
+        "\t--d <code distance, required if using JCCD>\n"
         "\t--pmin <error-rate, default=1e-3>\n"
         "\t--pmax <error-rate, default=1e-3>\n"
         "\t--step-size <default=1>\n"
@@ -64,7 +67,11 @@ int main(int argc, char* argv[]) {
     }
     fp_t p = pmin;
     DetailedStimCircuit base_circuit = make_capacity(&tgr, p, mx, color_map);
-    ConcatMWPMDecoder dec(base_circuit);
+
+    size_t distance;
+    pp.get("d", distance, true);
+
+    JointColorCodeDecoder<MobiusDecoder> dec(base_circuit, distance);
 
     memory_config_t config;
     config.errors_until_stop = errors_until_stop;

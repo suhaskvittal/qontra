@@ -2,7 +2,6 @@
  *  author: Suhas Vittal
  *  date:   27 May 2024
  * */
-#define MEMORY_DEBUG
 
 #include "qontra/decoder/concat_mwpm.h"
 
@@ -16,6 +15,17 @@ namespace qontra {
 
 using namespace graph;
 using namespace decoding;
+
+sptr<vertex_t>
+safe_at(const evmap_t& evm, sptr<vertex_t> x, sptr<vertex_t> y) {
+    auto xyp = make_ev_pair(x,y);
+    if (!evm.count(xyp)) {
+        std::cerr << "Edge between " << print_v(x) << " and " << print_v(y)
+            << " does not exist!\n";
+        exit(1);
+    }
+    return evm.at(xyp);
+}
 
 ConcatMWPMDecoder::ConcatMWPMDecoder(const DetailedStimCircuit& circuit)
     :MatchingBase(circuit, 3, false),
@@ -53,9 +63,11 @@ ConcatMWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) 
     
     fp_t best_log_pr = std::numeric_limits<fp_t>::lowest();
     stim::simd_bits<SIMD_WIDTH> best_corr(n_obs);
+    size_t best_correction_weight;
     for (int c = 0; c < 3; c++) {
         fp_t log_pr = 0.0;
         stim::simd_bits<SIMD_WIDTH> corr(n_obs);
+        size_t correction_weight;
 #ifdef MEMORY_DEBUG
         std::cout << "COLOR = " << c << std::endl;
 #endif
@@ -82,7 +94,7 @@ ConcatMWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) 
                             sptr<vertex_t> x = ec.path.at(j-1),
                                             y = ec.path.at(j);
                             if (x->is_boundary_vertex && y->is_boundary_vertex) continue;
-                            auto xy = edge_vertex_map.at(make_ev_pair(x,y));
+                            auto xy = safe_at(edge_vertex_map, x, y);
                             _active_vertices.insert(xy);
 #ifdef MEMORY_DEBUG
                             std::cout << "\t\tMatching " << print_v(x)
@@ -113,7 +125,7 @@ ConcatMWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) 
 #endif
                         continue;
                     }
-                    auto vw = edge_vertex_map.at(make_ev_pair(v,w));
+                    auto vw = safe_at(edge_vertex_map, v, w);
                     _active_vertices.insert(vw);
 #ifdef MEMORY_DEBUG
                     std::cout << "\t\tMatching " << print_v(v) << " and " << print_v(w)
@@ -135,18 +147,21 @@ ConcatMWPMDecoder::decode_error(stim::simd_bits_range_ref<SIMD_WIDTH> syndrome) 
 #endif
                 active_vertices.push_back(vb);
             }
-            // Add red vertices as well.
-            log_pr += rgb_compute_matching(active_vertices, c, corr);
+            log_pr += rgb_compute_matching(active_vertices, c, corr, correction_weight);
 #ifdef MEMORY_DEBUG
             std::cout << "FINAL LOG PR = " << log_pr << std::endl;
 #endif
         }
-        if (log_pr > best_log_pr) {
+        if (log_pr > best_log_pr || (abs(log_pr-best_log_pr) < 0.01 && correction_weight < best_correction_weight)) 
+        {
             best_log_pr = log_pr;
             best_corr = corr;
+            best_correction_weight = correction_weight;
         }
     }
-    return {0.0, best_corr};
+    Decoder::result_t res = {0.0, best_corr};
+    res.correction_weight = best_correction_weight;
+    return res;
 }
 
 
@@ -154,7 +169,8 @@ fp_t
 ConcatMWPMDecoder::rgb_compute_matching(
         const std::vector<sptr<vertex_t>>& active,
         int color,
-        stim::simd_bits_range_ref<SIMD_WIDTH> corr)
+        stim::simd_bits_range_ref<SIMD_WIDTH> corr,
+        size_t& correction_weight)
 {
     uptr<DecodingGraph>& gr = rgb_only_graphs[color];
 
@@ -183,6 +199,7 @@ ConcatMWPMDecoder::rgb_compute_matching(
     pm.Solve();
     // Now compute the correction and its probability.
     fp_t log_pr = 0.0;
+    correction_weight = 0;
     for (size_t i = 0; i < n; i++) {
         size_t j = pm.GetMatch(i);
         if (i > j) continue;
@@ -196,6 +213,7 @@ ConcatMWPMDecoder::rgb_compute_matching(
             << ec.path.size()-1 << std::endl;
 #endif
         if (ec.path.size() == 0) continue;
+        correction_weight += ec.path.size()-1;
         for (size_t k = 1; k < ec.path.size(); k++) {
             auto x = ec.path.at(k-1),
                  y = ec.path.at(k);

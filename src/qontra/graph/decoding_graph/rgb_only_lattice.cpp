@@ -29,6 +29,13 @@ sptr<hyperedge_t>
 translate_edge_to_lattice(
         DecodingGraph& gr, sptr<hyperedge_t> e, int color, evmap_t& evm, uint64_t& idctr) 
 {
+    /*
+    std::cout << "Adding edge:";
+    for (sptr<vertex_t> x : e->get<vertex_t>()) std::cout << " " << print_v(x);
+    std::cout << " | flags =";
+    for (uint64_t f : e->flags) std::cout << " " << f;
+    std::cout << "\n";
+    */
     if (e->get_order() == 2) {
         // Measurement and flag edges.
         auto x = e->get<vertex_t>(0),
@@ -48,14 +55,12 @@ translate_edge_to_lattice(
             if (x->color == color) v = x;
             else offc.push_back(x);
         }
+        if (offc.size() != 2) {
+//          std::cout << "\tskipped!\n";
+            return nullptr;
+        }
         auto x = offc[0],
              y = offc[1];
-        if (v->is_boundary_vertex && x->is_boundary_vertex && y->is_boundary_vertex) {
-            std::cout << "Found boundary edge.\n";
-        }
-        if (v->id == 9) {
-            std::cout << "Connecting 9(c=0) to " << print_v(x) << ", " << print_v(y) << "\n";
-        }
         if (!gr.contains(v)) gr.add_vertex(v);
         auto w = make_edge_vertex(gr, x, y, evm, idctr);
         sptr<hyperedge_t> _e = gr.make_edge({v, w});

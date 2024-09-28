@@ -29,8 +29,9 @@ public:
     
     fp_t rgb_compute_matching(
             const std::vector<sptr<gd::vertex_t>>&,
-            int,
-            stim::simd_bits_range_ref<SIMD_WIDTH>);
+            int color,
+            stim::simd_bits_range_ref<SIMD_WIDTH>,
+            size_t& correction_weight);
 private:
     // The parent MatchingBase class already has a DecodingGraph. We will use this
     // graph for restricted lattice matchings. For matchings on the R/G/B-only lattices,

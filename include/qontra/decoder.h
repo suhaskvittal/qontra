@@ -25,10 +25,16 @@ public:
     struct result_t {
         fp_t exec_time = 0.0;
         stim::simd_bits<SIMD_WIDTH> corr = stim::simd_bits<>(1);
+        /*
+         * Below are entries that are used by specific decoders. Do not
+         * expect this to be supported by all decoders.
+         * */
+        size_t correction_weight = 0;  // Size of logical correction.
     };
-
-    // The decoder uses the passed in circuit for decoding. It should
-    // be a memory experiment circuit for X rounds.
+    /*
+       The decoder uses the passed in circuit for decoding. It should
+       be a memory experiment circuit for X rounds.
+    */
     Decoder(const DetailedStimCircuit& circ)
         :circuit(circ)
     {}

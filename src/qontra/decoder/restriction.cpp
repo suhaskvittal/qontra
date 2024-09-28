@@ -2,7 +2,6 @@
  *  author: Suhas Vittal
  *  date:   17 February 2024
  * */
-#define MEMORY_DEBUG
 
 #include "qontra/decoder/restriction.h"
 

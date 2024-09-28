@@ -99,6 +99,11 @@ DecodingGraph::DecodingGraph(
                 nod_edges.push_back(e);
                 all_edges.push_back(e);
                 return;
+            } else if (flags.size() == 0 &&
+                    ((number_of_colors == 0 && detectors.size() > 2)
+                    || (detectors.size() > number_of_colors)) )
+            {
+                return;
             }
 
             std::vector<sptr<vertex_t>> vlist;
