@@ -50,6 +50,12 @@ translate_edge_to_lattice(
         }
         auto x = offc[0],
              y = offc[1];
+        if (v->is_boundary_vertex && x->is_boundary_vertex && y->is_boundary_vertex) {
+            std::cout << "Found boundary edge.\n";
+        }
+        if (v->id == 9) {
+            std::cout << "Connecting 9(c=0) to " << print_v(x) << ", " << print_v(y) << "\n";
+        }
         if (!gr.contains(v)) gr.add_vertex(v);
         auto w = make_edge_vertex(gr, x, y, evm, idctr);
         sptr<hyperedge_t> _e = gr.make_edge({v, w});
@@ -116,6 +122,12 @@ DecodingGraph::make_rgb_only_lattice(int color, evmap_t& evm) {
             }
         }
     }
+    // Also handle implicit edge between the boundaries.
+    auto ime = get_edge(std::vector<sptr<vertex_t>>{
+                    get_boundary_vertex(0),
+                    get_boundary_vertex(1),
+                    get_boundary_vertex(2)});
+    tentative_edges.push_back( translate_edge_to_lattice(gr, ime, color, evm, idctr) );
     for (sptr<hyperedge_t> e : ord4_edges) {
         auto _e = translate_edge_to_lattice(gr, e, color, evm, idctr);
         if (_e != nullptr) {

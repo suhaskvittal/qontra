@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
                 0.0,
                 false,
                 false);
-    auto errors = stim::find_undetectable_logical_error(dem, 10, 10, false);
+    auto errors = stim::find_undetectable_logical_error(dem, 3, 3, false);
     std::cout << "Distance = " << errors.count_errors() << std::endl;
-
+    std::cout << errors << "\n";
 }

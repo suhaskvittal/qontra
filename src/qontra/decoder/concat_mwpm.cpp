@@ -2,6 +2,7 @@
  *  author: Suhas Vittal
  *  date:   27 May 2024
  * */
+#define MEMORY_DEBUG
 
 #include "qontra/decoder/concat_mwpm.h"
 
@@ -192,7 +193,7 @@ ConcatMWPMDecoder::rgb_compute_matching(
 #ifdef MEMORY_DEBUG
         std::cout << "\tMatched " << print_v(v) << " <---> " << print_v(w) 
             << ", probability = " << ec.probability << ", path size = "
-            << ec.path.size() << std::endl;
+            << ec.path.size()-1 << std::endl;
 #endif
         if (ec.path.size() == 0) continue;
         for (size_t k = 1; k < ec.path.size(); k++) {

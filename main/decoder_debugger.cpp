@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
     int error_weight = atoi(argv[3]);
     uint64_t shots = atoll(argv[4]);
 
-    DetailedStimCircuit circuit = make_default_circuit(qes_file, 1e-3, true, "circuit");
+    DetailedStimCircuit circuit = make_default_circuit(qes_file, 1e-3, true, "cap");
     uptr<Decoder> dec = nullptr;
     if (decoder_name == "mwpm") {
         dec = std::make_unique<MWPMDecoder>(circuit);
